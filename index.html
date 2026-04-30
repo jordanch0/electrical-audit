@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <title>RCD Audit</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #111; overflow: hidden; }
+    #root { height: 100%; padding-top: env(safe-area-inset-top); }
+    #loading { position: fixed; inset: 0; background: #111; display: flex; flex-direction: column; align-items: center; justify-content: center; color: #e8731a; font-family: sans-serif; z-index: 9999; }
+    .logo { font-size: 52px; font-weight: 900; letter-spacing: -2px; }
+    .sub  { font-size: 13px; color: #555; margin-top: 6px; letter-spacing: 1px; }
+    .spinner { width: 32px; height: 32px; border: 3px solid #222; border-top-color: #e8731a; border-radius: 50%; animation: spin 0.8s linear infinite; margin-top: 28px; }
+    #status { font-size: 11px; color: #444; margin-top: 16px; max-width: 280px; text-align: center; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="logo">RCD</div>
+    <div class="sub">VORICK GROUP ASSET MAINTENANCE</div>
+    <div class="spinner"></div>
+    <div id="status">Loading...</div>
+  </div>
+  <div id="root"></div>
+
+  <script>
+    var status = document.getElementById('status');
+    function setStatus(msg) { if(status) status.textContent = msg; }
+    window.onerror = function(msg, src, line, col, err) {
+      document.body.style.overflow = 'auto';
+      document.body.innerHTML = '<div style="color:#ff6b6b;padding:30px;font-family:sans-serif;background:#111;min-height:100vh">'
+        + '<h2 style="color:#e8731a">JavaScript Error</h2>'
+        + '<b>' + msg + '</b><br><br>'
+        + 'Line: ' + line + '<br>'
+        + 'File: ' + src + '<br><br>'
+        + (err && err.stack ? '<pre style="font-size:10px;color:#888;white-space:pre-wrap">' + err.stack + '</pre>' : '')
+        + '</div>';
+      return true;
+    };
+  </script>
+
+  <script>setStatus('Loading React...');</script>
+  <script src="react.js" onerror="setStatus('ERROR: react.js failed to load')"></script>
+
+  <script>setStatus('Loading ReactDOM...');</script>
+  <script src="reactdom.js" onerror="setStatus('ERROR: reactdom.js failed to load')"></script>
+
+  <script>setStatus('Loading XLSX...');</script>
+  <script src="xlsx.js" onerror="setStatus('ERROR: xlsx.js failed to load')"></script>
+
+  <script>setStatus('Loading app...');</script>
+  <script src="app.js" onerror="setStatus('ERROR: app.js failed to load')"></script>
+
+  <script>setStatus('Starting...');</script>
+</body>
+</html>
