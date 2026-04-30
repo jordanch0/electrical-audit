@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <title>RCD Audit</title>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; padding: 0; height: 100%; background: #111; overflow: hidden; }
+    #root { height: 100%; padding-top: env(safe-area-inset-top); }
+    #loading {
+      position: fixed; inset: 0; background: #111;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      color: #e8731a; font-family: sans-serif; z-index: 9999;
+    }
+    #loading .logo { font-size: 52px; font-weight: 900; letter-spacing: -2px; }
+    #loading .sub  { font-size: 13px; color: #555; margin-top: 6px; letter-spacing: 1px; }
+    #loading .spinner {
+      width: 32px; height: 32px; border: 3px solid #222;
+      border-top-color: #e8731a; border-radius: 50%;
+      animation: spin 0.8s linear infinite; margin-top: 28px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="logo">RCD</div>
+    <div class="sub">VORICK GROUP ASSET MAINTENANCE</div>
+    <div class="spinner"></div>
+  </div>
+  <div id="root"></div>
+
+  <!-- All libraries are local files — NO internet required -->
+  <script src="react.min.js"></script>
+  <script src="react-dom.min.js"></script>
+  <script src="xlsx.min.js"></script>
+  <!-- Pre-compiled app — NO Babel needed -->
+  <script src="app.js"></script>
+</body>
+</html>
