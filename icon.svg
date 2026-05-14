@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="112" fill="#111111"/>
+  <rect x="40" y="40" width="432" height="432" rx="80" fill="#1a1a1a"/>
+  <!-- Lightning bolt -->
+  <polygon points="300,60 180,280 240,280 212,452 332,232 272,232 300,60" fill="#e8731a"/>
+  <!-- Green check accent -->
+  <circle cx="380" cy="380" r="72" fill="#10b981"/>
+  <polyline points="348,380 370,402 415,358" stroke="white" stroke-width="20" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>
