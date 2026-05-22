@@ -865,6 +865,25 @@ React.createElement('div', { style: S.homeWrap,}
 // ─────────────────────────────────────────────────────────────────────────
 // HISTORY VIEW — with read-only circuit viewer
 // ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// CONTINUE CONFIRM BUTTON — shared by all history views
+// Shows inline confirmation before loading a historical audit (overwrites active)
+// ─────────────────────────────────────────────────────────────────────────
+function ContinueConfirmBtn({onConfirm,styleObj}){
+  const[confirming,setConfirming]=React.useState(false);
+  if(confirming){
+    return React.createElement('div',{style:{width:"100%",background:"#1a0a2a",border:"1px solid #7c3aed55",borderRadius:8,padding:"10px 12px",marginTop:4}}
+      ,React.createElement('div',{style:{fontSize:12,color:"#c4b5fd",fontWeight:600,marginBottom:8}},"This will replace your current audit with the archived snapshot. Continue?")
+      ,React.createElement('div',{style:{display:"flex",gap:8}}
+        ,React.createElement('button',{style:{flex:1,padding:"9px",background:"#7c3aed",color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onConfirm();setConfirming(false);}},"▶ Yes, Continue")
+        ,React.createElement('button',{style:{padding:"9px 14px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setConfirming(false)},"Cancel")
+      )
+    );
+  }
+  return React.createElement('button',{style:{...(styleObj||{}),flex:1,color:"#a78bfa",borderColor:"#7c3aed44",fontWeight:700},onClick:()=>setConfirming(true)},"▶ Continue");
+}
+
+
 function HistoryView({ history, project, onDelete, onExportSnap, onContinueFromSnap }) {
 const [expanded,   setExpanded]  = React.useState(null);
 const [deleteId,   setDeleteId]  = React.useState(null);
@@ -1044,7 +1063,7 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 , React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700}, onClick: ()=>{ setViewSnap(snap); setViewArea(null); },}, "👁 View Results"
 )
 , React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"}, onClick: ()=>onExportSnap(snap),}, "↓ Export" )
-, React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#a78bfa",borderColor:"#7c3aed44",fontWeight:700}, onClick: ()=>onContinueFromSnap(snap),}, "▶ Continue" )
+, React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...S.smallBtn}})
 , deleteId===snap.id
 ?React.createElement(React.Fragment, null, React.createElement('button', { style: {...S.smallBtn,color:"#f87171",borderColor:"#ef444455"}, onClick: ()=>{onDelete(snap.id);setDeleteId(null);},}, "Confirm"), React.createElement('button', { style: S.smallBtn, onClick: ()=>setDeleteId(null),}, "Cancel"))
 :React.createElement('button', { style: {...S.smallBtn,color:"#ef4444",borderColor:"#ef444433"}, onClick: ()=>setDeleteId(snap.id),}, "🗑")
@@ -3163,7 +3182,7 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10}}
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
-            ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#a78bfa",borderColor:"#7c3aed44",fontWeight:700},onClick:()=>onContinueFromSnap(snap)},"▶ Continue")
+            ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SI.smallBtn}})
             ,deleteId===snap.id
               ?React.createElement(React.Fragment,null,React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444455"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"Confirm"),React.createElement('button',{style:SI.smallBtn,onClick:()=>setDeleteId(null)},"Cancel"))
               :React.createElement('button',{style:{...SI.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
@@ -3247,13 +3266,14 @@ const SI={
 const K_CAL_EVENTS = "cal-events-v1";
 
 const CAL_TYPES = [
-  { key:"rcd_push",    label:"RCD Push Test",       color:"#e8731a", icon:"📋", period:"Monthly"    },
-  { key:"rcd_inject",  label:"RCD Injection Test",  color:"#3b82f6", icon:"🔬", period:"Annual"     },
-  { key:"iel_estop",   label:"IEL E-Stops",         color:"#ef4444", icon:"🔴", period:"3-Monthly"  },
-  { key:"iel_lanyard", label:"IEL Lanyards",        color:"#10b981", icon:"🔗", period:"3-Monthly"  },
-  { key:"iel_iso",     label:"IEL Isolators",       color:"#f59e0b", icon:"⚡", period:"3-Monthly"  },
-  { key:"tat",         label:"Test & Tag",          color:"#60a5fa", icon:"🏷", period:"Variable"   },
-  { key:"other",       label:"Other / Custom",      color:"#a855f7", icon:"📌", period:"Custom"     },
+  { key:"rcd_push",    label:"RCD Push Test",          color:"#e8731a", icon:"📋", period:"Monthly"    },
+  { key:"rcd_inject",  label:"RCD Injection Test",     color:"#3b82f6", icon:"🔬", period:"Annual"     },
+  { key:"iel_estop",   label:"IEL E-Stops",            color:"#ef4444", icon:"🔴", period:"3-Monthly"  },
+  { key:"iel_lanyard", label:"IEL Lanyards",           color:"#10b981", icon:"🔗", period:"3-Monthly"  },
+  { key:"iel_iso",     label:"IEL Isolators",          color:"#f59e0b", icon:"⚡", period:"3-Monthly"  },
+  { key:"tat",         label:"Test & Tag",             color:"#60a5fa", icon:"🏷", period:"Variable"   },
+  { key:"thermo",      label:"Thermographic Testing",  color:"#f97316", icon:"🌡", period:"Variable"   },
+  { key:"other",       label:"Other / Custom",         color:"#a855f7", icon:"📌", period:"Custom"     },
 ];
 
 function calUid(){ return Math.random().toString(36).slice(2,9); }
@@ -3316,7 +3336,11 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
           ,React.createElement('span',{style:{fontSize:11,fontWeight:700,color:uc,background:uc+"22",borderRadius:4,padding:"2px 7px",border:`1px solid ${uc}44`}},ul)
         )
         ,React.createElement('div',{style:{fontSize:12,color:"#888",marginTop:3}},ev.site)
-        ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Due: ",React.createElement('strong',{style:{color:ev.completed?"#555":uc}},fmtDate(ev.dueDate)),ev.recur&&ev.recur!=="none"?React.createElement('span',{style:{color:"#6366f1",marginLeft:6}},"↻ "+ev.recur):"")
+        ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Due: ",React.createElement('strong',{style:{color:ev.completed?"#555":uc}},fmtDate(ev.dueDate)),ev.recur&&ev.recur!=="none"?React.createElement('span',{style:{color:"#6366f1",marginLeft:6}},"↻ "+(
+          ev.type==="tat"
+            ? ev.recur==="3-Monthly"?"3-Monthly (Bldg/Const)":ev.recur==="6-Monthly"?"6-Monthly (Factory/Whs)":ev.recur==="Annual"?"Annual (Hostile)":ev.recur
+            : ev.recur
+        )):"")
         ,ev.completed&&ev.completedAt&&React.createElement('div',{style:{fontSize:10,color:"#22c55e",marginTop:2}},"✓ Completed ",fmtDate(ev.completedAt.slice(0,10)))
         ,ev.notes&&React.createElement('div',{style:{fontSize:11,color:"#aaa",marginTop:3}},ev.notes)
         ,ev.seriesId&&React.createElement('div',{style:{fontSize:10,color:"#6366f1",marginTop:3}},"↻ ",ev.recur," · ",ev.seriesIndex!==undefined?`${ev.seriesIndex+1} of ${ev.seriesTotal}`:"series")
@@ -3414,23 +3438,25 @@ function CalendarApp({ onGoHome }) {
 
   // Form state
   const blank = {type:"rcd_push",site:"",dueDate:"",notes:"",recur:"none",tatPeriod:"3"};
+  const [editSeriesMode, setEditSeriesMode] = React.useState(null); // null | "single" | "series"
   const [form,  setForm]  = React.useState({...blank});
   const [customSite, setCustomSite] = React.useState("");
 
   React.useEffect(()=>{
     (async()=>{
       try{
-        const [ev, rcdProjs, ielProjs, tatProjs] = await Promise.all([
+        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs] = await Promise.all([
           load(K_CAL_EVENTS,[]),
           load(K_PROJECTS,[]),
           load(K_IEL_PROJECTS,[]),
           load(K_TAT_PROJECTS,[]),
+          load("thermo-projects-v1",[]),
         ]);
         setEvents(ev);
-        // Merge site names from both modules, deduplicate by name
+        // Merge site names from all modules, deduplicate by name
         const names = new Set();
         const combined = [];
-        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[])].forEach(p=>{
+        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[])].forEach(p=>{
           if(p&&p.name&&!names.has(p.name)){ names.add(p.name); combined.push(p.name); }
         });
         setAllSites(combined);
@@ -3442,51 +3468,59 @@ function CalendarApp({ onGoHome }) {
     if(loaded){ save(K_CAL_EVENTS,events); setSaveFlash(true); const t=setTimeout(()=>setSaveFlash(false),1200); return()=>clearTimeout(t); }
   },[events,loaded]);
 
+  // Generate recurring events from a start date and recur value
+  const generateSeries = (formToSave, startDate, recur) => {
+    const counts = {Monthly:12,"3-Monthly":8,"6-Monthly":6,Annual:5};
+    const count = counts[recur]||1;
+    const seriesId = calUid();
+    const newEvents = [];
+    let d = new Date(startDate);
+    for(let i=0;i<count;i++){
+      newEvents.push({
+        id:calUid(), ...formToSave,
+        dueDate:d.toISOString().slice(0,10),
+        seriesId, seriesIndex:i, seriesTotal:count,
+      });
+      if(recur==="Monthly")         d=new Date(d.getFullYear(),d.getMonth()+1,d.getDate());
+      else if(recur==="3-Monthly")  d=new Date(d.getFullYear(),d.getMonth()+3,d.getDate());
+      else if(recur==="6-Monthly")  d=new Date(d.getFullYear(),d.getMonth()+6,d.getDate());
+      else if(recur==="Annual")     d=new Date(d.getFullYear()+1,d.getMonth(),d.getDate());
+    }
+    return newEvents;
+  };
+
   const saveEvent = () => {
     const finalSite = (form.site==="__custom__"||!form.site) ? customSite.trim() : form.site.trim();
     if(!form.dueDate||!finalSite) return;
     const formToSave = {...form, site: finalSite};
+
     if(editId){
-      // Editing a single event — just update it, don't regenerate series
-      setEvents(prev=>prev.map(e=>e.id===editId?{...e,...formToSave}:e));
-      setEditId(null);
-    } else {
-      // Generate all occurrences for recurring events
-      const newEvents = [];
-      const seriesId = calUid(); // shared ID links events in same series
-      if(form.recur==="none"){
-        newEvents.push({id:calUid(),...formToSave,seriesId:null});
-      } else {
-        // Work out how many occurrences to generate
-        // Monthly: 12 months (1 year ahead)
-        // 3-Monthly: 8 occurrences (2 years ahead)
-        // Annual: 3 occurrences (3 years ahead)
-        const counts = {Monthly:12,"3-Monthly":8,"6-Monthly":6,Annual:3};
-        const count = counts[form.recur]||1;
-        let d = new Date(form.dueDate);
-        for(let i=0;i<count;i++){
-          const dateStr = d.toISOString().slice(0,10);
-          newEvents.push({
-            id:calUid(),
-            ...formToSave,
-            dueDate:dateStr,
-            seriesId,
-            seriesIndex:i,
-            seriesTotal:count,
-          });
-          // Advance date
-          if(form.recur==="Monthly"){
-            d = new Date(d.getFullYear(), d.getMonth()+1, d.getDate());
-          } else if(form.recur==="3-Monthly"){
-            d = new Date(d.getFullYear(), d.getMonth()+3, d.getDate());
-          } else if(form.recur==="6-Monthly"){
-            d = new Date(d.getFullYear(), d.getMonth()+6, d.getDate());
-          } else if(form.recur==="Annual"){
-            d = new Date(d.getFullYear()+1, d.getMonth(), d.getDate());
+      const editingEv = events.find(e=>e.id===editId);
+      const hasSeries = editingEv && editingEv.seriesId;
+
+      if(hasSeries && editSeriesMode === "series"){
+        // Edit entire series: delete all in series, regenerate from new settings
+        const oldSeriesId = editingEv.seriesId;
+        setEvents(prev=>{
+          const withoutSeries = prev.filter(e=>e.seriesId!==oldSeriesId);
+          if(form.recur==="none"){
+            return [...withoutSeries, {id:calUid(),...formToSave,seriesId:null}];
           }
-        }
+          return [...withoutSeries, ...generateSeries(formToSave, form.dueDate, form.recur)];
+        });
+      } else {
+        // Edit this event only
+        setEvents(prev=>prev.map(e=>e.id===editId?{...e,...formToSave}:e));
       }
-      setEvents(prev=>[...prev,...newEvents]);
+      setEditId(null);
+      setEditSeriesMode(null);
+    } else {
+      // New event
+      if(form.recur==="none"){
+        setEvents(prev=>[...prev,{id:calUid(),...formToSave,seriesId:null}]);
+      } else {
+        setEvents(prev=>[...prev,...generateSeries(formToSave, form.dueDate, form.recur)]);
+      }
     }
     setForm({...blank});
     setCustomSite("");
@@ -3500,6 +3534,7 @@ function CalendarApp({ onGoHome }) {
   const startEdit = ev => {
     setForm({type:ev.type,site:ev.site,dueDate:ev.dueDate,notes:ev.notes||"",recur:ev.recur||"none",tatPeriod:ev.tatPeriod||"3"});
     setEditId(ev.id);
+    setEditSeriesMode(null); // reset — user picks mode in the form
     setShowAdd(true);
   };
 
@@ -3633,7 +3668,7 @@ function CalendarApp({ onGoHome }) {
       // Add / Edit form
       ,showAdd&&React.createElement('div',{style:CAL_STYLE.formWrap}
         ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#818cf8",marginBottom:editId?8:16}},editId?"✏️ Edit Event":"+ Add Test Event")
-        ,editId&&(()=>{const ev=events.find(e=>e.id===editId);return ev&&ev.seriesId?React.createElement('div',{style:{background:"#1e1a2e",border:"1px solid #6366f155",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:12,color:"#a5b4fc"}},"ℹ️ Editing this event only. Changes won't apply to other events in the series."):null;})()
+        
         // Type
         ,React.createElement('div',{style:{marginBottom:12}}
           ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:6}},"TEST TYPE")
@@ -3686,31 +3721,51 @@ function CalendarApp({ onGoHome }) {
           ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
           ,React.createElement('input',{style:{width:"100%",background:"#1a1a1a",border:`1px solid ${!form.dueDate?"#ef4444":"#333"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},type:"date",value:form.dueDate,onChange:e=>setForm(f=>({...f,dueDate:e.target.value}))})
         )
-        // T&T period selector — only shown when Test & Tag is selected
-        ,form.type==="tat"&&React.createElement('div',{style:{marginBottom:12}}
-          ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"TEST FREQUENCY")
-          ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,["1","3","6","12"].map(m=>React.createElement('button',{key:m,
-              style:{flex:1,padding:"10px 4px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
-                border:`2px solid ${form.tatPeriod===m?"#60a5fa":"#333"}`,
-                background:form.tatPeriod===m?"#1a2030":"#1a1a1a",
-                color:form.tatPeriod===m?"#60a5fa":"#555"},
-              onClick:()=>setForm(f=>({...f,tatPeriod:m}))},
-              m==="1"?"1 Month":m==="3"?"3 Months":m==="6"?"6 Months":"Annual"
-            ))
-          )
-        )
+        // Series edit mode picker — shown when editing a recurring event
+        ,editId&&(()=>{
+          const ev=events.find(e=>e.id===editId);
+          if(!ev||!ev.seriesId) return null;
+          return React.createElement('div',{style:{background:"#1a0e00",border:"1px solid #f9731644",borderRadius:10,padding:"12px",marginBottom:12}}
+            ,React.createElement('div',{style:{fontSize:11,fontWeight:700,color:"#f97316",marginBottom:8,letterSpacing:0.5}},"EDITING RECURRING EVENT")
+            ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:10}},"Apply changes to:")
+            ,React.createElement('div',{style:{display:"flex",gap:8}}
+              ,React.createElement('button',{
+                style:{flex:1,padding:"10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                  border:`2px solid ${editSeriesMode==="single"?"#6366f1":"#333"}`,
+                  background:editSeriesMode==="single"?"#1a1a30":"#1a1a1a",
+                  color:editSeriesMode==="single"?"#818cf8":"#555"},
+                onClick:()=>setEditSeriesMode("single")},"This event only")
+              ,React.createElement('button',{
+                style:{flex:1,padding:"10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                  border:`2px solid ${editSeriesMode==="series"?"#f97316":"#333"}`,
+                  background:editSeriesMode==="series"?"#1a0e00":"#1a1a1a",
+                  color:editSeriesMode==="series"?"#f97316":"#555"},
+                onClick:()=>setEditSeriesMode("series")},"Entire series")
+            )
+            ,editSeriesMode==="series"&&React.createElement('div',{style:{fontSize:11,color:"#f59e0b",marginTop:8}}
+              ,"⚠ All ",ev.seriesTotal," events in this series will be deleted and regenerated from the new settings."
+            )
+          );
+        })()
 
-        // Recurrence
+        // Recurrence — T&T uses environment-labelled options, others use standard
         ,React.createElement('div',{style:{marginBottom:12}}
           ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"RECURRENCE")
-          ,React.createElement('select',{style:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
-            ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
-            ,React.createElement('option',{value:"Monthly"},"Monthly")
-            ,React.createElement('option',{value:"3-Monthly"},"Every 3 months")
-            ,React.createElement('option',{value:"6-Monthly"},"Every 6 months")
-            ,React.createElement('option',{value:"Annual"},"Annual")
-          )
+          ,form.type==="tat"
+            ? React.createElement('select',{style:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
+                ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
+                ,React.createElement('option',{value:"Monthly"},"1-Monthly — Hire / Construction")
+                ,React.createElement('option',{value:"3-Monthly"},"3-Monthly — Building / Construction / Demolition")
+                ,React.createElement('option',{value:"6-Monthly"},"6-Monthly — Factory / Warehouse / Production")
+                ,React.createElement('option',{value:"Annual"},"Annual — Hostile environment")
+              )
+            : React.createElement('select',{style:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
+                ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
+                ,React.createElement('option',{value:"Monthly"},"Monthly")
+                ,React.createElement('option',{value:"3-Monthly"},"Every 3 months")
+                ,React.createElement('option',{value:"6-Monthly"},"Every 6 months")
+                ,React.createElement('option',{value:"Annual"},"Annual")
+              )
         )
         // Notes
         ,React.createElement('div',{style:{marginBottom:16}}
@@ -3718,8 +3773,12 @@ function CalendarApp({ onGoHome }) {
           ,React.createElement('input',{style:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.notes,placeholder:"e.g. Contact: John — 0400 000 000",onChange:e=>setForm(f=>({...f,notes:e.target.value}))})
         )
         ,React.createElement('div',{style:{display:"flex",gap:8}}
-          ,React.createElement('button',{style:{flex:1,padding:"13px",background:"#6366f1",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",opacity:(!form.dueDate||!(form.site==="__custom__"?customSite.trim():form.site.trim()))?0.5:1},onClick:saveEvent},editId?"Save Changes":"Add Event")
-          ,React.createElement('button',{style:{padding:"13px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>{setShowAdd(false);setEditId(null);setForm({...blank});}},  "Cancel")
+          ,React.createElement('button',{style:{flex:1,padding:"13px",background:"#6366f1",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer",opacity:(
+              !form.dueDate||
+              !(form.site==="__custom__"?customSite.trim():form.site.trim())||
+              (editId&&events.find(e=>e.id===editId)?.seriesId&&!editSeriesMode)
+            )?0.5:1},onClick:saveEvent},editId?"Save Changes":"Add Event")
+          ,React.createElement('button',{style:{padding:"13px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>{setShowAdd(false);setEditId(null);setEditSeriesMode(null);setForm({...blank});}},  "Cancel")
         )
       )
     )
@@ -3820,7 +3879,12 @@ const K_TAT_FREQS = "tat-freqs-v1";
 const K_TAT_NAMES = "tat-names-v1";
 const K_TAT_DEFAULTS = "tat-defaults-v1";
 const TAT_FACTORY_DEFAULTS = {equipType:"Power Tool", freq:"3"};
-const TAT_DEFAULT_FREQS = [{value:"1",label:"1 Month"},{value:"3",label:"3 Months"},{value:"6",label:"6 Months"},{value:"12",label:"12 Months"}];
+const TAT_DEFAULT_FREQS = [
+  {value:"1",  label:"1-Monthly — Hire / Construction"},
+  {value:"3",  label:"3-Monthly — Building / Construction / Demolition"},
+  {value:"6",  label:"6-Monthly — Factory / Warehouse / Production"},
+  {value:"12", label:"Annual — Hostile environment"},
+];
 const TAT_DEFAULT_EQUIP_TYPES = ["Power Tool","Extension Lead","RCD Portable","Appliance","Double Adaptor","Power Board","Transformer","Other"];
 const TAT_DEFAULT_NAMES = ["Angle Grinder","Drill","Extension Lead","Power Board","Kettle","Laptop Charger","Vacuum","Heat Gun","Jigsaw","Circular Saw"];
 const K_TAT_RESULTS  = "tat-results-v1";   // { siteId: { areaId: { itemId: {...} } } }
@@ -3843,10 +3907,10 @@ const TAT_EQUIP_TYPES = [
 ];
 
 const TAT_FREQUENCIES = [
-  { value:"1",  label:"1 Month"  },
-  { value:"3",  label:"3 Months" },
-  { value:"6",  label:"6 Months" },
-  { value:"12", label:"12 Months"},
+  {value:"1",  label:"1-Monthly — Hire / Construction"},
+  {value:"3",  label:"3-Monthly — Building / Construction / Demolition"},
+  {value:"6",  label:"6-Monthly — Factory / Warehouse / Production"},
+  {value:"12", label:"Annual — Hostile environment"},
 ];
 
 function tatUid()  { return Math.random().toString(36).slice(2,9); }
@@ -3964,7 +4028,7 @@ function exportTATExcel(project, results, meta) {
       const areaFreq=(area.itemFreqs||{})[itemId]||item.freq||"3";
       const st=item.status||TAT_STATUS.UNTESTED;
       const pf=st===TAT_STATUS.PASS?"Pass":st===TAT_STATUS.FAIL?"Fail":st===TAT_STATUS.NA?"N/A":"Untested";
-      const freqLabel=[{value:"1",label:"1 Month"},{value:"3",label:"3 Months"},{value:"6",label:"6 Months"},{value:"12",label:"12 Months"}].find(f=>f.value===areaFreq)?.label||`${areaFreq} Months`;
+      const freqLabel=TAT_FREQUENCIES.find(f=>f.value===areaFreq)?.label||`${areaFreq} Months`;
       const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
       rows.push([
         area.name, areaTag, cleanName, areaEquip,
@@ -4535,7 +4599,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
         const tagNum=(area.itemTags||{})[itemId]||d.tag||"";
         const cleanName=rawName.replace(/^\d+\s*—\s*/,"");
         const itemFreq=(area.itemFreqs||{})[itemId]||d.freq||"3";
-        const freqLabel=(freqOptions||TAT_DEFAULT_FREQS).find(f=>f.value===itemFreq)?.label||`${itemFreq} Months`;
+        const freqLabel=itemFreq==="12"?"Annual":itemFreq+"m";
         return React.createElement('div',{key:itemId,
           style:{display:"flex",alignItems:"stretch",background:sm.bg,border:`2px solid ${sm.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",boxShadow:st!==TAT_STATUS.UNTESTED?`0 0 10px ${sm.border}44`:"none"},
           onClick:()=>onOpenDetail(itemId)}
@@ -4544,8 +4608,8 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
           )
           ,React.createElement('div',{style:{flex:1,padding:"12px 14px",minWidth:0}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:6,marginBottom:2}}
-              ,tagNum&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px"}},tagNum)
-              ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#eee"}},cleanName)
+              ,tagNum&&tagNum!==cleanName&&tagNum!==rawName&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px"}},tagNum)
+              ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#eee"}},cleanName||rawName)
             )
             ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#666",marginBottom:4}},d.equipType)
             ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#555",flexWrap:"wrap"}}
@@ -4616,7 +4680,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
           ,React.createElement('label',{style:ST.modalLabel},"TEST FREQ.")
           ,React.createElement('div',{style:{...ST.modalInput,background:"#111",color:"#aaa",display:"flex",alignItems:"center",gap:6}}
             ,React.createElement('span',{style:{fontSize:11,color:"#555"}},"🔒")
-            ,React.createElement('span',null,(freqOptions||TAT_DEFAULT_FREQS).find(f=>f.value===effectiveItem.freq)?.label||effectiveItem.freq||"3m")
+            ,React.createElement('span',null,(()=>{const v=effectiveItem.freq;return v==="12"?"Annual":v?v+"m":"3m";})())
           )
         )
       )
@@ -4663,7 +4727,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       ,nextDue&&React.createElement('div',{style:{display:"flex",alignItems:"center",background:"#111",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
         ,React.createElement('span',{style:{color:"#888",fontSize:11}},"NEXT TEST DUE:")
         ,React.createElement('span',{style:{color:TAT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},nextDue)
-        ,React.createElement('span',{style:{color:"#555",fontSize:11,marginLeft:8}},"(",TAT_FREQUENCIES.find(f=>f.value===item.freq)?.label||"3 Months",")")
+        ,React.createElement('span',{style:{color:"#555",fontSize:11,marginLeft:8}},"(",item.freq==="12"?"Annual":item.freq+"m",")")
       )
 
       // Notes
@@ -4898,7 +4962,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               onClick:e=>e.stopPropagation(),
               onChange:e=>{e.stopPropagation();setAreaDefaultFreq(area.id,e.target.value);}
             }
-              ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
+              ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.value==="12"?"Annual":f.value+"m"))
             )
           )
           ,React.createElement('button',{style:{...ST.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>{setConfirmDeleteArea(area.id);setExpandedArea(null);setConfirmDeleteItem(null);setEditingItem(null);}},"🗑")
@@ -4918,7 +4982,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               const tag=(area.itemTags||{})[itemId]||"";
               const freq=(area.itemFreqs||{})[itemId]||area.defaultFreq||"3";
               const itemLabel=mn.replace(/^\d+\s*—\s*/,"");
-              const freqLabel=(freqOpts.find(f=>f.value===freq)||{label:freq+"m"}).label;
+              const freqLabel=freq==="12"?"Annual":freq+"m";
               const isConfirming=confirmDeleteItem&&confirmDeleteItem.areaId===area.id&&confirmDeleteItem.itemId===itemId;
               const isEditing=editingItem&&editingItem.areaId===area.id&&editingItem.itemId===itemId;
 
@@ -5134,7 +5198,7 @@ function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
             ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
-            ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#a78bfa",borderColor:"#7c3aed44",fontWeight:700},onClick:()=>onContinueFromSnap(snap)},"▶ Continue")
+            ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...ST.smallBtn}})
             ,deleteId===snap.id
               ?React.createElement(React.Fragment,null,React.createElement('button',{style:{...ST.smallBtn,color:"#f87171",borderColor:"#ef444455"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"Confirm"),React.createElement('button',{style:ST.smallBtn,onClick:()=>setDeleteId(null)},"Cancel"))
               :React.createElement('button',{style:{...ST.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
@@ -5190,13 +5254,25 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:20}},"Manage dropdown options shown in the test form.")
 
     ,React.createElement('div',{style:secStyle}
-      ,secTitle("EQUIPMENT TYPE")
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:6}},"Tap ★ to set as default. Default is pre-selected in test form.")
+      ,secTitle("APPLIANCE NAMES (dropdown suggestions)")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,equipTypes.map(t=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${(tatDefaults||{}).equipType===t?TAT_COLOR+"88":TAT_COLOR+"33"}`,borderRadius:8,padding:"8px 12px"}}
-          ,(tatDefaults||{}).equipType===t&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,marginRight:2}},"★")
+        ,(applianceNames||TAT_DEFAULT_NAMES).map(n=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
+          ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},n)
+          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"},onClick:()=>removeName(n)},"✕")
+        ))
+      )
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>setNewName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addName()})
+        ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,padding:"10px 16px",fontSize:13},onClick:addName},"+ Add")
+      )
+      ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetNames},"Reset to defaults")
+    )
+    ,React.createElement('div',{style:secStyle}
+      ,secTitle("EQUIPMENT TYPE")
+
+      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
+        ,equipTypes.map(t=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
           ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},t)
-          ,React.createElement('button',{style:{background:"transparent",border:"none",color:TAT_COLOR,cursor:"pointer",fontSize:13,padding:"0 4px"},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),equipType:t}))},"★")
           ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeEquip(t)},"✕")
         ))
       )
@@ -5213,7 +5289,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${(tatDefaults||{}).freq===f.value?TAT_COLOR+"88":TAT_COLOR+"33"}`,borderRadius:8,padding:"8px 12px"}}
           ,(tatDefaults||{}).freq===f.value&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,marginRight:2}},"★")
-          ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},f.label," (",f.value,"m)")
+          ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},f.label)
           ,React.createElement('button',{style:{background:"transparent",border:"none",color:TAT_COLOR,cursor:"pointer",fontSize:13,padding:"0 4px"},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},"★")
           ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeFreq(f.value)},"✕")
         ))
@@ -5224,23 +5300,9 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       )
       ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetFreq},"Reset to defaults")
     )
-
-    ,React.createElement('div',{style:secStyle}
-      ,secTitle("APPLIANCE NAMES (dropdown suggestions)")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(applianceNames||TAT_DEFAULT_NAMES).map(n=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
-          ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},n)
-          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"},onClick:()=>removeName(n)},"✕")
-        ))
-      )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>setNewName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addName()})
-        ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,padding:"10px 16px",fontSize:13},onClick:addName},"+ Add")
-      )
-      ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetNames},"Reset to defaults")
-    )
   );
 }
+
 
 
 function TATNavBtn({icon,label,active,onClick,color}){
@@ -5306,28 +5368,3973 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   modalClose:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8},
 };
 
+
+// ═════════════════════════════════════════════════════════════════════════
+// THERMOGRAPHIC TESTING MODULE
+// ═════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────
+const THERMO_COLOR = "#f97316"; // deep orange — heat / infrared
+const K_THERMO_PROJECTS = "thermo-projects-v1";
+const K_THERMO_RESULTS = "thermo-results-v1";
+const K_THERMO_META = "thermo-meta-v1";
+const K_THERMO_HISTORY = "thermo-history-v1";
+const PRIORITY_OPTIONS = ["L", "M", "H", "U"];
+const PRIORITY_LABELS = {
+  L: "Low",
+  M: "Medium",
+  H: "High",
+  U: "Urgent"
+};
+const PRIORITY_COLORS = {
+  L: "#22c55e",
+  M: "#f59e0b",
+  H: "#ef4444",
+  U: "#9B0000"
+};
+const PRIORITY_BG = {
+  L: "#14532d22",
+  M: "#78350f22",
+  H: "#450a0a22",
+  U: "#3b000022"
+};
+const RESULT_OPTIONS = ["PASS", "FAIL", "MONITOR"];
+const RESULT_COLORS = {
+  PASS: "#22c55e",
+  FAIL: "#ef4444",
+  MONITOR: "#f59e0b",
+  UNTESTED: "#555"
+};
+const RESULT_BG = {
+  PASS: "#14532d",
+  FAIL: "#450a0a",
+  MONITOR: "#451a03",
+  UNTESTED: "#1a1a1a"
+};
+const RESPONSIBILITY_OPTIONS = ["Vorick Group", "Site Electrician", "Site Manager", "Contractor", "Client"];
+const RECTIFIED_OPTIONS = ["Removed from Service", "Scheduled for Repair", "Replacement Required", "Under Investigation", "No Action Required"];
+
+// ─────────────────────────────────────────────────────────────────────────
+// HELPERS
+// ─────────────────────────────────────────────────────────────────────────
+
+// localStorage helpers (same pattern as main app)
+
+// XLSX is loaded globally via script tag in index.html
+
+// ─────────────────────────────────────────────────────────────────────────
+// DATA HELPERS
+// ─────────────────────────────────────────────────────────────────────────
+// results is always the PROJECT-LEVEL slice: allResults[projectId]
+// shape: { [areaId]: { [boardId]: { [circuitId]: [photos] } } }
+function getPhotos(results, areaId, boardId, circuitId) {
+  return ((results[areaId] || {})[boardId] || {})[circuitId] || [];
+}
+
+// Returns all circuit IDs to count for a board — named circuits + "__board__" fallback
+function boardCircuitIds(board) {
+  const hasCircuits = (board.circuits || []).length > 0;
+  return hasCircuits ? board.circuits : ["__board__"];
+}
+function boardPhotoCount(results, areaId, boardId, board) {
+  let count = 0;
+  boardCircuitIds(board).forEach(cid => {
+    count += getPhotos(results, areaId, boardId, cid).length;
+  });
+  return count;
+}
+function boardHasFail(results, areaId, boardId, board) {
+  return boardCircuitIds(board).some(cid => getPhotos(results, areaId, boardId, cid).some(p => p.result === "FAIL"));
+}
+function boardHasMonitor(results, areaId, boardId, board) {
+  return boardCircuitIds(board).some(cid => getPhotos(results, areaId, boardId, cid).some(p => p.result === "MONITOR"));
+}
+function sitePhotoCount(results, project) {
+  let count = 0;
+  (project.areas || []).forEach(area => (area.boards || []).forEach(board => count += boardPhotoCount(results, area.id, board.id, board)));
+  return count;
+}
+function siteHasFail(results, project) {
+  return (project.areas || []).some(area => (area.boards || []).some(board => boardHasFail(results, area.id, board.id, board)));
+}
+function siteFail(results, project) {
+  let count = 0;
+  (project.areas || []).forEach(area => (area.boards || []).forEach(board => boardCircuitIds(board).forEach(cid => getPhotos(results, area.id, board.id, cid).forEach(p => {
+    if (p.result === "FAIL") count++;
+  }))));
+  return count;
+}
+function siteMonitor(results, project) {
+  let count = 0;
+  (project.areas || []).forEach(area => (area.boards || []).forEach(board => boardCircuitIds(board).forEach(cid => getPhotos(results, area.id, board.id, cid).forEach(p => {
+    if (p.result === "MONITOR") count++;
+  }))));
+  return count;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// EXCEL EXPORT
+// ─────────────────────────────────────────────────────────────────────────
+function exportThermoExcel(project, results, meta) {
+  const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
+  const sName = project.name || "Site";
+  const testDate = meta && meta.testDate || "";
+  const auditor = meta && meta.auditor || "";
+  const nextDue = testDate ? addYearsISO(testDate, 1) : "";
+  const headers = ["Location", "Board", "Circuit", "Date", "FLIR File", "Temperature (°C)", "Pass / Fail", "Rectified / Scheduled", "Date Rectified / Scheduled", "Defect ID", "Responsibility", "Notes / Recommendations", "Priority (L,M,H,U)"];
+  const n = headers.length;
+  const rows = [];
+  rows.push([`${sName} — Thermographic Test`, ...Array(n - 1).fill("")]);
+  rows.push([[project.company || "Vorick Group Asset Maintenance", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  "), ...Array(n - 1).fill("")]);
+  rows.push([`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${fmtDate(nextDue)}`, ...Array(Math.max(0, n - 5)).fill("")]);
+  rows.push(Array(n).fill(""));
+  rows.push(headers);
+  const dataRows = [];
+  (project.areas || []).forEach(area => {
+    (area.boards || []).forEach(board => {
+      // If board has circuits, one row per photo per circuit
+      const circuits = board.circuits || [];
+      if (circuits.length > 0) {
+        circuits.forEach(cid => {
+          const cName = (board.circuitNames || {})[cid] || "";
+          const photos = getPhotos(results, area.id, board.id, cid);
+          if (photos.length === 0) {
+            // Untested circuit — still list it
+            rows.push([area.name, board.name, cName, fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
+            dataRows.push({
+              result: "UNTESTED",
+              priority: ""
+            });
+          } else {
+            photos.forEach(photo => {
+              rows.push([area.name, board.name, cName, fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.rectified || "", photo.rectifiedDate ? fmtDate(photo.rectifiedDate) : "", photo.defectId || "", photo.responsibility || "", photo.notes || "", photo.priority || ""]);
+              dataRows.push({
+                result: photo.result || "UNTESTED",
+                priority: photo.priority || ""
+              });
+            });
+          }
+        });
+      } else {
+        // No circuits — photos belong directly to board (circuitId = "__board__")
+        const photos = getPhotos(results, area.id, board.id, "__board__");
+        if (photos.length === 0) {
+          rows.push([area.name, board.name, "", fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
+          dataRows.push({
+            result: "UNTESTED",
+            priority: ""
+          });
+        } else {
+          photos.forEach(photo => {
+            rows.push([area.name, board.name, "", fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.rectified || "", photo.rectifiedDate ? fmtDate(photo.rectifiedDate) : "", photo.defectId || "", photo.responsibility || "", photo.notes || "", photo.priority || ""]);
+            dataRows.push({
+              result: photo.result || "UNTESTED",
+              priority: photo.priority || ""
+            });
+          });
+        }
+      }
+    });
+  });
+  rows.push(Array(n).fill(""));
+  rows.push([`Notes: ${meta && meta.notes || ""}`, ...Array(n - 1).fill("")]);
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{
+    wch: 22
+  }, {
+    wch: 28
+  }, {
+    wch: 26
+  }, {
+    wch: 12
+  }, {
+    wch: 14
+  }, {
+    wch: 16
+  }, {
+    wch: 10
+  }, {
+    wch: 22
+  }, {
+    wch: 18
+  }, {
+    wch: 12
+  }, {
+    wch: 16
+  }, {
+    wch: 36
+  }, {
+    wch: 12
+  }];
+  ws["!rows"] = [{
+    hpt: 32
+  }, {
+    hpt: 16
+  }, {
+    hpt: 16
+  }, {
+    hpt: 6
+  }, {
+    hpt: 40
+  }];
+  ws["!merges"] = [{
+    s: {
+      r: 0,
+      c: 0
+    },
+    e: {
+      r: 0,
+      c: n - 1
+    }
+  }, {
+    s: {
+      r: 1,
+      c: 0
+    },
+    e: {
+      r: 1,
+      c: n - 1
+    }
+  }, {
+    s: {
+      r: 2,
+      c: 0
+    },
+    e: {
+      r: 2,
+      c: 1
+    }
+  }, {
+    s: {
+      r: 2,
+      c: 2
+    },
+    e: {
+      r: 2,
+      c: 3
+    }
+  }, {
+    s: {
+      r: 2,
+      c: 4
+    },
+    e: {
+      r: 2,
+      c: n - 1
+    }
+  }, {
+    s: {
+      r: 3,
+      c: 0
+    },
+    e: {
+      r: 3,
+      c: n - 1
+    }
+  }];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Thermographic Test");
+  const filename = `Thermo_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`;
+  const wbOut = XLSX.write(wb, {
+    bookType: "xlsx",
+    type: "base64",
+    cellStyles: false
+  });
+  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile) {
+    window.webkit.messageHandlers.shareFile.postMessage({
+      base64: wbOut,
+      filename,
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+  } else {
+    const link = document.createElement("a");
+    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbOut}`;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// EXCEL IMPORT — parses the Vorick thermo export format back into project structure
+// Columns: Location | Board | Circuit | Date | Page Number | Pass/Fail |
+//          Rectified/Scheduled | Date Rectified/Scheduled | Defect ID |
+//          Responsibility | Notes/Recommendations | Priority
+// One row = one photo. Circuit may be blank (board-level photo).
+// FLIR file name is NOT in the spreadsheet — left blank on import (user fills per new audit).
+// ─────────────────────────────────────────────────────────────────────────
+function parseThermoExcel(data, overrideName, XLSX) {
+  if (!XLSX) throw new Error("XLSX library not available");
+  const ws = data.Sheets[data.SheetNames[0]];
+  const rows = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    defval: ""
+  });
+
+  // ── Auto-detect site name from row 0 ──────────────────────────────────
+  let siteName = overrideName || "";
+  if (!siteName && rows[0] && rows[0][0]) {
+    const raw = String(rows[0][0]).trim();
+    // Strip "— Thermographic Test — March 2026" suffix patterns
+    siteName = raw.split(/\s*[-–]\s*(?:thermographic|thermo)/i)[0].trim() || raw;
+  }
+
+  // ── Auto-detect company / ABN / licence from row 1 ───────────────────
+  let company = "",
+    abn = "",
+    licence = "";
+  if (rows[1] && rows[1][0]) {
+    const parts = String(rows[1][0]).split(/\s*\|\s*/);
+    parts.forEach(p => {
+      const l = p.toLowerCase();
+      if (l.startsWith("abn:")) abn = p.replace(/^abn:\s*/i, "").trim();else if (l.startsWith("electrical licence:")) licence = p.replace(/^electrical licence:\s*/i, "").trim();else if (!company) company = p.trim();
+    });
+  }
+
+  // ── Find header row (contains "location") ─────────────────────────────
+  let headerIdx = -1;
+  for (let i = 0; i < Math.min(rows.length, 10); i++) {
+    if (rows[i].map(c => String(c).toLowerCase()).some(c => c.includes("location"))) {
+      headerIdx = i;
+      break;
+    }
+  }
+  if (headerIdx === -1) headerIdx = 2; // fallback
+
+  const header = rows[headerIdx].map(c => String(c).toLowerCase().trim());
+  const col = search => header.findIndex(h => h.includes(search));
+  const cLoc = col("location");
+  const cBoard = col("board");
+  const cCirc = col("circuit");
+  const cDate = col("date");
+  // page number col — we detect but don't import (user fills FLIR numbers fresh each audit)
+  const cPF = header.findIndex(h => h.includes("pass") || h.includes("fail"));
+  const cRect = header.findIndex(h => h.includes("rectif") || h.includes("schedul") && !h.includes("date"));
+  const cDRect = header.findIndex((h, i) => i > Math.max(0, cRect) && (h.includes("date") || h.includes("schedul")));
+  const cDef = col("defect");
+  const cResp = col("responsib");
+  const cNotes = header.findIndex(h => h.includes("note") || h.includes("recommend"));
+  const cPri = col("priority");
+
+  // ── Parse all data rows ───────────────────────────────────────────────
+  // We build: areaMap[locationName][boardName][circuitKey] = [photos...]
+  // circuitKey = circuit name (trimmed) or "__board__" if blank
+  const areaMap = {}; // { locationName: { boardName: { circuitKey: { name, photos[] } } } }
+
+  // Detect earliest test date for meta
+  let testDate = "";
+  for (let i = headerIdx + 1; i < rows.length; i++) {
+    const row = rows[i];
+    const loc = cLoc >= 0 ? String(row[cLoc] || "").trim() : "";
+    const board = cBoard >= 0 ? String(row[cBoard] || "").trim() : "";
+    if (!loc && !board) continue; // blank row
+    if (loc.toLowerCase() === "location") continue; // repeated header
+
+    const circRaw = cCirc >= 0 ? String(row[cCirc] || "").trim() : "";
+    const dateRaw = cDate >= 0 ? String(row[cDate] || "").trim() : "";
+    const pfRaw = cPF >= 0 ? String(row[cPF] || "").trim().toUpperCase() : "";
+    const rectRaw = cRect >= 0 ? String(row[cRect] || "").trim() : "";
+    const dRectRaw = cDRect >= 0 ? String(row[cDRect] || "").trim() : "";
+    const defRaw = cDef >= 0 ? String(row[cDef] || "").trim() : "";
+    const respRaw = cResp >= 0 ? String(row[cResp] || "").trim() : "";
+    const notesRaw = cNotes >= 0 ? String(row[cNotes] || "").trim() : "";
+    const priRaw = cPri >= 0 ? String(row[cPri] || "").trim().toUpperCase() : "";
+
+    // Convert pass/fail
+    let result = "PASS";
+    if (pfRaw === "FAIL") result = "FAIL";else if (pfRaw === "MONITOR") result = "MONITOR";
+
+    // Parse date to ISO
+    let isoDate = "";
+    if (dateRaw) {
+      try {
+        // Handle DD/MM/YYYY (Australian format)
+        const parts = dateRaw.split("/");
+        if (parts.length === 3 && parts[0].length <= 2) {
+          isoDate = `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        } else {
+          isoDate = new Date(dateRaw).toISOString().slice(0, 10);
+        }
+        if (!testDate || isoDate < testDate) testDate = isoDate;
+      } catch {/* ignore */}
+    }
+
+    // Parse rectified date
+    let isoRectDate = "";
+    if (dRectRaw) {
+      try {
+        const parts = dRectRaw.split("/");
+        if (parts.length === 3 && parts[0].length <= 2) {
+          isoRectDate = `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        } else {
+          isoRectDate = new Date(dRectRaw).toISOString().slice(0, 10);
+        }
+      } catch {/* ignore */}
+    }
+
+    // Validate priority
+    const priority = ["L", "M", "H", "U"].includes(priRaw) ? priRaw : "";
+
+    // Import structure only — no photos carried over, fresh audit starts blank
+    const circKey = circRaw || "__board__";
+    if (!areaMap[loc]) areaMap[loc] = {};
+    if (!areaMap[loc][board]) areaMap[loc][board] = {};
+    // Just register the circuit exists — no photos
+    if (!areaMap[loc][board][circKey]) areaMap[loc][board][circKey] = {
+      name: circRaw
+    };
+  }
+
+  // ── Build project structure ───────────────────────────────────────────
+  const siteId = slugify(siteName || "imported-site");
+  const areas = Object.entries(areaMap).map(([locName, boardMap]) => {
+    const areaId = slugify(locName);
+    const boards = Object.entries(boardMap).map(([boardName, circMap]) => {
+      const boardId = slugify(boardName);
+      const circuitIds = [];
+      const circuitNames = {};
+      Object.entries(circMap).forEach(([circKey, circData]) => {
+        if (circKey !== "__board__") {
+          const cid = uid();
+          circuitIds.push(cid);
+          circuitNames[cid] = circData.name;
+        }
+      });
+      return {
+        id: boardId,
+        name: boardName,
+        circuits: circuitIds,
+        circuitNames
+      };
+    });
+    return {
+      id: areaId,
+      name: locName,
+      boards
+    };
+  });
+
+  // ── Build results ─────────────────────────────────────────────────────
+  // Import structure only — results start completely empty for a fresh audit
+  const results = {
+    [siteId]: {}
+  };
+  return {
+    siteId,
+    siteName,
+    company,
+    abn,
+    licence,
+    areas,
+    results,
+    testDate
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TEMPLATE DOWNLOAD
+// ─────────────────────────────────────────────────────────────────────────
+function downloadThermoTemplate() {
+  const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
+  const rows = [
+    ["Location","Board","Circuit","Date","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)"],
+    ["ONR Main Wash Plant","Wash Plant Main Switchboard","Main switch","12/03/2026","PASS","","","","","",""],
+    ["ONR Main Wash Plant","Wash Plant Main Switchboard","Main Neutral bar","12/03/2026","PASS","","","","","",""],
+    ["ONR Main Wash Plant","Wash Plant Main Switch Room","MCC1 DOL Drives","12/03/2026","","","","","","",""],
+    ["ONR WORKSHOP","DB/1A","","12/03/2026","","","","","","",""],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=[{wch:24},{wch:28},{wch:26},{wch:12},{wch:10},{wch:22},{wch:18},{wch:12},{wch:16},{wch:36},{wch:10}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "Thermographic Test");
+  const out = XLSX.write(wb, {
+    bookType: "xlsx",
+    type: "base64"
+  });
+  if (window.webkit?.messageHandlers?.shareFile) {
+    window.webkit.messageHandlers.shareFile.postMessage({
+      base64: out,
+      filename: "Thermo_Import_Template.xlsx",
+      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    });
+  } else {
+    const link = document.createElement("a");
+    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${out}`;
+    link.download = "Thermo_Import_Template.xlsx";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// STYLE TOKENS — matches dark theme of main app
+// ─────────────────────────────────────────────────────────────────────────
+const STH = {
+  root: {
+    display: "flex",
+    flexDirection: "column",
+    flex: 1,
+    background: "#111",
+    color: "#eee",
+    fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif",
+    WebkitFontSmoothing: "antialiased",
+    height: "100%",
+    overflow: "hidden"
+  },
+  topbar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "0 16px",
+    height: 52,
+    flexShrink: 0,
+    background: "#111",
+    borderBottom: `2px solid ${THERMO_COLOR}44`,
+    zIndex: 10
+  },
+  topbarLeft: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10
+  },
+  topbarRight: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8
+  },
+  backBtn: {
+    background: "transparent",
+    border: "none",
+    color: "#aaa",
+    fontSize: 22,
+    cursor: "pointer",
+    padding: "4px 8px",
+    lineHeight: 1
+  },
+  appTitle: {
+    fontSize: 15,
+    fontWeight: 800,
+    color: "#eee",
+    letterSpacing: 0.5
+  },
+  appSub: {
+    fontSize: 11,
+    color: THERMO_COLOR,
+    letterSpacing: 0.3
+  },
+  saveIndicator: {
+    fontSize: 11,
+    color: "#22c55e",
+    fontWeight: 700,
+    transition: "opacity 0.3s"
+  },
+  breadcrumb: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    padding: "6px 16px",
+    background: "#0d0d0d",
+    borderBottom: "1px solid #1a1a1a",
+    flexShrink: 0,
+    flexWrap: "wrap"
+  },
+  bcItem: {
+    fontSize: 11,
+    color: "#555",
+    cursor: "pointer"
+  },
+  bcSep: {
+    fontSize: 11,
+    color: "#333"
+  },
+  main: {
+    flex: 1,
+    overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+    position: "relative"
+  },
+  bottomNav: {
+    display: "flex",
+    background: "#0d0d0d",
+    borderTop: "1px solid #1a1a1a",
+    flexShrink: 0,
+    minHeight: 56,
+    paddingBottom: "max(env(safe-area-inset-bottom, 0px), 12px)"
+  },
+  navBtn: {
+    flex: 1,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    padding: "6px 0",
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: 0.5,
+    color: "#555"
+  },
+  listWrap: {
+    padding: "16px"
+  },
+  listTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: "#eee",
+    marginBottom: 16
+  },
+  brandBlock: {
+    textAlign: "center",
+    borderBottom: `2px solid ${THERMO_COLOR}`,
+    paddingBottom: 8,
+    width: "100%",
+    maxWidth: 500
+  },
+  brandTitle: {
+    fontSize: 20,
+    fontWeight: 900,
+    letterSpacing: 3,
+    color: THERMO_COLOR
+  },
+  brandSub: {
+    fontSize: 11,
+    color: "#666",
+    letterSpacing: 1,
+    marginTop: 2
+  },
+  siteCard: {
+    width: "100%",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    background: "#1a1a1a",
+    border: "1px solid #2a2a2a",
+    borderRadius: 14,
+    padding: "16px 18px",
+    marginBottom: 10,
+    cursor: "pointer",
+    textAlign: "left"
+  },
+  siteCardName: {
+    fontSize: 16,
+    fontWeight: 700,
+    color: "#eee"
+  },
+  siteCardSub: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2
+  },
+  failBadge: {
+    fontSize: 11,
+    fontWeight: 800,
+    color: "#f87171",
+    background: "#3d1a1a",
+    borderRadius: 6,
+    padding: "3px 8px",
+    border: "1px solid #ef4444"
+  },
+  arrow: {
+    fontSize: 22,
+    color: "#555"
+  },
+  addCard: {
+    background: "#161616",
+    border: "1px solid #2a2a2a",
+    borderRadius: 14,
+    padding: "16px",
+    marginBottom: 10
+  },
+  metaLabelText: {
+    fontSize: 10,
+    color: "#666",
+    letterSpacing: 0.8,
+    fontWeight: 700
+  },
+  metaInput: {
+    background: "#1a1a1a",
+    border: "1px solid #333",
+    borderRadius: 8,
+    color: "#eee",
+    padding: "9px 12px",
+    fontSize: 13,
+    outline: "none",
+    width: "100%",
+    boxSizing: "border-box"
+  },
+  smallBtn: {
+    padding: "5px 10px",
+    background: "transparent",
+    border: "1px solid #333",
+    borderRadius: 6,
+    fontSize: 12,
+    cursor: "pointer",
+    fontWeight: 600,
+    flexShrink: 0,
+    color: "#aaa"
+  },
+  smallInput: {
+    background: "#111",
+    border: "1px solid #333",
+    borderRadius: 8,
+    color: "#eee",
+    padding: "8px 10px",
+    fontSize: 13,
+    outline: "none",
+    boxSizing: "border-box"
+  },
+  ctaPrimary: {
+    padding: "11px 20px",
+    background: THERMO_COLOR,
+    color: "#fff",
+    border: "none",
+    borderRadius: 10,
+    fontSize: 14,
+    fontWeight: 800,
+    cursor: "pointer"
+  },
+  ctaSecondary: {
+    padding: "11px 20px",
+    background: "#1a1a1a",
+    color: "#aaa",
+    border: "1px solid #333",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer"
+  },
+  homeWrap: {
+    padding: "24px 16px",
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    gap: 14
+  },
+  metaCard: {
+    width: "100%",
+    maxWidth: 500,
+    background: "#161616",
+    border: "1px solid #2a2a2a",
+    borderRadius: 14,
+    padding: "14px"
+  },
+  secondaryBtn: {
+    padding: "11px",
+    background: "#161616",
+    color: "#aaa",
+    border: "1px solid #2a2a2a",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  exportBtn: {
+    padding: "11px",
+    background: "#161616",
+    color: "#4ade80",
+    border: "1px solid #2a2a2a",
+    borderRadius: 10,
+    fontSize: 13,
+    fontWeight: 700,
+    cursor: "pointer"
+  },
+  confirmYes: {
+    padding: "7px 14px",
+    background: "#3d1a1a",
+    color: "#f87171",
+    border: "1px solid #ef4444",
+    borderRadius: 8,
+    fontSize: 13,
+    cursor: "pointer"
+  },
+  confirmNo: {
+    padding: "7px 14px",
+    background: "#1a1a1a",
+    color: "#aaa",
+    border: "1px solid #333",
+    borderRadius: 8,
+    fontSize: 13,
+    cursor: "pointer"
+  },
+  panelHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 14
+  },
+  panelTitle: {
+    fontSize: 20,
+    fontWeight: 800,
+    color: "#eee"
+  },
+  panelSub: {
+    fontSize: 12,
+    color: "#666",
+    marginTop: 2
+  },
+  modalOverlay: {
+    position: "absolute",
+    inset: 0,
+    background: "rgba(0,0,0,0.88)",
+    zIndex: 200,
+    display: "flex",
+    alignItems: "flex-end",
+    justifyContent: "center"
+  },
+  modalBox: {
+    background: "#1a1a1a",
+    border: "1px solid #333",
+    borderRadius: "20px 20px 0 0",
+    padding: "24px 20px 32px",
+    width: "100%",
+    maxWidth: 620,
+    maxHeight: "92vh",
+    overflowY: "auto"
+  },
+  modalHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 20
+  },
+  modalTitle: {
+    fontSize: 17,
+    fontWeight: 800,
+    color: "#eee"
+  },
+  modalSub: {
+    fontSize: 11,
+    color: "#666",
+    marginTop: 3
+  },
+  modalLabel: {
+    display: "block",
+    fontSize: 10,
+    color: "#666",
+    letterSpacing: 0.8,
+    fontWeight: 700,
+    marginBottom: 5
+  },
+  modalInput: {
+    width: "100%",
+    background: "#111",
+    border: "1px solid #333",
+    borderRadius: 8,
+    color: "#eee",
+    padding: "10px 12px",
+    fontSize: 13,
+    outline: "none",
+    boxSizing: "border-box"
+  },
+  modalField: {
+    marginBottom: 14
+  },
+  loader: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: "100vh",
+    background: "#111"
+  },
+  loaderSpinner: {
+    width: 32,
+    height: 32,
+    border: `3px solid ${THERMO_COLOR}33`,
+    borderTop: `3px solid ${THERMO_COLOR}`,
+    borderRadius: "50%",
+    animation: "spin 0.8s linear infinite"
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────
+// NAV BUTTON
+// ─────────────────────────────────────────────────────────────────────────
+function NavBtn({
+  icon,
+  label,
+  active,
+  onClick,
+  color
+}) {
+  const c = active ? color || THERMO_COLOR : "#555";
+  return /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.navBtn,
+      color: c,
+      borderTop: active ? `2px solid ${color || THERMO_COLOR}` : "2px solid transparent"
+    },
+    onClick: onClick
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 18
+    }
+  }, icon), /*#__PURE__*/React.createElement("span", null, label));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMPLETE AUDIT BUTTON
+// ─────────────────────────────────────────────────────────────────────────
+function CompleteAuditBtn({
+  onComplete
+}) {
+  const [confirm, setConfirm] = React.useState(false);
+  if (confirm) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        background: "#111",
+        border: `1px solid ${THERMO_COLOR}55`,
+        borderRadius: 10,
+        padding: "12px",
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#eee",
+        marginBottom: 10,
+        fontWeight: 600
+      }
+    }, "Archive this audit and reset for next run?"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        flex: 1,
+        padding: "11px",
+        background: THERMO_COLOR,
+        color: "#fff",
+        border: "none",
+        borderRadius: 10,
+        fontSize: 13,
+        fontWeight: 800,
+        cursor: "pointer"
+      },
+      onClick: () => {
+        onComplete();
+        setConfirm(false);
+      }
+    }, "\u2713 Yes, Complete"), /*#__PURE__*/React.createElement("button", {
+      style: {
+        flex: 1,
+        padding: "11px",
+        background: "transparent",
+        color: "#aaa",
+        border: "1px solid #333",
+        borderRadius: 10,
+        fontSize: 13,
+        cursor: "pointer"
+      },
+      onClick: () => setConfirm(false)
+    }, "Cancel")));
+  }
+  return /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      padding: "10px",
+      background: `${THERMO_COLOR}22`,
+      color: THERMO_COLOR,
+      border: `1px solid ${THERMO_COLOR}55`,
+      borderRadius: 10,
+      fontSize: 13,
+      fontWeight: 800,
+      cursor: "pointer"
+    },
+    onClick: () => setConfirm(true)
+  }, "\u2713 Complete & Archive Audit");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PROJECT LIST VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoProjectListView({
+  projects,
+  allResults,
+  onSelect,
+  onAddProject,
+  onDeleteProject
+}) {
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [tab, setTab] = React.useState("manual");
+  const [newName, setNewName] = React.useState("");
+  const [newCo, setNewCo] = React.useState("");
+  const [newAbn, setNewAbn] = React.useState("");
+  const [newLic, setNewLic] = React.useState("");
+  const [deleteId, setDeleteId] = React.useState(null);
+  const [importing, setImporting] = React.useState(false);
+  const [importPreview, setImportPreview] = React.useState(null);
+  const [importName, setImportName] = React.useState("");
+  const [importCo, setImportCo] = React.useState("");
+  const [importAbn, setImportAbn] = React.useState("");
+  const [importLic, setImportLic] = React.useState("");
+  const [importError, setImportError] = React.useState("");
+  const fileRef = React.useRef();
+  const handleAdd = () => {
+    if (!newName.trim()) return;
+    onAddProject({
+      id: slugify(newName),
+      name: newName.trim(),
+      company: newCo.trim(),
+      abn: newAbn.trim(),
+      licence: newLic.trim(),
+      areas: []
+    });
+    setNewName("");
+    setNewCo("");
+    setNewAbn("");
+    setNewLic("");
+    setShowAdd(false);
+  };
+  const handleFile = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImporting(true);
+    setImportError("");
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      try {
+        const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded"); return; }
+        const data = XLSX.read(ev.target.result, {
+          type: "array"
+        });
+        const parsed = parseThermoExcel(data, "", XLSX);
+        const fname = file.name.replace(/\.(xlsx|xls|csv)$/i, "").replace(/[_-]+/g, " ").trim();
+        setImportName(parsed.siteName || fname);
+        setImportPreview(parsed);
+        if (!importCo && parsed.company) setImportCo(parsed.company);
+        if (!importAbn && parsed.abn) setImportAbn(parsed.abn);
+        if (!importLic && parsed.licence) setImportLic(parsed.licence);
+      } catch (err) {
+        setImportError("Could not parse file: " + err.message);
+      }
+      setImporting(false);
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = "";
+  };
+  const confirmImport = () => {
+    if (!importPreview) return;
+    const sName = importName.trim() || importPreview.siteName || "Imported Site";
+    const newSiteId = slugify(sName);
+    const proj = {
+      id: newSiteId,
+      name: sName,
+      company: importCo.trim(),
+      abn: importAbn.trim(),
+      licence: importLic.trim(),
+      areas: importPreview.areas
+    };
+    // Results always empty — fresh audit, no photos carried over
+    onAddProject(proj, {});
+    setImportPreview(null);
+    setShowAdd(false);
+    setImportName("");
+    setImportCo("");
+    setImportAbn("");
+    setImportLic("");
+    setImportError("");
+  };
+
+  // previewPhotoCount removed — import is structure-only, no photos
+
+  const tabStyle = active => ({
+    flex: 1,
+    padding: "9px",
+    background: active ? "#1a0e00" : "#111",
+    border: active ? `1px solid ${THERMO_COLOR}` : "1px solid #2a2a2a",
+    borderRadius: 8,
+    color: active ? THERMO_COLOR : "#666",
+    fontSize: 12,
+    fontWeight: 600,
+    cursor: "pointer"
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: STH.listWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...STH.brandBlock,
+      borderColor: THERMO_COLOR
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...STH.brandTitle,
+      color: THERMO_COLOR
+    }
+  }, "VORICK GROUP"), /*#__PURE__*/React.createElement("div", {
+    style: STH.brandSub
+  }, "Thermographic Testing")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...STH.listTitle,
+      marginTop: 24
+    }
+  }, "Sites"), projects.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#555",
+      fontSize: 14,
+      marginBottom: 16
+    }
+  }, "No sites yet \u2014 add one or import a previous report."), projects.map(proj => {
+    const photoCount = sitePhotoCount(allResults[proj.id] || {}, proj);
+    const hasFail = siteHasFail(allResults[proj.id] || {}, proj);
+    return /*#__PURE__*/React.createElement("div", {
+      key: proj.id,
+      style: {
+        ...STH.siteCard,
+        flexDirection: "column",
+        gap: 0,
+        padding: 0,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        width: "100%",
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        padding: "16px 18px",
+        color: "inherit",
+        textAlign: "left"
+      },
+      onClick: () => onSelect(proj.id)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: STH.siteCardName
+    }, proj.name), /*#__PURE__*/React.createElement("div", {
+      style: STH.siteCardSub
+    }, proj.areas.length, " locations \xB7 ", photoCount, " photos logged")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginLeft: 16
+      }
+    }, hasFail && /*#__PURE__*/React.createElement("span", {
+      style: STH.failBadge
+    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+      style: STH.arrow
+    }, "\u203A"))), deleteId === proj.id ? /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "8px 18px",
+        background: "#1e1010",
+        borderTop: "1px solid #333"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: "#ef4444",
+        flex: 1
+      }
+    }, "Delete \"", proj.name, "\"?"), /*#__PURE__*/React.createElement("button", {
+      style: STH.confirmYes,
+      onClick: () => {
+        onDeleteProject(proj.id);
+        setDeleteId(null);
+      }
+    }, "Delete"), /*#__PURE__*/React.createElement("button", {
+      style: STH.confirmNo,
+      onClick: () => setDeleteId(null)
+    }, "Cancel")) : /*#__PURE__*/React.createElement("button", {
+      style: {
+        background: "transparent",
+        border: "none",
+        borderTop: "1px solid #2a2a2a",
+        color: "#555",
+        fontSize: 11,
+        padding: "6px 18px",
+        cursor: "pointer",
+        textAlign: "left",
+        width: "100%"
+      },
+      onClick: e => {
+        e.stopPropagation();
+        setDeleteId(proj.id);
+      }
+    }, "Delete site"));
+  }), showAdd ? /*#__PURE__*/React.createElement("div", {
+    style: STH.addCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: tabStyle(tab === "manual"),
+    onClick: () => setTab("manual")
+  }, "Manual Entry"), /*#__PURE__*/React.createElement("button", {
+    style: tabStyle(tab === "import"),
+    onClick: () => setTab("import")
+  }, "Import Excel")), tab === "manual" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 800,
+      color: "#eee",
+      marginBottom: 12
+    }
+  }, "New Site"), [["SITE NAME", newName, setNewName, "Site name"], ["COMPANY (optional)", newCo, setNewCo, "Company name"], ["ABN (optional)", newAbn, setNewAbn, "e.g. 12 345 678 901"], ["ELECTRICAL LICENCE (optional)", newLic, setNewLic, "e.g. 123456C"]].map(([label, val, setter, ph]) => /*#__PURE__*/React.createElement("div", {
+    key: label,
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, label), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.metaInput,
+      marginTop: 4
+    },
+    value: val,
+    placeholder: ph,
+    onChange: e => setter(e.target.value),
+    onKeyDown: e => e.key === "Enter" && handleAdd()
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 4
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: STH.ctaPrimary,
+    onClick: handleAdd
+  }, "Add Site"), /*#__PURE__*/React.createElement("button", {
+    style: STH.ctaSecondary,
+    onClick: () => setShowAdd(false)
+  }, "Cancel"))), tab === "import" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14,
+      fontWeight: 800,
+      color: "#eee",
+      marginBottom: 4
+    }
+  }, "Import Previous Report"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#666",
+      marginBottom: 12
+    }
+  }, "Upload your existing thermographic Excel report. Columns needed: Location, Board, Circuit, Date, Pass/Fail. The full site structure, results, notes and priorities are imported. FLIR file numbers are not imported \u2014 enter them fresh for the new audit cycle."), !importPreview && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+    ref: fileRef,
+    type: "file",
+    accept: ".xlsx,.xls,.csv",
+    style: {
+      display: "none"
+    },
+    onChange: handleFile
+  }), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.ctaPrimary,
+      width: "100%",
+      marginBottom: 8
+    },
+    onClick: () => fileRef.current && fileRef.current.click()
+  }, importing ? "Parsing..." : "Choose Excel / CSV File"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.ctaSecondary,
+      width: "100%",
+      fontSize: 12
+    },
+    onClick: downloadThermoTemplate
+  }, "Download Import Template"), importError && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#f87171",
+      fontSize: 12,
+      marginTop: 8
+    }
+  }, importError)), importPreview && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#1a0e00",
+      border: `1px solid ${THERMO_COLOR}44`,
+      borderRadius: 10,
+      padding: "12px",
+      marginBottom: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      fontWeight: 700,
+      color: THERMO_COLOR,
+      marginBottom: 8
+    }
+  }, "Preview"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#aaa",
+      marginBottom: 6
+    }
+  }, importPreview.areas.length, " locations \xB7 ", importPreview.areas.reduce((s, a) => s + (a.boards || []).length, 0), " boards \xB7 ", importPreview.areas.reduce((s, a) => s + (a.boards || []).reduce((s2, b) => s2 + (b.circuits || []).length, 0), 0), " circuits"), importPreview.areas.slice(0, 5).map(a => /*#__PURE__*/React.createElement("div", {
+    key: a.id,
+    style: {
+      fontSize: 11,
+      color: "#666",
+      marginBottom: 2
+    }
+  }, a.name, " - ", (a.boards || []).length, " boards")), importPreview.areas.length > 5 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#555"
+    }
+  }, "...and ", importPreview.areas.length - 5, " more"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#555",
+      marginTop: 8,
+      borderTop: "1px solid #2a2a2a",
+      paddingTop: 8
+    }
+  }, "Structure imported. All photo logs start blank \u2014 enter FLIR numbers as you test.")), [["SITE NAME", importName, setImportName, "Site name"], ["COMPANY (optional)", importCo, setImportCo, "Company name"], ["ABN (optional)", importAbn, setImportAbn, "e.g. 12 345 678 901"], ["ELECTRICAL LICENCE (optional)", importLic, setImportLic, "e.g. 123456C"]].map(([label, val, setter, ph]) => /*#__PURE__*/React.createElement("div", {
+    key: label,
+    style: {
+      marginBottom: 8
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, label), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.metaInput,
+      marginTop: 4
+    },
+    value: val,
+    placeholder: ph,
+    onChange: e => setter(e.target.value)
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: STH.ctaPrimary,
+    onClick: confirmImport
+  }, "Import Site"), /*#__PURE__*/React.createElement("button", {
+    style: STH.ctaSecondary,
+    onClick: () => setImportPreview(null)
+  }, "Re-upload"), /*#__PURE__*/React.createElement("button", {
+    style: STH.ctaSecondary,
+    onClick: () => setShowAdd(false)
+  }, "Cancel"))))) : /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.ctaPrimary,
+      width: "100%",
+      marginTop: 8
+    },
+    onClick: () => setShowAdd(true)
+  }, "+ Add / Import Site"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// HOME VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoHomeView({
+  project,
+  meta,
+  setMeta,
+  results,
+  onStartAudit,
+  onReport,
+  onManage,
+  onHistory,
+  onReset,
+  onExport,
+  onArchive,
+  auditEntered,
+  onCompleteAudit
+}) {
+  const [showExports, setShowExports] = React.useState(false);
+  const [confirmReset, setConfirmReset] = React.useState(false);
+  const photoCount = sitePhotoCount(results, project);
+  const hasFail = siteHasFail(results, project);
+  const hasAuditor = !!(meta.auditor && meta.auditor.trim());
+  return /*#__PURE__*/React.createElement("div", {
+    style: STH.homeWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...STH.brandBlock,
+      borderColor: THERMO_COLOR
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...STH.brandTitle,
+      color: THERMO_COLOR
+    }
+  }, "VORICK GROUP"), /*#__PURE__*/React.createElement("div", {
+    style: STH.brandSub
+  }, "Thermographic Testing")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 800,
+      color: "#eee"
+    }
+  }, project.name), project.company && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#666"
+    }
+  }, project.company), /*#__PURE__*/React.createElement("div", {
+    style: STH.metaCard
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "AUDITOR"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.metaInput,
+      marginTop: 4,
+      borderColor: !hasAuditor ? "#ef4444" : "#333"
+    },
+    value: meta.auditor || "",
+    placeholder: "Enter name to begin audit\u2026",
+    onChange: e => setMeta({
+      auditor: e.target.value
+    })
+  }), !hasAuditor && /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#ef4444",
+      marginTop: 4
+    }
+  }, "\u26A0 Auditor name required before starting")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 10
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "TEST DATE"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.metaInput,
+      marginTop: 4
+    },
+    type: "date",
+    value: meta.testDate || "",
+    onChange: e => setMeta({
+      testDate: e.target.value
+    })
+  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "STARTING FLIR NUMBER"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#555",
+      marginBottom: 4
+    }
+  }, "First FLIR file number on camera today (e.g. 168). Used to auto-suggest next number while logging."), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.metaInput,
+      marginTop: 2
+    },
+    type: "number",
+    min: "1",
+    value: meta.startFlir || "",
+    placeholder: "e.g. 168",
+    onChange: e => setMeta({
+      startFlir: e.target.value ? parseInt(e.target.value) : ""
+    })
+  }))), (() => {
+    const failCount = siteFail(results, project);
+    const monitorCount = siteMonitor(results, project);
+    const passCount = photoCount - failCount - monitorCount;
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: "100%",
+        maxWidth: 500,
+        display: "flex",
+        gap: 8
+      }
+    }, [["Photos", photoCount, "#60a5fa"], ["Pass", passCount, "#22c55e"], ["Monitor", monitorCount, "#f59e0b"], ["Fail", failCount, "#ef4444"]].map(([label, val, color]) => /*#__PURE__*/React.createElement("div", {
+      key: label,
+      style: {
+        flex: 1,
+        textAlign: "center",
+        background: "#161616",
+        border: `1px solid ${val > 0 ? color + "44" : "#2a2a2a"}`,
+        borderRadius: 12,
+        padding: "10px 4px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 22,
+        fontWeight: 900,
+        color: val > 0 ? color : "#444"
+      }
+    }, val), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#555",
+        marginTop: 2
+      }
+    }, label.toUpperCase()))));
+  })(), meta.testDate && /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 500,
+      display: "flex",
+      justifyContent: "flex-end"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 11,
+      color: "#555"
+    }
+  }, "Next due: ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: THERMO_COLOR,
+      fontWeight: 700
+    }
+  }, fmtDate(addYearsISO(meta.testDate, 1))))), /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      maxWidth: 500,
+      padding: "16px",
+      background: hasAuditor ? THERMO_COLOR : "#1a1a1a",
+      color: hasAuditor ? "#fff" : "#555",
+      border: `2px solid ${hasAuditor ? THERMO_COLOR : "#2a2a2a"}`,
+      borderRadius: 16,
+      fontSize: 16,
+      fontWeight: 800,
+      cursor: hasAuditor ? "pointer" : "not-allowed",
+      letterSpacing: 0.5
+    },
+    onClick: () => hasAuditor && onStartAudit()
+  }, "\uD83C\uDF21 Start / Continue Audit"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 500,
+      background: "#161616",
+      border: `1px solid ${auditEntered ? THERMO_COLOR + "44" : "#2a2a2a"}`,
+      borderRadius: 12,
+      padding: "10px 14px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#555",
+      fontWeight: 700,
+      letterSpacing: 0.8,
+      marginBottom: 8
+    }
+  }, "COMPLETE & ARCHIVE AUDIT"), /*#__PURE__*/React.createElement(CompleteAuditBtn, {
+    onComplete: onCompleteAudit
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 500,
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.secondaryBtn,
+      flex: 1
+    },
+    onClick: onReport
+  }, "\u2261 Report"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.secondaryBtn,
+      flex: 1,
+      color: "#f59e0b",
+      borderColor: "#f59e0b33"
+    },
+    onClick: onHistory
+  }, "\uD83D\uDD50 History"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.secondaryBtn,
+      flex: 1,
+      color: "#a855f7",
+      borderColor: "#a855f744"
+    },
+    onClick: onManage
+  }, "\u2699 Structure"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.secondaryBtn,
+      flex: 1,
+      color: "#4ade80",
+      borderColor: "#22c55e44"
+    },
+    onClick: () => setShowExports(x => !x)
+  }, "\u2193 Export")), showExports && /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.exportBtn,
+      width: "100%",
+      maxWidth: 500,
+      color: THERMO_COLOR,
+      borderColor: `${THERMO_COLOR}44`,
+      background: "#1a0e00"
+    },
+    onClick: onExport
+  }, "\u2193 Export Thermographic xlsx"), confirmReset ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 10,
+      flexWrap: "wrap",
+      width: "100%",
+      maxWidth: 500
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#ef4444",
+      fontSize: 13,
+      flex: 1
+    }
+  }, "Reset all photo logs?"), /*#__PURE__*/React.createElement("button", {
+    style: STH.confirmYes,
+    onClick: () => {
+      onReset();
+      setConfirmReset(false);
+    }
+  }, "Yes"), /*#__PURE__*/React.createElement("button", {
+    style: STH.confirmNo,
+    onClick: () => setConfirmReset(false)
+  }, "Cancel")) : /*#__PURE__*/React.createElement("button", {
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "#555",
+      fontSize: 12,
+      cursor: "pointer",
+      textDecoration: "underline"
+    },
+    onClick: () => setConfirmReset(true)
+  }, "Reset all photo logs"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AREA LIST VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoAreaListView({
+  project,
+  results,
+  onSelect
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: STH.listWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.listTitle
+  }, "Select Location"), project.areas.length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#555",
+      fontSize: 14
+    }
+  }, "No locations yet \u2014 go to \u2699 Structure to add areas and boards."), project.areas.map(area => {
+    const photoCount = (area.boards || []).reduce((s, board) => s + boardPhotoCount(results, area.id, board.id, board), 0);
+    const hasFail = (area.boards || []).some(board => boardHasFail(results, area.id, board.id, board));
+    return /*#__PURE__*/React.createElement("button", {
+      key: area.id,
+      style: {
+        ...STH.siteCard,
+        ...(hasFail ? {
+          background: "#1e1010",
+          borderColor: "#ef444455"
+        } : {})
+      },
+      onClick: () => onSelect(area.id)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: STH.siteCardName
+    }, area.name), /*#__PURE__*/React.createElement("div", {
+      style: STH.siteCardSub
+    }, (area.boards || []).length, " boards \xB7 ", photoCount, " photos logged")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }
+    }, hasFail && /*#__PURE__*/React.createElement("span", {
+      style: STH.failBadge
+    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+      style: STH.arrow
+    }, "\u203A")));
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BOARD LIST VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoBoardListView({
+  area,
+  project,
+  results,
+  onSelect
+}) {
+  return /*#__PURE__*/React.createElement("div", {
+    style: STH.listWrap
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.listTitle
+  }, area.name), (area.boards || []).length === 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#555",
+      fontSize: 14
+    }
+  }, "No boards in this area \u2014 go to \u2699 Structure to add boards."), (area.boards || []).map(board => {
+    const photoCount = boardPhotoCount(results, area.id, board.id, board);
+    const hasFail = boardHasFail(results, area.id, board.id, board);
+    return /*#__PURE__*/React.createElement("button", {
+      key: board.id,
+      style: {
+        ...STH.siteCard,
+        ...(hasFail ? {
+          background: "#1e1010",
+          borderColor: "#ef444455"
+        } : {})
+      },
+      onClick: () => onSelect(board.id)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: STH.siteCardName
+    }, board.name), /*#__PURE__*/React.createElement("div", {
+      style: STH.siteCardSub
+    }, (board.circuits || []).length > 0 ? `${(board.circuits || []).length} circuits · ` : "No circuits (board-level) · ", photoCount, " photos logged")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }
+    }, hasFail && /*#__PURE__*/React.createElement("span", {
+      style: STH.failBadge
+    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+      style: STH.arrow
+    }, "\u203A")));
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CIRCUIT LIST VIEW — list of circuits for a board, tap to navigate into photo page
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoCircuitView({
+  area,
+  board,
+  project,
+  results,
+  onSelectCircuit
+}) {
+  const hasCircuits = (board.circuits || []).length > 0;
+  const rows = hasCircuits ? (board.circuits || []).map(cid => ({
+    id: cid,
+    name: (board.circuitNames || {})[cid] || cid
+  })) : [{
+    id: "__board__",
+    name: board.name + " (whole board)"
+  }];
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.panelHeader
+  }, /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: STH.panelTitle
+  }, board.name), /*#__PURE__*/React.createElement("div", {
+    style: STH.panelSub
+  }, area.name, " \xB7 ", rows.length, " ", hasCircuits ? "circuit" + (rows.length !== 1 ? "s" : "") : "board-level"))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: THERMO_COLOR,
+      background: "#1a0e00",
+      border: `1px solid ${THERMO_COLOR}33`,
+      borderRadius: 8,
+      padding: "8px 12px",
+      marginBottom: 12
+    }
+  }, "\uD83C\uDF21 Tap any item to log FLIR photos"), rows.map(row => {
+    const photos = getPhotos(results, area.id, board.id, row.id);
+    const hasFail = photos.some(p => p.result === "FAIL");
+    const hasMonitor = photos.some(p => p.result === "MONITOR");
+    const statusColor = hasFail ? "#ef4444" : hasMonitor ? "#f59e0b" : photos.length > 0 ? "#22c55e" : "#333";
+    return /*#__PURE__*/React.createElement("div", {
+      key: row.id,
+      style: {
+        background: "#1a1a1a",
+        border: `2px solid ${statusColor}44`,
+        borderRadius: 12,
+        marginBottom: 8,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        width: "100%",
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "14px 16px",
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        color: "inherit",
+        textAlign: "left"
+      },
+      onClick: () => onSelectCircuit(row.id, row.name)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: 10,
+        height: 10,
+        borderRadius: "50%",
+        background: statusColor,
+        flexShrink: 0
+      }
+    }), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 700,
+        color: "#eee"
+      }
+    }, row.id === "__board__" ? board.name : row.name), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#555",
+        marginTop: 2
+      }
+    }, photos.length === 0 ? "No photos logged" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
+      style: STH.failBadge
+    }, "FAIL"), !hasFail && hasMonitor && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        fontWeight: 800,
+        color: "#f59e0b",
+        background: "#78350f22",
+        borderRadius: 6,
+        padding: "3px 8px",
+        border: "1px solid #f59e0b44"
+      }
+    }, "MONITOR"), /*#__PURE__*/React.createElement("span", {
+      style: STH.arrow
+    }, "\u203A")));
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PHOTO PAGE — full-page view for logging photos on a single circuit
+// ─────────────────────────────────────────────────────────────────────────
+function PhotoPage({
+  circuitId,
+  circuitName,
+  board,
+  area,
+  project,
+  results,
+  meta,
+  onPatchPhotos
+}) {
+  const existing = getPhotos(results, area.id, board.id, circuitId);
+  const photosRef = React.useRef(existing.length > 0 ? [...existing] : []);
+  const [photos, setPhotosState] = React.useState(photosRef.current);
+  const setPhotos = updated => {
+    photosRef.current = updated;
+    setPhotosState(updated);
+  };
+
+  // FLIR counter — compute once at mount from the results snapshot, then track locally.
+  // This avoids stale-closure bugs where results prop doesn't reflect recent saves/deletes.
+  const computeOtherCount = () => {
+    let total = 0;
+    (project.areas || []).forEach(a => (a.boards || []).forEach(b => {
+      boardCircuitIds(b).forEach(cid => {
+        if (a.id === area.id && b.id === board.id && cid === circuitId) return;
+        total += getPhotos(results, a.id, b.id, cid).length;
+      });
+    }));
+    return total;
+  };
+
+  // otherCount is fixed for this page session — only THIS circuit's photos change here
+  const otherCountRef = React.useRef(computeOtherCount());
+  const nextFlirNum = localPhotosLength => {
+    const startFlir = meta.startFlir ? parseInt(meta.startFlir) : null;
+    if (!startFlir) return "";
+    return startFlir + otherCountRef.current + localPhotosLength;
+  };
+  const makeFlirName = localPhotosLength => {
+    const num = nextFlirNum(localPhotosLength);
+    return num !== "" ? `FLIR${String(num).padStart(4, "0")}` : "";
+  };
+  const blankForm = localPhotosLength => ({
+    id: uid(),
+    flirFile: makeFlirName(localPhotosLength),
+    temp: "",
+    result: "PASS",
+    priority: "",
+    notes: "",
+    rectified: "",
+    rectifiedDate: "",
+    defectId: "",
+    responsibility: ""
+  });
+  const [form, setForm] = React.useState(blankForm(photosRef.current.length));
+  const [editingIdx, setEditingIdx] = React.useState(null); // null=new entry, number=editing existing
+
+  const savePhoto = () => {
+    if (!form.flirFile.trim()) return;
+    let updated;
+    if (editingIdx === null) {
+      updated = [...photosRef.current, {
+        ...form
+      }];
+    } else {
+      updated = photosRef.current.map((p, i) => i === editingIdx ? {
+        ...form
+      } : p);
+    }
+    setPhotos(updated);
+    onPatchPhotos(updated);
+    setEditingIdx(null);
+    // Next blank: length of updated array (editing doesn't change length, adding does)
+    setForm(blankForm(updated.length));
+  };
+  const deletePhoto = idx => {
+    const updated = photosRef.current.filter((_, i) => i !== idx);
+    setPhotos(updated);
+    onPatchPhotos(updated);
+    if (editingIdx === idx) {
+      setEditingIdx(null);
+      setForm(blankForm(updated.length));
+    }
+  };
+  const startEdit = idx => {
+    setForm({
+      ...photosRef.current[idx]
+    });
+    setEditingIdx(idx);
+  };
+  const cancelEdit = () => {
+    setEditingIdx(null);
+    setForm(blankForm(photosRef.current.length));
+  };
+  const isEditing = editingIdx !== null;
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px 16px 40px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 16
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 20,
+      fontWeight: 800,
+      color: "#eee"
+    }
+  }, circuitId === "__board__" ? board.name : circuitName), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#666",
+      marginTop: 2
+    }
+  }, board.name, " \xB7 ", area.name)), photos.length > 0 && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#666",
+      letterSpacing: 0.8,
+      fontWeight: 700,
+      marginBottom: 8
+    }
+  }, "LOGGED PHOTOS"), photos.map((photo, idx) => {
+    const rc = RESULT_COLORS[photo.result] || "#555";
+    const isBeingEdited = editingIdx === idx;
+    return /*#__PURE__*/React.createElement("div", {
+      key: photo.id || idx,
+      style: {
+        background: isBeingEdited ? "#1a0e00" : "#111",
+        border: `2px solid ${isBeingEdited ? THERMO_COLOR : rc + "44"}`,
+        borderRadius: 12,
+        padding: "12px 14px",
+        marginBottom: 8,
+        display: "flex",
+        alignItems: "flex-start",
+        gap: 10
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        marginBottom: 4,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 15,
+        fontWeight: 800,
+        color: THERMO_COLOR
+      }
+    }, photo.flirFile), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: rc,
+        background: `${rc}22`,
+        borderRadius: 4,
+        padding: "2px 8px"
+      }
+    }, photo.result || "PASS"), photo.temp && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: "#f59e0b"
+      }
+    }, "\uD83C\uDF21 ", photo.temp, "\xB0C"), photo.priority && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        fontWeight: 800,
+        color: PRIORITY_COLORS[photo.priority],
+        background: PRIORITY_BG[photo.priority],
+        borderRadius: 4,
+        padding: "2px 8px"
+      }
+    }, photo.priority, " \u2014 ", PRIORITY_LABELS[photo.priority])), photo.notes && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#aaa",
+        marginTop: 2
+      }
+    }, "\u270E ", photo.notes), photo.rectified && /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#64748b",
+        marginTop: 2
+      }
+    }, "\uD83D\uDD27 ", photo.rectified)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        flexDirection: "column",
+        gap: 6,
+        flexShrink: 0
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        color: THERMO_COLOR,
+        borderColor: `${THERMO_COLOR}44`,
+        padding: "6px 12px"
+      },
+      onClick: () => startEdit(idx)
+    }, "\u270E Edit"), /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        color: "#ef4444",
+        borderColor: "#ef444433",
+        padding: "6px 12px"
+      },
+      onClick: () => deletePhoto(idx)
+    }, "\u2715 Del")));
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      borderTop: `2px solid ${THERMO_COLOR}33`,
+      paddingTop: 16,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: THERMO_COLOR,
+      letterSpacing: 0.5
+    }
+  }, isEditing ? "✎ EDIT PHOTO" : "➕ ADD PHOTO")), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "FLIR FILE NAME *"), /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.modalInput,
+      fontSize: 17,
+      letterSpacing: 0.5,
+      borderColor: form.flirFile.trim() ? `${THERMO_COLOR}88` : "#333"
+    },
+    value: form.flirFile,
+    placeholder: "e.g. FLIR0171",
+    onChange: e => setForm(f => ({
+      ...f,
+      flirFile: e.target.value
+    }))
+  })), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "RESULT *"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, RESULT_OPTIONS.map(r => /*#__PURE__*/React.createElement("button", {
+    key: r,
+    style: {
+      flex: 1,
+      padding: "14px 4px",
+      background: form.result === r ? RESULT_BG[r] : "#1a1a1a",
+      color: form.result === r ? RESULT_COLORS[r] : "#555",
+      border: `2px solid ${form.result === r ? RESULT_COLORS[r] : "#2a2a2a"}`,
+      borderRadius: 10,
+      fontSize: 14,
+      fontWeight: 800,
+      cursor: "pointer"
+    },
+    onClick: () => setForm(f => ({
+      ...f,
+      result: r
+    }))
+  }, r)))), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "TEMPERATURE \xB0C ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#444",
+      fontWeight: 400
+    }
+  }, "(optional)")), /*#__PURE__*/React.createElement("input", {
+    style: STH.modalInput,
+    type: "number",
+    step: "0.1",
+    value: form.temp,
+    placeholder: "e.g. 74.2",
+    onChange: e => setForm(f => ({
+      ...f,
+      temp: e.target.value
+    }))
+  })), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "PRIORITY ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#444",
+      fontWeight: 400
+    }
+  }, "(optional)")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      flexWrap: "wrap"
+    }
+  }, ["", ...PRIORITY_OPTIONS].map(p => /*#__PURE__*/React.createElement("button", {
+    key: p || "none",
+    style: {
+      padding: "10px 14px",
+      background: form.priority === p ? p ? PRIORITY_BG[p] : "#1a2535" : "#1a1a1a",
+      color: form.priority === p ? p ? PRIORITY_COLORS[p] : "#64748b" : "#444",
+      border: `1px solid ${form.priority === p ? p ? PRIORITY_COLORS[p] : "#334155" : "#2a2a2a"}`,
+      borderRadius: 8,
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer"
+    },
+    onClick: () => setForm(f => ({
+      ...f,
+      priority: p
+    }))
+  }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None")))), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "NOTES / RECOMMENDATIONS ", /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#444",
+      fontWeight: 400
+    }
+  }, "(optional)")), /*#__PURE__*/React.createElement("input", {
+    style: STH.modalInput,
+    value: form.notes,
+    placeholder: "e.g. Check load balancing and terminations",
+    onChange: e => setForm(f => ({
+      ...f,
+      notes: e.target.value
+    }))
+  })), (form.result === "FAIL" || form.result === "MONITOR") && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "RECTIFIED / SCHEDULED"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...STH.modalInput
+    },
+    value: form.rectified,
+    onChange: e => setForm(f => ({
+      ...f,
+      rectified: e.target.value
+    }))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\u2014 Select \u2014"), RECTIFIED_OPTIONS.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o,
+    value: o
+  }, o)))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 14
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "DATE RECTIFIED / SCHEDULED"), /*#__PURE__*/React.createElement("input", {
+    style: STH.modalInput,
+    type: "date",
+    value: form.rectifiedDate,
+    onChange: e => setForm(f => ({
+      ...f,
+      rectifiedDate: e.target.value
+    }))
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      flex: 1
+    }
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "DEFECT ID"), /*#__PURE__*/React.createElement("input", {
+    style: STH.modalInput,
+    value: form.defectId,
+    placeholder: "e.g. DEF-001",
+    onChange: e => setForm(f => ({
+      ...f,
+      defectId: e.target.value
+    }))
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "RESPONSIBILITY"), /*#__PURE__*/React.createElement("select", {
+    style: {
+      ...STH.modalInput
+    },
+    value: form.responsibility,
+    onChange: e => setForm(f => ({
+      ...f,
+      responsibility: e.target.value
+    }))
+  }, /*#__PURE__*/React.createElement("option", {
+    value: ""
+  }, "\u2014 Select \u2014"), RESPONSIBILITY_OPTIONS.map(o => /*#__PURE__*/React.createElement("option", {
+    key: o,
+    value: o
+  }, o))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {
+      flex: 1,
+      padding: "18px",
+      background: form.flirFile.trim() ? THERMO_COLOR : "#2a2a2a",
+      color: form.flirFile.trim() ? "#fff" : "#555",
+      border: "none",
+      borderRadius: 14,
+      fontSize: 16,
+      fontWeight: 800,
+      cursor: form.flirFile.trim() ? "pointer" : "not-allowed"
+    },
+    onClick: savePhoto
+  }, isEditing ? "✓ Save Changes" : "✓ Add Photo"), isEditing && /*#__PURE__*/React.createElement("button", {
+    style: {
+      padding: "18px 22px",
+      background: "#1a1a1a",
+      color: "#aaa",
+      border: "1px solid #333",
+      borderRadius: 14,
+      fontSize: 15,
+      cursor: "pointer"
+    },
+    onClick: cancelEdit
+  }, "Cancel")));
+}
+// ─────────────────────────────────────────────────────────────────────────
+// REPORT VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoReportView({
+  project,
+  results,
+  meta,
+  onExport
+}) {
+  const rows = [];
+  (project.areas || []).forEach(area => {
+    (area.boards || []).forEach(board => {
+      const hasC = (board.circuits || []).length > 0;
+      const cids = hasC ? board.circuits : ["__board__"];
+      cids.forEach(cid => {
+        const cName = hasC ? (board.circuitNames || {})[cid] || cid : "";
+        const photos = getPhotos(results, area.id, board.id, cid);
+        photos.forEach(p => rows.push({
+          area: area.name,
+          board: board.name,
+          circuit: cName,
+          photo: p
+        }));
+      });
+    });
+  });
+  const fails = rows.filter(r => r.photo.result === "FAIL");
+  const monitors = rows.filter(r => r.photo.result === "MONITOR");
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 900,
+      letterSpacing: 1.5,
+      marginBottom: 4
+    }
+  }, project.name), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      color: "#777",
+      marginBottom: 20
+    }
+  }, "THERMOGRAPHIC REPORT ", meta.auditor ? `· ${meta.auditor}` : ""), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8,
+      marginBottom: 20,
+      flexWrap: "wrap"
+    }
+  }, [["Total", rows.length, "#94a3b8"], ["Pass", rows.filter(r => r.photo.result === "PASS").length, "#22c55e"], ["Fail", fails.length, "#ef4444"], ["Monitor", monitors.length, "#f59e0b"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+    key: l,
+    style: {
+      flex: 1,
+      minWidth: 70,
+      textAlign: "center",
+      background: "#1a1a1a",
+      borderRadius: 10,
+      border: `1px solid ${c}33`,
+      padding: "10px 4px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 22,
+      fontWeight: 800,
+      color: c
+    }
+  }, v), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 9,
+      color: "#666",
+      marginTop: 2
+    }
+  }, l.toUpperCase())))), (fails.length > 0 || monitors.length > 0) && /*#__PURE__*/React.createElement("div", {
+    style: {
+      marginBottom: 20
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 13,
+      fontWeight: 800,
+      color: "#ef4444",
+      marginBottom: 10
+    }
+  }, "Issues Requiring Attention"), [...fails, ...monitors].map((r, i) => /*#__PURE__*/React.createElement("div", {
+    key: i,
+    style: {
+      background: `${RESULT_BG[r.photo.result]}88`,
+      border: `1px solid ${RESULT_COLORS[r.photo.result]}44`,
+      borderRadius: 8,
+      padding: "10px 12px",
+      marginBottom: 6,
+      fontSize: 12
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      marginBottom: 4,
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800,
+      color: THERMO_COLOR
+    }
+  }, r.photo.flirFile), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800,
+      color: RESULT_COLORS[r.photo.result]
+    }
+  }, r.photo.result), r.photo.priority && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 800,
+      color: PRIORITY_COLORS[r.photo.priority]
+    }
+  }, r.photo.priority, " \u2014 ", PRIORITY_LABELS[r.photo.priority]), r.photo.temp && /*#__PURE__*/React.createElement("span", {
+    style: {
+      color: "#f59e0b"
+    }
+  }, "\uD83C\uDF21 ", r.photo.temp, "\xB0C")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#aaa"
+    }
+  }, r.area, " \u203A ", r.board, r.circuit ? ` › ${r.circuit}` : ""), r.photo.notes && /*#__PURE__*/React.createElement("div", {
+    style: {
+      color: "#888",
+      marginTop: 3
+    }
+  }, "\u270E ", r.photo.notes)))), /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      padding: "13px",
+      background: `${THERMO_COLOR}22`,
+      color: THERMO_COLOR,
+      border: `1px solid ${THERMO_COLOR}44`,
+      borderRadius: 10,
+      fontSize: 14,
+      fontWeight: 800,
+      cursor: "pointer"
+    },
+    onClick: onExport
+  }, "\u2193 Export xlsx"));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MANAGE / STRUCTURE VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoManageView({
+  project,
+  onUpdateProject
+}) {
+  const [expandedArea, setExpandedArea] = React.useState(null);
+  const [expandedBoard, setExpandedBoard] = React.useState(null);
+  const [newAreaName, setNewAreaName] = React.useState("");
+  const [newBoardName, setNewBoardName] = React.useState({});
+  const [newCircuit, setNewCircuit] = React.useState({});
+  const [confirmDeleteArea, setConfirmDeleteArea] = React.useState(null);
+  const [confirmDeleteBoard, setConfirmDeleteBoard] = React.useState(null);
+  const [confirmDeleteCircuit, setConfirmDeleteCircuit] = React.useState(null);
+  const update = updated => onUpdateProject({
+    ...project,
+    areas: updated
+  });
+  const addArea = () => {
+    if (!newAreaName.trim()) return;
+    update([...project.areas, {
+      id: slugify(newAreaName),
+      name: newAreaName.trim(),
+      boards: []
+    }]);
+    setNewAreaName("");
+  };
+  const delArea = id => update(project.areas.filter(a => a.id !== id));
+  const addBoard = areaId => {
+    const name = (newBoardName[areaId] || "").trim();
+    if (!name) return;
+    update(project.areas.map(a => a.id !== areaId ? a : {
+      ...a,
+      boards: [...(a.boards || []), {
+        id: slugify(name),
+        name,
+        circuits: [],
+        circuitNames: {}
+      }]
+    }));
+    setNewBoardName(x => ({
+      ...x,
+      [areaId]: ""
+    }));
+  };
+  const delBoard = (areaId, boardId) => update(project.areas.map(a => a.id !== areaId ? a : {
+    ...a,
+    boards: (a.boards || []).filter(b => b.id !== boardId)
+  }));
+  const addCircuit = (areaId, boardId) => {
+    const key = `${areaId}-${boardId}`;
+    const name = (newCircuit[key] || "").trim();
+    if (!name) return;
+    const cid = uid();
+    update(project.areas.map(a => a.id !== areaId ? a : {
+      ...a,
+      boards: (a.boards || []).map(b => b.id !== boardId ? b : {
+        ...b,
+        circuits: [...(b.circuits || []), cid],
+        circuitNames: {
+          ...(b.circuitNames || {}),
+          [cid]: name
+        }
+      })
+    }));
+    setNewCircuit(x => ({
+      ...x,
+      [key]: ""
+    }));
+  };
+  const delCircuit = (areaId, boardId, cid) => update(project.areas.map(a => a.id !== areaId ? a : {
+    ...a,
+    boards: (a.boards || []).map(b => b.id !== boardId ? b : {
+      ...b,
+      circuits: (b.circuits || []).filter(c => c !== cid),
+      circuitNames: Object.fromEntries(Object.entries(b.circuitNames || {}).filter(([k]) => k !== cid))
+    })
+  }));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 18,
+      fontWeight: 800,
+      color: "#eee",
+      marginBottom: 4
+    }
+  }, "Structure"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#666",
+      marginBottom: 16
+    }
+  }, "Manage locations, boards and circuits for ", project.name), project.areas.map(area => /*#__PURE__*/React.createElement("div", {
+    key: area.id,
+    style: {
+      border: `1px solid ${expandedArea === area.id ? THERMO_COLOR + "55" : "#2a2a2a"}`,
+      borderRadius: 12,
+      marginBottom: 10,
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "12px 14px",
+      background: "#1a1a1a"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      background: "transparent",
+      border: "none",
+      cursor: "pointer",
+      color: "inherit",
+      textAlign: "left",
+      padding: 0
+    },
+    onClick: () => {
+      setExpandedArea(expandedArea === area.id ? null : area.id);
+      setExpandedBoard(null);
+      setConfirmDeleteArea(null);
+      setConfirmDeleteBoard(null);
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 16,
+      color: expandedArea === area.id ? THERMO_COLOR : "#aaa"
+    }
+  }, expandedArea === area.id ? "▾" : "▸"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      color: "#eee",
+      fontSize: 14
+    }
+  }, area.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: "#555"
+    }
+  }, (area.boards || []).length, " boards")), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      color: "#ef4444",
+      borderColor: "#ef444433"
+    },
+    onClick: () => setConfirmDeleteArea(area.id)
+  }, "\uD83D\uDDD1")), confirmDeleteArea === area.id && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#2a1010",
+      border: "1px solid #ef444466",
+      padding: "10px 14px",
+      display: "flex",
+      flexDirection: "column",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 13,
+      color: "#f87171",
+      fontWeight: 700
+    }
+  }, "Delete area \"", area.name, "\"?"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      flex: 1,
+      color: "#f87171",
+      borderColor: "#ef444466",
+      fontSize: 13,
+      padding: "10px 0"
+    },
+    onClick: () => {
+      delArea(area.id);
+      setConfirmDeleteArea(null);
+    }
+  }, "\uD83D\uDDD1 Delete"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      flex: 1,
+      fontSize: 13,
+      padding: "10px 0"
+    },
+    onClick: () => setConfirmDeleteArea(null)
+  }, "Keep"))), expandedArea === area.id && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "8px 8px 12px 20px"
+    }
+  }, (area.boards || []).map(board => /*#__PURE__*/React.createElement("div", {
+    key: board.id,
+    style: {
+      border: `1px solid ${expandedBoard === board.id ? THERMO_COLOR + "44" : "#222"}`,
+      borderRadius: 8,
+      marginBottom: 8,
+      background: "#161616"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      padding: "10px 12px"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: {
+      flex: 1,
+      display: "flex",
+      alignItems: "center",
+      gap: 8,
+      background: "transparent",
+      border: "none",
+      cursor: "pointer",
+      color: "inherit",
+      textAlign: "left",
+      padding: 0
+    },
+    onClick: () => setExpandedBoard(expandedBoard === board.id ? null : board.id)
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 14,
+      color: expandedBoard === board.id ? THERMO_COLOR : "#aaa"
+    }
+  }, expandedBoard === board.id ? "▾" : "▸"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontWeight: 700,
+      color: "#eee",
+      fontSize: 13
+    }
+  }, board.name), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 11,
+      color: "#555"
+    }
+  }, (board.circuits || []).length, " circuits")), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      color: "#ef4444",
+      borderColor: "#ef444433",
+      fontSize: 11
+    },
+    onClick: () => setConfirmDeleteBoard(board.id)
+  }, "\uD83D\uDDD1")), confirmDeleteBoard === board.id && /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "#2a1010",
+      padding: "8px 12px",
+      display: "flex",
+      gap: 8
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#f87171",
+      flex: 1
+    }
+  }, "Delete \"", board.name, "\"?"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      color: "#f87171",
+      borderColor: "#ef444466",
+      fontSize: 11
+    },
+    onClick: () => {
+      delBoard(area.id, board.id);
+      setConfirmDeleteBoard(null);
+    }
+  }, "Delete"), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      fontSize: 11
+    },
+    onClick: () => setConfirmDeleteBoard(null)
+  }, "Keep")), expandedBoard === board.id && /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "8px 12px 12px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 10,
+      color: "#555",
+      fontWeight: 700,
+      letterSpacing: 0.8,
+      marginBottom: 6
+    }
+  }, "CIRCUITS (optional \u2014 leave empty to log photos at board level)"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: 6,
+      marginBottom: 8
+    }
+  }, (board.circuits || []).map(cid => {
+    const cName = (board.circuitNames || {})[cid] || cid;
+    return /*#__PURE__*/React.createElement("div", {
+      key: cid,
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        background: "#1e1e1e",
+        border: `1px solid ${THERMO_COLOR}33`,
+        borderRadius: 8,
+        padding: "6px 10px"
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 12,
+        color: "#ccc"
+      }
+    }, cName), /*#__PURE__*/React.createElement("button", {
+      style: {
+        background: "#2a1010",
+        border: "1px solid #ef444433",
+        color: "#ef4444",
+        cursor: "pointer",
+        fontSize: 12,
+        padding: "3px 8px",
+        borderRadius: 5
+      },
+      onClick: () => delCircuit(area.id, board.id, cid)
+    }, "\u2715"));
+  }), (board.circuits || []).length === 0 && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: 12,
+      color: "#444"
+    }
+  }, "No circuits \u2014 photos will be logged at board level")), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.smallInput,
+      flex: 1
+    },
+    placeholder: "Add circuit e.g. Main switch",
+    value: newCircuit[`${area.id}-${board.id}`] || "",
+    onChange: e => setNewCircuit(x => ({
+      ...x,
+      [`${area.id}-${board.id}`]: e.target.value
+    })),
+    onKeyDown: e => e.key === "Enter" && addCircuit(area.id, board.id)
+  }), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      color: THERMO_COLOR,
+      borderColor: `${THERMO_COLOR}55`
+    },
+    onClick: () => addCircuit(area.id, board.id)
+  }, "+ Add"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginTop: 6
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.smallInput,
+      flex: 1
+    },
+    placeholder: "New board / panel name",
+    value: newBoardName[area.id] || "",
+    onChange: e => setNewBoardName(x => ({
+      ...x,
+      [area.id]: e.target.value
+    })),
+    onKeyDown: e => e.key === "Enter" && addBoard(area.id)
+  }), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.smallBtn,
+      color: THERMO_COLOR,
+      borderColor: `${THERMO_COLOR}55`
+    },
+    onClick: () => addBoard(area.id)
+  }, "+ Board"))))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: 6,
+      marginTop: 12
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    style: {
+      ...STH.smallInput,
+      flex: 1
+    },
+    placeholder: "New area / location name",
+    value: newAreaName,
+    onChange: e => setNewAreaName(e.target.value),
+    onKeyDown: e => e.key === "Enter" && addArea()
+  }), /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...STH.ctaPrimary,
+      padding: "10px 16px",
+      fontSize: 13
+    },
+    onClick: addArea
+  }, "+ Area")));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// CONTINUE SNAP BUTTON — inline confirm before loading a historical audit
+// ─────────────────────────────────────────────────────────────────────────
+function ContinueSnapBtn({
+  onConfirm
+}) {
+  const [confirming, setConfirming] = React.useState(false);
+  if (confirming) {
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        width: "100%",
+        background: "#1a0a2a",
+        border: "1px solid #7c3aed55",
+        borderRadius: 8,
+        padding: "10px 12px",
+        marginTop: 4
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#c4b5fd",
+        fontWeight: 600,
+        marginBottom: 8
+      }
+    }, "This will replace your current audit with the archived snapshot. Continue?"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        flex: 1,
+        padding: "9px",
+        background: "#7c3aed",
+        color: "#fff",
+        border: "none",
+        borderRadius: 8,
+        fontSize: 13,
+        fontWeight: 800,
+        cursor: "pointer"
+      },
+      onClick: () => {
+        onConfirm();
+        setConfirming(false);
+      }
+    }, "\u25B6 Yes, Continue"), /*#__PURE__*/React.createElement("button", {
+      style: {
+        padding: "9px 14px",
+        background: "transparent",
+        color: "#aaa",
+        border: "1px solid #333",
+        borderRadius: 8,
+        fontSize: 13,
+        cursor: "pointer"
+      },
+      onClick: () => setConfirming(false)
+    }, "Cancel")));
+  }
+  return /*#__PURE__*/React.createElement("button", {
+    style: {
+      ...{
+        padding: "5px 10px",
+        background: "transparent",
+        border: "1px solid #7c3aed44",
+        borderRadius: 6,
+        fontSize: 12,
+        cursor: "pointer",
+        fontWeight: 700,
+        flexShrink: 0,
+        color: "#a78bfa"
+      },
+      flex: 1
+    },
+    onClick: () => setConfirming(true)
+  }, "\u25B6 Continue");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// HISTORY VIEW — snap list + drill-down read-only viewer
+// Mirrors RCD / IEL / TAT pattern exactly: View / Export / Continue / Delete
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoHistoryView({
+  history,
+  project,
+  onDelete,
+  onExportSnap,
+  onContinueFromSnap
+}) {
+  const [expanded, setExpanded] = React.useState(null);
+  const [deleteId, setDeleteId] = React.useState(null);
+  const [viewSnap, setViewSnap] = React.useState(null);
+  // Drill-down state inside view mode
+  const [viewArea, setViewArea] = React.useState(null); // area.id
+  const [viewBoard, setViewBoard] = React.useState(null); // board.id
+  const [viewCirc, setViewCirc] = React.useState(null); // circuitId or "__board__"
+
+  const resetView = () => {
+    setViewSnap(null);
+    setViewArea(null);
+    setViewBoard(null);
+    setViewCirc(null);
+  };
+
+  // ── READ-ONLY VIEW MODE ──────────────────────────────────────────────────
+  if (viewSnap) {
+    const snap = viewSnap;
+    const snapResults = snap.results || {};
+
+    // Helper: count photos in snap for a board
+    const snapBoardPhotos = (areaId, board) => {
+      let count = 0;
+      boardCircuitIds(board).forEach(cid => {
+        count += ((snapResults[areaId] || {})[board.id] || {})[cid]?.length || 0;
+      });
+      return count;
+    };
+
+    // ── LEVEL 4: Photos for one circuit ─────────────────────────────────
+    if (viewArea && viewBoard && viewCirc) {
+      const area = project?.areas?.find(a => a.id === viewArea);
+      const board = area?.boards?.find(b => b.id === viewBoard);
+      const photos = ((snapResults[viewArea] || {})[viewBoard] || {})[viewCirc] || [];
+      const circName = viewCirc === "__board__" ? board?.name || "Board" : (board?.circuitNames || {})[viewCirc] || viewCirc;
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "16px 16px 40px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 16
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        style: {
+          ...STH.smallBtn,
+          color: "#aaa"
+        },
+        onClick: () => setViewCirc(null)
+      }, "\u2039 Back"), /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 16,
+          fontWeight: 800,
+          color: "#eee"
+        }
+      }, circName), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: "#555"
+        }
+      }, board?.name, " \xB7 ", fmtDate(snap.testDate), " \xB7 Read-only")), /*#__PURE__*/React.createElement("span", {
+        style: {
+          fontSize: 11,
+          color: "#555",
+          background: "#1a1a1a",
+          borderRadius: 6,
+          padding: "3px 8px",
+          border: "1px solid #2a2a2a"
+        }
+      }, photos.length, " photo", photos.length !== 1 ? "s" : "")), photos.length === 0 && /*#__PURE__*/React.createElement("div", {
+        style: {
+          color: "#555",
+          fontSize: 13
+        }
+      }, "No photos logged for this circuit."), photos.map((photo, idx) => {
+        const rc = RESULT_COLORS[photo.result] || "#555";
+        return /*#__PURE__*/React.createElement("div", {
+          key: photo.id || idx,
+          style: {
+            background: "#111",
+            border: `2px solid ${rc}44`,
+            borderRadius: 12,
+            padding: "12px 14px",
+            marginBottom: 8
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            marginBottom: 4,
+            flexWrap: "wrap"
+          }
+        }, /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 15,
+            fontWeight: 800,
+            color: THERMO_COLOR
+          }
+        }, photo.flirFile || "—"), /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 12,
+            fontWeight: 800,
+            color: rc,
+            background: `${rc}22`,
+            borderRadius: 4,
+            padding: "2px 8px"
+          }
+        }, photo.result || "PASS"), photo.temp && /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 12,
+            color: "#f59e0b"
+          }
+        }, "\uD83C\uDF21 ", photo.temp, "\xB0C"), photo.priority && /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 12,
+            fontWeight: 800,
+            color: PRIORITY_COLORS[photo.priority],
+            background: PRIORITY_BG[photo.priority],
+            borderRadius: 4,
+            padding: "2px 8px"
+          }
+        }, photo.priority, " \u2014 ", PRIORITY_LABELS[photo.priority])), photo.notes && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 12,
+            color: "#aaa",
+            marginTop: 2
+          }
+        }, "\u270E ", photo.notes), photo.rectified && /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 11,
+            color: "#64748b",
+            marginTop: 2
+          }
+        }, "\uD83D\uDD27 ", photo.rectified));
+      }));
+    }
+
+    // ── LEVEL 3: Circuits for one board ─────────────────────────────────
+    if (viewArea && viewBoard) {
+      const area = project?.areas?.find(a => a.id === viewArea);
+      const board = area?.boards?.find(b => b.id === viewBoard);
+      const rows = board ? boardCircuitIds(board).map(cid => ({
+        id: cid,
+        name: cid === "__board__" ? board.name : (board.circuitNames || {})[cid] || cid
+      })) : [];
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "16px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 16
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        style: {
+          ...STH.smallBtn,
+          color: "#aaa"
+        },
+        onClick: () => setViewBoard(null)
+      }, "\u2039 Back"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 16,
+          fontWeight: 800,
+          color: "#eee"
+        }
+      }, board?.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: "#555"
+        }
+      }, area?.name, " \xB7 Read-only"))), rows.map(row => {
+        const photos = ((snapResults[viewArea] || {})[viewBoard] || {})[row.id] || [];
+        const hasFail = photos.some(p => p.result === "FAIL");
+        const hasMonitor = photos.some(p => p.result === "MONITOR");
+        const sc = hasFail ? "#ef4444" : hasMonitor ? "#f59e0b" : photos.length > 0 ? "#22c55e" : "#333";
+        return /*#__PURE__*/React.createElement("button", {
+          key: row.id,
+          style: {
+            ...STH.siteCard,
+            borderColor: `${sc}44`,
+            ...(hasFail ? {
+              background: "#1e1010"
+            } : {})
+          },
+          onClick: () => setViewCirc(row.id)
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            flex: 1
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 14,
+            fontWeight: 700,
+            color: "#eee"
+          }
+        }, row.name), /*#__PURE__*/React.createElement("div", {
+          style: {
+            fontSize: 11,
+            color: "#555",
+            marginTop: 2
+          }
+        }, photos.length === 0 ? "No photos" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
+          style: STH.failBadge
+        }, "FAIL"), !hasFail && hasMonitor && /*#__PURE__*/React.createElement("span", {
+          style: {
+            fontSize: 11,
+            fontWeight: 800,
+            color: "#f59e0b",
+            background: "#78350f22",
+            borderRadius: 6,
+            padding: "3px 8px",
+            border: "1px solid #f59e0b44",
+            marginRight: 8
+          }
+        }, "MONITOR"), /*#__PURE__*/React.createElement("span", {
+          style: STH.arrow
+        }, "\u203A"));
+      }));
+    }
+
+    // ── LEVEL 2: Boards for one area ────────────────────────────────────
+    if (viewArea) {
+      const area = project?.areas?.find(a => a.id === viewArea);
+      return /*#__PURE__*/React.createElement("div", {
+        style: {
+          padding: "16px"
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          marginBottom: 16
+        }
+      }, /*#__PURE__*/React.createElement("button", {
+        style: {
+          ...STH.smallBtn,
+          color: "#aaa"
+        },
+        onClick: () => setViewArea(null)
+      }, "\u2039 Back"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 16,
+          fontWeight: 800,
+          color: "#eee"
+        }
+      }, area?.name), /*#__PURE__*/React.createElement("div", {
+        style: {
+          fontSize: 11,
+          color: "#555"
+        }
+      }, fmtDate(snap.testDate), " \xB7 Read-only"))), (area?.boards || []).map(board => {
+        const count = snapBoardPhotos(viewArea, board);
+        const hasFail = boardCircuitIds(board).some(cid => ((snapResults[viewArea] || {})[board.id] || {})[cid]?.some(p => p.result === "FAIL"));
+        return /*#__PURE__*/React.createElement("button", {
+          key: board.id,
+          style: {
+            ...STH.siteCard,
+            ...(hasFail ? {
+              background: "#1e1010",
+              borderColor: "#ef444455"
+            } : {})
+          },
+          onClick: () => setViewBoard(board.id)
+        }, /*#__PURE__*/React.createElement("div", {
+          style: {
+            flex: 1
+          }
+        }, /*#__PURE__*/React.createElement("div", {
+          style: STH.siteCardName
+        }, board.name), /*#__PURE__*/React.createElement("div", {
+          style: STH.siteCardSub
+        }, count, " photo", count !== 1 ? "s" : "", " logged")), hasFail && /*#__PURE__*/React.createElement("span", {
+          style: STH.failBadge
+        }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+          style: STH.arrow
+        }, "\u203A"));
+      }));
+    }
+
+    // ── LEVEL 1: Area list + snap summary ───────────────────────────────
+    const totalPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.length : 0), 0), 0), 0);
+    const failPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.filter(p => p.result === "FAIL").length : 0), 0), 0), 0);
+    return /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "16px 16px 40px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        alignItems: "center",
+        gap: 10,
+        marginBottom: 16
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        color: "#aaa"
+      },
+      onClick: resetView
+    }, "\u2039 Back"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 16,
+        fontWeight: 800,
+        color: THERMO_COLOR
+      }
+    }, "Thermographic Audit"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#555"
+      }
+    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor", " \xB7 Read-only")), /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        color: "#4ade80",
+        borderColor: "#22c55e44",
+        fontWeight: 700
+      },
+      onClick: () => onExportSnap(snap)
+    }, "\u2193 Export")), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        marginBottom: 16
+      }
+    }, [["Photos", totalPhotos, "#60a5fa"], ["Fail", failPhotos, "#ef4444"], ["Pass", totalPhotos - failPhotos, "#22c55e"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
+      key: l,
+      style: {
+        flex: 1,
+        textAlign: "center",
+        background: "#1a1a1a",
+        border: `1px solid ${c}33`,
+        borderRadius: 10,
+        padding: "10px 4px"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 22,
+        fontWeight: 800,
+        color: c
+      }
+    }, v), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 10,
+        color: "#666",
+        marginTop: 2
+      }
+    }, l.toUpperCase())))), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#555",
+        marginBottom: 12
+      }
+    }, "Tap a location to view photos"), (project?.areas || []).map(area => {
+      const aCount = (area.boards || []).reduce((s, b) => s + snapBoardPhotos(area.id, b), 0);
+      const aFail = (area.boards || []).some(b => boardCircuitIds(b).some(cid => ((snapResults[area.id] || {})[b.id] || {})[cid]?.some(p => p.result === "FAIL")));
+      return /*#__PURE__*/React.createElement("button", {
+        key: area.id,
+        style: {
+          ...STH.siteCard,
+          ...(aFail ? {
+            background: "#1e1010",
+            borderColor: "#ef444455"
+          } : {})
+        },
+        onClick: () => setViewArea(area.id)
+      }, /*#__PURE__*/React.createElement("div", {
+        style: {
+          flex: 1
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: STH.siteCardName
+      }, area.name), /*#__PURE__*/React.createElement("div", {
+        style: STH.siteCardSub
+      }, aCount, " photo", aCount !== 1 ? "s" : "", " logged")), aFail && /*#__PURE__*/React.createElement("span", {
+        style: STH.failBadge
+      }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+        style: STH.arrow
+      }, "\u203A"));
+    }));
+  }
+
+  // ── SNAP LIST ────────────────────────────────────────────────────────────
+  if (history.length === 0) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "40px 16px",
+      textAlign: "center",
+      color: "#555"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 32,
+      marginBottom: 12
+    }
+  }, "\uD83D\uDCCB"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 14
+    }
+  }, "No archived audits yet."));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      padding: "16px"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.listTitle
+  }, "Audit History"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: 12,
+      color: "#555",
+      marginBottom: 16
+    }
+  }, history.length, " saved audit", history.length !== 1 ? "s" : ""), history.map(snap => {
+    const isExpanded = expanded === snap.id;
+    const snapResults = snap.results || {};
+    const totalPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.length : 0), 0), 0), 0);
+    const failPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.filter(p => p.result === "FAIL").length : 0), 0), 0), 0);
+    return /*#__PURE__*/React.createElement("div", {
+      key: snap.id,
+      style: {
+        ...STH.siteCard,
+        flexDirection: "column",
+        padding: 0,
+        marginBottom: 10,
+        overflow: "hidden"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        width: "100%",
+        background: "transparent",
+        border: "none",
+        cursor: "pointer",
+        padding: "14px 16px",
+        color: "inherit",
+        textAlign: "left"
+      },
+      onClick: () => setExpanded(isExpanded ? null : snap.id)
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        flex: 1
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 14,
+        fontWeight: 800,
+        color: THERMO_COLOR,
+        marginBottom: 4
+      }
+    }, "Thermographic Audit"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 12,
+        color: "#888"
+      }
+    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor"), /*#__PURE__*/React.createElement("div", {
+      style: {
+        fontSize: 11,
+        color: "#555",
+        marginTop: 2
+      }
+    }, "Archived ", fmtDateTime(snap.archivedAt)), /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        marginTop: 6
+      }
+    }, /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#60a5fa"
+      }
+    }, totalPhotos, " photos"), failPhotos > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#f87171",
+        fontWeight: 800
+      }
+    }, failPhotos, " FAIL"), failPhotos === 0 && totalPhotos > 0 && /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 11,
+        color: "#22c55e"
+      }
+    }, "All pass"))), /*#__PURE__*/React.createElement("span", {
+      style: {
+        fontSize: 22,
+        color: isExpanded ? THERMO_COLOR : "#555"
+      }
+    }, isExpanded ? "▾" : "›")), isExpanded && /*#__PURE__*/React.createElement("div", {
+      style: {
+        padding: "0 16px 14px",
+        borderTop: "1px solid #2a2a2a"
+      }
+    }, /*#__PURE__*/React.createElement("div", {
+      style: {
+        display: "flex",
+        gap: 8,
+        marginTop: 10,
+        flexWrap: "wrap"
+      }
+    }, /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        flex: 1,
+        color: "#60a5fa",
+        borderColor: "#3b82f644",
+        fontWeight: 700
+      },
+      onClick: () => {
+        setViewSnap(snap);
+        setViewArea(null);
+        setViewBoard(null);
+        setViewCirc(null);
+      }
+    }, "\uD83D\uDC41 View"), /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        flex: 1,
+        color: "#4ade80",
+        borderColor: "#22c55e44"
+      },
+      onClick: () => onExportSnap(snap)
+    }, "\u2193 Export"), /*#__PURE__*/React.createElement(ContinueSnapBtn, {
+      onConfirm: () => onContinueFromSnap(snap)
+    }), deleteId === snap.id ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        color: "#f87171",
+        borderColor: "#ef444455"
+      },
+      onClick: () => {
+        onDelete(snap.id);
+        setDeleteId(null);
+      }
+    }, "Confirm"), /*#__PURE__*/React.createElement("button", {
+      style: STH.smallBtn,
+      onClick: () => setDeleteId(null)
+    }, "Cancel")) : /*#__PURE__*/React.createElement("button", {
+      style: {
+        ...STH.smallBtn,
+        color: "#ef4444",
+        borderColor: "#ef444433"
+      },
+      onClick: () => setDeleteId(snap.id)
+    }, "\uD83D\uDDD1"))));
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MAIN THERMO APP
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoApp({
+  onGoHome
+}) {
+  const [projects, setProjects] = React.useState([]);
+  const [allResults, setAllResults] = React.useState({});
+  const [allMeta, setAllMeta] = React.useState({});
+  const [history, setHistory] = React.useState([]);
+  const [loaded, setLoaded] = React.useState(false);
+  const [saveFlash, setSaveFlash] = React.useState(false);
+  const [activeProject, setActiveProject] = React.useState(null);
+  const [auditEntered, setAuditEntered] = React.useState(false);
+  const [view, setView] = React.useState("projects");
+  const [activeAreaId, setActiveAreaId] = React.useState(null);
+  const [activeBoardId, setActiveBoardId] = React.useState(null);
+  const [activeCircuitId, setActiveCircuitId] = React.useState(null); // id of circuit open in photo page
+  const [activeCircuitName, setActiveCircuitName] = React.useState("");
+
+  // Load
+  React.useEffect(() => {
+    const t = setTimeout(() => setLoaded(true), 3000);
+    (async () => {
+      try {
+        const [p, r, m, h] = await Promise.all([load(K_THERMO_PROJECTS, []), load(K_THERMO_RESULTS, {}), load(K_THERMO_META, {}), load(K_THERMO_HISTORY, [])]);
+        clearTimeout(t);
+        setProjects(p);
+        setAllResults(r);
+        setAllMeta(m);
+        setHistory(h);
+        setLoaded(true);
+      } catch {
+        clearTimeout(t);
+        setLoaded(true);
+      }
+    })();
+  }, []);
+
+  // Save
+  React.useEffect(() => {
+    if (loaded) save(K_THERMO_PROJECTS, projects);
+  }, [projects, loaded]);
+  React.useEffect(() => {
+    if (loaded) {
+      save(K_THERMO_RESULTS, allResults);
+      setSaveFlash(true);
+      const t = setTimeout(() => setSaveFlash(false), 1200);
+      return () => clearTimeout(t);
+    }
+  }, [allResults, loaded]);
+  React.useEffect(() => {
+    if (loaded) save(K_THERMO_META, allMeta);
+  }, [allMeta, loaded]);
+  React.useEffect(() => {
+    if (loaded) save(K_THERMO_HISTORY, history);
+  }, [history, loaded]);
+  const project = projects.find(p => p.id === activeProject);
+  const meta = allMeta[activeProject] || {
+    auditor: "",
+    testDate: new Date().toISOString().slice(0, 10),
+    startFlir: "",
+    notes: ""
+  };
+  const setMeta = patch => setAllMeta(prev => ({
+    ...prev,
+    [activeProject]: {
+      ...meta,
+      ...patch
+    }
+  }));
+  const area = project?.areas?.find(a => a.id === activeAreaId);
+  const board = area?.boards?.find(b => b.id === activeBoardId);
+  const patchPhotos = (areaId, boardId, circuitId, photos) => {
+    setAllResults(prev => ({
+      ...prev,
+      [activeProject]: {
+        ...(prev[activeProject] || {}),
+        [areaId]: {
+          ...((prev[activeProject] || {})[areaId] || {}),
+          [boardId]: {
+            ...(((prev[activeProject] || {})[areaId] || {})[boardId] || {}),
+            [circuitId]: photos
+          }
+        }
+      }
+    }));
+  };
+  const archiveAudit = () => {
+    if (!project) return;
+    const snap = {
+      id: uid(),
+      projectId: activeProject,
+      projectName: project.name,
+      auditor: meta.auditor || "",
+      testDate: meta.testDate || "",
+      archivedAt: new Date().toISOString(),
+      results: JSON.parse(JSON.stringify(allResults[activeProject] || {})),
+      meta: {
+        ...meta
+      }
+    };
+    setHistory(prev => [snap, ...prev].slice(0, 100));
+    return snap;
+  };
+  const completeAudit = () => {
+    archiveAudit();
+    // Reset all results for this project
+    setAllResults(prev => ({
+      ...prev,
+      [activeProject]: {}
+    }));
+    setAllMeta(prev => ({
+      ...prev,
+      [activeProject]: {
+        ...meta,
+        testDate: new Date().toISOString().slice(0, 10),
+        startFlir: ""
+      }
+    }));
+    setAuditEntered(false);
+    setActiveAreaId(null);
+    setActiveBoardId(null);
+    setView("home");
+  };
+  const goProjects = () => {
+    setView("projects");
+    setActiveProject(null);
+    setActiveAreaId(null);
+    setActiveBoardId(null);
+    setActiveCircuitId(null);
+    setActiveCircuitName("");
+    setAuditEntered(false);
+  };
+  const goHome = () => {
+    setView("home");
+    setActiveAreaId(null);
+    setActiveBoardId(null);
+    setActiveCircuitId(null);
+    setActiveCircuitName("");
+  };
+  const handleBack = () => {
+    if (view === "circuit") {
+      setView("board");
+      setActiveCircuitId(null);
+      setActiveCircuitName("");
+    } else if (view === "board") {
+      setView("area");
+      setActiveBoardId(null);
+    } else if (view === "area") {
+      setView("audit");
+      setActiveAreaId(null);
+    } else if (view === "audit" && activeAreaId) {
+      setActiveAreaId(null);
+    } else if (view === "audit" && auditEntered) {
+      setAuditEntered(false);
+      goHome();
+    } else if (view === "audit") {
+      goHome();
+    } else if (view === "home") {
+      goProjects();
+    } else if (["manage", "report", "history"].includes(view)) {
+      goHome();
+    } else goProjects();
+  };
+  if (!loaded) return /*#__PURE__*/React.createElement("div", {
+    style: STH.loader
+  }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } }`), /*#__PURE__*/React.createElement("div", {
+    style: STH.loaderSpinner
+  }), /*#__PURE__*/React.createElement("p", {
+    style: {
+      color: "#aaa",
+      marginTop: 16
+    }
+  }, "Loading\u2026"));
+  const isAudit = view === "audit" || view === "area" || view === "board" || view === "circuit";
+  return /*#__PURE__*/React.createElement("div", {
+    style: STH.root
+  }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`), /*#__PURE__*/React.createElement("header", {
+    style: STH.topbar
+  }, /*#__PURE__*/React.createElement("div", {
+    style: STH.topbarLeft
+  }, view !== "projects" && /*#__PURE__*/React.createElement("button", {
+    style: STH.backBtn,
+    onClick: handleBack
+  }, "\u2039"), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+    style: STH.appTitle
+  }, "\uD83C\uDF21 THERMO TEST"), /*#__PURE__*/React.createElement("div", {
+    style: STH.appSub
+  }, view === "projects" ? "Site Select" : project?.name || ""))), /*#__PURE__*/React.createElement("div", {
+    style: STH.topbarRight
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...STH.saveIndicator,
+      opacity: saveFlash ? 1 : 0
+    }
+  }, "\u2713 Saved"), onGoHome && /*#__PURE__*/React.createElement("button", {
+    onClick: onGoHome,
+    style: {
+      fontSize: 11,
+      color: "#555",
+      background: "#1a1a1a",
+      border: "1px solid #2a2a2a",
+      borderRadius: 8,
+      padding: "5px 10px",
+      cursor: "pointer",
+      fontWeight: 600
+    }
+  }, "\u2302 Modules"))), view !== "projects" && /*#__PURE__*/React.createElement("div", {
+    style: STH.breadcrumb
+  }, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcItem,
+    onClick: goProjects
+  }, "Sites"), project && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: STH.bcItem,
+    onClick: goHome
+  }, project.name)), isAudit && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...STH.bcItem,
+      color: THERMO_COLOR
+    }
+  }, "Audit")), activeAreaId && area && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: STH.bcItem,
+    onClick: () => {
+      setView("area");
+      setActiveBoardId(null);
+    }
+  }, area.name)), activeBoardId && board && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...STH.bcItem,
+      color: THERMO_COLOR
+    }
+  }, board.name)), view === "circuit" && activeCircuitName && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...STH.bcItem,
+      color: THERMO_COLOR
+    }
+  }, activeCircuitName)), view === "manage" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...STH.bcItem,
+      color: "#a855f7"
+    }
+  }, "Structure")), view === "report" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...STH.bcItem,
+      color: "#94a3b8"
+    }
+  }, "Report")), view === "history" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
+    style: STH.bcSep
+  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      ...STH.bcItem,
+      color: "#f59e0b"
+    }
+  }, "History"))), /*#__PURE__*/React.createElement("main", {
+    style: STH.main
+  }, view === "projects" && /*#__PURE__*/React.createElement(ThermoProjectListView, {
+    projects: projects,
+    allResults: allResults,
+    onSelect: id => {
+      setActiveProject(id);
+      setView("home");
+    },
+    onAddProject: (p, initialResults) => {
+      setProjects(prev => [...prev, p]);
+      if (initialResults && Object.keys(initialResults).length > 0) {
+        setAllResults(prev => ({
+          ...prev,
+          [p.id]: initialResults
+        }));
+      }
+    },
+    onDeleteProject: id => {
+      setProjects(prev => prev.filter(p => p.id !== id));
+      setAllResults(prev => {
+        const n = {
+          ...prev
+        };
+        delete n[id];
+        return n;
+      });
+      setAllMeta(prev => {
+        const n = {
+          ...prev
+        };
+        delete n[id];
+        return n;
+      });
+      setHistory(prev => prev.filter(h => h.projectId !== id));
+      if (activeProject === id) goProjects();
+    }
+  }), view === "home" && project && /*#__PURE__*/React.createElement(ThermoHomeView, {
+    project: project,
+    meta: meta,
+    setMeta: setMeta,
+    results: allResults[activeProject] || {},
+    auditEntered: auditEntered,
+    onStartAudit: () => {
+      setAuditEntered(true);
+      setView("audit");
+    },
+    onReport: () => setView("report"),
+    onManage: () => setView("manage"),
+    onHistory: () => setView("history"),
+    onReset: () => setAllResults(prev => ({
+      ...prev,
+      [activeProject]: {}
+    })),
+    onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta),
+    onArchive: () => archiveAudit(),
+    onCompleteAudit: completeAudit
+  }), view === "audit" && project && !activeAreaId && /*#__PURE__*/React.createElement(ThermoAreaListView, {
+    project: project,
+    results: allResults[activeProject] || {},
+    onSelect: id => {
+      setActiveAreaId(id);
+      setView("area");
+    }
+  }), view === "area" && area && !activeBoardId && /*#__PURE__*/React.createElement(ThermoBoardListView, {
+    area: area,
+    project: project,
+    results: allResults[activeProject] || {},
+    onSelect: id => {
+      setActiveBoardId(id);
+      setView("board");
+    }
+  }), view === "board" && board && /*#__PURE__*/React.createElement(ThermoCircuitView, {
+    area: area,
+    board: board,
+    project: project,
+    results: allResults[activeProject] || {},
+    onSelectCircuit: (cid, cname) => {
+      setActiveCircuitId(cid);
+      setActiveCircuitName(cname);
+      setView("circuit");
+    }
+  }), view === "circuit" && board && activeCircuitId && /*#__PURE__*/React.createElement(PhotoPage, {
+    circuitId: activeCircuitId,
+    circuitName: activeCircuitName,
+    board: board,
+    area: area,
+    project: project,
+    results: allResults[activeProject] || {},
+    meta: meta,
+    onPatchPhotos: photos => patchPhotos(activeAreaId, activeBoardId, activeCircuitId, photos)
+  }), view === "report" && project && /*#__PURE__*/React.createElement(ThermoReportView, {
+    project: project,
+    results: allResults[activeProject] || {},
+    meta: meta,
+    onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta)
+  }), view === "manage" && project && /*#__PURE__*/React.createElement(ThermoManageView, {
+    project: project,
+    onUpdateProject: updated => setProjects(prev => prev.map(p => p.id === updated.id ? {
+      ...p,
+      ...updated
+    } : p))
+  }), view === "history" && /*#__PURE__*/React.createElement(ThermoHistoryView, {
+    history: history.filter(h => h.projectId === activeProject),
+    project: project,
+    onDelete: id => setHistory(prev => prev.filter(h => h.id !== id)),
+    onExportSnap: snap => exportThermoExcel({
+      ...project,
+      areas: project?.areas || []
+    }, snap.results || {}, snap.meta || {}),
+    onContinueFromSnap: snap => {
+      setAllResults(prev => ({
+        ...prev,
+        [activeProject]: JSON.parse(JSON.stringify(snap.results || {}))
+      }));
+      setAllMeta(prev => ({
+        ...prev,
+        [activeProject]: {
+          ...snap.meta
+        }
+      }));
+      setAuditEntered(true);
+      setActiveAreaId(null);
+      setActiveBoardId(null);
+      setView("audit");
+    }
+  })), view !== "projects" && /*#__PURE__*/React.createElement("nav", {
+    style: STH.bottomNav
+  }, /*#__PURE__*/React.createElement(NavBtn, {
+    icon: "\u2302",
+    label: "Home",
+    active: view === "home",
+    onClick: goHome
+  }), /*#__PURE__*/React.createElement(NavBtn, {
+    icon: "\uD83C\uDF21",
+    label: "Audit",
+    active: isAudit,
+    onClick: () => {
+      setView("audit");
+      setActiveBoardId(null);
+    }
+  }), /*#__PURE__*/React.createElement(NavBtn, {
+    icon: "\u2261",
+    label: "Report",
+    active: view === "report",
+    onClick: () => setView("report")
+  }), /*#__PURE__*/React.createElement(NavBtn, {
+    icon: "\uD83D\uDD50",
+    label: "History",
+    active: view === "history",
+    onClick: () => setView("history"),
+    color: "#f59e0b"
+  }), /*#__PURE__*/React.createElement(NavBtn, {
+    icon: "\u2699",
+    label: "Structure",
+    active: view === "manage",
+    onClick: () => setView("manage"),
+    color: "#a855f7"
+  })));
+}
 // ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
 function AppRoot() {
-  const [module, setModule] = React.useState(null); // null | "rcd" | "iel"
+  const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo"
 
   // When on landing page, allow #root to scroll; when in a module, lock it
   React.useEffect(()=>{
     const root = document.getElementById('root');
     if(!root) return;
     if(!module) {
-      // Landing: allow natural scroll
-      root.style.position = 'relative';
-      root.style.overflow = 'auto';
-      root.style.height = 'auto';
-      root.style.minHeight = '100vh';
+      root.style.position = 'fixed';
+      root.style.top = '0';
+      root.style.left = '0';
+      root.style.right = '0';
+      root.style.bottom = '0';
+      root.style.overflow = 'hidden';
+      root.style.height = '';
     } else {
-      // Module: fixed full-screen
       root.style.position = 'fixed';
       root.style.overflow = 'hidden';
       root.style.height = '';
-      root.style.minHeight = '';
     }
   }, [module]);
 
@@ -5335,22 +9342,30 @@ function AppRoot() {
   if (module === "iel") return React.createElement(IELApp, {onGoHome: ()=>setModule(null)});
   if (module === "tat") return React.createElement(TATApp, {onGoHome: ()=>setModule(null)});
   if (module === "cal") return React.createElement(CalendarApp, {onGoHome: ()=>setModule(null)});
+  if (module === "thermo") return React.createElement(ThermoApp, {onGoHome: ()=>setModule(null)});
 
-  return React.createElement('div', {style:{
-    display:"flex",flexDirection:"column",
-    minHeight:"100%",
-    background:"#111",color:"#eee",
-    fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",
-    WebkitFontSmoothing:"antialiased",
-    overflowY:"auto",
-    overflowX:"hidden",
-    WebkitOverflowScrolling:"touch",
-  }}
+  return React.createElement('div', {
+    style:{
+      display:"flex",flexDirection:"column",
+      position:"fixed",
+      top:0,left:0,right:0,bottom:0,
+      background:"#111",color:"#eee",
+      fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",
+      WebkitFontSmoothing:"antialiased",
+      overflowY:"scroll",
+      overflowX:"hidden",
+      WebkitOverflowScrolling:"touch",
+    },
+    ref: el => { if(el) el.scrollTop = 0; }
+  }
     , React.createElement('div', {style:{
         padding:"60px 24px 48px",
         display:"flex",flexDirection:"column",
         alignItems:"center",
         gap:0,
+        minHeight:"100%",
+        width:"100%",
+        boxSizing:"border-box",
       }}
 
       // Brand
@@ -5365,7 +9380,38 @@ function AppRoot() {
       // Module cards
       , React.createElement('div', {style:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1.5,marginBottom:16,textAlign:"center"}}, "SELECT MODULE")
 
-      , React.createElement('button', {
+      // Schedule
+, React.createElement('button', {
+          style:{
+            width:"100%",maxWidth:420,
+            display:"flex",alignItems:"center",gap:20,
+            padding:"24px 24px",
+            background:"#161616",
+            border:"2px solid #6366f144",
+            borderRadius:20,
+            cursor:"pointer",
+            color:"#eee",
+            marginBottom:14,
+            textAlign:"left",
+          },
+          onClick: ()=>setModule("cal")
+        }
+        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#6366f122",border:"1px solid #6366f144",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "📅")
+        , React.createElement('div', {style:{flex:1}}
+          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#818cf8",letterSpacing:0.5}}, "TEST CALENDAR")
+          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "Track upcoming test due dates, get reminders for RCD, IEL and other scheduled audits")
+          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
+            , React.createElement('span', {style:{fontSize:10,color:"#818cf8",background:"#6366f122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 Monthly Push")
+            , React.createElement('span', {style:{fontSize:10,color:"#10b981",background:"#10b98122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔗 IEL 3-Month")
+            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔬 Annual Injection")
+          )
+        )
+        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
+      )
+
+      
+      // Testing
+, React.createElement('button', {
           style:{
             width:"100%",maxWidth:420,
             display:"flex",alignItems:"center",gap:20,
@@ -5455,29 +9501,31 @@ function AppRoot() {
             display:"flex",alignItems:"center",gap:20,
             padding:"24px 24px",
             background:"#161616",
-            border:"2px solid #6366f144",
+            border:"2px solid #f9731644",
             borderRadius:20,
             cursor:"pointer",
             color:"#eee",
             marginBottom:14,
             textAlign:"left",
           },
-          onClick: ()=>setModule("cal")
+          onClick: ()=>setModule("thermo")
         }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#6366f122",border:"1px solid #6366f144",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "📅")
+        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#f9731622",border:"1px solid #f9731644",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "\uD83C\uDF21")
         , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#818cf8",letterSpacing:0.5}}, "TEST CALENDAR")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "Track upcoming test due dates, get reminders for RCD, IEL and other scheduled audits")
+          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#f97316",letterSpacing:0.5}}, "THERMOGRAPHIC TESTING")
+          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "FLIR camera photo logging for thermal imaging audits of electrical equipment")
           , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#818cf8",background:"#6366f122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 Monthly Push")
-            , React.createElement('span', {style:{fontSize:10,color:"#10b981",background:"#10b98122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔗 IEL 3-Month")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔬 Annual Injection")
+            , React.createElement('span', {style:{fontSize:10,color:"#f97316",background:"#f9731622",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\uD83C\uDF21 FLIR Logging")
+            , React.createElement('span', {style:{fontSize:10,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\u2713 Pass / Fail / Monitor")
+            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\uD83D\uDCC5 Annual Cycle")
           )
         )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
+        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "\u203a")
       )
 
-      , React.createElement('div', {style:{marginTop:24,textAlign:"center",fontSize:11,color:"#333",letterSpacing:0.5}}, "Vorick Group Asset Maintenance · v10")
+
+
+            , React.createElement('div', {style:{marginTop:24,textAlign:"center",fontSize:11,color:"#333",letterSpacing:0.5}}, "Vorick Group Asset Maintenance · v10")
     )
   );
 }
