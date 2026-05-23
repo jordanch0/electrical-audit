@@ -41,6 +41,7 @@ const K_META      = "rcd-meta-v6";
 const K_HISTORY   = "rcd-history-v6";
 const K_DROPDOWNS = "rcd-dropdowns-v6";
 const K_LOGO      = "rcd-logo-v6";       // base64 data-URL of uploaded logo
+const K_MODE      = "rcd-mode-v6";        // active audit mode: "push"|"inject"|null
 const load = async (key, fallback) => { try { const r=localStorage.getItem(key); return r?JSON.parse(r):fallback; } catch(_) { return fallback; } };
 let _storageWarnShown = false;
 const save = async (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) { if(!_storageWarnShown){ _storageWarnShown=true; console.error('Storage save failed:',e); try{ const el=document.createElement('div'); el.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#3d1a1a;color:#f87171;border:1px solid #ef4444;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;z-index:9999;max-width:320px;text-align:center;'; el.textContent='⚠ Storage full — data may not be saved. Clear old history or browser data.'; document.body.appendChild(el); setTimeout(()=>{ _storageWarnShown=false; el.remove(); },6000); }catch(_){} } } };
@@ -179,66 +180,94 @@ if(rows[1]) {
   if(!abn && parsed.abn) abn = parsed.abn;
   if(!licence && parsed.licence) licence = parsed.licence;
 }
-// Find header row
+// Find header row — must have short cell values (not an instruction sentence)
 let headerIdx = -1;
 for (let i = 0; i < Math.min(rows.length, 15); i++) {
 const r = rows[i].map(c => String(c).toLowerCase());
-if (r.some(c => c.includes("area"))) { headerIdx = i; break; }
+// Skip rows where any cell is a long instruction sentence (>60 chars)
+if (rows[i].some(c => String(c).length > 60)) continue;
+if (r.some(c => c === "area" || c === "location")) { headerIdx = i; break; }
 }
 if (headerIdx === -1) headerIdx = 0;
 const header = rows[headerIdx].map(c => String(c).toLowerCase().trim());
 // Find the Area column (col with "area" in header)
 const aC = Math.max(0, header.findIndex(h => h.includes("area")));
-// Find the Panel/Asset Name column — the column right after area,
-// or the one with "panel" / "asset" in the header
-// This column contains the full combined string like "MSB1-DB CB 9"
+// Find the Panel column and optional Circuit column
 let pC = header.findIndex(h =>
-(h.includes("panel") || h.includes("asset") || h.includes("name")) &&
+(h.includes("panel") || h.includes("asset") || h.includes("name") || h.includes("db")) &&
 !h.includes("device") && !h.includes("type")
 );
-if (pC < 0) pC = aC + 1; // fallback: column right after area
-// Collect all panel/asset names grouped by area
-// We intentionally ignore all other columns — they are test results, not structure
+if (pC < 0) pC = aC + 1;
+// New template has separate Circuit column (col C); old format combined them in col B
+const cC = header.findIndex(h => h === "circuit / cb" || (h.includes("circuit") && !h.includes("isolation")) || h === "cb");
+const hasSeparateCircuit = cC >= 0 && cC !== pC;
+// CB Type (col D) and Amp Rating (col E) — only in new 3-col template
+const cCbType    = header.findIndex(h => h.includes("cb") && h.includes("type") || h === "cb / rcd type");
+const cAmpRating = header.findIndex(h => h.includes("amp") || h.includes("rating"));
+// circuitMeta accumulator: { "Panel Name": { "Circuit Name": {cbType, ampRating} } }
+const circuitMetaMap = {};
+// Collect panel/circuit rows grouped by area
 const rawByArea = {};
 for (let i = headerIdx + 1; i < rows.length; i++) {
 const row  = rows[i];
 const aRaw = String(row[aC] || "").trim();
 const pRaw = String(row[pC] || "").trim();
 if (!aRaw && !pRaw) continue;
-// Skip rows that look like repeated headers
 if (aRaw.toLowerCase() === "area") continue;
 const aKey = aRaw || "General";
 if (!rawByArea[aKey]) rawByArea[aKey] = [];
-if (pRaw) rawByArea[aKey].push(pRaw);
+if (hasSeparateCircuit) {
+  // New 3-column format: Area | Panel | Circuit [| CB Type | Amp Rating]
+  const cRaw = String(row[cC] || "").trim();
+  const cbT  = cCbType    >= 0 ? String(row[cCbType]    || "").trim() : "";
+  const ampR = cAmpRating >= 0 ? String(row[cAmpRating] || "").trim() : "";
+  if (pRaw || cRaw) {
+    rawByArea[aKey].push({ panel: pRaw, circuit: cRaw || pRaw });
+    if (cbT || ampR) {
+      if (!circuitMetaMap[pRaw]) circuitMetaMap[pRaw] = {};
+      circuitMetaMap[pRaw][cRaw || pRaw] = { cbType: cbT, ampRating: ampR };
+    }
+  }
+} else {
+  // Legacy 2-column format: Area | Panel+Circuit combined
+  if (pRaw) rawByArea[aKey].push(pRaw);
+}
 }
 const areaMap = {};
-Object.entries(rawByArea).forEach(([aName, panelStrs]) => {
-// Each string in panelStrs is a combined "BOARD CIRCUIT" string
-// Parse: split at last CB token if present, otherwise group by shared prefix
-let resolved = panelStrs.map(pRaw => {
-const split = parsePanelCircuit(pRaw);
-if (split) return split;
-// No circuit token — use shared prefix with siblings
-const prefix  = findSharedPrefix(pRaw, panelStrs);
-const circuit = pRaw.slice(prefix.length).replace(/^[\s\-–_]+/, "").trim() || pRaw;
-return { panel: prefix, circuit };
-});
-// Collapse "MSB1-DB" → "MSB1" where "MSB1" also exists
-resolved = collapsePanelNames(resolved);
+Object.entries(rawByArea).forEach(([aName, items]) => {
 areaMap[aName] = {};
-resolved.forEach(({ panel, circuit }) => {
-if (!areaMap[aName][panel]) areaMap[aName][panel] = new Set();
-areaMap[aName][panel].add(circuit);
-});
+if (hasSeparateCircuit) {
+  // Items are already {panel, circuit} objects
+  items.forEach(({ panel, circuit }) => {
+    if (!areaMap[aName][panel]) areaMap[aName][panel] = new Set();
+    areaMap[aName][panel].add(circuit);
+  });
+} else {
+  // Legacy: items are strings needing panel/circuit split
+  const panelStrs = items;
+  let resolved = panelStrs.map(pRaw => {
+    const split = parsePanelCircuit(pRaw);
+    if (split) return split;
+    const prefix  = findSharedPrefix(pRaw, panelStrs);
+    const circuit = pRaw.slice(prefix.length).replace(/^[\s\-–_]+/, "").trim() || pRaw;
+    return { panel: prefix, circuit };
+  });
+  resolved = collapsePanelNames(resolved);
+  resolved.forEach(({ panel, circuit }) => {
+    if (!areaMap[aName][panel]) areaMap[aName][panel] = new Set();
+    areaMap[aName][panel].add(circuit);
+  });
+}
 });
 const areas = Object.entries(areaMap).map(([aName, panelObj]) => ({
 id: slugify(aName),
 name: aName,
-panels: Object.entries(panelObj).map(([pName, circuits]) => ({
-id: slugify(pName),
-name: pName,
-circuits: [...circuits],
-})),
+panels: Object.entries(panelObj).map(([pName, circuits]) => {
+  const meta = circuitMetaMap[pName] || {};
+  const cm = {};
+  Object.keys(meta).forEach(c => { if (meta[c].cbType || meta[c].ampRating) cm[c] = meta[c]; });
+  return { id: slugify(pName), name: pName, circuits: [...circuits], ...(Object.keys(cm).length ? { circuitMeta: cm } : {}) };
+}),
 }));
 return { id: slugify(projectName), name: projectName, company: company || "Vorick Group", abn: abn || "", licence: licence || "", areas };
 }
@@ -439,34 +468,43 @@ const filename = `${project.name.replace(/\s+/g,"_")}_RCD_${isInject?"Injection"
 // TEMPLATE DOWNLOAD — gives user a sample import spreadsheet
 // ─────────────────────────────────────────────────────────────────────────
 function downloadTemplate() {
+const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
 const wb=XLSX.utils.book_new();
 const rows=[
-["Area","Panel / DB Name","Circuit / CB"],
-["Area 1","Panel 1","CB1"],
-["Area 1","Panel 1","CB2"],
-["Area 1","Panel 1","CB3"],
-["Area 1","Panel 2","CB1"],
-["Area 1","Panel 2","CB2"],
-["Wash Plant","DB Wash Plant","CB9"],
-["Wash Plant","DB Wash Plant","CB10"],
-["Wash Plant","DB Lunch Shed","CB1"],
+  ["Site Name — enter your site name here"],
+  ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+  [""],
+  ["INSTRUCTIONS: Fill in Area, Panel/DB Name, Circuit/CB label, CB Type (MCB/RCBO/RCD/MCCB) and Amp Rating (e.g. 16). One circuit per row. Rows 1-3 are read automatically — do not delete them."],
+  ["Area","Panel / DB Name","Circuit / CB","CB Type","Amp Rating (A)"],
+  ["Wash Plant","MDB-WP","CB 1","MCB","16"],
+  ["Wash Plant","MDB-WP","CB 2","MCB","32"],
+  ["Wash Plant","MDB-WP","CB 3 (RCD)","RCBO","20"],
+  ["Wash Plant","DB Lunch Shed","CB 1","MCB","10"],
+  ["Wash Plant","DB Lunch Shed","CB 2","MCB","10"],
+  ["Sub Station","MSB","CB 1","MCCB","63"],
+  ["Sub Station","MSB","CB 2","MCCB","63"],
+  ["Office","DB-Office","CB 1","MCB","16"],
 ];
 const ws=XLSX.utils.aoa_to_sheet(rows);
-ws["!cols"]=[{wch:24},{wch:24},{wch:16}];
-XLSX.utils.book_append_sheet(wb,ws,"RCD Import Template");
-const tOut = XLSX.write(wb, {bookType:"xlsx", type:"base64", cellStyles:true});
-const tUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${tOut}`;
-if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile) {
-    window.webkit.messageHandlers.shareFile.postMessage({
-      base64: tOut,
-      filename: 'RCD_Import_Template.xlsx',
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    });
-  } else {
-    var tLink=document.createElement('a');
-    tLink.href=tUri; tLink.download='RCD_Import_Template.xlsx';
-    document.body.appendChild(tLink); tLink.click(); document.body.removeChild(tLink);
-  }
+ws["!cols"]=[{wch:24},{wch:26},{wch:18},{wch:12},{wch:14}];
+// Style header rows
+const hdrFill={patternType:"solid",fgColor:{rgb:"FFE8731A"}};
+const hdrFont={name:"Calibri",bold:true,sz:10,color:{rgb:"FFFFFFFF"}};
+const infoFill={patternType:"solid",fgColor:{rgb:"FF1E3A5F"}};
+const infoFont={name:"Calibri",sz:9,color:{rgb:"FFadd8e6"},italic:true};
+const colHdrFill={patternType:"solid",fgColor:{rgb:"FF2D2D2D"}};
+const colHdrFont={name:"Calibri",bold:true,sz:10,color:{rgb:"FFeeeeee"}};
+["A1"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",bold:true,sz:13,color:{rgb:"FFE8731A"}}};});
+["A2"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",sz:10,color:{rgb:"FF999999"}}};});
+["A4"].forEach(r=>{if(ws[r])ws[r].s={fill:infoFill,font:infoFont};});
+["A5","B5","C5","D5","E5"].forEach(r=>{if(ws[r])ws[r].s={fill:colHdrFill,font:colHdrFont,alignment:{horizontal:"center"}};});
+ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}},{s:{r:3,c:0},e:{r:3,c:4}}];
+XLSX.utils.book_append_sheet(wb,ws,"RCD Import");
+const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
+const fname="RCD_Import_Template.xlsx";
+if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
+  window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
 }
 // ═════════════════════════════════════════════════════════════════════════
 // MAIN APP
@@ -492,15 +530,16 @@ React.useEffect(()=>{
 var safetyTimer=setTimeout(()=>setLoaded(true),3000);
 (async()=>{
 try {
-const [p,r,m,h,d,l]=await Promise.all([
+const [p,r,m,h,d,l,mo]=await Promise.all([
 load(K_PROJECTS,[]),
 load(K_RESULTS,{}),
 load(K_META,{}),
 load(K_HISTORY,[]),
 load(K_DROPDOWNS,{responsibility:DEFAULT_RESPONSIBILITY,rectified:DEFAULT_RECTIFIED,ampRating:DEFAULT_AMP_RATING,cbType:DEFAULT_CB_TYPE}),
 load(K_LOGO,null),
+load(K_MODE,null),
 ]);
-clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setLogo(l);setLoaded(true);
+clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setLogo(l);setMode(mo);setLoaded(true);
 } catch(loadErr) { console.error('Load error:',loadErr); clearTimeout(safetyTimer); setLoaded(true); }
 })();
 },[]);
@@ -510,6 +549,7 @@ React.useEffect(()=>{ if(loaded){save(K_META,allMeta);} },[allMeta,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_HISTORY,history);} },[history,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_DROPDOWNS,dropdowns);} },[dropdowns,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_LOGO,logo);} },[logo,loaded]);
+React.useEffect(()=>{ if(loaded){save(K_MODE,mode);} },[mode,loaded]);
 const project = projects.find(p=>p.id===activeProject);
 const meta    = _nullishCoalesce(allMeta[activeProject], () => ({auditor:"",pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),notes:""}));
 const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
@@ -523,8 +563,11 @@ return {...prev,[pid]:{...prev[pid],[aid]:{...(_nullishCoalesce(prev[pid], () =>
 };
 const cycleCircuit=(aid,panid,circuit)=>{
 const d=getCircuitData(allResults,activeProject,aid,panid,circuit);
-if(mode==="push") patchCircuit(activeProject,aid,panid,circuit,{push:{...d.push,status:cycleS(_nullishCoalesce(_optionalChain([d, 'access', _51 => _51.push, 'optionalAccess', _52 => _52.status]), () => (STATUS.UNTESTED)))}});
-else patchCircuit(activeProject,aid,panid,circuit,{inject:{...d.inject,status:cycleS(_nullishCoalesce(_optionalChain([d, 'access', _53 => _53.inject, 'optionalAccess', _54 => _54.status]), () => (STATUS.UNTESTED)))}});
+if(mode==="push"){
+  const nextStatus=cycleS(_nullishCoalesce(_optionalChain([d, 'access', _51 => _51.push, 'optionalAccess', _52 => _52.status]), () => (STATUS.UNTESTED)));
+  patchCircuit(activeProject,aid,panid,circuit,{push:{...d.push,status:nextStatus}});
+  if(nextStatus===STATUS.FAIL) setDetailInfo({areaId:aid,panelId:panid,circuit});
+} else patchCircuit(activeProject,aid,panid,circuit,{inject:{...d.inject,status:cycleS(_nullishCoalesce(_optionalChain([d, 'access', _53 => _53.inject, 'optionalAccess', _54 => _54.status]), () => (STATUS.UNTESTED)))}});
 };
 const setAllPanel=(aid,panid,circuits,status)=>{
 setAllResults(prev=>{
@@ -562,7 +605,8 @@ React.createElement('div', { style: S.root,}
 , React.createElement('header', { style: {...S.topbar,borderBottom:`2px solid ${mode?modeColor+"33":"#222"}`},}
 , React.createElement('div', { style: S.topbarLeft,}
 , view!=="projects" && React.createElement('button', { style: S.backBtn, onClick: ()=>{
-if(view==="panel"){setView("audit");setActivePanelId(null);setDetailInfo(null);}
+if(detailInfo){setDetailInfo(null);}
+else if(view==="panel"){setView("audit");setActivePanelId(null);setDetailInfo(null);}
 else if(view==="audit"&&activePanelId){setActivePanelId(null);setDetailInfo(null);}
 else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
 else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);setView("home");}
@@ -612,13 +656,14 @@ onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[ac
 , isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:mode?modeColor:"#e8731a",moduleLabel:"RCD TEST",auditLabel:mode?modeLabel:"",hasActiveAudit:!!mode,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Vorick Group",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:true})
 , isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(AreaListView, { project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>setActiveAreaId(id),})
 , isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(PanelListView, { area: area, project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>{setActivePanelId(id);setView("panel");},})
-, view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
+, !detailInfo&&view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
 onCycle: c=>cycleCircuit(activeAreaId,activePanelId,c),
 onSetAll: s=>setAllPanel(activeAreaId,activePanelId,panel.circuits,s),
 onOpenDetail: c=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,circuit:c}),})
-, view==="report"&&project&&React.createElement(ReportView, { project: project, results: allResults, meta: meta, onExportPush: ()=>exportExcel(allResults,project,meta,"push",logo), onExportInject: ()=>exportExcel(allResults,project,meta,"inject",logo), onArchive: archiveAudit,})
-, view==="manage"&&project&&React.createElement(ManageView, { project: project, dropdowns: dropdowns, onUpdateProject: updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),})
-, view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode,logo),
+, detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns, onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch), onClose: ()=>setDetailInfo(null),})
+, !detailInfo&&view==="report"&&project&&React.createElement(ReportView, { project: project, results: allResults, meta: meta, onExportPush: ()=>exportExcel(allResults,project,meta,"push",logo), onExportInject: ()=>exportExcel(allResults,project,meta,"inject",logo), onArchive: archiveAudit,})
+, !detailInfo&&view==="manage"&&project&&React.createElement(ManageView, { project: project, dropdowns: dropdowns, onUpdateProject: updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),})
+, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode,logo),
 onContinueFromSnap: (snap)=>{
   // Deep-copy snap results into active results (does NOT overwrite archived snap)
   setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
@@ -629,19 +674,16 @@ onContinueFromSnap: (snap)=>{
   setActivePanelId(null);
   setView("audit");
 },})
-, view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, logo: logo, setLogo: setLogo,})
+, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, logo: logo, setLogo: setLogo,})
 )
-, detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns,
-onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch),
-onClose: ()=>setDetailInfo(null),})
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
 , React.createElement(NavBtn, { icon: "⌂", label: "Home",      active: view==="home",     onClick: goHome,})
 , React.createElement(NavBtn, { icon: "☑", label: "Audit",     active: isAudit,           onClick: ()=>{setView("audit");setActivePanelId(null);setDetailInfo(null);},})
-, React.createElement(NavBtn, { icon: "≡", label: "Report",    active: view==="report",   onClick: ()=>setView("report"),})
-, React.createElement(NavBtn, { icon: "🕐", label: "History",  active: view==="history",  onClick: ()=>setView("history"), color: "#f59e0b",})
-, React.createElement(NavBtn, { icon: "⚙", label: "Manage",   active: view==="manage",   onClick: ()=>setView("manage"), color: "#a855f7",})
-, React.createElement(NavBtn, { icon: "▾", label: "Dropdowns", active: view==="settings", onClick: ()=>setView("settings"), color: "#64748b",})
+, React.createElement(NavBtn, { icon: "≡", label: "Report",    active: view==="report",   onClick: ()=>{setDetailInfo(null);setView("report");}})
+, React.createElement(NavBtn, { icon: "🕐", label: "History",  active: view==="history",  onClick: ()=>{setDetailInfo(null);setView("history");}, color: "#f59e0b",})
+, React.createElement(NavBtn, { icon: "⚙", label: "Manage",   active: view==="manage",   onClick: ()=>{setDetailInfo(null);setView("manage");}, color: "#a855f7",})
+, React.createElement(NavBtn, { icon: "▾", label: "Dropdowns", active: view==="settings", onClick: ()=>{setDetailInfo(null);setView("settings");}, color: "#64748b",})
 )
 )
 )
@@ -1212,9 +1254,10 @@ const CbAmpReadOnly = React.createElement('div', { style: {display:"flex",gap:8,
 );
 if(isPush){
 const push=_nullishCoalesce(d.push, () => ({}));
+const pushIsFail = (_nullishCoalesce(push.status, () => (STATUS.UNTESTED))) === STATUS.FAIL;
 return (
-React.createElement('div', { style: S.modalOverlay, onClick: onClose,}
-, React.createElement('div', { style: S.modalBox, onClick: e=>e.stopPropagation(),}
+React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#111",minHeight:"100%"}, onClick: onClose,}
+, React.createElement('div', { style: {}, onClick: e=>e.stopPropagation(),}
 , React.createElement('div', { style: S.modalHeader,}
 , React.createElement('div', null, React.createElement('div', { style: S.modalTitle,}, _optionalChain([panel, 'optionalAccess', _154 => _154.name]), " · "  , circuit), React.createElement('div', { style: S.modalSub,}, _optionalChain([area, 'optionalAccess', _155 => _155.name]), " · Monthly Push Test"    ))
 , React.createElement(StatusBadge, { status: _nullishCoalesce(push.status, () => (STATUS.UNTESTED)),})
@@ -1232,11 +1275,48 @@ style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,curs
 })
 )
 )
+/* FAIL-ONLY SECTION — only shown when result is FAIL */
+, pushIsFail && React.createElement('div', { style: {background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4},}
+, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
+, React.createElement('div', { style: S.modalField,}
+, React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED")
+, React.createElement(EditableDropdown, {
+options: rectOptions,
+value: _nullishCoalesce(push.rectified, () => ("")),
+onChange: v=>onPatch({push:{...push,rectified:v}}),
+placeholder: "Select or type…",})
+)
+, React.createElement('div', { style: {display:"flex",gap:10},}
+, React.createElement('div', { style: {...S.modalField,flex:1},}
+, React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
+, React.createElement('input', { style: S.modalInput, type: "date", value: _nullishCoalesce(push.scheduledDate, () => ("")), onChange: e=>onPatch({push:{...push,scheduledDate:e.target.value}}),})
+)
+, React.createElement('div', { style: {...S.modalField,flex:1},}
+, React.createElement('label', { style: S.modalLabel,}, "DEFECT ID")
+, React.createElement('input', { style: S.modalInput, type: "text", placeholder: "e.g. 74", value: _nullishCoalesce(push.defectId, () => ("")), onChange: e=>onPatch({push:{...push,defectId:e.target.value}}),})
+)
+)
+, React.createElement('div', { style: S.modalField,}
+, React.createElement('label', { style: S.modalLabel,}, "RESPONSIBILITY")
+, React.createElement(EditableDropdown, {
+options: respOptions,
+value: _nullishCoalesce(push.responsibility, () => (respOptions[0]||"Vorick Group")),
+onChange: v=>onPatch({push:{...push,responsibility:v}}),
+placeholder: "Select or type…",})
+)
+, React.createElement('div', { style: S.modalField,}
+, React.createElement('label', { style: S.modalLabel,}, "PRIORITY")
+, React.createElement('select', { style: S.modalInput, value: _nullishCoalesce(push.priority, () => ("")), onChange: e=>onPatch({push:{...push,priority:e.target.value}}),}
+, React.createElement('option', { value: "",}, "— Select"), React.createElement('option', { value: "L",}, "L – Low"), React.createElement('option', { value: "M",}, "M – Medium"), React.createElement('option', { value: "H",}, "H – High"), React.createElement('option', { value: "U",}, "U – Urgent")
+)
+)
+)
+/* Notes always visible */
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "NOTES / COMMENTS"  )
 , React.createElement('textarea', { style: {...S.modalInput,minHeight:80,resize:"vertical"}, placeholder: "Defect details, rectification notes…"   , value: _nullishCoalesce(push.comment, () => ("")), onChange: e=>onPatch({push:{...push,comment:e.target.value}}),})
 )
-, React.createElement('button', { style: {...S.modalClose,background:"#e8731a",color:"#fff"}, onClick: onClose,}, "Done")
+, React.createElement('button', { style: {width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:"#e8731a",color:"#fff"}, onClick: onClose,}, "← Back")
 )
 )
 );
@@ -1244,8 +1324,8 @@ style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,curs
 const inj=_nullishCoalesce(d.inject, () => ({}));
 const isOver = msIsOver(inj.resultPos) || msIsOver(inj.resultNeg);
 return (
-React.createElement('div', { style: S.modalOverlay, onClick: onClose,}
-, React.createElement('div', { style: S.modalBox, onClick: e=>e.stopPropagation(),}
+React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#111",minHeight:"100%"}, onClick: onClose,}
+, React.createElement('div', { style: {}, onClick: e=>e.stopPropagation(),}
 , React.createElement('div', { style: S.modalHeader,}
 , React.createElement('div', null, React.createElement('div', { style: S.modalTitle,}, _optionalChain([panel, 'optionalAccess', _156 => _156.name]), " · "  , circuit), React.createElement('div', { style: S.modalSub,}, _optionalChain([area, 'optionalAccess', _157 => _157.name]), " · Annual Injection Test"    ))
 , React.createElement(StatusBadge, { status: _nullishCoalesce(inj.status, () => (STATUS.UNTESTED)),})
@@ -1286,47 +1366,32 @@ return React.createElement('button', { key: s, onClick: ()=>onPatch({inject:{...
 })
 )
 )
-/* Rectified — only show on fail */
+/* Fail-only section — red panel matching push test standard */
 , (inj.status===STATUS.FAIL)&&(
-React.createElement('div', { style: S.modalField,}
-, React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED"  )
-, React.createElement(EditableDropdown, {
-options: rectOptions,
-value: _nullishCoalesce(inj.rectified, () => ("")),
-onChange: v=>onPatch({inject:{...inj,rectified:v}}),
-placeholder: "Select or type…"  ,})
+React.createElement('div', { style: {background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4},}
+, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
+, React.createElement('div', { style: S.modalField,}
+, React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED")
+, React.createElement(EditableDropdown, {options:rectOptions, value:_nullishCoalesce(inj.rectified,()=>("")), onChange:v=>onPatch({inject:{...inj,rectified:v}}), placeholder:"Select or type…",})
 )
-)
-, (inj.status===STATUS.FAIL)&&(
-React.createElement('div', { style: {display:"flex",gap:10},}
+, React.createElement('div', { style: {display:"flex",gap:10},}
 , React.createElement('div', { style: {...S.modalField,flex:1},}
-, React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED" )
-, React.createElement('input', { style: S.modalInput, type: "date", value: _nullishCoalesce(inj.scheduledDate, () => ("")), onChange: e=>onPatch({inject:{...inj,scheduledDate:e.target.value}}),})
+, React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
+, React.createElement('input', { style: S.modalInput, type:"date", value:_nullishCoalesce(inj.scheduledDate,()=>("")), onChange:e=>onPatch({inject:{...inj,scheduledDate:e.target.value}}),})
 )
 , React.createElement('div', { style: {...S.modalField,flex:1},}
-, React.createElement('label', { style: S.modalLabel,}, "DEFECT ID" )
-, React.createElement('input', { style: S.modalInput, type: "text", placeholder: "e.g. 74" , value: _nullishCoalesce(inj.defectId, () => ("")), onChange: e=>onPatch({inject:{...inj,defectId:e.target.value}}),})
+, React.createElement('label', { style: S.modalLabel,}, "DEFECT ID")
+, React.createElement('input', { style: S.modalInput, type:"text", placeholder:"e.g. 74", value:_nullishCoalesce(inj.defectId,()=>("")), onChange:e=>onPatch({inject:{...inj,defectId:e.target.value}}),})
 )
 )
-)
-/* Responsibility — DROPDOWN — only on fail */
-, (inj.status===STATUS.FAIL)&&(
-React.createElement('div', { style: S.modalField,}
+, React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RESPONSIBILITY")
-, React.createElement(EditableDropdown, {
-options: respOptions,
-value: _nullishCoalesce(inj.responsibility, () => ((respOptions[0]||"Vorick Group"))),
-onChange: v=>onPatch({inject:{...inj,responsibility:v}}),
-placeholder: "Select or type…"  ,})
+, React.createElement(EditableDropdown, {options:respOptions, value:_nullishCoalesce(inj.responsibility,()=>(respOptions[0]||"Vorick Group")), onChange:v=>onPatch({inject:{...inj,responsibility:v}}), placeholder:"Select or type…",})
 )
-)
-/* Priority — only on fail */
-, (inj.status===STATUS.FAIL)&&(
-React.createElement('div', { style: {display:"flex",gap:10},}
-, React.createElement('div', { style: {...S.modalField,flex:3},}
+, React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "PRIORITY")
-, React.createElement('select', { style: S.modalInput, value: _nullishCoalesce(inj.priority, () => ("")), onChange: e=>onPatch({inject:{...inj,priority:e.target.value}}),}
-, React.createElement('option', { value: "",}, "— Select" ), React.createElement('option', { value: "L",}, "L – Low"  ), React.createElement('option', { value: "M",}, "M – Medium"  ), React.createElement('option', { value: "H",}, "H – High"  ), React.createElement('option', { value: "U",}, "U – Urgent"  )
+, React.createElement('select', { style: S.modalInput, value:_nullishCoalesce(inj.priority,()=>("")), onChange:e=>onPatch({inject:{...inj,priority:e.target.value}}),}
+, React.createElement('option', { value:"",}, "— Select"), React.createElement('option', { value:"L",}, "L – Low"), React.createElement('option', { value:"M",}, "M – Medium"), React.createElement('option', { value:"H",}, "H – High"), React.createElement('option', { value:"U",}, "U – Urgent")
 )
 )
 )
@@ -1339,7 +1404,7 @@ React.createElement('div', { style: {display:"flex",gap:10},}
 , React.createElement('span', { style: {color:"#888",fontSize:11},}, "NEXT INJECTION TEST DUE:"   )
 , React.createElement('span', { style: {color:"#60a5fa",fontWeight:800,fontSize:13,marginLeft:8},}, addYears(meta.injectDate,1))
 )
-, React.createElement('button', { style: {...S.modalClose,background:"#1e3a5f",color:"#60a5fa"}, onClick: onClose,}, "Done")
+, React.createElement('button', { style: {width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:"#1e3a5f",color:"#60a5fa"}, onClick: onClose,}, "← Back")
 )
 )
 );
@@ -1402,6 +1467,8 @@ const [bulkAmpRating,setBulkAmpRating]=React.useState({});
 const [editingProject,setEditingProject]=React.useState(false);
 const [projName,setProjName]=React.useState(project.name);
 const [projCo,setProjCo]=React.useState(project.company||"");
+const [projAbn,setProjAbn]=React.useState(project.abn||"");
+const [projLic,setProjLic]=React.useState(project.licence||"");
 
 const [editingCircuit,setEditingCircuit]=React.useState(null); // { pid, circuit }
 const [editCbType,setEditCbType]=React.useState("");
@@ -1471,7 +1538,7 @@ const delCircuit=(aid,pid,c)=>{
     return{...p,circuits:p.circuits.filter(x=>x!==c),circuitMeta:meta};
   })}:a)});
 };
-const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim()});setEditingProject(false);};
+const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
 // ── Consolidate panels with shared prefix ────────────────────────────
 // Re-runs the same prefix-merging logic used during import, so projects
 // imported before the fix can be repaired without re-importing.
@@ -1543,6 +1610,8 @@ React.createElement('div', { style: S.listWrap,}
 , editingProject?React.createElement(React.Fragment, null
 , React.createElement(LabelInput, { label: "PROJECT NAME" , value: projName, onChange: setProjName, placeholder: "Project name" ,})
 , React.createElement(LabelInput, { label: "COMPANY",      value: projCo,   onChange: setProjCo,   placeholder: "Company",})
+, React.createElement(LabelInput, { label: "ABN",           value: projAbn,  onChange: setProjAbn,  placeholder: "e.g. 12 345 678 901",})
+, React.createElement(LabelInput, { label: "ELECTRICAL LICENCE", value: projLic, onChange: setProjLic, placeholder: "e.g. 123456C",})
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:8},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: saveProj,}, "Save")
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setEditingProject(false),}, "Cancel")
@@ -1938,10 +2007,14 @@ modalClose:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:1
 // ═════════════════════════════════════════════════════════════════════════
 
 // Storage keys
-const K_IEL_PROJECTS = "iel-projects-v2";
-const K_IEL_RESULTS  = "iel-results-v2";   // { siteId: { areaId: { cat: { itemId: {status,checks,notes,...} } } } }
-const K_IEL_META     = "iel-meta-v2";
-const K_IEL_HISTORY  = "iel-history-v2";
+const K_IEL_PROJECTS  = "iel-projects-v2";
+const K_IEL_RESULTS   = "iel-results-v2";   // { siteId: { areaId: { cat: { itemId: {status,checks,notes,...} } } } }
+const K_IEL_META      = "iel-meta-v2";
+const K_IEL_CAT       = "iel-cat-v2";        // active category: "estops"|"lanyards"|"isolators"|null
+const K_IEL_HISTORY   = "iel-history-v2";
+const K_IEL_DROPDOWNS = "iel-dropdowns-v1";
+const IEL_DEFAULT_RESPONSIBILITY = ["Vorick Group","Site Electrician","Site Manager","Contractor","Client"];
+const IEL_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair","Replacement Required","Under Investigation","No Action Required"];
 
 const IEL_CATEGORIES = [
   { key:"estops",    label:"E-Stops",   icon:"🔴", color:"#ef4444", desc:"Emergency stop buttons & devices" },
@@ -2086,7 +2159,11 @@ function parseIELExcel(data){
   const ws=data.Sheets[data.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
   let headerIdx=-1;
-  for(let i=0;i<Math.min(rows.length,10);i++){const r=rows[i].map(c=>String(c).toLowerCase());if(r.some(c=>c.includes("location"))&&r.some(c=>c.includes("type"))){headerIdx=i;break;}}
+  for(let i=0;i<Math.min(rows.length,10);i++){
+    if(rows[i].some(c=>String(c).length>60)) continue;
+    const r=rows[i].map(c=>String(c).toLowerCase());
+    if(r.some(c=>c==="location"||c==="area")&&r.some(c=>c==="type")){headerIdx=i;break;}
+  }
   if(headerIdx===-1)headerIdx=4;
   const header=rows[headerIdx].map(c=>String(c).toLowerCase().trim());
   const col=search=>header.findIndex(h=>h.includes(search));
@@ -2168,20 +2245,41 @@ function parseIELExcel(data){
 }
 
 function downloadIELTemplate(){
+  const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
   const wb=XLSX.utils.book_new();
   const rows=[
-    ["Location","Type","Machine","Date","Mechanism / Reset Check","Circuit Isolation Verified","Lanyard Tension / Cond.","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)"],
-    ["Area Name","Estop","Machine Name","","","","","","","","","","",""],
-    ["Area Name","Lanyard","Machine Name","","","","","","","","","","",""],
-    ["Area Name","Isolator","Machine Name","","","","","","","","","","",""],
+    ["Site Name — enter your site name here"],
+    ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+    [""],
+    ["INSTRUCTIONS: Fill in Location (area), Type (Estop / Lanyard / Isolator) and Machine name. One item per row. Type must be exactly: Estop, Lanyard, or Isolator. Rows 1-3 are read automatically."],
+    ["Location","Type","Machine / Asset Name"],
+    ["Wash Plant","Estop","Conveyor Feed Belt E/S"],
+    ["Wash Plant","Estop","Screen Deck E/S"],
+    ["Wash Plant","Lanyard","Crusher Feed Conveyor — Lanyard"],
+    ["Wash Plant","Lanyard","Screen Deck Access — Lanyard"],
+    ["Wash Plant","Isolator","Crusher Feed Isolator"],
+    ["Sub Station","Estop","Pump Station E/S"],
+    ["Sub Station","Isolator","Pump Station Isolator"],
+    ["Workshop","Estop","Lathe E/S"],
+    ["Workshop","Lanyard","Overhead Crane — Lanyard"],
   ];
   const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:22},{wch:10},{wch:28},{wch:12},{wch:18},{wch:18},{wch:18},{wch:10},{wch:20},{wch:14},{wch:10},{wch:16},{wch:36},{wch:10}];
-  XLSX.utils.book_append_sheet(wb,ws,"IEL Template");
-  const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+  ws["!cols"]=[{wch:26},{wch:12},{wch:36}];
+  const colHdrFill={patternType:"solid",fgColor:{rgb:"FF2D2D2D"}};
+  const colHdrFont={name:"Calibri",bold:true,sz:10,color:{rgb:"FFeeeeee"}};
+  const infoFill={patternType:"solid",fgColor:{rgb:"FF1E3A5F"}};
+  const infoFont={name:"Calibri",sz:9,color:{rgb:"FFadd8e6"},italic:true};
+  ["A1"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",bold:true,sz:13,color:{rgb:"FF10b981"}}};});
+  ["A2"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",sz:10,color:{rgb:"FF999999"}}};});
+  ["A4"].forEach(r=>{if(ws[r])ws[r].s={fill:infoFill,font:infoFont};});
+  ["A5","B5","C5"].forEach(r=>{if(ws[r])ws[r].s={fill:colHdrFill,font:colHdrFont,alignment:{horizontal:"center"}};});
+  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:2}},{s:{r:1,c:0},e:{r:1,c:2}},{s:{r:3,c:0},e:{r:3,c:2}}];
+  XLSX.utils.book_append_sheet(wb,ws,"IEL Import");
+  const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
+  const fname="IEL_Import_Template.xlsx";
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:"IEL_Import_Template.xlsx",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }else{const link=document.createElement("a");link.href=`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${tOut}`;link.download="IEL_Import_Template.xlsx";document.body.appendChild(link);link.click();document.body.removeChild(link);}
+    window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  }else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -2201,12 +2299,14 @@ function IELApp({ onGoHome }) {
   const [activeAreaId,  setActiveAreaId] = React.useState(null);
   const [activePanelId, setActivePanelId]= React.useState(null);
   const [detailInfo,    setDetailInfo]   = React.useState(null); // {areaId,panelId,itemId}
+  const [ielDropdowns,  setIelDropdowns] = React.useState({responsibility:IEL_DEFAULT_RESPONSIBILITY,rectified:IEL_DEFAULT_RECTIFIED});
 
   React.useEffect(()=>{
     var t=setTimeout(()=>setLoaded(true),3000);
     (async()=>{
       try{
-        const[p,r,m,h]=await Promise.all([load(K_IEL_PROJECTS,[]),load(K_IEL_RESULTS,{}),load(K_IEL_META,{}),load(K_IEL_HISTORY,[])]);
+        const[p,r,m,h,cat,dd]=await Promise.all([load(K_IEL_PROJECTS,[]),load(K_IEL_RESULTS,{}),load(K_IEL_META,{}),load(K_IEL_HISTORY,[]),load(K_IEL_CAT,null),load(K_IEL_DROPDOWNS,{responsibility:IEL_DEFAULT_RESPONSIBILITY,rectified:IEL_DEFAULT_RECTIFIED})]);
+        setActiveCat(cat); setIelDropdowns(dd);
         clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setLoaded(true);
       }catch(e){clearTimeout(t);setLoaded(true);}
     })();
@@ -2215,7 +2315,9 @@ function IELApp({ onGoHome }) {
   React.useEffect(()=>{if(loaded)save(K_IEL_PROJECTS,projects);},[projects,loaded]);
   React.useEffect(()=>{if(loaded){save(K_IEL_RESULTS,allResults);setSaveFlash(true);const t=setTimeout(()=>setSaveFlash(false),1200);return()=>clearTimeout(t);}},[allResults,loaded]);
   React.useEffect(()=>{if(loaded)save(K_IEL_META,allMeta);},[allMeta,loaded]);
+  React.useEffect(()=>{if(loaded)save(K_IEL_CAT,activeCat);},[activeCat,loaded]);
   React.useEffect(()=>{if(loaded)save(K_IEL_HISTORY,history);},[history,loaded]);
+  React.useEffect(()=>{if(loaded)save(K_IEL_DROPDOWNS,ielDropdowns);},[ielDropdowns,loaded]);
 
   const project  = projects.find(p=>p.id===activeProject);
   const meta     = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
@@ -2251,13 +2353,15 @@ function IELApp({ onGoHome }) {
   const canGoBack= view!=="projects";
 
   const handleBack=()=>{
+    if(detailInfo){setDetailInfo(null);return;}
+    if(view==="dropdowns"){setView("home");return;}
     if(view==="panel"){setView("audit");setActivePanelId(null);}
     else if(view==="audit"&&activePanelId){setActivePanelId(null);}
     else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
     else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);setView("home");}
     else if(view==="audit"&&!activeAreaId){setView("home");}
     else if(view==="home"){goProjects();}
-    else if(["manage","report","history"].includes(view)){setView("home");}
+    else if(["manage","report","history","dropdowns"].includes(view)){setView("home");}
     else goProjects();
   };
 
@@ -2296,14 +2400,16 @@ function IELApp({ onGoHome }) {
     // ── Main
     ,React.createElement('main',{style:SI.main}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>setAllResults(prev=>({...prev,[activeProject]:{}})),onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,activeCatKey:activeCat,onCompleteAudit:()=>{archiveAudit();const cat=activeCat;setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={...proj[aid],[cat]:{}};});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
-      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#10b981",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit();const cat=activeCat;setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={...proj[aid],[cat]:{}};});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:false})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>setAllResults(prev=>({...prev,[activeProject]:{}})),onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,activeCatKey:activeCat,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#10b981",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
-      ,view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId})})
-      ,view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit})
-      ,view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
-      ,view==="history"&&React.createElement(IELHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIELExcel(project,snap.results||{},snap.meta||{}),
+      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId})})
+      ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
+      ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);}})
+      ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns})
+      ,!detailInfo&&view==="history"&&React.createElement(IELHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIELExcel(project,snap.results||{},snap.meta||{}),
         onContinueFromSnap:(snap)=>{
           setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
           setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
@@ -2315,17 +2421,58 @@ function IELApp({ onGoHome }) {
         }})
     )
 
-    // ── Detail modal
-    ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
+
 
     // ── Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:SI.bottomNav}
-      ,React.createElement(IELNavBtn,{icon:"⌂",label:"Home",active:view==="home",onClick:goHome})
-      ,React.createElement(IELNavBtn,{icon:"☑",label:"Audit",active:isAudit,onClick:()=>{setView("audit");setActivePanelId(null);}})
-      ,React.createElement(IELNavBtn,{icon:"≡",label:"Report",active:view==="report",onClick:()=>setView("report")})
-      ,React.createElement(IELNavBtn,{icon:"🕐",label:"History",active:view==="history",color:"#f59e0b",onClick:()=>setView("history")})
-      ,React.createElement(IELNavBtn,{icon:"⚙",label:"Manage",active:view==="manage",color:"#a855f7",onClick:()=>setView("manage")})
+      ,React.createElement(IELNavBtn,{icon:"⌂",label:"Home",active:view==="home",onClick:()=>{setDetailInfo(null);goHome();}})
+      ,React.createElement(IELNavBtn,{icon:"☑",label:"Audit",active:isAudit,onClick:()=>{setDetailInfo(null);setView("audit");setActivePanelId(null);}})
+      ,React.createElement(IELNavBtn,{icon:"≡",label:"Report",active:view==="report",onClick:()=>{setDetailInfo(null);setView("report");}})
+      ,React.createElement(IELNavBtn,{icon:"🕐",label:"History",active:view==="history",color:"#f59e0b",onClick:()=>{setDetailInfo(null);setView("history");}})
+      ,React.createElement(IELNavBtn,{icon:"⚙",label:"Manage",active:view==="manage",color:"#a855f7",onClick:()=>{setDetailInfo(null);setView("manage");}})
+      ,React.createElement(IELNavBtn,{icon:"▾",label:"Dropdowns",active:view==="dropdowns",color:"#64748b",onClick:()=>{setDetailInfo(null);setView("dropdowns");}})
     )
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// IEL DROPDOWNS VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function IELDropdownsView({dropdowns,setDropdowns}){
+  const [newVals,setNewVals]=React.useState({});
+  const items=(key)=>(dropdowns&&dropdowns[key])||[];
+  const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
+  const removeItem=(key,item)=>setDropdowns(d=>({...d,[key]:items(key).filter(x=>x!==item)}));
+  const sections=[
+    {key:"responsibility",label:"RESPONSIBILITY",color:"#10b981",desc:"Options shown when logging a failed item"},
+    {key:"rectified",    label:"RECTIFIED / SCHEDULED",color:"#f59e0b",desc:"Actions available when rectifying a defect"},
+  ];
+  return React.createElement('div',{style:{padding:"16px",paddingBottom:100}}
+    ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee",marginBottom:4}},"Dropdown Options")
+    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:20}},"Add or remove options available when testing items")
+    ,sections.map(({key,label,color,desc})=>{
+      const newVal=newVals[key]||"";
+      return React.createElement('div',{key,style:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:12,padding:"12px 14px",marginBottom:14}}
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color,letterSpacing:0.8,marginBottom:2}},label)
+        ,React.createElement('div',{style:{fontSize:11,color:"#555",marginBottom:10}},desc)
+        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}
+          ,items(key).map((item,i)=>React.createElement('div',{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#111",borderRadius:8,padding:"8px 10px"}}
+            ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#ccc"}},item)
+            ,i===0&&React.createElement('span',{style:{fontSize:10,color:"#555",marginRight:4}},"default")
+            ,i>0&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:11,padding:"0 2px"},onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},"★")
+            ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕")
+          ))
+          ,items(key).length===0&&React.createElement('div',{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
+        )
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,React.createElement('input',{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none"},
+            placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
+            onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
+            onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
+          ,React.createElement('button',{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
+        )
+      );
+    })
   );
 }
 
@@ -2696,7 +2843,31 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
 // ─────────────────────────────────────────────────────────────────────────
 // IEL ITEM MODAL — test form with checkboxes (core testing interface)
 // ─────────────────────────────────────────────────────────────────────────
-function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,onPatch,onClose}){
+function IELEditableDropdown({options,value,onChange,placeholder}){
+  const[open,setOpen]=React.useState(false);
+  const[custom,setCustom]=React.useState(false);
+  const[typedVal,setTypedVal]=React.useState(value||"");
+  const isCustom=value&&!options.includes(value);
+  React.useEffect(()=>{if(isCustom){setCustom(true);setTypedVal(value);}},[]);
+  React.useEffect(()=>{if(custom&&value!==typedVal){setTypedVal(value||"");}},[value]);
+  if(custom){return React.createElement('div',{style:{display:"flex",gap:8}}
+    ,React.createElement('input',{style:{...SI.modalInput,flex:1},value:typedVal,placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
+    ,React.createElement('button',{style:{padding:"8px 10px",background:"transparent",border:"1px solid #333",borderRadius:8,color:"#aaa",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
+  );}
+  return React.createElement('div',{style:{position:"relative"}}
+    ,React.createElement('button',{style:{...SI.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee":"#555"},onClick:()=>setOpen(o=>!o)}
+      ,React.createElement('span',null,value||placeholder||"Select…")
+      ,React.createElement('span',{style:{color:"#555",fontSize:12}},open?"▴":"▾")
+    )
+    ,open&&React.createElement('div',{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}}
+      ,options.map(o=>React.createElement('div',{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?"#10b981":"#ccc",background:o===value?"#1a3d1a":"transparent",borderBottom:"1px solid #2a2a2a"},
+        onClick:()=>{onChange(o);setOpen(false);}},o))
+      ,React.createElement('div',{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},"✏ Type custom…")
+    )
+  );
+}
+
+function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,onPatch,onClose}){
   const area=project.areas.find(a=>a.id===areaId);
   const panel=area&&area.panels.find(p=>p.id===panelId);
   const machineNames=panel&&panel.machineNames||{};
@@ -2731,8 +2902,8 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,onPatch,on
   const overdue=nextDueISO&&isOverdue(nextDueISO);
   const sm=IEL_SM[item.status||IEL_STATUS.UNTESTED]||IEL_SM.untested;
 
-  return React.createElement('div',{style:SI.modalOverlay,onClick:onClose}
-    ,React.createElement('div',{style:SI.modalBox,onClick:e=>e.stopPropagation()}
+  return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#111",minHeight:"100%"}}
+    ,React.createElement('div',{style:{}}
       // Header
       ,React.createElement('div',{style:SI.modalHeader}
         ,React.createElement('div',null
@@ -2820,31 +2991,40 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,onPatch,on
         ,React.createElement('textarea',{style:{...SI.modalInput,minHeight:72,resize:"vertical"},placeholder:"Defect details, action required…",value:item.notes||"",onChange:e=>onPatch({notes:e.target.value})})
       )
 
-      // Fail-only fields
-      ,(item.status===IEL_STATUS.FAIL)&&React.createElement(React.Fragment,null
+      // Fail-only section — red panel, same as RCD push
+      ,(item.status===IEL_STATUS.FAIL)&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"RECTIFIED / SCHEDULED")
-          ,React.createElement('input',{style:SI.modalInput,value:item.rectified||"",placeholder:"e.g. Scheduled for Repair",onChange:e=>onPatch({rectified:e.target.value})})
+          ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED,value:item.rectified||"",onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…"})
         )
         ,React.createElement('div',{style:{display:"flex",gap:10}}
-          ,React.createElement('div',{style:{...SI.modalField,flex:2}}
-            ,React.createElement('label',{style:SI.modalLabel},"RESPONSIBILITY")
-            ,React.createElement('input',{style:SI.modalInput,value:item.responsibility||"",placeholder:"Company name",onChange:e=>onPatch({responsibility:e.target.value})})
+          ,React.createElement('div',{style:{...SI.modalField,flex:1}}
+            ,React.createElement('label',{style:SI.modalLabel},"DATE RECTIFIED")
+            ,React.createElement('input',{style:SI.modalInput,type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value})})
           )
           ,React.createElement('div',{style:{...SI.modalField,flex:1}}
-            ,React.createElement('label',{style:SI.modalLabel},"PRIORITY")
-            ,React.createElement('select',{style:SI.modalInput,value:item.priority||"",onChange:e=>onPatch({priority:e.target.value})}
-              ,React.createElement('option',{value:""},"— Select")
-              ,React.createElement('option',{value:"L"},"L – Low")
-              ,React.createElement('option',{value:"M"},"M – Medium")
-              ,React.createElement('option',{value:"H"},"H – High")
-              ,React.createElement('option',{value:"U"},"U – Urgent")
-            )
+            ,React.createElement('label',{style:SI.modalLabel},"DEFECT ID")
+            ,React.createElement('input',{style:SI.modalInput,type:"text",placeholder:"e.g. 74",value:item.defectId||"",onChange:e=>onPatch({defectId:e.target.value})})
+          )
+        )
+        ,React.createElement('div',{style:SI.modalField}
+          ,React.createElement('label',{style:SI.modalLabel},"RESPONSIBILITY")
+          ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.responsibility)||IEL_DEFAULT_RESPONSIBILITY,value:item.responsibility||"",onChange:v=>onPatch({responsibility:v}),placeholder:"Select or type…"})
+        )
+        ,React.createElement('div',{style:SI.modalField}
+          ,React.createElement('label',{style:SI.modalLabel},"PRIORITY")
+          ,React.createElement('select',{style:SI.modalInput,value:item.priority||"",onChange:e=>onPatch({priority:e.target.value})}
+            ,React.createElement('option',{value:""},"— Select")
+            ,React.createElement('option',{value:"L"},"L – Low")
+            ,React.createElement('option',{value:"M"},"M – Medium")
+            ,React.createElement('option',{value:"H"},"H – High")
+            ,React.createElement('option',{value:"U"},"U – Urgent")
           )
         )
       )
 
-      ,React.createElement('button',{style:{...SI.modalClose,background:catI.color,color:"#fff"},onClick:onClose},"Done")
+      ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:catI.color,color:"#fff"},onClick:onClose},"← Back")
     )
   );
 }
@@ -2891,6 +3071,8 @@ function IELManageView({project,onUpdateProject}){
   const[editingProject,setEditingProject]=React.useState(false);
   const[projName,setProjName]=React.useState(project.name);
   const[projCo,setProjCo]=React.useState(project.company||"");
+  const[projAbn,setProjAbn]=React.useState(project.abn||"");
+  const[projLic,setProjLic]=React.useState(project.licence||"");
   const[confirmDeleteItem,setConfirmDeleteItem]=React.useState(null); // {aid, catKey, itemId}
   const[confirmDeleteArea,setConfirmDeleteArea]=React.useState(null); // areaId
   const upd=u=>onUpdateProject(u);
@@ -2919,8 +3101,10 @@ function IELManageView({project,onUpdateProject}){
         ?React.createElement(React.Fragment,null
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"SITE NAME"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projName,onChange:e=>setProjName(e.target.value)}))
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"COMPANY"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projCo,placeholder:"Company name",onChange:e=>setProjCo(e.target.value)}))
+          ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"ABN"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projAbn,placeholder:"e.g. 12 345 678 901",onChange:e=>setProjAbn(e.target.value)}))
+          ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projLic,placeholder:"e.g. 123456C",onChange:e=>setProjLic(e.target.value)}))
           ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim()});setEditingProject(false);}},"Save")
+            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);}},"Save")
             ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel")
           )
         )
@@ -4080,8 +4264,9 @@ function parseTATExcel(data) {
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
   let headerIdx=-1;
   for(let i=0;i<Math.min(rows.length,10);i++){
+    if(rows[i].some(c=>String(c).length>60)) continue;
     const r=rows[i].map(c=>String(c).toLowerCase());
-    if(r.some(c=>c.includes("area"))&&r.some(c=>c.includes("asset")||c.includes("tag")||c.includes("desc"))){headerIdx=i;break;}
+    if(r.some(c=>c==="area")&&r.some(c=>c.includes("asset")||c.includes("tag")||c.includes("desc"))){headerIdx=i;break;}
   }
   if(headerIdx===-1)headerIdx=4;
   const header=rows[headerIdx].map(c=>String(c).toLowerCase().trim());
@@ -4125,9 +4310,8 @@ function parseTATExcel(data) {
       id:tatSlug(aName),name:aName,defaultFreq,
       items:itemArr.map(i=>i.itemId),
       itemNames:Object.fromEntries(itemArr.map(i=>{
-        const tag=i.tag||"";
         const desc=i.data.desc||"";
-        const display=tag&&desc?`${tag} — ${desc}`:desc||tag||i.itemId;
+        const display=desc||i.itemId;
         return[i.itemId,display];
       })),
       itemTags:Object.fromEntries(itemArr.map(i=>[i.itemId,i.tag||""])),
@@ -4146,22 +4330,42 @@ function parseTATExcel(data) {
 }
 
 function downloadTATTemplate(){
+  const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
   const wb=XLSX.utils.book_new();
   const rows=[
+    ["Site Name — enter your site name here"],
+    ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+    [""],
+    ["INSTRUCTIONS: Fill in Area, Asset ID/Tag number, Description, Equipment Type and Test Frequency in months (1, 3, 6, or 12). One asset per row. Rows 1-3 are read automatically."],
     ["Area","Asset ID / Tag","Description","Equipment Type","Test Frequency (months)"],
-    ["Workshop","TAG-001","Angle Grinder 9\"","Power Tool","3"],
-    ["Workshop","TAG-002","10m Extension Lead","Extension Lead","6"],
-    ["Office","TAG-003","Laptop Charger","Appliance","12"],
+    ["Workshop","1","Angle Grinder 9\"","Power Tool","3"],
+    ["Workshop","2","4.5\" Angle Grinder","Power Tool","3"],
+    ["Workshop","3","10m Extension Lead","Extension Lead","6"],
+    ["Workshop","4","20m Extension Lead","Extension Lead","6"],
+    ["Workshop","5","Bench Drill Press","Power Tool","6"],
+    ["Office","6","Laptop Charger — Dell","Appliance","12"],
+    ["Office","7","Monitor Power Supply","Appliance","12"],
+    ["Smoko Hut","8","Microwave","Appliance","12"],
+    ["Smoko Hut","9","Kettle","Appliance","12"],
+    ["Wash Plant","10","Pressure Washer","Power Tool","3"],
   ];
   const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:20},{wch:14},{wch:30},{wch:16},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,ws,"T&T Template");
-  const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+  ws["!cols"]=[{wch:22},{wch:16},{wch:32},{wch:18},{wch:20}];
+  const colHdrFill={patternType:"solid",fgColor:{rgb:"FF2D2D2D"}};
+  const colHdrFont={name:"Calibri",bold:true,sz:10,color:{rgb:"FFeeeeee"}};
+  const infoFill={patternType:"solid",fgColor:{rgb:"FF1E3A5F"}};
+  const infoFont={name:"Calibri",sz:9,color:{rgb:"FFadd8e6"},italic:true};
+  ["A1"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",bold:true,sz:13,color:{rgb:"FF3b82f6"}}};});
+  ["A2"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",sz:10,color:{rgb:"FF999999"}}};});
+  ["A4"].forEach(r=>{if(ws[r])ws[r].s={fill:infoFill,font:infoFont};});
+  ["A5","B5","C5","D5","E5"].forEach(r=>{if(ws[r])ws[r].s={fill:colHdrFill,font:colHdrFont,alignment:{horizontal:"center"}};});
+  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}},{s:{r:3,c:0},e:{r:3,c:4}}];
+  XLSX.utils.book_append_sheet(wb,ws,"T&T Import");
+  const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
+  const fname="TAT_Import_Template.xlsx";
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:"TAT_Import_Template.xlsx",mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }else{
-    const link=document.createElement("a");link.href=`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${tOut}`;link.download="TAT_Import_Template.xlsx";document.body.appendChild(link);link.click();document.body.removeChild(link);
-  }
+    window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  }else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -4228,6 +4432,7 @@ function TATApp({ onGoHome }) {
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
 
   const handleBack=()=>{
+    if(detailItemId){setDetailItemId(null);return;}
     if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
     else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);goHome();}
     else if(view==="audit"){goHome();}
@@ -4292,7 +4497,7 @@ function TATApp({ onGoHome }) {
       })
       ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:TAT_COLOR,moduleLabel:"TEST & TAG",auditLabel:"Test & Tag Audit",hasActiveAudit:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setAuditEntered(false);},onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(TATAreaListView,{project,results:allResults,onSelect:id=>setActiveAreaId(id)})
-      ,isAudit&&project&&auditEntered&&activeAreaId&&area&&React.createElement(TATItemGrid,{area,project,results:allResults,meta,freqOptions,
+      ,!detailItemId&&isAudit&&project&&auditEntered&&activeAreaId&&area&&React.createElement(TATItemGrid,{area,project,results:allResults,meta,freqOptions,
         onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,itemId,patch),
         onOpenDetail:itemId=>{
           // Pre-populate equipType from area metadata if not yet set in results
@@ -4306,32 +4511,26 @@ function TATApp({ onGoHome }) {
           setDetailItemId(itemId);
         },
       })
-      ,view==="report"&&project&&React.createElement(TATReportView,{project,results:allResults,meta,
+      ,detailItemId&&area&&React.createElement(TATItemModal,{equipTypes,freqOptions,itemId:detailItemId,area,project,results:allResults,meta,onPatch:patch=>patchItem(activeProject,activeAreaId,detailItemId,patch),onClose:()=>setDetailItemId(null)})
+      ,!detailItemId&&view==="report"&&project&&React.createElement(TATReportView,{project,results:allResults,meta,
         onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit})
-      ,view==="manage"&&project&&React.createElement(TATManageView,{project,equipTypes,freqOptions,tatDefaults,applianceNames,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
-      ,view==="settings"&&React.createElement(TATSettingsView,{equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults})
-      ,view==="history"&&React.createElement(TATHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,
+      ,!detailItemId&&view==="manage"&&project&&React.createElement(TATManageView,{project,equipTypes,freqOptions,tatDefaults,applianceNames,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,!detailItemId&&view==="settings"&&React.createElement(TATSettingsView,{equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults})
+      ,!detailItemId&&view==="history"&&React.createElement(TATHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,
         onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),
         onExportSnap:snap=>exportTATExcel(project,snap.results||{},snap.meta||{}),
         onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(false);setActiveAreaId(null);setView("home");},
       })
     )
 
-    // Item detail modal
-    ,detailItemId&&area&&React.createElement(TATItemModal,{equipTypes,freqOptions,
-      itemId:detailItemId,area,project,results:allResults,meta,
-      onPatch:patch=>patchItem(activeProject,activeAreaId,detailItemId,patch),
-      onClose:()=>setDetailItemId(null),
-    })
-
     // Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:ST.bottomNav}
-      ,React.createElement(TATNavBtn,{icon:"⌂",label:"Home",active:view==="home",onClick:goHome})
-      ,React.createElement(TATNavBtn,{icon:"☑",label:"Audit",active:isAudit,color:TAT_COLOR,onClick:()=>{setView("audit");setActiveAreaId(null);}})
-      ,React.createElement(TATNavBtn,{icon:"≡",label:"Report",active:view==="report",onClick:()=>setView("report")})
-      ,React.createElement(TATNavBtn,{icon:"🕐",label:"History",active:view==="history",color:"#f59e0b",onClick:()=>setView("history")})
-      ,React.createElement(TATNavBtn,{icon:"⚙",label:"Manage",active:view==="manage",color:"#a855f7",onClick:()=>setView("manage")})
-      ,React.createElement(TATNavBtn,{icon:"≔",label:"Dropdowns",active:view==="settings",color:"#64748b",onClick:()=>setView("settings")})
+      ,React.createElement(TATNavBtn,{icon:"⌂",label:"Home",active:view==="home",onClick:()=>{setDetailItemId(null);goHome();}})
+      ,React.createElement(TATNavBtn,{icon:"☑",label:"Audit",active:isAudit,color:TAT_COLOR,onClick:()=>{setDetailItemId(null);setView("audit");setActiveAreaId(null);}})
+      ,React.createElement(TATNavBtn,{icon:"≡",label:"Report",active:view==="report",onClick:()=>{setDetailItemId(null);setView("report");}})
+      ,React.createElement(TATNavBtn,{icon:"🕐",label:"History",active:view==="history",color:"#f59e0b",onClick:()=>{setDetailItemId(null);setView("history");}})
+      ,React.createElement(TATNavBtn,{icon:"⚙",label:"Manage",active:view==="manage",color:"#a855f7",onClick:()=>{setDetailItemId(null);setView("manage");}})
+      ,React.createElement(TATNavBtn,{icon:"≔",label:"Dropdowns",active:view==="settings",color:"#64748b",onClick:()=>{setDetailItemId(null);setView("settings");}})
     )
   );
 }
@@ -4654,8 +4853,8 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
 
-  return React.createElement('div',{style:ST.modalOverlay,onClick:onClose}
-    ,React.createElement('div',{style:ST.modalBox,onClick:e=>e.stopPropagation()}
+  return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#111",minHeight:"100%"}}
+    ,React.createElement('div',{style:{}}
       ,React.createElement('div',{style:ST.modalHeader}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
@@ -4736,19 +4935,46 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         ,React.createElement('textarea',{style:{...ST.modalInput,minHeight:72,resize:"vertical"},placeholder:"Defect details, action required…",value:item.notes||"",onChange:e=>onPatch({notes:e.target.value})})
       )
 
-      // Priority (only on fail)
-      ,item.status===TAT_STATUS.FAIL&&React.createElement('div',{style:ST.modalField}
-        ,React.createElement('label',{style:ST.modalLabel},"PRIORITY")
-        ,React.createElement('select',{style:ST.modalInput,value:item.priority||"",onChange:e=>onPatch({priority:e.target.value})}
-          ,React.createElement('option',{value:""},"— Select")
-          ,React.createElement('option',{value:"L"},"L – Low")
-          ,React.createElement('option',{value:"M"},"M – Medium")
-          ,React.createElement('option',{value:"H"},"H – High")
-          ,React.createElement('option',{value:"U"},"U – Urgent")
+      // Fail-only section — red panel, same as RCD push
+      ,item.status===TAT_STATUS.FAIL&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:ST.modalField}
+          ,React.createElement('label',{style:ST.modalLabel},"RECTIFIED / SCHEDULED")
+          ,React.createElement('select',{style:ST.modalInput,value:item.rectified||"",onChange:e=>onPatch({rectified:e.target.value})}
+            ,React.createElement('option',{value:""},"— Select")
+            ,DEFAULT_RECTIFIED.map(o=>React.createElement('option',{key:o,value:o},o))
+          )
+        )
+        ,React.createElement('div',{style:{display:"flex",gap:10}}
+          ,React.createElement('div',{style:{...ST.modalField,flex:1}}
+            ,React.createElement('label',{style:ST.modalLabel},"DATE RECTIFIED")
+            ,React.createElement('input',{style:ST.modalInput,type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value})})
+          )
+          ,React.createElement('div',{style:{...ST.modalField,flex:1}}
+            ,React.createElement('label',{style:ST.modalLabel},"DEFECT ID")
+            ,React.createElement('input',{style:ST.modalInput,type:"text",placeholder:"e.g. 74",value:item.defectId||"",onChange:e=>onPatch({defectId:e.target.value})})
+          )
+        )
+        ,React.createElement('div',{style:ST.modalField}
+          ,React.createElement('label',{style:ST.modalLabel},"RESPONSIBILITY")
+          ,React.createElement('select',{style:ST.modalInput,value:item.responsibility||"",onChange:e=>onPatch({responsibility:e.target.value})}
+            ,React.createElement('option',{value:""},"— Select")
+            ,DEFAULT_RESPONSIBILITY.map(o=>React.createElement('option',{key:o,value:o},o))
+          )
+        )
+        ,React.createElement('div',{style:ST.modalField}
+          ,React.createElement('label',{style:ST.modalLabel},"PRIORITY")
+          ,React.createElement('select',{style:ST.modalInput,value:item.priority||"",onChange:e=>onPatch({priority:e.target.value})}
+            ,React.createElement('option',{value:""},"— Select")
+            ,React.createElement('option',{value:"L"},"L – Low")
+            ,React.createElement('option',{value:"M"},"M – Medium")
+            ,React.createElement('option',{value:"H"},"H – High")
+            ,React.createElement('option',{value:"U"},"U – Urgent")
+          )
         )
       )
 
-      ,React.createElement('button',{style:{...ST.modalClose,background:TAT_COLOR,color:"#fff"},onClick:onClose},"Done")
+      ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:TAT_COLOR,color:"#fff"},onClick:onClose},"← Back")
     )
   );
 }
@@ -4812,6 +5038,9 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[bulkItems,setBulkItems]=React.useState({});
   const[editingProject,setEditingProject]=React.useState(false);
   const[projName,setProjName]=React.useState(project.name);
+  const[projCo,setProjCo]=React.useState(project.company||"");
+  const[projAbn,setProjAbn]=React.useState(project.abn||"");
+  const[projLic,setProjLic]=React.useState(project.licence||"");
   const[editingItem,setEditingItem]=React.useState(null); // {areaId, itemId}
   const[editName,setEditName]=React.useState("");
   const[editTag,setEditTag]=React.useState("");
@@ -4820,6 +5049,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
 
   const freqOpts=freqOptions||TAT_DEFAULT_FREQS;
   const equipOpts=equipTypes||TAT_DEFAULT_EQUIP_TYPES;
+  const saveProjTAT=()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
 
   // Auto-next tag
   const nextTag=()=>{
@@ -4934,8 +5164,10 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     ,React.createElement('div',{style:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:12,padding:"12px 14px",marginBottom:14}}
       ,editingProject
         ?React.createElement(React.Fragment,null
-          ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:ST.metaLabelText},"SITE NAME"),React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:projName,onChange:e=>setProjName(e.target.value)}))
-          ,React.createElement('div',{style:{display:"flex",gap:8}},React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:()=>{upd({...project,name:projName.trim()||project.name});setEditingProject(false);}},"Save"),React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel"))
+          ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>
+            React.createElement('div',{key:lbl,style:{marginBottom:8}},React.createElement('div',{style:ST.metaLabelText},lbl),React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))
+          )
+          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}},React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:saveProjTAT},"Save"),React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel"))
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
@@ -5379,7 +5611,8 @@ const THERMO_COLOR = "#f97316"; // deep orange — heat / infrared
 const K_THERMO_PROJECTS = "thermo-projects-v1";
 const K_THERMO_RESULTS = "thermo-results-v1";
 const K_THERMO_META = "thermo-meta-v1";
-const K_THERMO_HISTORY = "thermo-history-v1";
+const K_THERMO_HISTORY   = "thermo-history-v1";
+const K_THERMO_DROPDOWNS = "thermo-dropdowns-v1";
 const PRIORITY_OPTIONS = ["L", "M", "H", "U"];
 const PRIORITY_LABELS = {
   L: "Low",
@@ -5696,12 +5929,13 @@ function parseThermoExcel(data, overrideName, XLSX) {
   // ── Find header row (contains "location") ─────────────────────────────
   let headerIdx = -1;
   for (let i = 0; i < Math.min(rows.length, 10); i++) {
-    if (rows[i].map(c => String(c).toLowerCase()).some(c => c.includes("location"))) {
+    if (rows[i].some(c => String(c).length > 60)) continue;
+    if (rows[i].map(c => String(c).toLowerCase()).some(c => c === "location")) {
       headerIdx = i;
       break;
     }
   }
-  if (headerIdx === -1) headerIdx = 2; // fallback
+  if (headerIdx === -1) headerIdx = 4; // fallback to row 5 (0-indexed)
 
   const header = rows[headerIdx].map(c => String(c).toLowerCase().trim());
   const col = search => header.findIndex(h => h.includes(search));
@@ -5839,33 +6073,47 @@ function parseThermoExcel(data, overrideName, XLSX) {
 function downloadThermoTemplate() {
   const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
   const rows = [
-    ["Location","Board","Circuit","Date","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)"],
-    ["ONR Main Wash Plant","Wash Plant Main Switchboard","Main switch","12/03/2026","PASS","","","","","",""],
-    ["ONR Main Wash Plant","Wash Plant Main Switchboard","Main Neutral bar","12/03/2026","PASS","","","","","",""],
-    ["ONR Main Wash Plant","Wash Plant Main Switch Room","MCC1 DOL Drives","12/03/2026","","","","","","",""],
-    ["ONR WORKSHOP","DB/1A","","12/03/2026","","","","","","",""],
+    ["Site Name — enter your site name here"],
+    ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+    [""],
+    ["INSTRUCTIONS: Fill in Location (area), Board name and Circuit name. One circuit per row. Leave Circuit blank for board-level photos only. Test results and FLIR photos are recorded inside the app — do not add result columns. Rows 1-3 are read automatically."],
+    ["Location","Board","Circuit"],
+    ["Wash Plant","MSB — Main Switchboard","Main Incomer"],
+    ["Wash Plant","MSB — Main Switchboard","Main Neutral Bar"],
+    ["Wash Plant","MSB — Main Switchboard","Feeder CB 1 — Crusher"],
+    ["Wash Plant","MSB — Main Switchboard","Feeder CB 2 — Screen"],
+    ["Wash Plant","MSB — Main Switchboard","Feeder CB 3 — Conveyor"],
+    ["Wash Plant","MCC 1 — Motor Control Centre","DOL Starter — Feed Belt"],
+    ["Wash Plant","MCC 1 — Motor Control Centre","DOL Starter — Screen Deck"],
+    ["Wash Plant","MCC 1 — Motor Control Centre","VSD — Crusher"],
+    ["Wash Plant","DB Lunch Shed","CB 1"],
+    ["Sub Station","MSB — Sub Station","Main Incomer"],
+    ["Sub Station","MSB — Sub Station","Feeder CB 1"],
+    ["Workshop","DB Workshop","CB 1"],
+    ["Workshop","DB Workshop","CB 2"],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:24},{wch:28},{wch:26},{wch:12},{wch:10},{wch:22},{wch:18},{wch:12},{wch:16},{wch:36},{wch:10}];
+  ws["!cols"]=[{wch:26},{wch:34},{wch:30}];
+  const colHdrFill={patternType:"solid",fgColor:{rgb:"FF2D2D2D"}};
+  const colHdrFont={name:"Calibri",bold:true,sz:10,color:{rgb:"FFeeeeee"}};
+  const infoFill={patternType:"solid",fgColor:{rgb:"FF1E3A5F"}};
+  const infoFont={name:"Calibri",sz:9,color:{rgb:"FFadd8e6"},italic:true};
+  ["A1"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",bold:true,sz:13,color:{rgb:"FFf97316"}}};});
+  ["A2"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",sz:10,color:{rgb:"FF999999"}}};});
+  ["A4"].forEach(r=>{if(ws[r])ws[r].s={fill:infoFill,font:infoFont};});
+  ["A5","B5","C5"].forEach(r=>{if(ws[r])ws[r].s={fill:colHdrFill,font:colHdrFont,alignment:{horizontal:"center"}};});
+  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:2}},{s:{r:1,c:0},e:{r:1,c:2}},{s:{r:3,c:0},e:{r:3,c:2}}];
   const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Thermographic Test");
-  const out = XLSX.write(wb, {
-    bookType: "xlsx",
-    type: "base64"
-  });
+  XLSX.utils.book_append_sheet(wb, ws, "Thermo Import");
+  const out = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
+  const fname = "Thermo_Import_Template.xlsx";
   if (window.webkit?.messageHandlers?.shareFile) {
-    window.webkit.messageHandlers.shareFile.postMessage({
-      base64: out,
-      filename: "Thermo_Import_Template.xlsx",
-      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
+    window.webkit.messageHandlers.shareFile.postMessage({ base64: out, filename: fname, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   } else {
     const link = document.createElement("a");
     link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${out}`;
-    link.download = "Thermo_Import_Template.xlsx";
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    link.download = fname;
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
   }
 }
 
@@ -6350,6 +6598,143 @@ function CompleteAuditBtn({
     },
     onClick: () => setConfirm(true)
   }, "\u2713 Complete & Archive Audit");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUDIT GATE — shown when audit tab tapped with no board selected
+// ─────────────────────────────────────────────────────────────────────────
+function SWBAuditGate({summary, hasAuditor, onGoHome, onEnterAudit}) {
+  const auditInProgress = summary.total>0 && (summary.pass+summary.fail+summary.na)>0;
+  return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
+    ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},auditInProgress?"☑":"📋")
+    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?"#a855f7":"#555",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
+    ,auditInProgress
+      ?React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}},"Tap Continue to test boards, or go Home to complete the audit.")
+      :React.createElement('div',{style:{fontSize:13,color:"#555",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
+    ,!hasAuditor&&React.createElement('div',{style:{fontSize:12,color:"#ef4444",background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"10px 16px",marginBottom:16,width:"100%",maxWidth:320}},"⚠ Enter auditor name on Home screen before starting")
+    ,!auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:"#a855f7",color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Go to Home to Start")
+    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?"#a855f7":"#2a2a2a",color:hasAuditor?"#fff":"#555",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},"☑ Continue Audit →")
+    ,auditInProgress&&React.createElement('button',{style:{padding:"12px 32px",background:"transparent",color:"#888",border:"1px solid #2a2a2a",borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Back to Home")
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AREA LIST VIEW — select area (no boards shown here)
+// ─────────────────────────────────────────────────────────────────────────
+function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
+  const SS=swbStyles();
+  // If onSelectBoard is passed we're in legacy mode (not used anymore but keep for safety)
+  if(onSelectBoard) return null;
+  return React.createElement('div',{style:SS.listWrap}
+    ,React.createElement('div',{style:SS.listTitle},"Select Area")
+    ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No areas yet. Go to ⚙ Structure to add areas and boards.")
+    ,(project.areas||[]).map(area=>{
+      let pass=0,fail=0,untested=0,total=0;
+      (area.boards||[]).forEach(b=>{
+        const bs=swbBoardSummary(results,project.id,area.id,b.id);
+        pass+=bs.pass; fail+=bs.fail; untested+=bs.untested; total+=bs.total;
+      });
+      const pct=total>0?Math.round(pass/total*100):0;
+      const allDone=(area.boards||[]).length>0&&(area.boards||[]).every(b=>swbBoardComplete(results,project.id,area.id,b.id));
+      return React.createElement('button',{key:area.id,
+        style:{...SS.siteCard,...(fail>0?{background:"#1e1010",borderColor:"#ef444455"}:allDone?{background:"#0e1e0e",borderColor:"#22c55e33"}:{})},
+        onClick:()=>onSelectArea(area.id)}
+        ,React.createElement('div',{style:SS.siteCardLeft}
+          ,React.createElement('div',{style:SS.siteCardName},area.name)
+          ,React.createElement('div',{style:SS.siteCardSub},(area.boards||[]).length," boards")
+          ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}}
+            ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:fail>0?"#ef4444":allDone?"#22c55e":"#a855f7"}})
+          )
+        )
+        ,React.createElement('div',{style:SS.siteCardRight}
+          ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
+          ,allDone&&fail===0&&React.createElement('span',{style:{color:"#4ade80",fontSize:18,fontWeight:800}},"✓")
+          ,React.createElement('span',{style:SS.arrow},"›")
+        )
+      );
+    })
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// BOARD LIST VIEW — shows boards within a selected area
+// ─────────────────────────────────────────────────────────────────────────
+function SWBBoardListView({area, project, results, onSelectBoard}) {
+  const SS=swbStyles();
+  return React.createElement('div',{style:SS.listWrap}
+    ,React.createElement('div',{style:SS.listTitle},area.name)
+    ,(area.boards||[]).length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No boards in this area. Go to ⚙ Structure to add boards.")
+    ,(area.boards||[]).map(b=>{
+      const bs=swbBoardSummary(results,project.id,area.id,b.id);
+      const isComp=swbBoardComplete(results,project.id,area.id,b.id);
+      const pct=bs.total>0?Math.round((bs.pass+bs.na)/bs.total*100):0;
+      return React.createElement('button',{key:b.id,
+        style:{...SS.siteCard,...(bs.fail>0?{background:"#1e1010",borderColor:"#ef444455"}:isComp?{background:"#0e1e0e",borderColor:"#22c55e33"}:{})},
+        onClick:()=>onSelectBoard(b.id)}
+        ,React.createElement('div',{style:SS.siteCardLeft}
+          ,React.createElement('div',{style:SS.siteCardName},b.name)
+          ,React.createElement('div',{style:SS.siteCardSub},bs.pass," pass · ",bs.fail," fail · ",bs.na," N/A · ",bs.untested," untested")
+          ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}}
+            ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:bs.fail>0?"#ef4444":isComp?"#22c55e":"#a855f7"}})
+          )
+        )
+        ,React.createElement('div',{style:SS.siteCardRight}
+          ,bs.fail>0&&React.createElement('span',{style:SS.failBadge},bs.fail," F")
+          ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#4ade80",fontSize:18,fontWeight:800}},"✓")
+          ,React.createElement('span',{style:SS.arrow},"›")
+        )
+      );
+    })
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// COMPLETE AUDIT BTN
+// ─────────────────────────────────────────────────────────────────────────
+function SWBCompleteAuditBtn({onComplete}) {
+  const [confirm,setConfirm]=React.useState(false);
+  if(confirm){
+    return React.createElement('div',{style:{background:"#111",border:"1px solid #a855f755",borderRadius:10,padding:"12px",marginTop:4}}
+      ,React.createElement('div',{style:{fontSize:12,color:"#eee",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
+      ,React.createElement('div',{style:{display:"flex",gap:8}}
+        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#a855f7",color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},"✓ Yes, Complete")
+        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>setConfirm(false)},"Cancel")
+      )
+    );
+  }
+  return React.createElement('button',{style:{width:"100%",padding:"10px",background:"#a855f722",color:"#a855f7",border:"1px solid #a855f755",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>setConfirm(true)},"✓ Complete & Archive Audit");
+}
+
+// SWB-specific EditableDropdown using swbStyles colors
+function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
+  const [open, setOpen] = React.useState(false);
+  const [custom, setCustom] = React.useState(false);
+  const [typedVal, setTypedVal] = React.useState(value||"");
+  const accentColor = color || "#a855f7";
+  const isCustom = value && !(options||[]).includes(value);
+  React.useEffect(()=>{ if(isCustom){setCustom(true);setTypedVal(value);} },[]);
+  React.useEffect(()=>{ if(custom && value !== typedVal){ setTypedVal(value||""); } },[value]);
+  const SS = swbStyles();
+  if(custom){
+    return React.createElement('div',{style:{display:"flex",gap:8}}
+      ,React.createElement('input',{style:{...SS.modalInput,flex:1},value:typedVal,placeholder:placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
+      ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa",borderColor:"#333",flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
+    );
+  }
+  return React.createElement('div',{style:{position:"relative"}}
+    ,React.createElement('button',{style:{...SS.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"},onClick:()=>setOpen(x=>!x)}
+      ,React.createElement('span',{style:{color:value?"#eee":"#555"}},value||placeholder||"Select…")
+      ,React.createElement('span',{style:{color:"#666",fontSize:12}},"▾")
+    )
+    ,open&&React.createElement('div',{style:{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1e1e1e",border:"1px solid #333",borderRadius:10,zIndex:300,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}
+      ,(options||[]).map((opt,i)=>
+        React.createElement('button',{key:i,style:{display:"block",width:"100%",textAlign:"left",padding:"11px 14px",background:value===opt?"#160e20":"transparent",color:value===opt?accentColor:"#ccc",border:"none",borderBottom:"1px solid #2a2a2a",cursor:"pointer",fontSize:13,fontWeight:value===opt?700:400},onClick:()=>{onChange(opt);setOpen(false);}}
+          ,i===0&&React.createElement('span',{style:{fontSize:9,color:accentColor,fontWeight:700,marginRight:6}},"DEFAULT"),opt
+        )
+      )
+      ,React.createElement('button',{style:{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12},onClick:()=>{setOpen(false);setCustom(true);}},"✏️ Type custom value…")
+    )
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -7232,6 +7617,30 @@ function ThermoCircuitView({
 // ─────────────────────────────────────────────────────────────────────────
 // PHOTO PAGE — full-page view for logging photos on a single circuit
 // ─────────────────────────────────────────────────────────────────────────
+function ThermoEditableDropdown({options,value,onChange,placeholder}){
+  const[open,setOpen]=React.useState(false);
+  const[custom,setCustom]=React.useState(false);
+  const[typedVal,setTypedVal]=React.useState(value||"");
+  const isCustom=value&&!options.includes(value);
+  React.useEffect(()=>{if(isCustom){setCustom(true);setTypedVal(value);}},[]);
+  React.useEffect(()=>{if(custom&&value!==typedVal){setTypedVal(value||"");}},[value]);
+  if(custom){return React.createElement("div",{style:{display:"flex",gap:8}}
+    ,React.createElement("input",{style:{...STH.modalInput,flex:1},value:typedVal,placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
+    ,React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #333",borderRadius:8,color:"#aaa",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
+  );}
+  return React.createElement("div",{style:{position:"relative"}}
+    ,React.createElement("button",{style:{...STH.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee":"#555"},onClick:()=>setOpen(o=>!o)}
+      ,React.createElement("span",null,value||placeholder||"Select…")
+      ,React.createElement("span",{style:{color:"#555",fontSize:12}},open?"▴":"▾")
+    )
+    ,open&&React.createElement("div",{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}}
+      ,options.map(o=>React.createElement("div",{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?"#f97316":"#ccc",background:o===value?"#1a1a0a":"transparent",borderBottom:"1px solid #2a2a2a"},
+        onClick:()=>{onChange(o);setOpen(false);}},o))
+      ,React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},"✏ Type custom…")
+    )
+  );
+}
+
 function PhotoPage({
   circuitId,
   circuitName,
@@ -7240,6 +7649,7 @@ function PhotoPage({
   project,
   results,
   meta,
+  dropdowns,
   onPatchPhotos
 }) {
   const existing = getPhotos(results, area.id, board.id, circuitId);
@@ -7530,37 +7940,6 @@ function PhotoPage({
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
-  }, "PRIORITY ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#444",
-      fontWeight: 400
-    }
-  }, "(optional)")), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      flexWrap: "wrap"
-    }
-  }, ["", ...PRIORITY_OPTIONS].map(p => /*#__PURE__*/React.createElement("button", {
-    key: p || "none",
-    style: {
-      padding: "10px 14px",
-      background: form.priority === p ? p ? PRIORITY_BG[p] : "#1a2535" : "#1a1a1a",
-      color: form.priority === p ? p ? PRIORITY_COLORS[p] : "#64748b" : "#444",
-      border: `1px solid ${form.priority === p ? p ? PRIORITY_COLORS[p] : "#334155" : "#2a2a2a"}`,
-      borderRadius: 8,
-      fontSize: 12,
-      fontWeight: 700,
-      cursor: "pointer"
-    },
-    onClick: () => setForm(f => ({
-      ...f,
-      priority: p
-    }))
-  }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None")))), /*#__PURE__*/React.createElement("div", {
-    style: STH.modalField
-  }, /*#__PURE__*/React.createElement("label", {
-    style: STH.modalLabel
   }, "NOTES / RECOMMENDATIONS ", /*#__PURE__*/React.createElement("span", {
     style: {
       color: "#444",
@@ -7574,77 +7953,61 @@ function PhotoPage({
       ...f,
       notes: e.target.value
     }))
-  })), (form.result === "FAIL" || form.result === "MONITOR") && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  })), (form.result === "FAIL" || form.result === "MONITOR") && /*#__PURE__*/React.createElement("div", {
+    style: {background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}
+  }, "\u26a0 FAIL \u2014 DEFECT DETAILS"), /*#__PURE__*/React.createElement("div", {
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
-  }, "RECTIFIED / SCHEDULED"), /*#__PURE__*/React.createElement("select", {
-    style: {
-      ...STH.modalInput
-    },
+  }, "RECTIFIED / SCHEDULED"), /*#__PURE__*/React.createElement(ThermoEditableDropdown, {
+    options: dropdowns&&dropdowns.rectified ? dropdowns.rectified : RECTIFIED_OPTIONS,
     value: form.rectified,
-    onChange: e => setForm(f => ({
-      ...f,
-      rectified: e.target.value
-    }))
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\u2014 Select \u2014"), RECTIFIED_OPTIONS.map(o => /*#__PURE__*/React.createElement("option", {
-    key: o,
-    value: o
-  }, o)))), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      gap: 8,
-      marginBottom: 14
-    }
+    onChange: v => setForm(f => ({...f, rectified: v})),
+    placeholder: "Select or type\u2026"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {display:"flex",gap:10}
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
+    style: {...STH.modalField,flex:1}
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
-  }, "DATE RECTIFIED / SCHEDULED"), /*#__PURE__*/React.createElement("input", {
-    style: STH.modalInput,
-    type: "date",
-    value: form.rectifiedDate,
-    onChange: e => setForm(f => ({
-      ...f,
-      rectifiedDate: e.target.value
-    }))
+  }, "DATE RECTIFIED"), /*#__PURE__*/React.createElement("input", {
+    style: STH.modalInput, type: "date", value: form.rectifiedDate,
+    onChange: e => setForm(f => ({...f, rectifiedDate: e.target.value}))
   })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      flex: 1
-    }
+    style: {...STH.modalField,flex:1}
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
   }, "DEFECT ID"), /*#__PURE__*/React.createElement("input", {
-    style: STH.modalInput,
-    value: form.defectId,
-    placeholder: "e.g. DEF-001",
-    onChange: e => setForm(f => ({
-      ...f,
-      defectId: e.target.value
-    }))
+    style: STH.modalInput, value: form.defectId, placeholder: "e.g. DEF-001",
+    onChange: e => setForm(f => ({...f, defectId: e.target.value}))
   }))), /*#__PURE__*/React.createElement("div", {
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
-  }, "RESPONSIBILITY"), /*#__PURE__*/React.createElement("select", {
-    style: {
-      ...STH.modalInput
-    },
+  }, "RESPONSIBILITY"), /*#__PURE__*/React.createElement(ThermoEditableDropdown, {
+    options: dropdowns&&dropdowns.responsibility ? dropdowns.responsibility : RESPONSIBILITY_OPTIONS,
     value: form.responsibility,
-    onChange: e => setForm(f => ({
-      ...f,
-      responsibility: e.target.value
-    }))
-  }, /*#__PURE__*/React.createElement("option", {
-    value: ""
-  }, "\u2014 Select \u2014"), RESPONSIBILITY_OPTIONS.map(o => /*#__PURE__*/React.createElement("option", {
-    key: o,
-    value: o
-  }, o))))), /*#__PURE__*/React.createElement("div", {
+    onChange: v => setForm(f => ({...f, responsibility: v})),
+    placeholder: "Select or type\u2026"
+  })), /*#__PURE__*/React.createElement("div", {
+    style: STH.modalField
+  }, /*#__PURE__*/React.createElement("label", {
+    style: STH.modalLabel
+  }, "PRIORITY"), /*#__PURE__*/React.createElement("div", {
+    style: {display:"flex",gap:8,flexWrap:"wrap"}
+  }, ["", ...PRIORITY_OPTIONS].map(p => /*#__PURE__*/React.createElement("button", {
+    key: p || "none",
+    style: {
+      padding:"10px 14px",
+      background: form.priority===p ? p ? PRIORITY_BG[p] : "#1a2535" : "#1a1a1a",
+      color: form.priority===p ? p ? PRIORITY_COLORS[p] : "#64748b" : "#444",
+      border: `1px solid ${form.priority===p ? p ? PRIORITY_COLORS[p] : "#334155" : "#2a2a2a"}`,
+      borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
+    },
+    onClick: () => setForm(f => ({...f, priority: p}))
+  }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -8886,6 +9249,46 @@ function ThermoHistoryView({
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// THERMO DROPDOWNS VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function ThermoDropdownsView({dropdowns,setDropdowns}){
+  const[newVals,setNewVals]=React.useState({});
+  const items=key=>(dropdowns&&dropdowns[key])||[];
+  const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
+  const removeItem=(key,item)=>setDropdowns(d=>({...d,[key]:items(key).filter(x=>x!==item)}));
+  const sections=[
+    {key:"responsibility",label:"RESPONSIBILITY",color:"#f97316",desc:"Options shown when logging a failed or monitor item"},
+    {key:"rectified",label:"RECTIFIED / SCHEDULED",color:"#f59e0b",desc:"Actions available when rectifying a defect"},
+  ];
+  return React.createElement("div",{style:{padding:"16px",paddingBottom:100}}
+    ,React.createElement("div",{style:{fontSize:16,fontWeight:800,color:"#eee",marginBottom:4}},"Dropdown Options")
+    ,React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:20}},"Add or remove options available when recording defects")
+    ,sections.map(({key,label,color,desc})=>{
+      const newVal=newVals[key]||"";
+      return React.createElement("div",{key,style:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:12,padding:"12px 14px",marginBottom:14}}
+        ,React.createElement("div",{style:{fontSize:10,fontWeight:800,color,letterSpacing:0.8,marginBottom:2}},label)
+        ,React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:10}},desc)
+        ,React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}
+          ,items(key).map((item,i)=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#111",borderRadius:8,padding:"8px 10px"}}
+            ,React.createElement("span",{style:{flex:1,fontSize:12,color:"#ccc"}},item)
+            ,i===0&&React.createElement("span",{style:{fontSize:10,color:"#555",marginRight:4}},"default")
+            ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:11,padding:"0 2px"},onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},"★")
+            ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕")
+          ))
+          ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
+        )
+        ,React.createElement("div",{style:{display:"flex",gap:8}}
+          ,React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none"},
+            placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
+            onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
+            onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
+          ,React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
+        )
+      );
+    })
+  );
+}
+
 // MAIN THERMO APP
 // ─────────────────────────────────────────────────────────────────────────
 function ThermoApp({
@@ -8904,18 +9307,20 @@ function ThermoApp({
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeCircuitId, setActiveCircuitId] = React.useState(null); // id of circuit open in photo page
   const [activeCircuitName, setActiveCircuitName] = React.useState("");
+  const [thermoDropdowns, setThermoDropdowns] = React.useState({responsibility:[...RESPONSIBILITY_OPTIONS],rectified:[...RECTIFIED_OPTIONS]});
 
   // Load
   React.useEffect(() => {
     const t = setTimeout(() => setLoaded(true), 3000);
     (async () => {
       try {
-        const [p, r, m, h] = await Promise.all([load(K_THERMO_PROJECTS, []), load(K_THERMO_RESULTS, {}), load(K_THERMO_META, {}), load(K_THERMO_HISTORY, [])]);
+        const [p, r, m, h, dd] = await Promise.all([load(K_THERMO_PROJECTS, []), load(K_THERMO_RESULTS, {}), load(K_THERMO_META, {}), load(K_THERMO_HISTORY, []), load(K_THERMO_DROPDOWNS, {responsibility:[...RESPONSIBILITY_OPTIONS],rectified:[...RECTIFIED_OPTIONS]})]);
         clearTimeout(t);
         setProjects(p);
         setAllResults(r);
         setAllMeta(m);
         setHistory(h);
+        setThermoDropdowns(dd);
         setLoaded(true);
       } catch {
         clearTimeout(t);
@@ -8942,6 +9347,9 @@ function ThermoApp({
   React.useEffect(() => {
     if (loaded) save(K_THERMO_HISTORY, history);
   }, [history, loaded]);
+  React.useEffect(() => {
+    if (loaded) save(K_THERMO_DROPDOWNS, thermoDropdowns);
+  }, [thermoDropdowns, loaded]);
   const project = projects.find(p => p.id === activeProject);
   const meta = allMeta[activeProject] || {
     auditor: "",
@@ -9046,7 +9454,7 @@ function ThermoApp({
       goHome();
     } else if (view === "home") {
       goProjects();
-    } else if (["manage", "report", "history"].includes(view)) {
+    } else if (["manage", "report", "history", "dropdowns"].includes(view)) {
       goHome();
     } else goProjects();
   };
@@ -9210,7 +9618,16 @@ function ThermoApp({
     onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta),
     onArchive: () => archiveAudit(),
     onCompleteAudit: completeAudit
-  }), view === "audit" && project && !activeAreaId && /*#__PURE__*/React.createElement(ThermoAreaListView, {
+  }), view === "audit" && project && !auditEntered && /*#__PURE__*/React.createElement(AuditGatePage, {
+    color: "#f97316",
+    moduleLabel: "THERMO TEST",
+    auditLabel: "Thermographic Audit",
+    hasActiveAudit: !!(meta && meta.auditor && meta.auditor.trim()),
+    onGoHome: goHome,
+    onCompleteAudit: () => { completeAudit(); },
+    onEnterAudit: () => setAuditEntered(true),
+    isRCD: false
+  }), view === "audit" && project && auditEntered && !activeAreaId && /*#__PURE__*/React.createElement(ThermoAreaListView, {
     project: project,
     results: allResults[activeProject] || {},
     onSelect: id => {
@@ -9243,12 +9660,16 @@ function ThermoApp({
     project: project,
     results: allResults[activeProject] || {},
     meta: meta,
+    dropdowns: thermoDropdowns,
     onPatchPhotos: photos => patchPhotos(activeAreaId, activeBoardId, activeCircuitId, photos)
   }), view === "report" && project && /*#__PURE__*/React.createElement(ThermoReportView, {
     project: project,
     results: allResults[activeProject] || {},
     meta: meta,
     onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta)
+  }), view === "dropdowns" && /*#__PURE__*/React.createElement(ThermoDropdownsView, {
+    dropdowns: thermoDropdowns,
+    setDropdowns: setThermoDropdowns
   }), view === "manage" && project && /*#__PURE__*/React.createElement(ThermoManageView, {
     project: project,
     onUpdateProject: updated => setProjects(prev => prev.map(p => p.id === updated.id ? {
@@ -9311,13 +9732,19 @@ function ThermoApp({
     active: view === "manage",
     onClick: () => setView("manage"),
     color: "#a855f7"
+  }), /*#__PURE__*/React.createElement(NavBtn, {
+    icon: "\u25be",
+    label: "Dropdowns",
+    active: view === "dropdowns",
+    onClick: () => setView("dropdowns"),
+    color: "#64748b"
   })));
 }
 // ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
 function AppRoot() {
-  const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo"
+  const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo" | "swb"
 
   // When on landing page, allow #root to scroll; when in a module, lock it
   React.useEffect(()=>{
@@ -9343,6 +9770,7 @@ function AppRoot() {
   if (module === "tat") return React.createElement(TATApp, {onGoHome: ()=>setModule(null)});
   if (module === "cal") return React.createElement(CalendarApp, {onGoHome: ()=>setModule(null)});
   if (module === "thermo") return React.createElement(ThermoApp, {onGoHome: ()=>setModule(null)});
+  if (module === "swb") return React.createElement(SWBApp, {onGoHome: ()=>setModule(null)});
 
   return React.createElement('div', {
     style:{
@@ -9525,7 +9953,25 @@ function AppRoot() {
 
 
 
-            , React.createElement('div', {style:{marginTop:24,textAlign:"center",fontSize:11,color:"#333",letterSpacing:0.5}}, "Vorick Group Asset Maintenance · v10")
+
+      , React.createElement('button', {
+          style:{width:"100%",maxWidth:420,display:"flex",alignItems:"center",gap:20,padding:"24px",background:"#161616",border:"2px solid #a855f744",borderRadius:20,cursor:"pointer",color:"#eee",marginBottom:14,textAlign:"left"},
+          onClick: ()=>setModule("swb")
+        }
+        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#a855f722",border:"1px solid #a855f744",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "🔌")
+        , React.createElement('div', {style:{flex:1}}
+          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#a855f7",letterSpacing:0.5}}, "SWITCHBOARD AUDIT")
+          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "Visual inspection of switchboards and enclosures")
+          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
+            , React.createElement('span', {style:{fontSize:10,color:"#a855f7",background:"#a855f722",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "☑ 11-Point Checklist")
+            , React.createElement('span', {style:{fontSize:10,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 Defect Register")
+            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📅 Annual Cycle")
+          )
+        )
+        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
+      )
+
+                        , React.createElement('div', {style:{marginTop:24,textAlign:"center",fontSize:11,color:"#333",letterSpacing:0.5}}, "Vorick Group Asset Maintenance · v10")
     )
   );
 }
@@ -9549,6 +9995,1099 @@ function RCDAppWrapper({ onGoHome }) {
       }, "⌂ Module Select")
   );
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// SWITCHBOARD / ENCLOSURE AUDIT MODULE v2
+// ─────────────────────────────────────────────────────────────────────────
+
+const SWB_DEFAULT_RESPONSIBILITY = ["Vorick Group","Site Electrician","Site Manager","Contractor","Client"];
+const SWB_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair","Replacement Required","Under Investigation","No Action Required"];
+
+const SWB_COLOR = "#a855f7";
+const K_SWB_PROJECTS = "swb-projects-v1";
+const K_SWB_RESULTS  = "swb-results-v1";
+const K_SWB_META     = "swb-meta-v1";
+const K_SWB_HISTORY  = "swb-history-v1";
+const K_SWB_DROPDOWNS = "swb-dropdowns-v1";
+
+const SWB_CHECKLIST = [
+  { key:"enclosure",    label:"Enclosure Condition" },
+  { key:"ventilation",  label:"Ventilation" },
+  { key:"moisture",     label:"Moisture / Vermin" },
+  { key:"insulation",   label:"Insulation" },
+  { key:"busbars",      label:"Busbars" },
+  { key:"terminations", label:"Terminations" },
+  { key:"protection",   label:"Protection Devices" },
+  { key:"contactors",   label:"Contactors / Relays" },
+  { key:"mounting",     label:"Mounting / Fixings" },
+  { key:"labelling",    label:"Labelling" },
+  { key:"earthing",     label:"Door Earthing" },
+];
+
+const SWB_GUIDANCE = {
+  enclosure:    { pass:"Enclosure is structurally sound, door closes and latches properly, no cracks, corrosion, or physical damage. IP rating maintained.", fail:"Visible damage, cracking, corrosion, door not sealing, missing blanks, or IP rating compromised." },
+  ventilation:  { pass:"Ventilation openings are clear and unobstructed. Fans operational if fitted. No excessive heat build-up inside enclosure.", fail:"Vents blocked, fans not running, overheating evident, or inadequate airflow for equipment rating." },
+  moisture:     { pass:"No signs of moisture ingress, condensation, water staining, or vermin. Enclosure seals intact.", fail:"Moisture, rust from water ingress, animal nesting, droppings, or evidence of flooding present." },
+  insulation:   { pass:"Visible insulation on conductors is intact — no cracking, brittleness, discolouration, or abrasion. Cable management tidy.", fail:"Insulation cracking, bare conductors visible, heat discolouration, brittle or damaged cable sheathing." },
+  busbars:      { pass:"Busbars are clean, securely fixed, correctly rated, and free from discolouration, arcing marks, or corrosion.", fail:"Discolouration, burn marks, loose connections, corrosion, or incorrect phase identification on busbars." },
+  terminations: { pass:"All terminations are tight, correctly landed, properly rated, and free from heat damage or corrosion. No loose strands.", fail:"Loose, overheated, or burnt terminals. Incorrect conductor sizing, loose strands, or signs of arcing." },
+  protection:   { pass:"Protective devices (MCBs, fuses, RCDs) are correctly rated, properly seated, labelled, and all blanking plates in place.", fail:"Incorrect ratings, missing blanks, tripped/blown devices not investigated, or unlabelled protection." },
+  contactors:   { pass:"Contactors and relays operate correctly with no unusual noise, overheating, or chatter. Contacts in good condition.", fail:"Audible chatter, overheating, damaged contacts, incorrect ratings, or contactors failing to seat cleanly." },
+  mounting:     { pass:"All equipment is securely mounted to DIN rail or back panel. Fixings tight, cable ties intact, cable entries sealed.", fail:"Loose mounting, missing fixings, unsecured cables, open cable entries, or equipment not rated for environment." },
+  labelling:    { pass:"All circuits, devices, and phases are clearly labelled. Labels legible and match the distribution board schedule.", fail:"Missing, illegible, incorrect, or outdated labels. Circuit numbers not matching schedule or cables unlabelled." },
+  earthing:     { pass:"Door earth bonding strap is present, intact, and making good contact at both ends. No corrosion at connection points.", fail:"Missing or broken earth strap, corroded connections, or earth continuity not maintained to door/enclosure." },
+};
+
+const SWB_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
+const SWB_SM = {
+  untested:{ label:"—",    bg:"#2a2a2a", fg:"#666",    border:"#333" },
+  pass:    { label:"PASS", bg:"#1a3d1a", fg:"#4ade80", border:"#22c55e" },
+  fail:    { label:"FAIL", bg:"#3d1a1a", fg:"#f87171", border:"#ef4444" },
+  na:      { label:"N/A",  bg:"#1e2535", fg:"#64748b", border:"#334155" },
+};
+const SWB_RISK_COLORS = { L:"#22c55e", M:"#f59e0b", H:"#ef4444", U:"#c0392b" };
+const SWB_RISK_LABELS = { L:"Low", M:"Medium", H:"High", U:"Urgent" };
+
+function swbUid()  { return Math.random().toString(36).slice(2,9); }
+function swbSlug(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,20)+"-"+swbUid(); }
+function swbAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
+
+// ─── Data helpers ─────────────────────────────────────────────────────────
+function swbGetItem(results, projectId, areaId, boardId, itemKey) {
+  return ((((results[projectId]||{})[areaId]||{})[boardId])||{})[itemKey]
+    || { status:SWB_STATUS.UNTESTED, defectId:"", comment:"", risk:"", rectified:"", responsibility:"", priority:"" };
+}
+function swbGetStatus(results, projectId, areaId, boardId, itemKey) {
+  return swbGetItem(results, projectId, areaId, boardId, itemKey).status || SWB_STATUS.UNTESTED;
+}
+function swbBoardSummary(results, projectId, areaId, boardId) {
+  let pass=0,fail=0,na=0,untested=0;
+  SWB_CHECKLIST.forEach(({key})=>{
+    const v=swbGetStatus(results,projectId,areaId,boardId,key);
+    if(v===SWB_STATUS.PASS)pass++; else if(v===SWB_STATUS.FAIL)fail++;
+    else if(v===SWB_STATUS.NA)na++; else untested++;
+  });
+  return {pass,fail,na,untested,total:SWB_CHECKLIST.length};
+}
+function swbSiteSummary(results, project) {
+  let pass=0,fail=0,na=0,untested=0;
+  (project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{
+    const s=swbBoardSummary(results,project.id,area.id,board.id);
+    pass+=s.pass; fail+=s.fail; na+=s.na; untested+=s.untested;
+  }));
+  return {pass,fail,na,untested,total:(project.areas||[]).reduce((n,a)=>n+(a.boards||[]).length*SWB_CHECKLIST.length,0)};
+}
+function swbBoardComplete(results, projectId, areaId, boardId) {
+  return SWB_CHECKLIST.every(({key})=>swbGetStatus(results,projectId,areaId,boardId,key)!==SWB_STATUS.UNTESTED);
+}
+function swbSiteCompletedBoards(results, project) {
+  let total=0,complete=0;
+  (project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{
+    total++;
+    if(swbBoardComplete(results,project.id,area.id,board.id)) complete++;
+  }));
+  return {total,complete};
+}
+
+// ─── Excel export ─────────────────────────────────────────────────────────
+const SWB_XC = {
+  purple:"FFA855F7",white:"FFFFFFFF",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",
+  priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
+  priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
+};
+function swbXB(s,c){return{style:s||"thin",color:{rgb:c||SWB_XC.midGrey}};}
+function swbXAB(){const b=swbXB();return{top:b,bottom:b,left:b,right:b};}
+function swbXCS(fill,font,align,borders){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...(font||{})},alignment:{vertical:"center",...(align||{})},border:borders||{}};}
+function swbXPC(p){if(p==="U")return{bg:SWB_XC.priorityU_bg,font:SWB_XC.priorityU_font,bold:true};if(p==="H")return{bg:SWB_XC.priorityH_bg,font:SWB_XC.priorityH_font,bold:false};if(p==="M")return{bg:SWB_XC.priorityM_bg,font:SWB_XC.priorityM_font,bold:false};if(p==="L")return{bg:SWB_XC.priorityL_bg,font:SWB_XC.priorityL_font,bold:false};return null;}
+function swbXRS(ri,risk){if(risk){const pc=swbXPC(risk);if(pc)return swbXCS(pc.bg,{sz:10,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},{bottom:swbXB("hair")});}const bg=ri%2===0?SWB_XC.white:SWB_XC.lightGrey;return swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},{bottom:swbXB("hair")});}
+function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="number"?"n":"s",s:st};}
+
+function exportSWBExcel(project, allResults, meta) {
+  const wb=XLSX.utils.book_new();const ws={};const merges=[];
+  const n=7;const cols="ABCDEFG".split("");
+  let r=0;
+  const pid=project.id;const results=allResults[pid]||{};
+  const sName=project.name||"Site";
+  const testDate=(meta&&meta.testDate)||"";
+  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
+  const nextDue=testDate?swbAddYear(testDate):"";
+  const coLine=`${project.company||"Vorick Group"} Asset Maintenance Pty. Ltd.${project.abn?`  |  ABN: ${project.abn}`:""}${project.licence?`  |  Electrical Licence: ${project.licence}`:""}`;
+  const titleSt =swbXCS("FF1A1A2E",{bold:true,sz:14,color:{rgb:"FFc084fc"}},{horizontal:"left"});
+  const subSt   =swbXCS("FF1A1A2E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
+  const metaSt  =swbXCS("FF262626",{sz:9,color:{rgb:"FF999999"}},{horizontal:"left"});
+  const hdrSt   =swbXCS(SWB_XC.purple,{bold:true,sz:10,color:{rgb:SWB_XC.white}},{horizontal:"center",wrapText:true},swbXAB());
+  const bhdSt   =swbXCS("FF1E1428",{bold:true,sz:11,color:{rgb:"FFc084fc"}},{horizontal:"left"},{top:swbXB("medium","FFa855f7"),bottom:swbXB("medium","FFa855f7")});
+  const spcSt   =swbXCS("FF181820");
+  const phoSt   =swbXCS("FF181820",{sz:9,color:{rgb:"FF444466"},italic:true},{horizontal:"left"});
+  swbXC2(ws,"A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
+  for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
+  swbXC2(ws,"A2",coLine,subSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
+  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtD(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt); swbXC2(ws,"G3","",metaSt);
+  merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:6}}); r=3;
+  for(let c=0;c<n;c++) swbXC2(ws,cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
+  ["Item","Pass / Fail","Defect ID","Comments","Risk","Responsibility / Action","Priority"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
+  let di=0;
+  (project.areas||[]).forEach(area=>{
+    (area.boards||[]).forEach(board=>{
+      const bl=`${area.name}  ›  ${board.name}`;
+      swbXC2(ws,cols[0]+(r+1),bl,bhdSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+(r+1),"",bhdSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+      SWB_CHECKLIST.forEach(({key,label})=>{
+        const item=((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
+        const st=item.status||SWB_STATUS.UNTESTED;
+        const pfLabel=st===SWB_STATUS.PASS?"Pass":st===SWB_STATUS.FAIL?"Fail":st===SWB_STATUS.NA?"N/A":"Untested";
+        const rs=swbXRS(di,item.risk||"");
+        const bg=rs.fill.fgColor.rgb; const fc=rs.font.color; const bd=rs.font.bold;
+        const cSt=(h)=>swbXCS(bg,{sz:10,color:fc,bold:bd},{wrapText:true,horizontal:h||"left"},{bottom:swbXB("hair")});
+        swbXC2(ws,cols[0]+(r+1),label,rs);
+        swbXC2(ws,cols[1]+(r+1),pfLabel,cSt("center"));
+        swbXC2(ws,cols[2]+(r+1),item.defectId||"",rs);
+        swbXC2(ws,cols[3]+(r+1),item.comment||"",rs);
+        swbXC2(ws,cols[4]+(r+1),item.risk||"",cSt("center"));
+        swbXC2(ws,cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
+        swbXC2(ws,cols[6]+(r+1),item.priority||"",cSt("center"));
+        r++; di++;
+      });
+      swbXC2(ws,cols[0]+(r+1),"← Insert board photos here",phoSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+    });
+  });
+  ws["!merges"]=merges;
+  ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:n-1}});
+  ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:42},{wch:8},{wch:30},{wch:10}];
+  XLSX.utils.book_append_sheet(wb,ws,"Switchboard Audit");
+  const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
+  const fname=`SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
+    window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  } else {
+    const a=document.createElement("a"); a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+wbOut; a.download=fname; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+}
+
+// ─── Excel import ─────────────────────────────────────────────────────────
+function parseSWBExcel(data) {
+  try {
+    const ws=data.Sheets[data.SheetNames[0]];
+    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+    // ── Site name from row 0, company/ABN/licence from row 1 ──────────
+    let siteName="",company="",abn="",licence="";
+    if(rows[0]&&rows[0][0]){const t=String(rows[0][0]).trim();siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+    if(rows[1]&&rows[1][0]){
+      const parts=String(rows[1][0]).split(/\s*\|\s*/);
+      parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});
+    }
+    // ── Find header row with "area" or "board" ────────────────────────
+    let hi=-1;
+    for(let i=0;i<Math.min(rows.length,10);i++){
+      if(rows[i].some(c=>String(c).length>60)) continue;
+      const r=rows[i].map(c=>String(c).toLowerCase());
+      if(r.some(c=>c==="area"||c==="board"||c==="board / panel name")){hi=i;break;}
+    }
+    if(hi<0) hi=4;
+    const header=rows[hi].map(c=>String(c).toLowerCase().trim());
+    const aC=Math.max(0,header.findIndex(h=>h.includes("area")));
+    const bC=header.findIndex(h=>h.includes("board")||h.includes("panel")||h.includes("name"));
+    const pc=bC<0?aC+1:bC;
+    const areaMap={};
+    for(let i=hi+1;i<rows.length;i++){
+      const row=rows[i];
+      const aRaw=String(row[aC]||"").trim();
+      const bRaw=String(row[pc]||"").trim();
+      if(!aRaw&&!bRaw) continue;
+      const aKey=aRaw||"General";
+      if(!areaMap[aKey]) areaMap[aKey]=new Set();
+      if(bRaw) areaMap[aKey].add(bRaw);
+    }
+    const areas=Object.entries(areaMap).map(([aName,boards])=>({id:swbSlug(aName),name:aName,boards:[...boards].map(b=>({id:swbSlug(b),name:b}))}));
+    return {areas,siteName,siteId:swbSlug(siteName||"imported"),company,abn,licence};
+  } catch(e){ return null; }
+}
+
+function downloadSWBTemplate() {
+  const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
+  const wb=XLSX.utils.book_new();
+  const rows=[
+    ["Site Name — enter your site name here"],
+    ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+    [""],
+    ["INSTRUCTIONS: Fill in Area and Board / Panel Name. One board per row. Site name and company are read from rows 1-2 automatically — edit them above. The 11-point checklist is completed inside the app."],
+    ["Area","Board / Panel Name"],
+    ["Wash Plant","MSB — Main Switchboard"],
+    ["Wash Plant","MCC 1 — Motor Control Centre"],
+    ["Wash Plant","MCC 2 — Motor Control Centre"],
+    ["Wash Plant","DB — Lunch Shed"],
+    ["Sub Station","MSB — Sub Station"],
+    ["Sub Station","DB — Sub Station Lighting"],
+    ["Workshop","DB Workshop"],
+    ["Office","DB Office"],
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=[{wch:26},{wch:36}];
+  const colHdrFill={patternType:"solid",fgColor:{rgb:"FF2D2D2D"}};
+  const colHdrFont={name:"Calibri",bold:true,sz:10,color:{rgb:"FFeeeeee"}};
+  const infoFill={patternType:"solid",fgColor:{rgb:"FF1E3A5F"}};
+  const infoFont={name:"Calibri",sz:9,color:{rgb:"FFadd8e6"},italic:true};
+  ["A1"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",bold:true,sz:13,color:{rgb:"FFa855f7"}}};});
+  ["A2"].forEach(r=>{if(ws[r])ws[r].s={fill:{patternType:"solid",fgColor:{rgb:"FF1a1a1a"}},font:{name:"Calibri",sz:10,color:{rgb:"FF999999"}}};});
+  ["A4"].forEach(r=>{if(ws[r])ws[r].s={fill:infoFill,font:infoFont};});
+  ["A5","B5"].forEach(r=>{if(ws[r])ws[r].s={fill:colHdrFill,font:colHdrFont,alignment:{horizontal:"center"}};});
+  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:1}},{s:{r:1,c:0},e:{r:1,c:1}},{s:{r:3,c:0},e:{r:3,c:1}}];
+  XLSX.utils.book_append_sheet(wb,ws,"SWB Import");
+  const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
+  const fname="SWB_Import_Template.xlsx";
+  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
+    window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+  } else {
+    const a=document.createElement("a"); a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+wbOut; a.download=fname; document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// SWBApp
+// ─────────────────────────────────────────────────────────────────────────
+function SWBApp({ onGoHome }) {
+  const [projects,      setProjects]      = React.useState([]);
+  const [allResults,    setAllResults]    = React.useState({});
+  const [allMeta,       setAllMeta]       = React.useState({});
+  const [history,       setHistory]       = React.useState([]);
+  const [loaded,        setLoaded]        = React.useState(false);
+  const [saveFlash,     setSaveFlash]     = React.useState(false);
+  const [activeProject, setActiveProject] = React.useState(null);
+  const [view,          setView]          = React.useState("projects");
+  const [activeAreaId,  setActiveAreaId]  = React.useState(null);
+  const [activeBoardId, setActiveBoardId] = React.useState(null);
+  const [activeItemKey, setActiveItemKey] = React.useState(null);
+  const [auditEntered,  setAuditEntered]  = React.useState(false);
+  const [swbDropdowns,  setSwbDropdowns]  = React.useState({responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED});
+
+  React.useEffect(()=>{
+    (async()=>{
+      try{const [p,r,m,h,dd]=await Promise.all([load(K_SWB_PROJECTS,[]),load(K_SWB_RESULTS,{}),load(K_SWB_META,{}),load(K_SWB_HISTORY,[]),load(K_SWB_DROPDOWNS,{responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setSwbDropdowns(dd);}
+      finally{setLoaded(true);}
+    })();
+  },[]);
+  React.useEffect(()=>{ if(loaded) save(K_SWB_PROJECTS,projects); },[projects,loaded]);
+  React.useEffect(()=>{ if(loaded){save(K_SWB_RESULTS,allResults);setSaveFlash(true);const t=setTimeout(()=>setSaveFlash(false),1200);return()=>clearTimeout(t);} },[allResults,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_SWB_META,allMeta); },[allMeta,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_SWB_HISTORY,history); },[history,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_SWB_DROPDOWNS,swbDropdowns); },[swbDropdowns,loaded]);
+
+  const project=projects.find(p=>p.id===activeProject);
+  const meta=allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
+  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const area=project&&project.areas&&project.areas.find(a=>a.id===activeAreaId);
+  const board=area&&area.boards&&area.boards.find(b=>b.id===activeBoardId);
+
+  const patchItem=(areaId,boardId,itemKey,patch)=>setAllResults(prev=>{
+    const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
+    const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
+    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,[itemKey]:{...old,...patch}}}}};
+  });
+
+  const resetBoard=(areaId,boardId)=>setAllResults(prev=>{
+    const site=prev[activeProject]||{};const ar=site[areaId]||{};
+    const cleared={};
+    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
+    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
+  });
+
+  const archiveAudit=()=>{
+    const snap={id:swbUid(),projectId:activeProject,projectName:project&&project.name||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};
+    setHistory(prev=>[snap,...prev].slice(0,100));
+  };
+
+  const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
+  const goHome=()=>{setView("home");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
+  // goArea removed - use goAreaList() instead
+  const goAreaList=()=>{setView("audit");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
+
+  if(!loaded) return React.createElement('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#111"}},React.createElement('div',{style:{width:36,height:36,border:"3px solid #333",borderTop:"3px solid #a855f7",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
+
+  const SS=swbStyles();
+  const summary=project?swbSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0,untested:0};
+
+  return React.createElement('div',{style:SS.root}
+    ,React.createElement('header',{style:{...SS.topbar,borderBottom:`2px solid ${view==="projects"?"#222":"#a855f733"}`}}
+      ,React.createElement('div',{style:SS.topbarLeft}
+        ,view!=="projects"&&React.createElement('button',{style:SS.backBtn,onClick:()=>{
+          if(view==="item"){setActiveItemKey(null);setView("board");}
+          else if(view==="board"){setActiveBoardId(null);goAreaList();}
+          else if(view==="audit"&&!auditEntered){goHome();}
+          else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);goHome();}
+          else if(["manage","report","history","dropdowns"].includes(view))goHome();
+          else goProjects();
+        }},"‹")
+        ,React.createElement('div',null
+          ,React.createElement('div',{style:SS.appTitle},"SWB")
+          ,React.createElement('div',{style:{...SS.appSub,color:view==="projects"?"#555":"#a855f7"}},view==="projects"?"Project Select":project&&project.name||"")
+        )
+      )
+      ,React.createElement('div',{style:SS.topbarRight}
+        ,React.createElement('span',{style:{fontSize:11,color:"#22c55e",fontWeight:600,opacity:saveFlash?1:0,transition:"opacity 0.4s",pointerEvents:"none"}},"✓ Saved")
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",fontSize:11},onClick:onGoHome},"⌂ Modules")
+      )
+    )
+    ,view!=="projects"&&React.createElement('div',{style:SS.breadcrumb}
+      ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"},onClick:goHome},project&&project.name||"")
+      ,(view==="audit"&&auditEntered&&activeAreaId)&&React.createElement(React.Fragment,null
+        ,React.createElement('span',{style:SS.bcSep},"›")
+        ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"}},area&&area.name||"")
+      )
+      ,(view==="board"||view==="item")&&board&&React.createElement(React.Fragment,null
+        ,React.createElement('span',{style:SS.bcSep},"›")
+        ,React.createElement('span',{style:{...SS.bcItem,color:"#aaa"},onClick:()=>{setActiveBoardId(null);goAreaList();}},area&&area.name||"")
+        ,React.createElement('span',{style:SS.bcSep},"›")
+        ,React.createElement('span',{style:{...SS.bcItem,color:view==="item"?"#aaa":"#a855f7"},onClick:view==="item"?()=>{setActiveItemKey(null);setView("board");}:undefined},board.name)
+        ,view==="item"&&activeItemKey&&React.createElement(React.Fragment,null
+          ,React.createElement('span',{style:SS.bcSep},"›")
+          ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"}},(SWB_CHECKLIST.find(c=>c.key===activeItemKey)||{label:activeItemKey}).label)
+        )
+      )
+      ,["manage","report","history","dropdowns"].includes(view)&&React.createElement(React.Fragment,null
+        ,React.createElement('span',{style:SS.bcSep},"›")
+        ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"}},view.charAt(0).toUpperCase()+view.slice(1))
+      )
+    )
+    ,React.createElement('div',{style:SS.main}
+      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));}})
+      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);}})
+      ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
+      ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#555",fontSize:14}},"Select a site from the Project Select screen.")
+      ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
+      ,view==="audit"&&project&&auditEntered&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
+      ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId)})
+      ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
+      ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onExport:()=>exportSWBExcel(project,allResults,meta),onArchive:archiveAudit})
+      ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns})
+      ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");}})
+    )
+    ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
+      ,React.createElement(SWBNavBtn,{icon:"⌂",label:"Home",   active:view==="home",               onClick:goHome,            color:"#a855f7"})
+      ,React.createElement(SWBNavBtn,{icon:"☑",label:"Audit",  active:["audit","board","item"].includes(view),onClick:()=>{setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#a855f7"})
+      ,React.createElement(SWBNavBtn,{icon:"≡",label:"Report", active:view==="report",              onClick:()=>setView("report"),color:"#a855f7"})
+      ,React.createElement(SWBNavBtn,{icon:"🕐",label:"History",active:view==="history",            onClick:()=>setView("history"),color:"#f59e0b"})
+      ,React.createElement(SWBNavBtn,{icon:"⚙",label:"Manage", active:view==="manage",             onClick:()=>setView("manage"),color:"#a855f7"})
+      ,React.createElement(SWBNavBtn,{icon:"▾",label:"Dropdowns",active:view==="dropdowns",onClick:()=>setView("dropdowns"),color:"#64748b"})
+    )
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AUDIT GATE — shown when audit tab tapped with no board selected
+function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}) {
+  const [showAdd,setShowAdd]=React.useState(false);
+  const [tab,setTab]=React.useState("manual");
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
+  const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
+  const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);const [deleteId,setDeleteId]=React.useState(null);
+  const fileRef=React.useRef();const SS=swbStyles();
+
+  const handleFile=e=>{
+    const file=e.target.files&&e.target.files[0];if(!file)return;
+    setImporting(true);setImportError("");
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{const data=XLSX.read(ev.target.result,{type:"binary"});const parsed=parseSWBExcel(data);
+        if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Area / Board columns. Download the template for the correct format.");setImporting(false);return;}
+        setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");
+      }catch(_){setImportError("Failed to read file.");}
+      setImporting(false);
+    };
+    reader.readAsBinaryString(file);
+  };
+
+  const confirmImport=()=>{
+    if(!importPreview)return;
+    const sName=importName.trim()||"Imported Site";
+    onAddProject({id:swbSlug(sName),name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportError("");
+  };
+
+  return React.createElement('div',{style:SS.listWrap}
+    ,React.createElement('div',{style:{...SS.brandBlock,borderColor:"#a855f7"}}
+      ,React.createElement('div',{style:{...SS.brandTitle,color:"#a855f7"}},"VORICK GROUP")
+      ,React.createElement('div',{style:SS.brandSub},"Switchboard Audit")
+    )
+    ,React.createElement('div',{style:{...SS.listTitle,marginTop:24}},"Sites")
+    ,projects.length===0&&!showAdd&&React.createElement('div',{style:{color:"#555",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel.")
+    ,projects.map(proj=>{
+      const cb=swbSiteCompletedBoards(allResults,proj);
+      const s=swbSiteSummary(allResults,proj);
+      const pct=cb.total>0?Math.round(cb.complete/cb.total*100):0;
+      return React.createElement('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
+        ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{if(deleteId===proj.id)return;onSelect(proj.id);}}
+          ,React.createElement('div',{style:{flex:1}}
+            ,React.createElement('div',{style:SS.siteCardName},proj.name)
+            ,React.createElement('div',{style:SS.siteCardSub},`${(proj.areas||[]).length} areas · ${cb.complete} / ${cb.total} boards complete`)
+            ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}}
+              ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:s.fail>0?"#ef4444":"#a855f7"}})
+            )
+          )
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
+            ,s.fail>0&&React.createElement('span',{style:SS.failBadge},s.fail," FAIL")
+            ,cb.complete>0&&cb.complete===cb.total&&React.createElement('span',{style:{color:"#4ade80",fontSize:18,fontWeight:800}},"✓")
+            ,React.createElement('span',{style:SS.arrow},"›")
+          )
+        )
+        ,deleteId===proj.id
+          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"#1e1010",borderTop:"1px solid #333"}}
+            ,React.createElement('span',{style:{fontSize:12,color:"#ef4444",flex:1}},'Delete "',proj.name,'"?')
+            ,React.createElement('button',{style:SS.confirmYes,onClick:()=>{onDeleteProject(proj.id);setDeleteId(null);}},"Delete")
+            ,React.createElement('button',{style:SS.confirmNo,onClick:()=>setDeleteId(null)},"Cancel")
+          )
+          :React.createElement('button',{style:{background:"transparent",border:"none",borderTop:"1px solid #2a2a2a",color:"#555",fontSize:11,padding:"6px 18px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:e=>{e.stopPropagation();setDeleteId(proj.id);}},"🗑 Remove site")
+      );
+    })
+    ,showAdd
+      ?React.createElement('div',{style:SS.addCard}
+        ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:14}}
+          ,React.createElement('button',{style:{...SS.tabBtn,...(tab==="manual"?{...SS.tabBtnActive,borderColor:"#a855f7",color:"#a855f7",background:"#160e20"}:{})},onClick:()=>setTab("manual")},"✏️ Manual")
+          ,React.createElement('button',{style:{...SS.tabBtn,...(tab==="import"?{...SS.tabBtnActive,borderColor:"#a855f7",color:"#a855f7",background:"#160e20"}:{})},onClick:()=>setTab("import")},"📥 Import Excel")
+        )
+        ,tab==="manual"&&React.createElement(React.Fragment,null
+          ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#eee",marginBottom:12}},"New Site")
+          ,[["SITE NAME","text",newName,setNewName,"Site name"],["COMPANY (optional)","text",newCo,setNewCo,"Company name"],["ABN (optional)","text",newAbn,setNewAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",newLic,setNewLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>
+            React.createElement('div',{key:lbl,style:{marginBottom:8}}
+              ,React.createElement('div',{style:SS.metaLabelText},lbl)
+              ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
+            )
+          )
+          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
+            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7"},onClick:()=>{if(!newName.trim())return;onAddProject({id:swbSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
+          )
+        )
+        ,tab==="import"&&React.createElement(React.Fragment,null
+          ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#eee",marginBottom:4}},"Import from Excel")
+          ,React.createElement('div',{style:{fontSize:12,color:"#666",marginBottom:12}},"Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Area | Board / Panel Name"))
+          ,!importPreview&&React.createElement(React.Fragment,null
+            ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls",style:{display:"none"},onChange:handleFile})
+            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7",width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"📂 Choose Excel File")
+            ,React.createElement('button',{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:downloadSWBTemplate},"↓ Download Import Template")
+            ,importError&&React.createElement('div',{style:{color:"#f87171",fontSize:12,marginTop:8}},importError)
+          )
+          ,importPreview&&React.createElement(React.Fragment,null
+            ,React.createElement('div',{style:{background:"#160e20",border:"1px solid #a855f744",borderRadius:10,padding:"12px",marginBottom:12}}
+              ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",marginBottom:8}},"✓ Preview")
+              ,React.createElement('div',{style:{fontSize:12,color:"#aaa",marginBottom:4}},importPreview.areas.length," areas — ",importPreview.areas.reduce((s,a)=>s+(a.boards||[]).length,0)," boards")
+              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#666",marginBottom:2}},a.name," — ",(a.boards||[]).length," boards"))
+              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#555"}},"…and ",importPreview.areas.length-4," more")
+            )
+            ,[["SITE NAME","text",importName,setImportName,"Site name"],["COMPANY (optional)","text",importCo,setImportCo,"Company name"],["ABN (optional)","text",importAbn,setImportAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",importLic,setImportLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>
+              React.createElement('div',{key:lbl,style:{marginBottom:8}}
+                ,React.createElement('div',{style:SS.metaLabelText},lbl)
+                ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
+              )
+            )
+            ,React.createElement('div',{style:{display:"flex",gap:8}}
+              ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7"},onClick:confirmImport},"✓ Import Site")
+              ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
+              ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
+            )
+          )
+        )
+      )
+      :React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7",width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add / Import Site")
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// HOME VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onArchive,onCompleteAudit}) {
+  const [archiveMsg,setArchiveMsg]=React.useState("");const SS=swbStyles();
+  const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
+  const pct=summary.total>0?Math.round((summary.pass+summary.na)/summary.total*100):0;
+  const testDate=meta.testDate||"";const nextDue=testDate?swbAddYear(testDate):"";
+  const auditInProgress=summary.total>0&&summary.untested<summary.total;
+
+  return React.createElement('div',{style:SS.homeWrap}
+    ,React.createElement('div',{style:{...SS.brandBlock,borderColor:"#a855f7"}}
+      ,React.createElement('div',{style:{...SS.brandTitle,color:"#a855f7"}},"VORICK GROUP")
+      ,React.createElement('div',{style:SS.brandSub},"Switchboard Audit")
+    )
+    ,React.createElement('div',{style:SS.siteTitle},project.name)
+    ,React.createElement('div',{style:SS.siteSub},project.company||"")
+    ,React.createElement('div',{style:SS.metaCard}
+      ,React.createElement('div',{style:{marginBottom:10}}
+        ,React.createElement('div',{style:SS.metaLabelText},"AUDITOR")
+        ,React.createElement('input',{style:{...SS.metaInput,marginTop:4,borderColor:!hasAuditor?"#ef4444":"#333"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#ef4444",marginTop:4}},"⚠ Auditor name required before starting")
+      )
+      ,React.createElement('div',null
+        ,React.createElement('div',{style:SS.metaLabelText},"TEST DATE")
+        ,React.createElement('input',{style:{...SS.metaInput,marginTop:4,display:"block",width:"100%"},type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value})})
+      )
+    )
+    ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #a855f733",borderRadius:14,padding:"14px"}}
+      ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
+        ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress")
+        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.na," / ",summary.total," tested")
+      )
+      ,React.createElement('div',{style:{width:"100%",height:8,background:"#2a2a2a",borderRadius:4,overflow:"hidden",marginBottom:10}}
+        ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#ef4444":pct===100?"#22c55e":"#a855f7"}})
+      )
+      ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+        ,React.createElement('span',{style:{fontSize:11,color:"#a855f7"}},summary.pass," Pass")
+        ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#f87171",fontWeight:800}},summary.fail," FAIL")
+        ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},summary.untested," untested")
+        ,React.createElement('span',{style:{fontSize:11,color:"#555"}},summary.total," total")
+      )
+    )
+    ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#a855f7":"#1a1a1a",color:hasAuditor?"#fff":"#555",border:`2px solid ${hasAuditor?"#a855f7":"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},"☑ Start / Continue Audit")
+    ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${auditInProgress?"#a855f744":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"}}
+      ,React.createElement('div',{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},auditInProgress?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT")
+      ,archiveMsg
+        ?React.createElement('div',{style:{fontSize:12,color:"#22c55e",padding:"4px 0"}},archiveMsg)
+        :auditInProgress
+          ?React.createElement(SWBCompleteAuditBtn,{onComplete:()=>{onCompleteAudit();setArchiveMsg("📁 Archived — ready for new audit");setTimeout(()=>setArchiveMsg(""),3000);}})
+          :React.createElement('button',{style:{width:"100%",padding:"10px",background:"#a855f722",color:"#a855f7",border:"1px solid #a855f755",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onArchive();setArchiveMsg("📁 Audit archived to history");setTimeout(()=>setArchiveMsg(""),3000);}},"📁 Archive Completed Audit")
+    )
+    ,React.createElement('div',{style:{width:"100%",maxWidth:500,display:"flex",gap:8,flexWrap:"wrap"}}
+      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1},onClick:onReport},"≡ Report")
+      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1,color:"#f59e0b",borderColor:"#f59e0b33"},onClick:onHistory},"🕐 History")
+      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1,color:"#a855f7",borderColor:"#a855f744"},onClick:onManage},"⚙ Structure")
+      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:onExport},"↓ Export")
+    )
+    ,nextDue&&React.createElement('div',{style:{fontSize:11,color:"#555",width:"100%",maxWidth:500,textAlign:"center"}},"Next annual audit due: ",React.createElement('span',{style:{color:"#a855f7",fontWeight:700}},nextDue))
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// AREA LIST VIEW
+// ─────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// BOARD VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard}) {
+  const SS=swbStyles();
+  const bs=swbBoardSummary(results,project.id,area.id,board.id);
+  const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
+  const [confirmReset,setConfirmReset]=React.useState(false);
+
+  return React.createElement('div',{style:{padding:"16px",position:"relative"}}
+    ,React.createElement('div',{style:{marginBottom:16}}
+      ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}
+        ,React.createElement('div',null
+          ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#eee"}},board.name)
+          ,React.createElement('div',{style:{fontSize:12,color:"#555",marginTop:2}},area.name)
+        )
+        ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#22c55e",background:"#0e1e0e",border:"1px solid #22c55e44",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
+      )
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
+        ,[["PASS",bs.pass,"#22c55e"],["FAIL",bs.fail,"#ef4444"],["N/A",bs.na,"#64748b"],["—",bs.untested,"#f59e0b"]].map(([l,v,c])=>
+          React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l)
+        )
+      )
+      ,bs.untested<SWB_CHECKLIST.length&&React.createElement('div',{style:{marginTop:10}}
+        ,confirmReset
+          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1e1010",border:"1px solid #ef444433",borderRadius:8}}
+            ,React.createElement('span',{style:{fontSize:12,color:"#f87171",flex:1}},"Reset all results for this board?")
+            ,React.createElement('button',{style:SS.confirmYes,onClick:()=>{onResetBoard();setConfirmReset(false);}},"Reset")
+            ,React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
+          )
+          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},"↺ Reset board results")
+      )
+    )
+    ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
+      ,SWB_CHECKLIST.map(({key,label})=>{
+        const item=swbGetItem(results,project.id,area.id,board.id,key);
+        const st=item.status||SWB_STATUS.UNTESTED;const sm=SWB_SM[st];
+        const hasDetail=item.defectId||item.comment||item.risk||item.rectified||item.responsibility||item.priority;
+        return React.createElement('button',{key,
+          style:{display:"flex",alignItems:"center",gap:12,background:"#161616",border:`1px solid ${st===SWB_STATUS.UNTESTED?"#2a2a2a":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},
+          onClick:()=>onOpenItem(key)}
+          ,React.createElement('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:11,fontWeight:800,textAlign:"center"}},sm.label)
+          ,React.createElement('div',{style:{flex:1,minWidth:0}}
+            ,React.createElement('div',{style:{fontSize:14,fontWeight:600,color:"#eee"}},label)
+            ,hasDetail&&React.createElement('div',{style:{fontSize:10,color:"#a855f7",marginTop:2}},"✎ has notes")
+          )
+          ,item.risk&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:SWB_RISK_COLORS[item.risk],flexShrink:0}},item.risk)
+          ,React.createElement('span',{style:{fontSize:14,color:"#444",flexShrink:0}},">")
+        );
+      })
+    )
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// ITEM DETAIL PAGE
+// ─────────────────────────────────────────────────────────────────────────
+function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClose}) {
+  const item=swbGetItem(results,project.id,area.id,board.id,itemKey);
+  const label=(SWB_CHECKLIST.find(c=>c.key===itemKey)||{}).label||itemKey;
+  const guidance=SWB_GUIDANCE[itemKey]||{pass:"",fail:""};
+  const [status,      setStatusL]     = React.useState(item.status||SWB_STATUS.UNTESTED);
+  const [defectId,    setDefectId]    = React.useState(item.defectId||"");
+  const [comment,     setComment]     = React.useState(item.comment||"");
+  const [risk,        setRisk]        = React.useState(item.risk||"");
+  const [rectified,   setRectified]   = React.useState(item.rectified||"");
+  const [rectDate,    setRectDate]    = React.useState(item.rectifiedDate||"");
+  const [resp,        setResp]        = React.useState(item.responsibility||"");
+  const [priority,    setPriority]    = React.useState(item.priority||"");
+  const SS=swbStyles();const sm=SWB_SM[status];const isFail=status===SWB_STATUS.FAIL;
+  const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
+  const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
+
+  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk,rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:"",priority:isFail?priority:""});onClose();};
+
+  return React.createElement('div',{style:{padding:"16px",background:"#111",minHeight:"100%"}}
+      ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}
+        ,React.createElement('div',null
+          ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#eee"}},label)
+          ,React.createElement('div',{style:{fontSize:12,color:"#555",marginTop:3}},board.name," · ",area.name)
+        )
+        ,React.createElement('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},sm.label)
+      )
+      // Guidance panel
+      ,React.createElement('div',{style:{background:"#0d1117",border:"1px solid #a855f733",borderRadius:10,padding:"12px",marginBottom:16}}
+        ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:0}}
+          ,React.createElement('div',{style:{flex:1,background:"#0e1e0e",border:"1px solid #22c55e33",borderRadius:8,padding:"10px 12px"}}
+            ,React.createElement('div',{style:{fontSize:10,fontWeight:700,color:"#22c55e",letterSpacing:0.8,marginBottom:4}},"✓ PASS CRITERIA")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",lineHeight:1.5}},guidance.pass)
+          )
+          ,React.createElement('div',{style:{flex:1,background:"#1e0e0e",border:"1px solid #ef444433",borderRadius:8,padding:"10px 12px"}}
+            ,React.createElement('div',{style:{fontSize:10,fontWeight:700,color:"#f87171",letterSpacing:0.8,marginBottom:4}},"✗ FAIL INDICATORS")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",lineHeight:1.5}},guidance.fail)
+          )
+        )
+      )
+      // Result buttons
+      ,React.createElement('div',{style:{marginBottom:14}}
+        ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,[SWB_STATUS.PASS,SWB_STATUS.FAIL,SWB_STATUS.NA,SWB_STATUS.UNTESTED].map(s=>{
+            const sm2=SWB_SM[s];const active=status===s;
+            return React.createElement('button',{key:s,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:"#555",boxShadow:active?`0 0 8px ${sm2.border}66`:"none"},onClick:()=>setStatusL(s)},sm2.label);
+          })
+        )
+      )
+      // Risk Rating (always visible) + Comments
+      ,React.createElement('div',{style:{display:"flex",gap:10}}
+        ,React.createElement('div',{style:{...SS.modalField,flex:1}}
+          ,React.createElement('label',{style:SS.modalLabel},"RISK RATING")
+          ,React.createElement('select',{style:{...SS.modalInput,cursor:"pointer"},value:risk,onChange:e=>setRisk(e.target.value)}
+            ,React.createElement('option',{value:""},"— Select Risk")
+            ,React.createElement('option',{value:"L"},"L – Low")
+            ,React.createElement('option',{value:"M"},"M – Medium")
+            ,React.createElement('option',{value:"H"},"H – High")
+            ,React.createElement('option',{value:"U"},"U – Urgent")
+          )
+        )
+      )
+      
+      ,React.createElement('div',{style:SS.modalField}
+        ,React.createElement('label',{style:SS.modalLabel},"COMMENTS")
+        ,React.createElement('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:comment,placeholder:"Observations, recommendations…",onChange:e=>setComment(e.target.value)})
+      )
+      // Fail-only section — red panel, same as RCD push
+      ,isFail&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:SS.modalField}
+          ,React.createElement('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
+          ,React.createElement(SWBEditableDropdown,{options:rectOptions,value:rectified,onChange:v=>setRectified(v),placeholder:"Select or type…",color:"#f59e0b"})
+        )
+        ,React.createElement('div',{style:{display:"flex",gap:10}}
+          ,React.createElement('div',{style:{...SS.modalField,flex:1}}
+            ,React.createElement('label',{style:SS.modalLabel},"DATE RECTIFIED")
+            ,React.createElement('input',{style:SS.modalInput,type:"date",value:rectDate,onChange:e=>setRectDate(e.target.value)})
+          )
+          ,React.createElement('div',{style:{...SS.modalField,flex:1}}
+            ,React.createElement('label',{style:SS.modalLabel},"DEFECT ID")
+            ,React.createElement('input',{style:SS.modalInput,type:"text",placeholder:"e.g. 37",value:defectId,onChange:e=>setDefectId(e.target.value)})
+          )
+        )
+        ,React.createElement('div',{style:SS.modalField}
+          ,React.createElement('label',{style:SS.modalLabel},"RESPONSIBILITY")
+          ,React.createElement(SWBEditableDropdown,{options:respOptions,value:resp,onChange:v=>setResp(v),placeholder:"Select or type…",color:"#c084fc"})
+        )
+        ,React.createElement('div',{style:SS.modalField}
+          ,React.createElement('label',{style:SS.modalLabel},"PRIORITY")
+          ,React.createElement('select',{style:{...SS.modalInput,cursor:"pointer"},value:priority,onChange:e=>setPriority(e.target.value)}
+            ,React.createElement('option',{value:""},"— Select")
+            ,React.createElement('option',{value:"L"},"L – Low")
+            ,React.createElement('option',{value:"M"},"M – Medium")
+            ,React.createElement('option',{value:"H"},"H – High")
+            ,React.createElement('option',{value:"U"},"U – Urgent")
+          )
+        )
+      )
+      ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:4,background:"#a855f7",color:"#fff"},onClick:doSave},"Save")
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// REPORT VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function SWBReportView({project,results,meta,onExport,onArchive}) {
+  const SS=swbStyles();const summary=swbSiteSummary(results,project);
+  const testDate=meta.testDate||"";
+  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
+  const [archiveMsg,setArchiveMsg]=React.useState("");
+  const fails=[];
+  (project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{
+    SWB_CHECKLIST.forEach(({key,label})=>{
+      const item=swbGetItem(results,project.id,area.id,board.id,key);
+      if((item.status||SWB_STATUS.UNTESTED)===SWB_STATUS.FAIL) fails.push({area:area.name,board:board.name,label,item});
+    });
+  }));
+  return React.createElement('div',{style:SS.summaryWrap}
+    ,React.createElement('div',{style:{...SS.summaryTitle,color:"#a855f7"}},project.name)
+    ,React.createElement('div',{style:SS.summaryMeta},"SWITCHBOARD AUDIT REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
+    ,testDate&&React.createElement('div',{style:{fontSize:12,color:"#a855f7",background:"#a855f711",border:"1px solid #a855f733",borderRadius:8,padding:"8px 12px",marginBottom:16}},"📅 Tested: ",fmtD(testDate)," → next due: ",swbAddYear(testDate))
+    ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}
+      ,[["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>
+        React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}}
+          ,React.createElement('div',{style:{fontSize:22,fontWeight:800,color:c}},v)
+          ,React.createElement('div',{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())
+        )
+      )
+    )
+    ,React.createElement('div',{style:{marginBottom:20}}
+      ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY")
+      ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{marginBottom:12}}
+        ,React.createElement('div',{style:{fontSize:11,color:"#555",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase())
+        ,(area.boards||[]).map(board=>{
+          const bs=swbBoardSummary(results,project.id,area.id,board.id);
+          const isComp=swbBoardComplete(results,project.id,area.id,board.id);
+          return React.createElement('div',{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#161616",border:`1px solid ${bs.fail>0?"#ef444433":"#a855f722"}`,borderRadius:8,marginBottom:4}}
+            ,React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600,color:"#eee"}},board.name)
+            ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},bs.pass," P")
+            ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#ef4444",fontWeight:800}},bs.fail," F")
+            ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#64748b"}},bs.na," N/A")
+            ,bs.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},bs.untested," U")
+            ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#22c55e",fontWeight:800,fontSize:12}},"✓")
+          );
+        })
+      ))
+    )
+    ,fails.length>0&&React.createElement('div',{style:{marginBottom:20}}
+      ,React.createElement('div',{style:{fontSize:13,fontWeight:800,color:"#ef4444",marginBottom:10}},"Failed Items")
+      ,fails.map((f,i)=>React.createElement('div',{key:i,style:{padding:"10px 12px",background:"#1e1010",border:"1px solid #ef444433",borderRadius:8,marginBottom:6,fontSize:13}}
+        ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:4}}
+          ,React.createElement('span',{style:{fontWeight:700,color:"#fff"}},f.label)
+          ,f.item.risk&&React.createElement('span',{style:{fontSize:11,fontWeight:800,color:SWB_RISK_COLORS[f.item.risk],background:SWB_RISK_COLORS[f.item.risk]+"22",borderRadius:5,padding:"2px 6px"}},SWB_RISK_LABELS[f.item.risk]||f.item.risk)
+        )
+        ,React.createElement('div',{style:{fontSize:11,color:"#888"}},f.area," › ",f.board)
+        ,f.item.defectId&&React.createElement('div',{style:{fontSize:11,color:"#f59e0b",marginTop:4}},"Defect ID: ",f.item.defectId)
+        ,f.item.comment&&React.createElement('div',{style:{fontSize:12,color:"#ccc",marginTop:4}},f.item.comment)
+        ,(f.item.rectified||f.item.responsibility||f.item.priority)&&React.createElement('div',{style:{fontSize:11,color:"#a855f7",marginTop:4}}
+          ,f.item.priority&&React.createElement('span',{style:{marginRight:8}},f.item.priority," priority")
+          ,f.item.responsibility&&React.createElement('span',{style:{marginRight:8}},"→ ",f.item.responsibility)
+          ,f.item.rectified&&React.createElement('span',null,f.item.rectified)
+        )
+      ))
+    )
+    ,React.createElement('button',{style:{...SS.exportBtn,width:"100%",marginBottom:8,color:"#a855f7",borderColor:"#a855f744"},onClick:onExport},"📥 Export Excel (All Boards)")
+    ,archiveMsg
+      ?React.createElement('div',{style:{fontSize:12,color:"#22c55e",padding:"8px 0",textAlign:"center"}},archiveMsg)
+      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline",width:"100%"},onClick:()=>{onArchive();setArchiveMsg("✓ Archived");setTimeout(()=>setArchiveMsg(""),3000);}},"Archive snapshot to history")
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MANAGE VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function SWBManageView({project,onUpdateProject}) {
+  const [newAreaName,setNewAreaName]=React.useState("");const [newBoardName,setNewBoardName]=React.useState({});
+  const [expandedArea,setExpandedArea]=React.useState(null);const [editingProject,setEditingProject]=React.useState(false);
+  const [editingAreaId,setEditingAreaId]=React.useState(null);const [editAreaName,setEditAreaName]=React.useState("");
+  const [editingBoard,setEditingBoard]=React.useState(null);const [editBoardName,setEditBoardName]=React.useState("");
+  const [confirmDelArea,setConfirmDelArea]=React.useState(null);const [confirmDelBoard,setConfirmDelBoard]=React.useState(null);
+  const SS=swbStyles();const upd=u=>onUpdateProject(u);
+  const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...(project.areas||[]),{id:swbSlug(newAreaName),name:newAreaName.trim(),boards:[]}]});setNewAreaName("");};
+  const delArea=id=>upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});
+  const addBoard=aid=>{const n=(newBoardName[aid]||"").trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:[...(a.boards||[]),{id:swbSlug(n),name:n}]}:a)});setNewBoardName(x=>({...x,[aid]:""}));};
+  const delBoard=(aid,bid)=>upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).filter(b=>b.id!==bid)}:a)});
+  const saveArea=aid=>{const n=editAreaName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,name:n}:a)});setEditingAreaId(null);};
+  const saveBoard=(aid,bid)=>{const n=editBoardName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).map(b=>b.id===bid?{...b,name:n}:b)}:a)});setEditingBoard(null);};
+  return React.createElement('div',{style:SS.listWrap}
+    ,React.createElement('div',{style:SS.listTitle},"Structure")
+    ,editingProject
+      ?React.createElement('div',{style:{...SS.addCard,marginBottom:16,border:"1px solid #a855f744"}}
+        ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",marginBottom:10}},"SITE DETAILS")
+        ,[["Site Name","name"],["Company","company"],["ABN","abn"],["Electrical Licence","licence"]].map(([lbl,field])=>React.createElement('div',{key:field,style:{marginBottom:8}},React.createElement('div',{style:SS.metaLabelText},lbl),React.createElement('input',{style:{...SS.metaInput,marginTop:4},value:project[field]||"",placeholder:lbl,onChange:e=>upd({...project,[field]:e.target.value})})))
+        ,React.createElement('button',{style:{padding:"9px 14px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Done")
+      )
+      :React.createElement('button',{style:{...SS.siteCard,marginBottom:16},onClick:()=>setEditingProject(true)}
+        ,React.createElement('div',{style:{flex:1}},React.createElement('div',{style:SS.siteCardName},project.name),React.createElement('div',{style:SS.siteCardSub},project.company||"—",(project.abn?` · ABN: ${project.abn}`:"")))
+        ,React.createElement('span',{style:{fontSize:12,color:"#a855f7"}},"Edit ›")
+      )
+    ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",letterSpacing:0.8,marginBottom:10}},"AREAS & BOARDS")
+    ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{background:"#161616",border:"1px solid #a855f722",borderRadius:12,marginBottom:10,overflow:"hidden"}}
+      ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px"}}
+        ,editingAreaId===area.id
+          ?React.createElement('div',{style:{display:"flex",gap:8,flex:1,alignItems:"center"}}
+            ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editAreaName,autoFocus:true,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveArea(area.id);}})
+            ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveArea(area.id)},"Save")
+            ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},"✕")
+          )
+          :React.createElement(React.Fragment,null
+            ,React.createElement('div',{style:{flex:1,cursor:"pointer"},onClick:()=>setExpandedArea(expandedArea===area.id?null:area.id)},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
+            ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
+              ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setEditAreaName(area.name);setEditingAreaId(area.id);setConfirmDelArea(null);}},"✎ Edit")
+              ,confirmDelArea===area.id
+                ?React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
+                  ,React.createElement('span',{style:{fontSize:11,color:"#f87171"}},"Delete?")
+                  ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#f87171",borderColor:"#ef444466",fontSize:13,padding:"10px 0"},onClick:()=>{delArea(area.id);setConfirmDelArea(null);}},"🗑 Delete")
+                  ,React.createElement('button',{style:{...SS.smallBtn,flex:1,fontSize:13,padding:"10px 0"},onClick:()=>setConfirmDelArea(null)},"Keep")
+                )
+                :React.createElement('button',{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setConfirmDelArea(area.id)},"🗑")
+              ,React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>setExpandedArea(expandedArea===area.id?null:area.id)},expandedArea===area.id?"▲":"▼")
+            )
+          )
+      )
+      ,expandedArea===area.id&&React.createElement('div',{style:{padding:"0 14px 14px"}}
+        ,(area.boards||[]).map(b=>React.createElement('div',{key:b.id,style:{marginBottom:6}}
+          ,editingBoard&&editingBoard.aid===area.id&&editingBoard.bid===b.id
+            ?React.createElement('div',{style:{display:"flex",gap:8,padding:"8px 10px",background:"#111",borderRadius:8,alignItems:"center"}}
+              ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editBoardName,autoFocus:true,onChange:e=>setEditBoardName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveBoard(area.id,b.id);}})
+              ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveBoard(area.id,b.id)},"Save")
+              ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},"✕")
+            )
+            :confirmDelBoard&&confirmDelBoard.aid===area.id&&confirmDelBoard.bid===b.id
+              ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#1e1010",border:"1px solid #ef444433",borderRadius:8}}
+                ,React.createElement('span',{style:{fontSize:12,color:"#f87171",flex:1}},`Delete "${b.name}"?`)
+                ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#f87171",borderColor:"#ef444466",fontSize:13,padding:"10px 0"},onClick:()=>{delBoard(area.id,b.id);setConfirmDelBoard(null);}},"🗑 Delete")
+                ,React.createElement('button',{style:{...SS.smallBtn,flex:1,fontSize:13,padding:"10px 0"},onClick:()=>setConfirmDelBoard(null)},"Keep")
+              )
+              :React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8}}
+                ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee"}},b.name)
+                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});setConfirmDelBoard(null);}},"✎ Edit")
+                ,React.createElement('button',{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>{setConfirmDelBoard({aid:area.id,bid:b.id});setEditingBoard(null);}},"🗑")
+              )
+        ))
+        ,(area.boards||[]).length===0&&React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:8}},"No boards yet.")
+        ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:8}}
+          ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:"New board name (e.g. MCC 1)",value:newBoardName[area.id]||"",onChange:e=>setNewBoardName(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addBoard(area.id);}})
+          ,React.createElement('button',{style:{padding:"8px 14px",background:"#a855f7",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>addBoard(area.id)},"+ Add")
+        )
+      )
+    ))
+    ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
+      ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:"New area name",value:newAreaName,onChange:e=>setNewAreaName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")addArea();}})
+      ,React.createElement('button',{style:{padding:"8px 14px",background:"#a855f7",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:addArea},"+ Add Area")
+    )
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// HISTORY VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}) {
+  const [expanded,setExpanded]=React.useState(null);const [deleteId,setDeleteId]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);
+  const SS=swbStyles();
+  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
+  const fmtDT=d=>{if(!d)return"";try{return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return d;}};
+
+  if(viewSnap){
+    const snap=viewSnap;let pass=0,fail=0,na=0,unt=0,total=0;
+    if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;else if(st===SWB_STATUS.NA)na++;else unt++;});}));}
+    return React.createElement('div',{style:SS.listWrap}
+      ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},"‹ Back")
+        ,React.createElement('div',{style:{flex:1}}
+          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#a855f7"}},"Switchboard Audit Snapshot")
+          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtD(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+        )
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
+      )
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
+        ,[["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",unt,"#f59e0b"]].map(([l,v,col])=>
+          React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
+            ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:col}},v)
+            ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
+          )
+        )
+      )
+      ,project&&(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{marginBottom:16}}
+        ,(area.boards||[]).map(board=>{
+          const br=(((snap.results||{})[area.id]||{})[board.id])||{};
+          return React.createElement('div',{key:board.id,style:{marginBottom:10}}
+            ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#aaa",marginBottom:6,paddingBottom:4,borderBottom:"1px solid #a855f733"}},area.name," › ",board.name)
+            ,SWB_CHECKLIST.map(({key,label})=>{
+              const item=br[key]||{status:SWB_STATUS.UNTESTED};const sm=SWB_SM[item.status||SWB_STATUS.UNTESTED];
+              return React.createElement('div',{key,style:{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}}
+                ,React.createElement('div',{style:{width:48,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0}},sm.label)
+                ,React.createElement('div',{style:{flex:1,fontSize:13,color:"#ccc"}},label)
+                ,item.risk&&React.createElement('span',{style:{fontSize:11,fontWeight:800,color:SWB_RISK_COLORS[item.risk]}},item.risk)
+              );
+            })
+          );
+        })
+      ))
+    );
+  }
+
+  if(!history||history.length===0) return React.createElement('div',{style:SS.listWrap},React.createElement('div',{style:SS.listTitle},"History"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet."));
+  return React.createElement('div',{style:SS.listWrap}
+    ,React.createElement('div',{style:SS.listTitle},"History")
+    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
+    ,history.map(snap=>{
+      let pass=0,fail=0,total=0;
+      if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;});}))}
+      return React.createElement('div',{key:snap.id,style:{...SS.siteCard,flexDirection:"column",padding:0,marginBottom:10,overflow:"hidden"}}
+        ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
+          ,React.createElement('div',{style:{flex:1}}
+            ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#a855f7",marginBottom:4}},"Switchboard Audit")
+            ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtD(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDT(snap.archivedAt))
+            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
+              ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},pass," Pass")
+              ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
+              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail," Untested")
+            )
+          )
+          ,React.createElement('span',{style:{...SS.arrow,color:expanded===snap.id?"#a855f7":"#555"}},expanded===snap.id?"▾":"›")
+        )
+        ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
+          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
+            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:"#a855f744",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
+            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
+            ,React.createElement(SWBContinueBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn})
+            ,deleteId===snap.id
+              ?React.createElement(React.Fragment,null
+                ,React.createElement('button',{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444455"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"Confirm")
+                ,React.createElement('button',{style:SS.smallBtn,onClick:()=>setDeleteId(null)},"Cancel")
+              )
+              :React.createElement('button',{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
+          )
+        )
+      );
+    })
+  );
+}
+
+function SWBContinueBtn({onConfirm,styleObj}) {
+  const [confirming,setConfirming]=React.useState(false);
+  if(confirming){
+    return React.createElement('div',{style:{width:"100%",background:"#1a0a2a",border:"1px solid #a855f755",borderRadius:8,padding:"10px 12px",marginTop:4}}
+      ,React.createElement('div',{style:{fontSize:12,color:"#c4b5fd",fontWeight:600,marginBottom:8}},"This will replace your current audit with the archived snapshot. Continue?")
+      ,React.createElement('div',{style:{display:"flex",gap:8}}
+        ,React.createElement('button',{style:{flex:1,padding:"9px",background:"#a855f7",color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onConfirm();setConfirming(false);}},"▶ Yes, Continue")
+        ,React.createElement('button',{style:{padding:"9px 14px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setConfirming(false)},"Cancel")
+      )
+    );
+  }
+  return React.createElement('button',{style:{...(styleObj||{}),flex:1,color:"#a78bfa",borderColor:"#7c3aed44",fontWeight:700},onClick:()=>setConfirming(true)},"▶ Continue");
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// DROPDOWNS SETTINGS VIEW
+// ─────────────────────────────────────────────────────────────────────────
+function SWBDropdownsView({dropdowns, setDropdowns}) {
+  const [newVals, setNewVals] = React.useState({});
+  const SS = swbStyles();
+  const addItem = (key, val) => {
+    if(!val.trim()) return;
+    setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));
+    setNewVals(v=>({...v,[key]:""}));
+  };
+  const removeItem = (key, val) => setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
+  const resetKey   = (key, def) => setDropdowns(d=>({...d,[key]:def}));
+  const setDefault = (key, val) => {
+    const items = (dropdowns[key]||[]);
+    setDropdowns(d=>({...d,[key]:[val,...items.filter(x=>x!==val)]}));
+  };
+
+  const LISTS = [
+    { key:"rectified",      label:"RECTIFIED / SCHEDULED", defaults:SWB_DEFAULT_RECTIFIED,      color:"#f59e0b", desc:"Options shown in Rectified / Scheduled Action dropdown on FAIL items" },
+    { key:"responsibility", label:"RESPONSIBILITY",         defaults:SWB_DEFAULT_RESPONSIBILITY, color:"#c084fc", desc:"Options shown in the Responsibility dropdown on FAIL items" },
+  ];
+
+  return React.createElement('div',{style:SS.listWrap}
+    ,React.createElement('div',{style:{...SS.listTitle,color:"#64748b"}},"▾ Dropdowns")
+    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening an item form.")
+    ,LISTS.map(({key,label,defaults,color,desc})=>{
+      const items=(dropdowns&&dropdowns[key])||defaults;
+      const newVal=newVals[key]||"";
+      return React.createElement('div',{key,style:{...SS.addCard,marginBottom:14,border:`1px solid ${color}22`}}
+        ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}
+          ,React.createElement('div',null
+            ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color}},label)
+            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},desc)
+          )
+          ,React.createElement('button',{style:{...SS.smallBtn,fontSize:10,color:"#555",borderColor:"#333",flexShrink:0},onClick:()=>resetKey(key,defaults)},"Reset")
+        )
+        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:220,overflowY:"auto"}}
+          ,items.map((item,i)=>{
+            const isDefault=i===0;
+            return React.createElement('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#111",border:`1px solid ${isDefault?color+"44":"#1e1e1e"}`,borderRadius:7,padding:"7px 10px"}}
+              ,isDefault&&React.createElement('span',{style:{fontSize:9,color,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
+              ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#ccc"}},item)
+              ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},"★")
+              ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕")
+            );
+          })
+          ,items.length===0&&React.createElement('div',{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
+        )
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
+          ,React.createElement('button',{style:{...SS.smallBtn,color,borderColor:`${color}55`,fontWeight:700},onClick:()=>addItem(key,newVal)},"+ Add")
+        )
+      );
+    })
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────
+// SHARED COMPONENTS & STYLES
+// ─────────────────────────────────────────────────────────────────────────
+function SWBNavBtn({icon,label,active,onClick,color}) {
+  const c=active?(color||"#a855f7"):"#555";
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#a855f7"}`:"2px solid transparent"}}
+    ,React.createElement('span',{style:{fontSize:18}},icon)
+    ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
+  );
+}
+function swbStyles() {
+  return {
+    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#111",color:"#eee",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
+    topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#161616",flexShrink:0,zIndex:10},
+    topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
+    appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#a855f7"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
+    backBtn:{fontSize:28,color:"#aaa",background:"transparent",border:"none",cursor:"pointer",lineHeight:1,padding:"0 8px 0 0",fontWeight:300},
+    breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#161616",borderBottom:"1px solid #1e1e1e",fontSize:12,flexWrap:"wrap",flexShrink:0},
+    bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
+    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
+    bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
+    homeWrap:{padding:"24px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
+    brandBlock:{textAlign:"center",borderBottom:"2px solid #a855f7",paddingBottom:8,width:"100%",maxWidth:500},
+    brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
+    siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
+    metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px"},
+    metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
+    metaInput:{background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"9px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
+    listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
+    siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
+    siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
+    siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
+    failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
+    untestedBadge:{fontSize:11,fontWeight:700,color:"#fbbf24",background:"#2a1e00",borderRadius:6,padding:"3px 8px"},
+    arrow:{fontSize:22,color:"#555",lineHeight:1},
+    addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
+    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4},
+    smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},
+    modalOverlay:{position:"absolute",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"},
+    modalBox:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto"},
+    modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20},
+    modalTitle:{fontSize:18,fontWeight:800,color:"#eee"},modalSub:{fontSize:12,color:"#666",marginTop:3},
+    modalField:{marginBottom:14},
+    modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
+    modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
+    ctaPrimary:{padding:"11px 20px",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
+    ctaSecondary:{padding:"11px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
+    secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
+    exportBtn:{padding:"11px",background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
+    tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#666",fontSize:12,fontWeight:600,cursor:"pointer"},
+    tabBtnActive:{background:"#1e1e1e",border:"1px solid #a855f7",color:"#a855f7"},
+    confirmYes:{padding:"7px 14px",background:"#3d1a1a",color:"#f87171",border:"1px solid #ef4444",borderRadius:8,fontSize:13,cursor:"pointer"},
+    confirmNo: {padding:"7px 14px",background:"#1a1a1a",color:"#aaa", border:"1px solid #333",  borderRadius:8,fontSize:13,cursor:"pointer"},
+    smallBtn:  {padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
+  };
+}
+
 
 // ─────────────────────────────────────────────────────────────────────────
 // MOUNT
