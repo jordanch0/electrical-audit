@@ -1,6 +1,6 @@
-"use strict";
-if(typeof React==='undefined'){throw new Error('react.js not loaded - React is undefined');}
-if(typeof ReactDOM==='undefined'){throw new Error('reactdom.js not loaded - ReactDOM is undefined');}
+﻿import React from 'react';
+import * as XLSX_LIB from 'xlsx';
+const XLSX = XLSX_LIB;
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; }
 // ─────────────────────────────────────────────────────────────────────────
 // CONSTANTS & HELPERS
@@ -461,7 +461,7 @@ const filename = `${project.name.replace(/\s+/g,"_")}_RCD_${isInject?"Injection"
 // TEMPLATE DOWNLOAD — gives user a sample import spreadsheet
 // ─────────────────────────────────────────────────────────────────────────
 function downloadTemplate() {
-const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
+const XLSX=XLSX_LIB; if(!XLSX){alert("Excel library not loaded");return;}
 const wb=XLSX.utils.book_new();
 const rows=[
   ["Site Name — enter your site name here"],
@@ -2234,7 +2234,7 @@ function parseIELExcel(data){
 }
 
 function downloadIELTemplate(){
-  const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
+  const XLSX=XLSX_LIB; if(!XLSX){alert("Excel library not loaded");return;}
   const wb=XLSX.utils.book_new();
   const rows=[
     ["Site Name — enter your site name here"],
@@ -4353,7 +4353,7 @@ function parseTATExcel(data) {
 }
 
 function downloadTATTemplate(){
-  const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
+  const XLSX=XLSX_LIB; if(!XLSX){alert("Excel library not loaded");return;}
   const wb=XLSX.utils.book_new();
   const rows=[
     ["Site Name — enter your site name here"],
@@ -5752,7 +5752,7 @@ function siteMonitor(results, project) {
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
 function exportThermoExcel(project, results, meta) {
-  const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
+  const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
@@ -6113,7 +6113,7 @@ function parseThermoExcel(data, overrideName, XLSX) {
 // TEMPLATE DOWNLOAD
 // ─────────────────────────────────────────────────────────────────────────
 function downloadThermoTemplate() {
-  const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
+  const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
   const rows = [
     ["Site Name — enter your site name here"],
     ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
@@ -6546,7 +6546,7 @@ const STH = {
 // ─────────────────────────────────────────────────────────────────────────
 // NAV BUTTON
 // ─────────────────────────────────────────────────────────────────────────
-function NavBtn({
+function ThermoNavBtn({
   icon,
   label,
   active,
@@ -6759,7 +6759,7 @@ function ThermoProjectListView({
     const reader = new FileReader();
     reader.onload = async ev => {
       try {
-        const XLSX = window.XLSX; if (!XLSX) { alert("Excel library not loaded"); return; }
+        const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded"); return; }
         const data = XLSX.read(ev.target.result, {
           type: "array"
         });
@@ -9628,12 +9628,12 @@ function ThermoApp({
     }
   })), view !== "projects" && /*#__PURE__*/React.createElement("nav", {
     style: STH.bottomNav
-  }, /*#__PURE__*/React.createElement(NavBtn, {
+  }, /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: "\u2302",
     label: "Home",
     active: view === "home",
     onClick: goHome
-  }), /*#__PURE__*/React.createElement(NavBtn, {
+  }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: "\uD83C\uDF21",
     label: "Audit",
     active: isAudit,
@@ -9641,24 +9641,24 @@ function ThermoApp({
       setView("audit");
       setActiveBoardId(null);
     }
-  }), /*#__PURE__*/React.createElement(NavBtn, {
+  }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: "\u2261",
     label: "Report",
     active: view === "report",
     onClick: () => setView("report")
-  }), /*#__PURE__*/React.createElement(NavBtn, {
+  }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: "\uD83D\uDD50",
     label: "History",
     active: view === "history",
     onClick: () => setView("history"),
     color: "#f59e0b"
-  }), /*#__PURE__*/React.createElement(NavBtn, {
+  }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: "\u2699",
     label: "Manage",
     active: view === "manage",
     onClick: () => setView("manage"),
     color: "#a855f7"
-  }), /*#__PURE__*/React.createElement(NavBtn, {
+  }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: "\u25be",
     label: "Dropdowns",
     active: view === "dropdowns",
@@ -10133,7 +10133,7 @@ function parseSWBExcel(data) {
 }
 
 function downloadSWBTemplate() {
-  const XLSX=window.XLSX; if(!XLSX){alert("Excel library not loaded");return;}
+  const XLSX=XLSX_LIB; if(!XLSX){alert("Excel library not loaded");return;}
   const wb=XLSX.utils.book_new();
   const rows=[
     ["Site Name — enter your site name here"],
@@ -11145,7 +11145,7 @@ function parseIRTExcel(data){
 
 // ─── Template download ────────────────────────────────────────────────────
 function downloadIRTTemplate(){
-  const XLSX=window.XLSX;if(!XLSX){alert("Excel library not loaded");return;}
+  const XLSX=XLSX_LIB;if(!XLSX){alert("Excel library not loaded");return;}
   const rows=[
     ["Site Name \u2014 enter your site name here"],
     ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
@@ -11168,7 +11168,7 @@ function downloadIRTTemplate(){
 
 // ─── Excel export ─────────────────────────────────────────────────────────
 function exportIRTExcel(project,results,meta){
-  const XLSX=window.XLSX;if(!XLSX){alert("Excel library not loaded");return;}
+  const XLSX=XLSX_LIB;if(!XLSX){alert("Excel library not loaded");return;}
   const sName=project.name||"Site";const td=meta.testDate?fmtDate(meta.testDate):"";
   const rows=[];
   rows.push([`${sName} \u2014 Insulation Resistance Test \u2014 ${td}`]);
@@ -11850,13 +11850,5 @@ function IRTApp({onGoHome}){
 // ─────────────────────────────────────────────────────────────────────────
 // MOUNT
 // ─────────────────────────────────────────────────────────────────────────
-(function(){
-  try {
-    var root=ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(AppRoot));
-    if(window.__hideLoading)window.__hideLoading();
-  } catch(e) {
-    document.body.style.overflow='auto';
-    document.body.innerHTML='<div style="color:#ff6b6b;padding:30px;font-family:sans-serif;background:#111;min-height:100vh"><h2 style="color:#e8731a">Mount Error</h2><b>'+e.message+'</b><br><br><pre style="font-size:10px;color:#888;white-space:pre-wrap">'+e.stack+'</pre></div>';
-  }
-})();
+
+export default AppRoot;

@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <link rel="manifest" href="/electrical-audit/manifest.json"/>
   <title>SparkCheck | Electrical Audit</title>
   <style>
     *, *::before, *::after {
@@ -73,7 +74,6 @@
   <div id="root"></div>
 
   <script>
-    function ss(m) { var e = document.getElementById('status'); if (e) e.textContent = m; }
     function showErr(t, m) {
       document.body.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;padding:30px;font-family:sans-serif;background:#111;color:#eee;overflow:auto"><h2 style="color:#e8731a">' + t + '</h2><pre style="color:#f87171;white-space:pre-wrap;font-size:13px">' + m + '</pre></div>';
     }
@@ -89,21 +89,8 @@
       if (el) { el.style.transition = 'opacity 0.3s'; el.style.opacity = '0'; setTimeout(function() { el.remove(); }, 300); }
     };
     setTimeout(function() { window.__hideLoading(); }, 5000);
-
-    ss('Loading React...');
   </script>
 
-  <script src="react.js"></script>
-  <script>
-    if (typeof React === 'undefined' || typeof ReactDOM === 'undefined') {
-      showErr('React failed', 'react.js did not load correctly.');
-    } else { ss('Loading XLSX...'); }
-  </script>
-
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"
-    onerror="window.XLSX=window.XLSX||{utils:{book_new:()=>({}),aoa_to_sheet:()=>({}),book_append_sheet:()=>{},sheet_to_json:()=>[]},write:()=>'',read:()=>({Sheets:{},SheetNames:[]})};"></script>
-
-  <script>ss('Loading app...');</script>
-  <script src="app.js"></script>
+  <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
