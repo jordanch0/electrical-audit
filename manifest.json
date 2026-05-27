@@ -1,7 +1,7 @@
 {
-  "name": "Electrical Audit",
-  "short_name": "Elec Audit",
-  "description": "Vorick Group — RCD Testing, IEL Testing & Test Calendar",
+  "name": "SparkCheck",
+  "short_name": "SparkCheck",
+  "description": "SparkCheck — Electrical Audit Software",
   "start_url": ".",
   "scope": ".",
   "display": "standalone",

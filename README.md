@@ -1,6 +1,6 @@
-# Electrical Audit — PWA
+# SparkCheck — Electrical Audit Software
 
-Vorick Group Asset Maintenance  
+Electrical Audit Software  
 RCD Testing · IEL Testing · Test Calendar
 
 ## Deploy to GitHub Pages
