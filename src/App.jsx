@@ -537,10 +537,10 @@ function DeleteButton({ onDelete, label = 'Delete?' }) {
     }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})));
   }
   return React.createElement('div', {
-    style: { display: 'flex', alignItems: 'center', gap: '8px' }
+    style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' }
   },
     React.createElement('span', {
-      style: { color: '#f87171', fontSize: '13px' }
+      style: { color: '#f87171', fontSize: '13px', whiteSpace: 'nowrap' }
     }, label),
     React.createElement('button', {
       onClick: confirm,
@@ -555,6 +555,8 @@ function DeleteButton({ onDelete, label = 'Delete?' }) {
         display: 'flex',
         alignItems: 'center',
         gap: '6px',
+        minHeight: '36px',
+        flexShrink: 0,
       }
     }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), ' Delete'),
     React.createElement('button', {
@@ -567,6 +569,8 @@ function DeleteButton({ onDelete, label = 'Delete?' }) {
         padding: '4px 14px',
         fontSize: '13px',
         cursor: 'pointer',
+        minHeight: '36px',
+        flexShrink: 0,
       }
     }, 'Keep')
   );
@@ -1165,7 +1169,7 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 )
 , expanded===snap.id&&(
 React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"},}
-, React.createElement('div', { style: {display:"flex",gap:8,marginTop:10},}
+, React.createElement('div', { style: {display:"flex",gap:8,marginTop:10,flexWrap:"wrap"},}
 , React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700}, onClick: ()=>{ setViewSnap(snap); setViewArea(null); },}, "👁 View Results"
 )
 , React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"}, onClick: ()=>onExportSnap(snap),}, "↓ Export" )
@@ -1662,8 +1666,8 @@ React.createElement('div', { key: area.id, style: {...S.manageSection,borderColo
 React.createElement('div', { style: {padding:"0 4px 8px 20px"},}
 , area.panels.map(pnl=>(
 React.createElement('div', { key: pnl.id, style: {...S.managePanel,borderColor:expandedPanel===pnl.id?"#60a5fa44":"#222"},}
-, React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:expandedPanel===pnl.id?10:0},}
-, React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0}, onClick: ()=>{const closing=expandedPanel===pnl.id;setExpandedPanel(closing?null:pnl.id);setEditingCircuit(null);},}
+, React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:expandedPanel===pnl.id?10:0,flexWrap:"wrap"},}
+, React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0}, onClick: ()=>{const closing=expandedPanel===pnl.id;setExpandedPanel(closing?null:pnl.id);setEditingCircuit(null);},}
 , React.createElement('span', { style: {fontSize:14,color:expandedPanel===pnl.id?"#60a5fa":"#666"},}, expandedPanel===pnl.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:600,color:"#ccc",fontSize:13},}, pnl.name)
 , React.createElement('span', { style: {fontSize:11,color:"#555"},}, pnl.circuits.length, " circuits" )
@@ -1698,9 +1702,9 @@ React.createElement('div', { style: {paddingLeft:8},}
     ));
   }
   // Normal (view) state
-  return(React.createElement('div',{key:c,style:{background:"#1e1e1e",border:"1px solid #333",borderRadius:8,padding:"6px 8px",display:"flex",alignItems:"center",gap:6}},
+  return(React.createElement('div',{key:c,style:{background:"#1e1e1e",border:"1px solid #333",borderRadius:8,padding:"6px 8px",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}},
     React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flexShrink:0}},c),
-    cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#64748b",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flexShrink:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},cm.cbType),
+    cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#64748b",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},cm.cbType),
     cm.ampRating&&React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0}}," · "+cm.ampRating),
     React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},"✎"),
     React.createElement(DeleteButton, { onDelete: ()=>delCircuit(area.id,pnl.id,c), label: `Delete ${c}?` })
@@ -2004,7 +2008,7 @@ circuitEditBtn:{fontSize:11,background:"#161616",border:"1px solid",borderRadius
 tapHint:{marginTop:20,textAlign:"center",fontSize:11,color:"#444"},
 summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5,color:"#e8731a"},summaryMeta:{fontSize:13,color:"#777",marginTop:4},
 manageSection:{border:"1px solid",borderRadius:12,marginBottom:10,overflow:"hidden"},
-manageSectionHeader:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a"},
+manageSectionHeader:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"wrap"},
 managePanel:{border:"1px solid",borderRadius:8,padding:"10px 12px",marginBottom:8,background:"#161616"},
 smallBtn:{padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
 smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},
@@ -3158,8 +3162,8 @@ function IELManageView({project,onUpdateProject}){
     ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet.")
     ,project.areas.map(area=>
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#a855f755":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
-        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a"}}
-          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}}
+        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"wrap"}}
+          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}}
             ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa"}},expandedArea===area.id?"▾":"▸")
             ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name)
             ,React.createElement('span',{style:{fontSize:11,color:"#555"}},area.panels.reduce((s,p)=>s+p.circuits.length,0)," items")
@@ -3174,8 +3178,8 @@ function IELManageView({project,onUpdateProject}){
                 ,(area.panels.find(p=>p.name===cat.key)||{circuits:[],machineNames:{}}).circuits.map(itemId=>{
                   const mn=(area.panels.find(p=>p.name===cat.key)||{machineNames:{}}).machineNames||{};
                   const itemName=mn[itemId]||itemId;
-                  return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${cat.color}33`,borderRadius:8,padding:"6px 10px"}}
-                    ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1}},itemName)
+                  return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${cat.color}33`,borderRadius:8,padding:"6px 10px",flexWrap:"wrap"}}
+                    ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1,minWidth:0}},itemName)
                     ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,cat.key,itemId), label: `Delete "${itemName}"?` })
                   );
                 })
@@ -3386,7 +3390,7 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
           ,React.createElement('span',{style:{...SI.arrow,color:expanded===snap.id?"#10b981":"#555"}},expanded===snap.id?"▾":"›")
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
-          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10}}
+          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SI.smallBtn}})
@@ -5207,13 +5211,13 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     ,project.areas.map(area=>
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#a855f755":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
         // Area header row
-        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#1a1a1a"}}
-          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setEditingItem(null);}}
+        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#1a1a1a",flexWrap:"wrap"}}
+          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setEditingItem(null);}}
             ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa"}},expandedArea===area.id?"▾":"▸")
             ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name)
             ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:4}},(area.items||[]).length," items")
           )
-          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5}}
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
             ,React.createElement('span',{style:{fontSize:10,color:"#555",whiteSpace:"nowrap"}},"Default:")
             ,React.createElement('select',{
               style:{background:"#111",border:"1px solid #333",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
@@ -5276,9 +5280,9 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               }
 
               // Normal view
-              return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"6px 10px"}}
+              return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"6px 10px",flexWrap:"wrap"}}
                 ,tag&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px",flexShrink:0}},tag)
-                ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1}},itemLabel)
+                ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1,minWidth:0}},itemLabel)
                 ,React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0}},freqLabel)
                 ,React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>startEditItem(area,itemId)},"✎")
                 ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,itemId), label: `Delete "${itemLabel}"?` })
@@ -8214,7 +8218,8 @@ function ThermoManageView({
       alignItems: "center",
       gap: 8,
       padding: "12px 14px",
-      background: "#1a1a1a"
+      background: "#1a1a1a",
+      flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: {
@@ -8227,7 +8232,8 @@ function ThermoManageView({
       cursor: "pointer",
       color: "inherit",
       textAlign: "left",
-      padding: 0
+      padding: 0,
+      minWidth: 0
     },
     onClick: () => {
       setExpandedArea(expandedArea === area.id ? null : area.id);
@@ -8273,7 +8279,8 @@ function ThermoManageView({
       display: "flex",
       alignItems: "center",
       gap: 8,
-      padding: "10px 12px"
+      padding: "10px 12px",
+      flexWrap: "wrap"
     }
   }, /*#__PURE__*/React.createElement("button", {
     style: {
@@ -8286,7 +8293,8 @@ function ThermoManageView({
       cursor: "pointer",
       color: "inherit",
       textAlign: "left",
-      padding: 0
+      padding: 0,
+      minWidth: 0
     },
     onClick: () => { setExpandedBoard(expandedBoard === board.id ? null : board.id); }
   }, /*#__PURE__*/React.createElement("span", {
@@ -8343,12 +8351,15 @@ function ThermoManageView({
         background: "#1e1e1e",
         border: `1px solid ${THERMO_COLOR}33`,
         borderRadius: 8,
-        padding: "6px 10px"
+        padding: "6px 10px",
+        flexWrap: "wrap"
       }
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12,
-        color: "#ccc"
+        color: "#ccc",
+        flex: 1,
+        minWidth: 0
       }
     }, cName), React.createElement(DeleteButton, { onDelete: () => delCircuit(area.id, board.id, cid), label: `Delete ${cName}?` }))
   }), (board.circuits || []).length === 0 && /*#__PURE__*/React.createElement("span", {
@@ -10572,7 +10583,7 @@ function SWBManageView({project,onUpdateProject}) {
       )
     ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",letterSpacing:0.8,marginBottom:10}},"AREAS & BOARDS")
     ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{background:"#161616",border:"1px solid #a855f722",borderRadius:12,marginBottom:10,overflow:"hidden"}}
-      ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px"}}
+      ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",flexWrap:"wrap",gap:8}}
         ,editingAreaId===area.id
           ?React.createElement('div',{style:{display:"flex",gap:8,flex:1,alignItems:"center"}}
             ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editAreaName,autoFocus:true,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveArea(area.id);}})
@@ -10581,7 +10592,7 @@ function SWBManageView({project,onUpdateProject}) {
           )
           :React.createElement(React.Fragment,null
             ,React.createElement('div',{style:{flex:1,cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
-            ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
+            ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}}
               ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},"✎ Edit")
               ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
               ,React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"▲":"▼")
@@ -10596,8 +10607,8 @@ function SWBManageView({project,onUpdateProject}) {
               ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveBoard(area.id,b.id)},"Save")
               ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},"✕")
             )
-              :React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8}}
-                ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee"}},b.name)
+              :React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8,flexWrap:"wrap"}}
+                ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee",minWidth:0}},b.name)
                 ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});}},"✎ Edit")
                 ,React.createElement(DeleteButton, { onDelete: ()=>delBoard(area.id,b.id), label: "Delete board?" })
               )
@@ -11354,17 +11365,17 @@ function IRTManageView({project,onUpdateProject}){
     ),
     React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment"),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{background:"#161616",border:`1px solid ${expandedArea===area.id?IRT_COLOR+"55":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}},
-      React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px"}},
-        React.createElement("div",{style:{flex:1,cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
-        React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center"}},
+      React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",flexWrap:"wrap",gap:8}},
+        React.createElement("div",{style:{flex:1,cursor:"pointer",minWidth:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
+        React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",justifyContent:"flex-end"}},
           React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" }),
           React.createElement("span",{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"\u25b2":"\u25bc")
         )
       ),
       expandedArea===area.id&&React.createElement("div",{style:{padding:"0 14px 14px"}},
         (area.panels||[]).map(panel=>React.createElement("div",{key:panel.id,style:{border:`1px solid ${expandedPanel===panel.id?IRT_COLOR+"44":"#222"}`,borderRadius:8,marginBottom:8,background:"#111"}},
-          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px"}},
-            React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);}},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",flexWrap:"wrap"}},
+            React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);}},
               React.createElement("span",{style:{fontSize:14,color:expandedPanel===panel.id?IRT_COLOR:"#aaa"}},expandedPanel===panel.id?"\u25be":"\u25b8"),
               React.createElement("span",{style:{fontWeight:700,color:"#eee",fontSize:13}},panel.name),
               React.createElement("span",{style:{fontSize:11,color:"#555"}},(panel.items||[]).length," items")
@@ -11374,7 +11385,7 @@ function IRTManageView({project,onUpdateProject}){
           expandedPanel===panel.id&&React.createElement("div",{style:{padding:"8px 12px 12px"}},
             React.createElement("div",{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:6}},"ITEMS (motors / cables / CBs)"),
             React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
-              (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}33`,borderRadius:8,padding:"6px 10px"}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1}},name),React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,panel.id,itemId), label: `Delete "${name}"?` }));}),
+              (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}33`,borderRadius:8,padding:"6px 10px",flexWrap:"wrap"}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1,minWidth:0}},name),React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,panel.id,itemId), label: `Delete "${name}"?` }));}),
               (panel.items||[]).length===0&&React.createElement("span",{style:{fontSize:12,color:"#444"}},"No items yet")
             ),
             React.createElement("div",{style:{display:"flex",gap:6}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"Add motor / cable / CB name\u2026",value:newItem[`${area.id}-${panel.id}`]||"",onChange:e=>setNewItem(x=>({...x,[`${area.id}-${panel.id}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,panel.id)}),React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR+"55"},onClick:()=>addItem(area.id,panel.id)},"+ Add"))
