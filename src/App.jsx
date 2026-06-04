@@ -534,7 +534,7 @@ function DeleteButton({ onDelete, label = 'Delete?' }) {
         fontSize: '13px',
         lineHeight: 1,
       }
-    }, '🗑');
+    }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})));
   }
   return React.createElement('div', {
     style: { display: 'flex', alignItems: 'center', gap: '8px' }
@@ -556,7 +556,7 @@ function DeleteButton({ onDelete, label = 'Delete?' }) {
         alignItems: 'center',
         gap: '6px',
       }
-    }, '🗑 Delete'),
+    }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), ' Delete'),
     React.createElement('button', {
       onClick: cancel,
       style: {
@@ -840,7 +840,7 @@ React.createElement('div', { key: proj.id, style: {...S.siteCard,flexDirection:"
 , showAdd?(
 React.createElement('div', { style: S.addCard,}
 , React.createElement('div', { style: {display:"flex",gap:8,marginBottom:14},}
-, React.createElement('button', { style: {...S.tabBtn,...(tab==="manual"?S.tabBtnActive:{})}, onClick: ()=>setTab("manual"),}, "✏️ Manual Entry"  )
+, React.createElement('button', { style: {...S.tabBtn,...(tab==="manual"?S.tabBtnActive:{})}, onClick: ()=>setTab("manual"),}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual Entry"  )
 , React.createElement('button', { style: {...S.tabBtn,...(tab==="import"?S.tabBtnActive:{})}, onClick: ()=>setTab("import"),}, "📥 Import from Excel"   )
 )
 , tab==="manual"&&React.createElement(React.Fragment, null
@@ -1234,7 +1234,7 @@ return React.createElement('div', { key: i, style: {display:"flex",alignItems:"c
   const reordered=[item,...items.filter(x=>x!==item)];
   setDropdowns(d=>({...d,[key]:reordered}));
 },}, "★")
-, React.createElement('button', { style: {background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"}, onClick: ()=>removeItem(key,item),}, "✕")
+, React.createElement('button', { style: {background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"}, onClick: ()=>removeItem(key,item),}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
 );
 })
 , items.length===0&&React.createElement('div', { style: {fontSize:12,color:"#444",padding:"6px 0"},}, "No options — add one below"     )
@@ -1482,7 +1482,7 @@ onClick: ()=>{onChange(opt);setOpen(false);},}
 , i===0&&React.createElement('span', { style: {fontSize:9,color:"#e8731a",fontWeight:700,marginRight:6},}, "DEFAULT"), opt
 )
 ))
-, React.createElement('button', { style: {display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12}, onClick: ()=>{setOpen(false);setCustom(true);},}, "✏️ Type custom value…"
+, React.createElement('button', { style: {display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12}, onClick: ()=>{setOpen(false);setCustom(true);},}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Type custom value…"
 )
 )
 )
@@ -1643,7 +1643,7 @@ React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {fontSize:15,fontWeight:800,color:"#eee"}}, project.name)
 , project.company&&React.createElement('div', { style: {fontSize:12,color:"#666",marginTop:2}}, project.company)
 )
-, React.createElement('button', { style: {...S.smallBtn,color:"#c084fc",borderColor:"#a855f744"}, onClick: ()=>setEditingProject(true),}, "✏️ Edit")
+, React.createElement('button', { style: {...S.smallBtn,color:"#c084fc",borderColor:"#a855f744"}, onClick: ()=>setEditingProject(true),}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
 )
 )
 , React.createElement('div', { style: {fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10},}, "AREAS / LOCATIONS"  )
@@ -2483,7 +2483,7 @@ function IELDropdownsView({dropdowns,setDropdowns}){
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#ccc"}},item)
               ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},"★")
-              ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕")
+              ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
             );
           })
           ,items(key).length===0&&React.createElement('div',{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
@@ -2592,7 +2592,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,showAdd
       ?React.createElement('div',{style:SI.addCard}
         ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:14}}
-          ,React.createElement('button',{style:{...SI.tabBtn,...(tab==="manual"?SI.tabBtnActive:{})},onClick:()=>setTab("manual")},"✏️ Manual Entry")
+          ,React.createElement('button',{style:{...SI.tabBtn,...(tab==="manual"?SI.tabBtnActive:{})},onClick:()=>setTab("manual")},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual Entry")
           ,React.createElement('button',{style:{...SI.tabBtn,...(tab==="import"?SI.tabBtnActive:{})},onClick:()=>setTab("import")},"📥 Import Excel")
         )
         ,tab==="manual"&&React.createElement(React.Fragment,null
@@ -3151,7 +3151,7 @@ function IELManageView({project,onUpdateProject}){
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
-          ,React.createElement('button',{style:{...SI.smallBtn,color:"#a855f7",borderColor:"#a855f755"},onClick:()=>setEditingProject(true)},"✏️ Edit")
+          ,React.createElement('button',{style:{...SI.smallBtn,color:"#a855f7",borderColor:"#a855f755"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         )
     )
     ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
@@ -3551,15 +3551,15 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
         ,ev.seriesId&&React.createElement('div',{style:{fontSize:10,color:"#6366f1",marginTop:3}},"↻ ",ev.recur," · ",ev.seriesIndex!==undefined?`${ev.seriesIndex+1} of ${ev.seriesTotal}`:"series")
       )
       ,!compact&&!ev.completed&&React.createElement('div',{style:{display:"flex",gap:6,marginLeft:8,alignItems:"flex-start"}}
-        ,React.createElement('button',{style:{...SI.smallBtn,color:"#818cf8",borderColor:"#6366f144"},onClick:()=>onStartEdit&&onStartEdit(ev)},"✏️ Edit")
+        ,React.createElement('button',{style:{...SI.smallBtn,color:"#818cf8",borderColor:"#6366f144"},onClick:()=>onStartEdit&&onStartEdit(ev)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         ,del
           ?React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:4}}
             ,React.createElement('span',{style:{fontSize:10,color:"#f87171",fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}},"Delete?")
-            ,React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 10px",fontSize:11},onClick:()=>{onDelete&&onDelete(ev.id);setDel(false);}},"🗑 Delete")
-            ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444455",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);setDel(false);}},"🗑 All ",ev.seriesTotal," in series")
+            ,React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 10px",fontSize:11},onClick:()=>{onDelete&&onDelete(ev.id);setDel(false);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " Delete")
+            ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444455",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);setDel(false);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " All ",ev.seriesTotal," in series")
             ,React.createElement('button',{style:SI.smallBtn,onClick:()=>setDel(false)},"Keep")
           )
-          :React.createElement('button',{style:{...SI.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDel(true)},"🗑")
+          :React.createElement('button',{style:{...SI.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDel(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
       )
       ,!compact&&ev.completed&&React.createElement('button',{style:{...SI.smallBtn,color:"#555",marginLeft:8},onClick:()=>onToggleComplete&&onToggleComplete(ev.id)},"↩ Undo")
     )
@@ -3873,7 +3873,7 @@ function CalendarApp({ onGoHome }) {
 
       // Add / Edit form
       ,showAdd&&React.createElement('div',{style:CAL_STYLE.formWrap}
-        ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#818cf8",marginBottom:editId?8:16}},editId?"✏️ Edit Event":"+ Add Test Event")
+        ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#818cf8",marginBottom:editId?8:16}},editId?React.createElement(React.Fragment,null,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))," Edit Event"):"+ Add Test Event")
         
         // Type
         ,React.createElement('div',{style:{marginBottom:12}}
@@ -4627,7 +4627,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,showAdd
       ?React.createElement('div',{style:ST.addCard}
         ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:14}}
-          ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="manual"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#1a2030"}:{})},onClick:()=>setTab("manual")},"✏️ Manual")
+          ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="manual"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#1a2030"}:{})},onClick:()=>setTab("manual")},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual")
           ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="import"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#1a2030"}:{})},onClick:()=>setTab("import")},"📥 Import Excel")
         )
         ,tab==="manual"&&React.createElement(React.Fragment,null
@@ -5199,7 +5199,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
-          ,React.createElement('button',{style:{...ST.smallBtn,color:"#a855f7",borderColor:"#a855f755"},onClick:()=>setEditingProject(true)},"✏️ Edit")
+          ,React.createElement('button',{style:{...ST.smallBtn,color:"#a855f7",borderColor:"#a855f755"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         )
     )
     ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS")
@@ -5496,7 +5496,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,(applianceNames||TAT_DEFAULT_NAMES).map(n=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
           ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},n)
-          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"},onClick:()=>removeName(n)},"✕")
+          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"},onClick:()=>removeName(n)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
         ))
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
@@ -5511,7 +5511,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,equipTypes.map(t=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
           ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},t)
-          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeEquip(t)},"✕")
+          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeEquip(t)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
         ))
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
@@ -5529,7 +5529,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
           ,(tatDefaults||{}).freq===f.value&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,marginRight:2}},"★")
           ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},f.label)
           ,React.createElement('button',{style:{background:"transparent",border:"none",color:TAT_COLOR,cursor:"pointer",fontSize:13,padding:"0 4px"},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},"★")
-          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeFreq(f.value)},"✕")
+          ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeFreq(f.value)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
         ))
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}
@@ -6663,7 +6663,7 @@ function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:accentColor,fontWeight:700,marginRight:6}},"DEFAULT"),opt
         )
       )
-      ,React.createElement('button',{style:{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12},onClick:()=>{setOpen(false);setCustom(true);}},"✏️ Type custom value…")
+      ,React.createElement('button',{style:{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12},onClick:()=>{setOpen(false);setCustom(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Type custom value…")
     )
   );
 }
@@ -8197,7 +8197,7 @@ function ThermoManageView({
             /*#__PURE__*/React.createElement("div",{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name),
             project.company&&/*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
           ),
-          /*#__PURE__*/React.createElement("button",{style:{...STH.smallBtn,color:THERMO_COLOR,borderColor:THERMO_COLOR+"55"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},"✏️ Edit")
+          /*#__PURE__*/React.createElement("button",{style:{...STH.smallBtn,color:THERMO_COLOR,borderColor:THERMO_COLOR+"55"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         )
   ),
   project.areas.map(area => /*#__PURE__*/React.createElement("div", {
@@ -9021,7 +9021,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns}){
             ,React.createElement("span",{style:{flex:1,fontSize:12,color:"#ccc"}},item)
             ,i===0&&React.createElement("span",{style:{fontSize:10,color:"#555",marginRight:4}},"default")
             ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:color,cursor:"pointer",fontSize:13,padding:"0 4px"},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},"★")
-            ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕")
+            ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
           ))
           ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
         )
@@ -10191,7 +10191,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,showAdd
       ?React.createElement('div',{style:SS.addCard}
         ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:14}}
-          ,React.createElement('button',{style:{...SS.tabBtn,...(tab==="manual"?{...SS.tabBtnActive,borderColor:"#a855f7",color:"#a855f7",background:"#160e20"}:{})},onClick:()=>setTab("manual")},"✏️ Manual")
+          ,React.createElement('button',{style:{...SS.tabBtn,...(tab==="manual"?{...SS.tabBtnActive,borderColor:"#a855f7",color:"#a855f7",background:"#160e20"}:{})},onClick:()=>setTab("manual")},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual")
           ,React.createElement('button',{style:{...SS.tabBtn,...(tab==="import"?{...SS.tabBtnActive,borderColor:"#a855f7",color:"#a855f7",background:"#160e20"}:{})},onClick:()=>setTab("import")},"📥 Import Excel")
         )
         ,tab==="manual"&&React.createElement(React.Fragment,null
@@ -10568,7 +10568,7 @@ function SWBManageView({project,onUpdateProject}) {
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
           ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
         )
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},"✏️ Edit")
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
       )
     ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",letterSpacing:0.8,marginBottom:10}},"AREAS & BOARDS")
     ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{background:"#161616",border:"1px solid #a855f722",borderRadius:12,marginBottom:10,overflow:"hidden"}}
@@ -10747,7 +10747,7 @@ function SWBDropdownsView({dropdowns, setDropdowns}) {
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#ccc"}},item)
               ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},"★")
-              ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕")
+              ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
             );
           })
           ,items.length===0&&React.createElement('div',{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
@@ -11349,7 +11349,7 @@ function IRTManageView({project,onUpdateProject}){
             ,React.createElement("div",{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
             ,project.company&&React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
           )
-          ,React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR+"55"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},"✏️ Edit")
+          ,React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR+"55"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         )
     ),
     React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment"),
@@ -11403,7 +11403,7 @@ function IRTDropdownsView({dropdowns,setDropdowns}){
         React.createElement("div",{style:{fontSize:10,fontWeight:800,color,letterSpacing:0.8,marginBottom:4}},label),
         React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:10}},desc),
         items.length===0?React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options \u2014 add one below"):
-        items.map(item=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#111",borderRadius:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,color:"#ccc"}},item),React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},"✕"))),
+        items.map(item=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#111",borderRadius:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,color:"#ccc"}},item),React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"}))))),
         React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")),
         React.createElement("button",{style:{background:"transparent",border:"none",color:"#444",fontSize:11,cursor:"pointer",textDecoration:"underline",marginTop:6},onClick:()=>resetKey(key,defaults)},"\u21ba Reset to defaults")
       );
