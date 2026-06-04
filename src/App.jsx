@@ -923,9 +923,9 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('div', { style: S.metaCard,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
 , !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#ef4444",marginTop:4}}, "⚠ Auditor name required before starting a test")
-, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,marginTop:4},}
-, React.createElement('div', { style: {flex:1},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('input', { style: {...S.metaInput,marginTop:4}, type: "date", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")), onChange: e=>setMeta({pushDate:e.target.value}),}))
-, React.createElement('div', { style: {flex:1},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('input', { style: {...S.metaInput,marginTop:4}, type: "date", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")), onChange: e=>setMeta({injectDate:e.target.value}),}))
+, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,marginTop:4,width:"100%",boxSizing:"border-box"},}
+, React.createElement('div', { style: {flex:1,width:"100%",minWidth:0,boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('input', { style: {...S.metaInput,marginTop:4}, type: "date", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")), onChange: e=>setMeta({pushDate:e.target.value}),}))
+, React.createElement('div', { style: {flex:1,width:"100%",minWidth:0,boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('input', { style: {...S.metaInput,marginTop:4}, type: "date", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")), onChange: e=>setMeta({injectDate:e.target.value}),}))
 )
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:10,flexWrap:"wrap"},}
 , _optionalChain([meta, 'optionalAccess', _69 => _69.pushDate])&&React.createElement('div', { style: {...S.duePill,borderColor:"#e8731a55",color:"#e8731a"},}, "📋 Next push: "   , React.createElement('strong', null, addMonths(meta.pushDate,1)))
@@ -1962,11 +1962,11 @@ breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",backgrou
 bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
 bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
-homeWrap:{padding:"24px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
+homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
 brandBlock:{textAlign:"center",borderBottom:"2px solid #e8731a",paddingBottom:8,width:"100%",maxWidth:500},
 brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#e8731a"},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
 siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
-metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px"},
+metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px",boxSizing:"border-box",overflow:"hidden"},
 metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
 metaInput:{background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"9px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
 metaRow:{marginBottom:8},metaLabel:{flex:1,display:"flex",flexDirection:"column",gap:4},
@@ -3434,8 +3434,8 @@ const SI={
   brandBlock:{textAlign:"center",borderBottom:"2px solid #10b981",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#10b981"},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
   siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
-  homeWrap:{padding:"24px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
-  metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px"},
+  homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
+  metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px",boxSizing:"border-box",overflow:"hidden"},
   metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
   metaInput:{background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"9px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
   duePill:{fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
@@ -5579,8 +5579,8 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   brandBlock:{textAlign:"center",borderBottom:"2px solid #3b82f6",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
   siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
-  homeWrap:{padding:"24px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
-  metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px"},
+  homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
+  metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px",boxSizing:"border-box",overflow:"hidden"},
   metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
   metaInput:{background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"9px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
   duePill:{fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
@@ -6374,6 +6374,8 @@ const STH = {
   },
   homeWrap: {
     padding: "24px 16px",
+    width: "100%",
+    boxSizing: "border-box",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
@@ -6385,7 +6387,9 @@ const STH = {
     background: "#161616",
     border: "1px solid #2a2a2a",
     borderRadius: 14,
-    padding: "14px"
+    padding: "14px",
+    boxSizing: "border-box",
+    overflow: "hidden"
   },
   secondaryBtn: {
     padding: "11px",
@@ -10820,11 +10824,11 @@ function swbStyles() {
     bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
     bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
-    homeWrap:{padding:"24px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
+    homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     brandBlock:{textAlign:"center",borderBottom:"2px solid #a855f7",paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
     siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
-    metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px"},
+    metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px",boxSizing:"border-box",overflow:"hidden"},
     metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
     metaInput:{background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"9px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
     listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
@@ -10901,8 +10905,8 @@ function irtStyles(){
     failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
     arrow:{fontSize:22,color:"#555",lineHeight:1},
     addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
-    homeWrap:{padding:"24px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
-    metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px"},
+    homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
+    metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"14px",boxSizing:"border-box",overflow:"hidden"},
     metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
     metaInput:{background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"9px 12px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
     summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4},
