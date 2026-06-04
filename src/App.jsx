@@ -540,10 +540,10 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
   const btnPad = compact ? '3px 10px' : '4px 14px';
   const btnMinH = compact ? '28px' : '36px';
   return React.createElement('div', {
-    style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', flexShrink: 0 }
+    style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }
   },
     !compact && React.createElement('span', {
-      style: { color: '#f87171', fontSize: '13px', whiteSpace: 'nowrap' }
+      style: { color: '#f87171', fontSize: '13px', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }
     }, label),
     React.createElement('button', {
       onClick: confirm,
@@ -1723,12 +1723,12 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "Circuit name e.g. CB5", value: newCircuit[pnl.id]||"", onChange: e=>setNewCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addCircuit(area.id,pnl.id),})
 , React.createElement('button', { style: {...S.smallBtn,color:"#60a5fa",borderColor:"#3b82f655"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12}, value: newCbType[pnl.id]||"", onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
+, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%",overflow:"hidden"},}
+, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: newCbType[pnl.id]||"", onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
   , React.createElement('option', {value:""},"CB/RCD Type (optional)")
   , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
 )
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12}, value: newAmpRating[pnl.id]||"", onChange: e=>setNewAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
+, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: newAmpRating[pnl.id]||"", onChange: e=>setNewAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
   , React.createElement('option', {value:""},"Amps (optional)")
   , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
 )
@@ -1739,12 +1739,12 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
 , React.createElement('button', { style: {...S.smallBtn,color:"#4ade80",borderColor:"#22c55e55"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Bulk" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12}, value: bulkCbType[pnl.id]||"", onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
+, React.createElement('div', { style: {display:"flex",gap:6,width:"100%",overflow:"hidden"},}
+, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: bulkCbType[pnl.id]||"", onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
   , React.createElement('option', {value:""},"CB/RCD Type for all (optional)")
   , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
 )
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12}, value: bulkAmpRating[pnl.id]||"", onChange: e=>setBulkAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
+, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: bulkAmpRating[pnl.id]||"", onChange: e=>setBulkAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
   , React.createElement('option', {value:""},"Amps (opt.)")
   , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
 )
