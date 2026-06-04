@@ -499,6 +499,78 @@ if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.s
   window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
 }
+// ─────────────────────────────────────────────────────────────────────────
+// SHARED DELETE BUTTON — two-step inline confirmation for all destructive actions
+// ─────────────────────────────────────────────────────────────────────────
+let activeDeleteSetter = null;
+function DeleteButton({ onDelete, label = 'Delete?' }) {
+  const [confirming, setConfirming] = React.useState(false);
+  const open = () => {
+    if (activeDeleteSetter && activeDeleteSetter !== setConfirming) {
+      activeDeleteSetter(false);
+    }
+    activeDeleteSetter = setConfirming;
+    setConfirming(true);
+  };
+  const cancel = () => {
+    activeDeleteSetter = null;
+    setConfirming(false);
+  };
+  const confirm = () => {
+    activeDeleteSetter = null;
+    setConfirming(false);
+    onDelete();
+  };
+  if (!confirming) {
+    return React.createElement('button', {
+      onClick: open,
+      style: {
+        border: '1px solid rgba(239,68,68,0.35)',
+        color: 'rgba(239,68,68,0.7)',
+        background: 'transparent',
+        borderRadius: '6px',
+        padding: '4px 8px',
+        cursor: 'pointer',
+        fontSize: '13px',
+        lineHeight: 1,
+      }
+    }, '🗑');
+  }
+  return React.createElement('div', {
+    style: { display: 'flex', alignItems: 'center', gap: '8px' }
+  },
+    React.createElement('span', {
+      style: { color: '#f87171', fontSize: '13px' }
+    }, label),
+    React.createElement('button', {
+      onClick: confirm,
+      style: {
+        background: 'rgba(239,68,68,0.12)',
+        border: '1px solid rgba(239,68,68,0.5)',
+        color: '#f87171',
+        borderRadius: '999px',
+        padding: '4px 14px',
+        fontSize: '13px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+      }
+    }, '🗑 Delete'),
+    React.createElement('button', {
+      onClick: cancel,
+      style: {
+        background: 'rgba(255,255,255,0.06)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        color: '#aaa',
+        borderRadius: '999px',
+        padding: '4px 14px',
+        fontSize: '13px',
+        cursor: 'pointer',
+      }
+    }, 'Keep')
+  );
+}
 // ═════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═════════════════════════════════════════════════════════════════════════
@@ -693,13 +765,6 @@ const [newCo,      setNewCo]      = React.useState("");
 const [newAbn,     setNewAbn]     = React.useState("");
 const [newLic,     setNewLic]     = React.useState("");
 
-const [deleteId,   setDeleteId]   = React.useState(null);
-  React.useEffect(()=>{
-    if(!deleteId)return;
-    const dismiss=()=>setDeleteId(null);
-    document.addEventListener('click',dismiss);
-    return()=>document.removeEventListener('click',dismiss);
-  },[deleteId]);
 const [importing,  setImporting]  = React.useState(false);
 const [importPreview, setImportPreview] = React.useState(null); // parsed project before confirming
 const [importName, setImportName] = React.useState("");
@@ -765,13 +830,9 @@ React.createElement('div', { key: proj.id, style: {...S.siteCard,flexDirection:"
 , React.createElement('span', { style: S.arrow,}, "›")
 )
 )
-, deleteId===proj.id
-?React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"#1e1010",borderTop:"1px solid #ef444433"},}
-, React.createElement('span', { style: {fontSize:11,color:"#f87171",whiteSpace:"nowrap"},}, "Delete?")
-, React.createElement('button', { style: {...S.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"}, onClick: e=>{e.stopPropagation();onDeleteProject(proj.id);setDeleteId(null);},}, "🗑 Delete")
-, React.createElement('button', { style: {...S.smallBtn,padding:"7px 12px"},  onClick: e=>{e.stopPropagation();setDeleteId(null);},}, "Keep")
+, React.createElement('div', { style: {padding:"6px 18px",borderTop:"1px solid #2a2a2a",display:"flex",justifyContent:"flex-end"},}
+, React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" })
 )
-:React.createElement('button', { style: {background:"transparent",border:"none",borderTop:"1px solid #2a2a2a",color:"#555",fontSize:11,padding:"6px 18px",cursor:"pointer",textAlign:"left",width:"100%"}, onClick: e=>{e.stopPropagation();setDeleteId(proj.id);},}, "🗑 Remove site"  )
 )
 );
 })
@@ -932,7 +993,6 @@ function ContinueConfirmBtn({onConfirm,styleObj,color}){
 
 function HistoryView({ history, project, onDelete, onExportSnap, onContinueFromSnap }) {
 const [expanded,   setExpanded]  = React.useState(null);
-const [deleteId,   setDeleteId]  = React.useState(null);
 const [viewSnap,   setViewSnap]  = React.useState(null);  // snap being viewed in full
 const [viewArea,   setViewArea]  = React.useState(null);  // area id in snapshot viewer
 // ── Snapshot full-screen read-only viewer ──────────────────────────────
@@ -1110,9 +1170,7 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 )
 , React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"}, onClick: ()=>onExportSnap(snap),}, "↓ Export" )
 , React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...S.smallBtn}})
-, deleteId===snap.id
-?React.createElement(React.Fragment, null, React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap",alignSelf:"center"}},"Delete?"), React.createElement('button', { style: {...S.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"}, onClick: ()=>{onDelete(snap.id);setDeleteId(null);},}, "🗑 Delete"), React.createElement('button', { style: {...S.smallBtn,padding:"7px 12px"}, onClick: ()=>setDeleteId(null),}, "Keep"))
-:React.createElement('button', { style: {...S.smallBtn,color:"#ef4444",borderColor:"#ef444433"}, onClick: ()=>setDeleteId(snap.id),}, "🗑")
+, React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
 )
 )
 )
@@ -1454,16 +1512,13 @@ const [projLic,setProjLic]=React.useState(project.licence||"");
 const [editingCircuit,setEditingCircuit]=React.useState(null); // { pid, circuit }
 const [editCbType,setEditCbType]=React.useState("");
 const [editAmpRating,setEditAmpRating]=React.useState("");
-const [confirmDeleteCircuit,setConfirmDeleteCircuit]=React.useState(null); // { aid, pid, circuit }
-const [confirmDeleteArea,setConfirmDeleteArea]=React.useState(null);   // areaId
-const [confirmDeletePanel,setConfirmDeletePanel]=React.useState(null); // { aid, pid }
 
 const cbOptions  = _nullishCoalesce(_optionalChain([dropdowns, 'optionalAccess', _ => _.cbType]),  () => (DEFAULT_CB_TYPE));
 const ampOptions = _nullishCoalesce(_optionalChain([dropdowns, 'optionalAccess', _ => _.ampRating]),() => (DEFAULT_AMP_RATING));
 
 const upd=u=>onUpdateProject(u);
 
-const startEditCircuit=(pid,circuit,cm)=>{setConfirmDeleteCircuit(null);setEditingCircuit({pid,circuit});setEditCbType((cm&&cm.cbType)||"");setEditAmpRating((cm&&cm.ampRating)||"");};
+const startEditCircuit=(pid,circuit,cm)=>{setEditingCircuit({pid,circuit});setEditCbType((cm&&cm.cbType)||"");setEditAmpRating((cm&&cm.ampRating)||"");};
 const saveCircuitMeta=(aid,pid,circuit)=>{
   const cb=editCbType.trim();
   const amp=editAmpRating.trim();
@@ -1512,7 +1567,6 @@ const addBulk=(aid,pid)=>{
 };
 const delCircuit=(aid,pid,c)=>{
   if(editingCircuit&&editingCircuit.pid===pid&&editingCircuit.circuit===c)setEditingCircuit(null);
-  if(confirmDeleteCircuit&&confirmDeleteCircuit.pid===pid&&confirmDeleteCircuit.circuit===c)setConfirmDeleteCircuit(null);
   upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{
     if(p.id!==pid)return p;
     const meta={...(p.circuitMeta||{})};delete meta[c];
@@ -1597,36 +1651,24 @@ React.createElement('div', { style: S.listWrap,}
 , project.areas.map(area=>(
 React.createElement('div', { key: area.id, style: {...S.manageSection,borderColor:expandedArea===area.id?"#a855f755":"#2a2a2a"},}
 , React.createElement('div', { style: S.manageSectionHeader,}
-, React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0}, onClick: ()=>{setExpandedArea(expandedArea===area.id?null:area.id);setExpandedPanel(null);setEditingCircuit(null);setConfirmDeleteCircuit(null);setConfirmDeleteArea(null);setConfirmDeletePanel(null);},}
+, React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0}, onClick: ()=>{setExpandedArea(expandedArea===area.id?null:area.id);setExpandedPanel(null);setEditingCircuit(null);},}
 , React.createElement('span', { style: {fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa"},}, expandedArea===area.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:700,color:"#eee",fontSize:14},}, area.name)
 , React.createElement('span', { style: {fontSize:11,color:"#555"},}, area.panels.length, " panels · "   , area.panels.reduce((s,p)=>s+p.circuits.length,0), " circuits" )
 )
-, confirmDeleteArea===area.id
-  ?React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
-    ,React.createElement('span',{style:{fontSize:11,color:"#f87171"}},"Delete?")
-    ,React.createElement('button',{style:{...S.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:e=>{e.stopPropagation();delArea(area.id);setConfirmDeleteArea(null);}},"🗑 Delete")
-    ,React.createElement('button',{style:{...S.smallBtn,padding:"7px 12px"},onClick:e=>{e.stopPropagation();setConfirmDeleteArea(null);}},"Keep")
-  )
-  :React.createElement('button',{style:{...S.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:e=>{e.stopPropagation();setConfirmDeleteArea(area.id);setExpandedArea(null);setConfirmDeletePanel(null);setEditingCircuit(null);setConfirmDeleteCircuit(null);}},"🗑")
+, React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
 )
 , expandedArea===area.id&&(
 React.createElement('div', { style: {padding:"0 4px 8px 20px"},}
 , area.panels.map(pnl=>(
 React.createElement('div', { key: pnl.id, style: {...S.managePanel,borderColor:expandedPanel===pnl.id?"#60a5fa44":"#222"},}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:expandedPanel===pnl.id?10:0},}
-, React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0}, onClick: ()=>{const closing=expandedPanel===pnl.id;setExpandedPanel(closing?null:pnl.id);setEditingCircuit(null);setConfirmDeleteCircuit(null);},}
+, React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0}, onClick: ()=>{const closing=expandedPanel===pnl.id;setExpandedPanel(closing?null:pnl.id);setEditingCircuit(null);},}
 , React.createElement('span', { style: {fontSize:14,color:expandedPanel===pnl.id?"#60a5fa":"#666"},}, expandedPanel===pnl.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:600,color:"#ccc",fontSize:13},}, pnl.name)
 , React.createElement('span', { style: {fontSize:11,color:"#555"},}, pnl.circuits.length, " circuits" )
 )
-, confirmDeletePanel&&confirmDeletePanel.aid===area.id&&confirmDeletePanel.pid===pnl.id
-  ?React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
-    ,React.createElement('span',{style:{fontSize:11,color:"#f87171"}},"Delete?")
-    ,React.createElement('button',{style:{...S.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:e=>{e.stopPropagation();delPanel(area.id,pnl.id);setConfirmDeletePanel(null);}},"🗑 Delete")
-    ,React.createElement('button',{style:{...S.smallBtn,padding:"7px 12px"},onClick:e=>{e.stopPropagation();setConfirmDeletePanel(null);}},"Keep")
-  )
-  :React.createElement('button',{style:{...S.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:e=>{e.stopPropagation();setConfirmDeletePanel({aid:area.id,pid:pnl.id});setExpandedPanel(null);setEditingCircuit(null);setConfirmDeleteCircuit(null);}},"🗑")
+, React.createElement(DeleteButton, { onDelete: ()=>delPanel(area.id,pnl.id), label: "Delete panel?" })
 )
 , expandedPanel===pnl.id&&(
 React.createElement('div', { style: {paddingLeft:8},}
@@ -1634,17 +1676,6 @@ React.createElement('div', { style: {paddingLeft:8},}
 , pnl.circuits.map(c=>{
   const cm=(pnl.circuitMeta||{})[c]||{};
   const isEditing=editingCircuit&&editingCircuit.pid===pnl.id&&editingCircuit.circuit===c;
-  const isConfirmingDelete=confirmDeleteCircuit&&confirmDeleteCircuit.pid===pnl.id&&confirmDeleteCircuit.circuit===c;
-  // Confirm-delete state
-  if(isConfirmingDelete){
-    return(React.createElement('div',{key:c,style:{background:"#2a1010",border:"1px solid #ef444466",borderRadius:8,padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,width:"100%",boxSizing:"border-box"}},
-      React.createElement('span',{style:{fontSize:12,color:"#f87171",fontWeight:700}},"Delete "+c+"?"),
-      React.createElement('div',{style:{display:"flex",gap:6}},
-        React.createElement('button',{style:{...S.smallBtn,flex:1,color:"#f87171",borderColor:"#ef444466",fontSize:13,padding:"8px 0"},onClick:e=>{e.stopPropagation();delCircuit(area.id,pnl.id,c);setConfirmDeleteCircuit(null);}},"✕ Delete"),
-        React.createElement('button',{style:{...S.smallBtn,flex:1,fontSize:13,padding:"8px 0"},onClick:e=>{e.stopPropagation();setConfirmDeleteCircuit(null);}},"Keep")
-      )
-    ));
-  }
   // Edit state
   if(isEditing){
     return(React.createElement('div',{key:c,style:{background:"#1e1e1e",border:"1px solid #60a5fa",borderRadius:8,padding:"10px",width:"100%",boxSizing:"border-box"}},
@@ -1672,7 +1703,7 @@ React.createElement('div', { style: {paddingLeft:8},}
     cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#64748b",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flexShrink:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},cm.cbType),
     cm.ampRating&&React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0}}," · "+cm.ampRating),
     React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},"✎"),
-    React.createElement('button',{style:{background:"#2a1010",border:"1px solid #ef444433",color:"#ef4444",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>{setEditingCircuit(null);setConfirmDeleteCircuit({aid:area.id,pid:pnl.id,circuit:c})}},"✕")
+    React.createElement(DeleteButton, { onDelete: ()=>delCircuit(area.id,pnl.id,c), label: `Delete ${c}?` })
   ));
 })
 , pnl.circuits.length===0&&React.createElement('span', { style: {fontSize:12,color:"#555"},}, "No circuits" )
@@ -2481,13 +2512,6 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[newLic,setNewLic]=React.useState("");
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
-  const[deleteId,setDeleteId]=React.useState(null);
-  React.useEffect(()=>{
-    if(!deleteId)return;
-    const dismiss=()=>setDeleteId(null);
-    document.addEventListener('click',dismiss);
-    return()=>document.removeEventListener('click',dismiss);
-  },[deleteId]);
   const[importing,setImporting]=React.useState(false);
   const[importPreview,setImportPreview]=React.useState(null);
   const[importName,setImportName]=React.useState("");
@@ -2560,13 +2584,9 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('span',{style:SI.arrow},"›")
           )
         )
-        ,deleteId===proj.id
-          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"#1e1010",borderTop:"1px solid #ef444433"}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?")
-            ,React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDeleteProject(proj.id);setDeleteId(null);}},"🗑 Delete")
-            ,React.createElement('button',{style:{...SI.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep")
-          )
-          :React.createElement('button',{style:{background:"transparent",border:"none",borderTop:"1px solid #2a2a2a",color:"#555",fontSize:11,padding:"6px 18px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:e=>{e.stopPropagation();setDeleteId(proj.id);}},"🗑 Remove site")
+        ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #2a2a2a",display:"flex",justifyContent:"flex-end"}}
+          ,React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" })
+        )
       );
     })
     ,showAdd
@@ -3096,8 +3116,6 @@ function IELManageView({project,onUpdateProject}){
   const[projCo,setProjCo]=React.useState(project.company||"");
   const[projAbn,setProjAbn]=React.useState(project.abn||"");
   const[projLic,setProjLic]=React.useState(project.licence||"");
-  const[confirmDeleteItem,setConfirmDeleteItem]=React.useState(null); // {aid, catKey, itemId}
-  const[confirmDeleteArea,setConfirmDeleteArea]=React.useState(null); // areaId
   const upd=u=>onUpdateProject(u);
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...project.areas,{id:ielSlug(newAreaName),name:newAreaName.trim(),panels:IEL_CATEGORIES.map(cat=>({id:ielSlug(cat.key+"-"+newAreaName),name:cat.key,circuits:[],machineNames:{}}))}]});setNewAreaName("");};
   const delArea=id=>upd({...project,areas:project.areas.filter(a=>a.id!==id)});
@@ -3141,18 +3159,12 @@ function IELManageView({project,onUpdateProject}){
     ,project.areas.map(area=>
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#a855f755":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a"}}
-          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setConfirmDeleteItem(null);setConfirmDeleteArea(null);}}
+          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}}
             ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa"}},expandedArea===area.id?"▾":"▸")
             ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name)
             ,React.createElement('span',{style:{fontSize:11,color:"#555"}},area.panels.reduce((s,p)=>s+p.circuits.length,0)," items")
           )
-          ,confirmDeleteArea===area.id
-            ?React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#f87171"}},"Delete?")
-              ,React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{delArea(area.id);setConfirmDeleteArea(null);}},"🗑 Delete")
-              ,React.createElement('button',{style:{...SI.smallBtn,padding:"7px 12px"},onClick:()=>setConfirmDeleteArea(null)},"Keep")
-            )
-            :React.createElement('button',{style:{...SI.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>{setConfirmDeleteArea(area.id);setExpandedArea(null);setConfirmDeleteItem(null);}},"🗑")
+          ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
         )
         ,expandedArea===area.id&&React.createElement('div',{style:{padding:"8px 8px 12px 20px"}}
           ,IEL_CATEGORIES.map(cat=>
@@ -3162,19 +3174,9 @@ function IELManageView({project,onUpdateProject}){
                 ,(area.panels.find(p=>p.name===cat.key)||{circuits:[],machineNames:{}}).circuits.map(itemId=>{
                   const mn=(area.panels.find(p=>p.name===cat.key)||{machineNames:{}}).machineNames||{};
                   const itemName=mn[itemId]||itemId;
-                  const isConfirming=confirmDeleteItem&&confirmDeleteItem.aid===area.id&&confirmDeleteItem.catKey===cat.key&&confirmDeleteItem.itemId===itemId;
-                  if(isConfirming){
-                    return React.createElement('div',{key:itemId,style:{background:"#2a1010",border:"1px solid #ef444466",borderRadius:8,padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,width:"100%",boxSizing:"border-box"}}
-                      ,React.createElement('span',{style:{fontSize:12,color:"#f87171",fontWeight:700}},"Delete \""+itemName+"\"?")
-                      ,React.createElement('div',{style:{display:"flex",gap:6}}
-                        ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#f87171",borderColor:"#ef444466",fontSize:13,padding:"8px 0"},onClick:()=>{delItem(area.id,cat.key,itemId);setConfirmDeleteItem(null);}},"✕ Delete")
-                        ,React.createElement('button',{style:{...SI.smallBtn,flex:1,fontSize:13,padding:"8px 0"},onClick:()=>setConfirmDeleteItem(null)},"Keep")
-                      )
-                    );
-                  }
                   return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${cat.color}33`,borderRadius:8,padding:"6px 10px"}}
                     ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1}},itemName)
-                    ,React.createElement('button',{style:{background:"#2a1010",border:"1px solid #ef444433",color:"#ef4444",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>setConfirmDeleteItem({aid:area.id,catKey:cat.key,itemId})},"✕")
+                    ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,cat.key,itemId), label: `Delete "${itemName}"?` })
                   );
                 })
                 ,(area.panels.find(p=>p.name===cat.key)||{circuits:[]}).circuits.length===0&&React.createElement('span',{style:{fontSize:12,color:"#555"}},"No items")
@@ -3205,7 +3207,6 @@ function IELManageView({project,onUpdateProject}){
 // ─────────────────────────────────────────────────────────────────────────
 function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}){
   const[expanded,setExpanded]=React.useState(null);
-  const[deleteId,setDeleteId]=React.useState(null);
   const[viewSnap,setViewSnap]=React.useState(null);
 
   // ── Read-only snapshot viewer — Area list → Category list → Items ──────
@@ -3389,9 +3390,7 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SI.smallBtn}})
-            ,deleteId===snap.id
-              ?React.createElement(React.Fragment,null,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap",alignSelf:"center"}},"Delete?"),React.createElement('button',{style:{...SI.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"🗑 Delete"),React.createElement('button',{style:{...SI.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep"))
-              :React.createElement('button',{style:{...SI.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
+            ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
         )
       );
@@ -4558,13 +4557,6 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[newCo,setNewCo]=React.useState("");
   const[newAbn,setNewAbn]=React.useState("");
   const[newLic,setNewLic]=React.useState("");
-  const[deleteId,setDeleteId]=React.useState(null);
-  React.useEffect(()=>{
-    if(!deleteId)return;
-    const dismiss=()=>setDeleteId(null);
-    document.addEventListener('click',dismiss);
-    return()=>document.removeEventListener('click',dismiss);
-  },[deleteId]);
   const[importing,setImporting]=React.useState(false);
   const[importPreview,setImportPreview]=React.useState(null);
   const[importName,setImportName]=React.useState("");
@@ -4627,13 +4619,9 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('span',{style:ST.arrow},"›")
           )
         )
-        ,deleteId===proj.id
-          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"#1e1010",borderTop:"1px solid #ef444433"}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?")
-            ,React.createElement('button',{style:{...ST.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDeleteProject(proj.id);setDeleteId(null);}},"🗑 Delete")
-            ,React.createElement('button',{style:{...ST.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep")
-          )
-          :React.createElement('button',{style:{background:"transparent",border:"none",borderTop:"1px solid #2a2a2a",color:"#555",fontSize:11,padding:"6px 18px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:e=>{e.stopPropagation();setDeleteId(proj.id);}},"🗑 Remove site")
+        ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #2a2a2a",display:"flex",justifyContent:"flex-end"}}
+          ,React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" })
+        )
       );
     })
     ,showAdd
@@ -5073,8 +5061,6 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[newAreaName,setNewAreaName]=React.useState("");
   const[newItemName,setNewItemName]=React.useState({});
   const[newItemTag,setNewItemTag]=React.useState({});
-  const[confirmDeleteItem,setConfirmDeleteItem]=React.useState(null);
-  const[confirmDeleteArea,setConfirmDeleteArea]=React.useState(null); // areaId
   const[newItemEquip,setNewItemEquip]=React.useState({});
   const[newItemFreq,setNewItemFreq]=React.useState({});
   const[showNameDrop,setShowNameDrop]=React.useState({});
@@ -5176,7 +5162,6 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   })});
 
   const startEditItem=(area,itemId)=>{
-    setConfirmDeleteItem(null);
     const mn=(area.itemNames||{})[itemId]||"";
     const tag=(area.itemTags||{})[itemId]||"";
     const equip=(area.itemEquipTypes||{})[itemId]||"";
@@ -5223,13 +5208,12 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#a855f755":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
         // Area header row
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#1a1a1a"}}
-          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setConfirmDeleteItem(null);setEditingItem(null);setConfirmDeleteArea(null);}}
+          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setEditingItem(null);}}
             ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa"}},expandedArea===area.id?"▾":"▸")
             ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name)
             ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:4}},(area.items||[]).length," items")
           )
-          // Default freq selector — hide when confirming delete to avoid overflow
-          ,confirmDeleteArea!==area.id&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5}}
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5}}
             ,React.createElement('span',{style:{fontSize:10,color:"#555",whiteSpace:"nowrap"}},"Default:")
             ,React.createElement('select',{
               style:{background:"#111",border:"1px solid #333",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
@@ -5240,13 +5224,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"))
             )
           )
-          ,confirmDeleteArea===area.id
-            ?React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?")
-              ,React.createElement('button',{style:{...ST.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:e=>{e.stopPropagation();delArea(area.id);setConfirmDeleteArea(null);}},"🗑 Delete")
-              ,React.createElement('button',{style:{...ST.smallBtn,padding:"7px 12px"},onClick:e=>{e.stopPropagation();setConfirmDeleteArea(null);}},"Keep")
-            )
-            :React.createElement('button',{style:{...ST.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:e=>{e.stopPropagation();setConfirmDeleteArea(area.id);setExpandedArea(null);setConfirmDeleteItem(null);setEditingItem(null);}},"🗑")
+          ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
         )
         // Expanded content
         ,expandedArea===area.id&&React.createElement('div',{style:{padding:"8px 12px 12px"}}
@@ -5257,18 +5235,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               const freq=(area.itemFreqs||{})[itemId]||area.defaultFreq||"3";
               const itemLabel=mn.replace(/^\d+\s*—\s*/,"");
               const freqLabel=freq==="12"?"Annual":freq==="1"?"1 Month":freq+" Months";
-              const isConfirming=confirmDeleteItem&&confirmDeleteItem.areaId===area.id&&confirmDeleteItem.itemId===itemId;
               const isEditing=editingItem&&editingItem.areaId===area.id&&editingItem.itemId===itemId;
-
-              if(isConfirming){
-                return React.createElement('div',{key:itemId,style:{background:"#2a1010",border:"1px solid #ef444466",borderRadius:8,padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,width:"100%",boxSizing:"border-box"}}
-                  ,React.createElement('span',{style:{fontSize:12,color:"#f87171",fontWeight:700}},tag?`Delete #${tag} — "${itemLabel}"?`:`Delete "${itemLabel}"?`)
-                  ,React.createElement('div',{style:{display:"flex",gap:6}}
-                    ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#f87171",borderColor:"#ef444466",fontSize:13,padding:"8px 0"},onClick:()=>{delItem(area.id,itemId);setConfirmDeleteItem(null);}},"✕ Delete")
-                    ,React.createElement('button',{style:{...ST.smallBtn,flex:1,fontSize:13,padding:"8px 0"},onClick:()=>setConfirmDeleteItem(null)},"Keep")
-                  )
-                );
-              }
 
               if(isEditing){
                 return React.createElement('div',{key:itemId,style:{background:"#1e1e1e",border:`1px solid ${TAT_COLOR}`,borderRadius:8,padding:"10px",width:"100%",boxSizing:"border-box"}}
@@ -5314,7 +5281,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                 ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1}},itemLabel)
                 ,React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0}},freqLabel)
                 ,React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>startEditItem(area,itemId)},"✎")
-                ,React.createElement('button',{style:{background:"#2a1010",border:"1px solid #ef444433",color:"#ef4444",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>{setEditingItem(null);setConfirmDeleteItem({areaId:area.id,itemId});}},"✕")
+                ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,itemId), label: `Delete "${itemLabel}"?` })
               );
             })
             ,(area.items||[]).length===0&&React.createElement('span',{style:{fontSize:12,color:"#555"}},"No items")
@@ -5390,7 +5357,6 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
 // ─────────────────────────────────────────────────────────────────────────
 function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}){
   const[expanded,setExpanded]=React.useState(null);
-  const[deleteId,setDeleteId]=React.useState(null);
   const[viewSnap,setViewSnap]=React.useState(null);
 
   if(viewSnap){
@@ -5473,9 +5439,7 @@ function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
             ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
             ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...ST.smallBtn}})
-            ,deleteId===snap.id
-              ?React.createElement(React.Fragment,null,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap",alignSelf:"center"}},"Delete?"),React.createElement('button',{style:{...ST.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"🗑 Delete"),React.createElement('button',{style:{...ST.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep"))
-              :React.createElement('button',{style:{...ST.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
+            ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
         )
       );
@@ -6720,13 +6684,6 @@ function ThermoProjectListView({
   const [newCo, setNewCo] = React.useState("");
   const [newAbn, setNewAbn] = React.useState("");
   const [newLic, setNewLic] = React.useState("");
-  const [deleteId, setDeleteId] = React.useState(null);
-  React.useEffect(()=>{
-    if(!deleteId)return;
-    const dismiss=()=>setDeleteId(null);
-    document.addEventListener('click',dismiss);
-    return()=>document.removeEventListener('click',dismiss);
-  },[deleteId]);
   const [importing, setImporting] = React.useState(false);
   const [importPreview, setImportPreview] = React.useState(null);
   const [importName, setImportName] = React.useState("");
@@ -6886,48 +6843,9 @@ function ThermoProjectListView({
       style: STH.failBadge
     }, "FAIL"), /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
-    }, "\u203A"))), deleteId === proj.id ? /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        padding: "8px 18px",
-        background: "#1e1010",
-        borderTop: "1px solid #ef444433"
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#f87171",
-        whiteSpace: "nowrap"
-      }
-    }, "Delete?"), /*#__PURE__*/React.createElement("button", {
-      style: {...STH.smallBtn, color: "#f87171", borderColor: "#ef444466", padding: "7px 12px"},
-      onClick: e => {
-        e.stopPropagation();
-        onDeleteProject(proj.id);
-        setDeleteId(null);
-      }
-    }, "🗑 Delete"), /*#__PURE__*/React.createElement("button", {
-      style: {...STH.smallBtn, padding: "7px 12px"},
-      onClick: e => { e.stopPropagation(); setDeleteId(null); }
-    }, "Keep")) : /*#__PURE__*/React.createElement("button", {
-      style: {
-        background: "transparent",
-        border: "none",
-        borderTop: "1px solid #2a2a2a",
-        color: "#555",
-        fontSize: 11,
-        padding: "6px 18px",
-        cursor: "pointer",
-        textAlign: "left",
-        width: "100%"
-      },
-      onClick: e => {
-        e.stopPropagation();
-        setDeleteId(proj.id);
-      }
-    }, "🗑 Remove site"));
+    }, "\u203A"))), /*#__PURE__*/React.createElement("div", {
+      style: {padding: "6px 18px", borderTop: "1px solid #2a2a2a", display: "flex", justifyContent: "flex-end"}
+    }, React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" })));
   }), showAdd ? /*#__PURE__*/React.createElement("div", {
     style: STH.addCard
   }, /*#__PURE__*/React.createElement("div", {
@@ -7674,7 +7592,6 @@ function PhotoPage({
   });
   const [form, setForm] = React.useState(blankForm(photosRef.current.length));
   const [editingIdx, setEditingIdx] = React.useState(null); // null=new entry, number=editing existing
-  const [confirmDeleteIdx, setConfirmDeleteIdx] = React.useState(null); // index of photo pending delete confirm
 
   const savePhoto = () => {
     if (!form.flirFile.trim()) return;
@@ -7691,7 +7608,6 @@ function PhotoPage({
     setPhotos(updated);
     onPatchPhotos(updated);
     setEditingIdx(null);
-    setConfirmDeleteIdx(null);
     // Next blank: length of updated array (editing doesn't change length, adding does)
     setForm(blankForm(updated.length));
   };
@@ -7699,14 +7615,12 @@ function PhotoPage({
     const updated = photosRef.current.filter((_, i) => i !== idx);
     setPhotos(updated);
     onPatchPhotos(updated);
-    setConfirmDeleteIdx(null);
     if (editingIdx === idx) {
       setEditingIdx(null);
       setForm(blankForm(updated.length));
     }
   };
   const startEdit = idx => {
-    setConfirmDeleteIdx(null);
     setForm({
       ...photosRef.current[idx]
     });
@@ -7714,7 +7628,6 @@ function PhotoPage({
   };
   const cancelEdit = () => {
     setEditingIdx(null);
-    setConfirmDeleteIdx(null);
     setForm(blankForm(photosRef.current.length));
   };
   const isEditing = editingIdx !== null;
@@ -7825,38 +7738,19 @@ function PhotoPage({
         gap: 6,
         flexShrink: 0
       }
-    }, confirmDeleteIdx === idx
-      ? /*#__PURE__*/React.createElement(React.Fragment, null,
-          /*#__PURE__*/React.createElement("span", {style: {fontSize: 10, color: "#f87171", fontWeight: 700, textAlign: "center", whiteSpace: "nowrap"}}, "Delete?"),
-          /*#__PURE__*/React.createElement("button", {
-            style: {...STH.smallBtn, color: "#f87171", borderColor: "#ef444466", padding: "6px 10px"},
-            onClick: () => deletePhoto(idx)
-          }, "🗑 Delete"),
-          /*#__PURE__*/React.createElement("button", {
-            style: {...STH.smallBtn, padding: "6px 10px"},
-            onClick: () => setConfirmDeleteIdx(null)
-          }, "Keep")
-        )
-      : /*#__PURE__*/React.createElement(React.Fragment, null,
-          /*#__PURE__*/React.createElement("button", {
-            style: {
-              ...STH.smallBtn,
-              color: THERMO_COLOR,
-              borderColor: `${THERMO_COLOR}44`,
-              padding: "6px 12px"
-            },
-            onClick: () => startEdit(idx)
-          }, "\u270E Edit"),
-          /*#__PURE__*/React.createElement("button", {
-            style: {
-              ...STH.smallBtn,
-              color: "#ef4444",
-              borderColor: "#ef444433",
-              padding: "6px 12px"
-            },
-            onClick: () => { setEditingIdx(null); setConfirmDeleteIdx(idx); }
-          }, "\u2715 Del")
-        )
+    },
+    /*#__PURE__*/React.createElement(React.Fragment, null,
+      /*#__PURE__*/React.createElement("button", {
+        style: {
+          ...STH.smallBtn,
+          color: THERMO_COLOR,
+          borderColor: `${THERMO_COLOR}44`,
+          padding: "6px 12px"
+        },
+        onClick: () => startEdit(idx)
+      }, "✎ Edit"),
+      React.createElement(DeleteButton, { onDelete: () => deletePhoto(idx) })
+    )
     ));
   })), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8196,9 +8090,6 @@ function ThermoManageView({
   const [newAreaName, setNewAreaName] = React.useState("");
   const [newBoardName, setNewBoardName] = React.useState({});
   const [newCircuit, setNewCircuit] = React.useState({});
-  const [confirmDeleteArea, setConfirmDeleteArea] = React.useState(null);
-  const [confirmDeleteBoard, setConfirmDeleteBoard] = React.useState(null);
-  const [confirmDeleteCircuit, setConfirmDeleteCircuit] = React.useState(null); // {areaId, boardId, cid, name}
   const update = updated => onUpdateProject({
     ...project,
     areas: updated
@@ -8341,9 +8232,6 @@ function ThermoManageView({
     onClick: () => {
       setExpandedArea(expandedArea === area.id ? null : area.id);
       setExpandedBoard(null);
-      setConfirmDeleteArea(null);
-      setConfirmDeleteBoard(null);
-      setConfirmDeleteCircuit(null);
     }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
@@ -8367,16 +8255,8 @@ function ThermoManageView({
       color: "#ef4444",
       borderColor: "#ef444433"
     },
-    onClick: e => { e.stopPropagation(); setConfirmDeleteArea(area.id); setConfirmDeleteBoard(null); setConfirmDeleteCircuit(null); }
-  }, "🗑")), confirmDeleteArea === area.id && /*#__PURE__*/React.createElement("div", {
-    style: {display: "flex", gap: 6, alignItems: "center", padding: "6px 14px", background: "#1a1a1a", borderTop: "1px solid #2a2a2a"}
-  }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#f87171", flex: 1}}, "Delete?"), /*#__PURE__*/React.createElement("button", {
-    style: {...STH.smallBtn, color: "#f87171", borderColor: "#ef444466", padding: "7px 12px"},
-    onClick: e => { e.stopPropagation(); delArea(area.id); setConfirmDeleteArea(null); }
-  }, "🗑 Delete"), /*#__PURE__*/React.createElement("button", {
-    style: {...STH.smallBtn, padding: "7px 12px"},
-    onClick: e => { e.stopPropagation(); setConfirmDeleteArea(null); }
-  }, "Keep")), expandedArea === area.id && /*#__PURE__*/React.createElement("div", {
+    onClick: e => { e.stopPropagation(); }
+  }), React.createElement(DeleteButton, { onDelete: () => delArea(area.id), label: "Delete area?" })), expandedArea === area.id && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 8px 12px 20px"
     }
@@ -8408,7 +8288,7 @@ function ThermoManageView({
       textAlign: "left",
       padding: 0
     },
-    onClick: () => { setExpandedBoard(expandedBoard === board.id ? null : board.id); setConfirmDeleteBoard(null); setConfirmDeleteCircuit(null); setConfirmDeleteArea(null); }
+    onClick: () => { setExpandedBoard(expandedBoard === board.id ? null : board.id); }
   }, /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 14,
@@ -8432,16 +8312,8 @@ function ThermoManageView({
       borderColor: "#ef444433",
       fontSize: 11
     },
-    onClick: e => { e.stopPropagation(); setConfirmDeleteBoard(board.id); setConfirmDeleteArea(null); setConfirmDeleteCircuit(null); }
-  }, "🗑")), confirmDeleteBoard === board.id && /*#__PURE__*/React.createElement("div", {
-    style: {display: "flex", gap: 6, alignItems: "center", padding: "5px 12px", background: "#161616", borderTop: "1px solid #222"}
-  }, /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#f87171", flex: 1}}, "Delete?"), /*#__PURE__*/React.createElement("button", {
-    style: {...STH.smallBtn, color: "#f87171", borderColor: "#ef444466", padding: "6px 10px", fontSize: 11},
-    onClick: e => { e.stopPropagation(); delBoard(area.id, board.id); setConfirmDeleteBoard(null); }
-  }, "🗑 Delete"), /*#__PURE__*/React.createElement("button", {
-    style: {...STH.smallBtn, padding: "6px 10px", fontSize: 11},
-    onClick: e => { e.stopPropagation(); setConfirmDeleteBoard(null); }
-  }, "Keep")), expandedBoard === board.id && /*#__PURE__*/React.createElement("div", {
+    onClick: e => { e.stopPropagation(); }
+  }), React.createElement(DeleteButton, { onDelete: () => delBoard(area.id, board.id), label: "Delete board?" })), expandedBoard === board.id && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 12px 12px"
     }
@@ -8478,33 +8350,8 @@ function ThermoManageView({
         fontSize: 12,
         color: "#ccc"
       }
-    }, cName), /*#__PURE__*/React.createElement("button", {
-      style: {
-        background: "#2a1010",
-        border: "1px solid #ef444433",
-        color: "#ef4444",
-        cursor: "pointer",
-        fontSize: 12,
-        padding: "3px 8px",
-        borderRadius: 5
-      },
-      onClick: e => { e.stopPropagation(); setConfirmDeleteCircuit({areaId: area.id, boardId: board.id, cid, name: cName}); setConfirmDeleteBoard(null); setConfirmDeleteArea(null); }
-    }, "\u2715"));
-  }), confirmDeleteCircuit && confirmDeleteCircuit.boardId === board.id && /*#__PURE__*/React.createElement("div", {
-    style: {background: "#2a1010", border: "1px solid #ef444466", borderRadius: 8, padding: "8px 10px", display: "flex", flexDirection: "column", gap: 6, marginTop: 4}
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {fontSize: 12, color: "#f87171", fontWeight: 700}
-  }, 'Delete "' + confirmDeleteCircuit.name + '"?'), /*#__PURE__*/React.createElement("div", {
-    style: {display: "flex", gap: 6}
-  }, /*#__PURE__*/React.createElement("button", {
-      style: {...STH.smallBtn, flex: 1, color: "#f87171", borderColor: "#ef444466", fontSize: 13, padding: "8px 0"},
-      onClick: e => { e.stopPropagation(); delCircuit(confirmDeleteCircuit.areaId, confirmDeleteCircuit.boardId, confirmDeleteCircuit.cid); setConfirmDeleteCircuit(null); }
-    }, "🗑 Delete"),
-    /*#__PURE__*/React.createElement("button", {
-      style: {...STH.smallBtn, flex: 1, fontSize: 13, padding: "8px 0"},
-      onClick: e => { e.stopPropagation(); setConfirmDeleteCircuit(null); }
-    }, "Keep")
-  )), (board.circuits || []).length === 0 && !confirmDeleteCircuit && /*#__PURE__*/React.createElement("span", {
+    }, cName), React.createElement(DeleteButton, { onDelete: () => delCircuit(area.id, board.id, cid), label: `Delete ${cName}?` }))
+  }), (board.circuits || []).length === 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
       color: "#444"
@@ -8604,7 +8451,6 @@ function ThermoHistoryView({
   onContinueFromSnap
 }) {
   const [expanded, setExpanded] = React.useState(null);
-  const [deleteId, setDeleteId] = React.useState(null);
   const [viewSnap, setViewSnap] = React.useState(null);
   // Drill-down state inside view mode
   const [viewArea, setViewArea] = React.useState(null); // area.id
@@ -9142,30 +8988,7 @@ function ThermoHistoryView({
       onClick: () => onExportSnap(snap)
     }, "\u2193 Export"), /*#__PURE__*/React.createElement(ContinueSnapBtn, {
       onConfirm: () => onContinueFromSnap(snap)
-    }), deleteId === snap.id ? /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-      style: {fontSize: 11, color: "#f87171", whiteSpace: "nowrap", alignSelf: "center"}
-    }, "Delete?"), /*#__PURE__*/React.createElement("button", {
-      style: {
-        ...STH.smallBtn,
-        color: "#f87171",
-        borderColor: "#ef444466",
-        padding: "7px 12px"
-      },
-      onClick: () => {
-        onDelete(snap.id);
-        setDeleteId(null);
-      }
-    }, "🗑 Delete"), /*#__PURE__*/React.createElement("button", {
-      style: {...STH.smallBtn, padding: "7px 12px"},
-      onClick: () => setDeleteId(null)
-    }, "Keep")) : /*#__PURE__*/React.createElement("button", {
-      style: {
-        ...STH.smallBtn,
-        color: "#ef4444",
-        borderColor: "#ef444433"
-      },
-      onClick: () => setDeleteId(snap.id)
-    }, "🗑"))));
+    }), React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) }))))
   }));
 }
 
@@ -10309,13 +10132,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const [tab,setTab]=React.useState("manual");
   const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
-  const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);const [deleteId,setDeleteId]=React.useState(null);
-  React.useEffect(()=>{
-    if(!deleteId)return;
-    const dismiss=()=>setDeleteId(null);
-    document.addEventListener('click',dismiss);
-    return()=>document.removeEventListener('click',dismiss);
-  },[deleteId]);
+  const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=swbStyles();
 
   const handleFile=e=>{
@@ -10352,7 +10169,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       const s=swbSiteSummary(allResults,proj);
       const pct=cb.total>0?Math.round(cb.complete/cb.total*100):0;
       return React.createElement('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
-        ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{if(deleteId===proj.id)return;onSelect(proj.id);}}
+        ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{onSelect(proj.id);}}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:SS.siteCardName},proj.name)
             ,React.createElement('div',{style:SS.siteCardSub},`${(proj.areas||[]).length} areas · ${cb.complete} / ${cb.total} boards complete`)
@@ -10366,13 +10183,9 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('span',{style:SS.arrow},"›")
           )
         )
-        ,deleteId===proj.id
-          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"#1e1010",borderTop:"1px solid #ef444433"}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?")
-            ,React.createElement('button',{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDeleteProject(proj.id);setDeleteId(null);}},"🗑 Delete")
-            ,React.createElement('button',{style:{...SS.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep")
-          )
-          :React.createElement('button',{style:{background:"transparent",border:"none",borderTop:"1px solid #2a2a2a",color:"#555",fontSize:11,padding:"6px 18px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:e=>{e.stopPropagation();setDeleteId(proj.id);}},"🗑 Remove site")
+        ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #2a2a2a",display:"flex",justifyContent:"flex-end"}}
+          ,React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" })
+        )
       );
     })
     ,showAdd
@@ -10731,7 +10544,6 @@ function SWBManageView({project,onUpdateProject}) {
   const [projLic,setProjLic]=React.useState(project.licence||"");
   const [editingAreaId,setEditingAreaId]=React.useState(null);const [editAreaName,setEditAreaName]=React.useState("");
   const [editingBoard,setEditingBoard]=React.useState(null);const [editBoardName,setEditBoardName]=React.useState("");
-  const [confirmDelArea,setConfirmDelArea]=React.useState(null);const [confirmDelBoard,setConfirmDelBoard]=React.useState(null);
   const SS=swbStyles();const upd=u=>onUpdateProject(u);
   const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...(project.areas||[]),{id:swbSlug(newAreaName),name:newAreaName.trim(),boards:[]}]});setNewAreaName("");};
@@ -10768,17 +10580,11 @@ function SWBManageView({project,onUpdateProject}) {
             ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},"✕")
           )
           :React.createElement(React.Fragment,null
-            ,React.createElement('div',{style:{flex:1,cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setConfirmDelArea(null);setConfirmDelBoard(null);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
+            ,React.createElement('div',{style:{flex:1,cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
             ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
-              ,confirmDelArea!==area.id&&React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);setConfirmDelArea(null);}},"✎ Edit")
-              ,confirmDelArea===area.id
-                ?React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center"}}
-                  ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?")
-                  ,React.createElement('button',{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 10px"},onClick:e=>{e.stopPropagation();delArea(area.id);setConfirmDelArea(null);}},"🗑 Delete")
-                  ,React.createElement('button',{style:{...SS.smallBtn,padding:"7px 10px"},onClick:e=>{e.stopPropagation();setConfirmDelArea(null);}},"Keep")
-                )
-                :React.createElement('button',{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:e=>{e.stopPropagation();setConfirmDelArea(area.id);setConfirmDelBoard(null);}},"🗑")
-              ,confirmDelArea!==area.id&&React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setConfirmDelArea(null);setConfirmDelBoard(null);}},expandedArea===area.id?"▲":"▼")
+              ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},"✎ Edit")
+              ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
+              ,React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"▲":"▼")
             )
           )
       )
@@ -10790,17 +10596,10 @@ function SWBManageView({project,onUpdateProject}) {
               ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveBoard(area.id,b.id)},"Save")
               ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},"✕")
             )
-            :confirmDelBoard&&confirmDelBoard.aid===area.id&&confirmDelBoard.bid===b.id
-              ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8}}
-                ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee"}}  ,b.name)
-                ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?")
-                ,React.createElement('button',{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"6px 10px",fontSize:12},onClick:e=>{e.stopPropagation();delBoard(area.id,b.id);setConfirmDelBoard(null);}},"🗑 Delete")
-                ,React.createElement('button',{style:{...SS.smallBtn,padding:"6px 10px",fontSize:12},onClick:e=>{e.stopPropagation();setConfirmDelBoard(null);}},"Keep")
-              )
               :React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8}}
                 ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee"}},b.name)
-                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});setConfirmDelBoard(null);}},"✎ Edit")
-                ,React.createElement('button',{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:e=>{e.stopPropagation();setConfirmDelBoard({aid:area.id,bid:b.id});setConfirmDelArea(null);setEditingBoard(null);}},"🗑")
+                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});}},"✎ Edit")
+                ,React.createElement(DeleteButton, { onDelete: ()=>delBoard(area.id,b.id), label: "Delete board?" })
               )
         ))
         ,(area.boards||[]).length===0&&React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:8}},"No boards yet.")
@@ -10821,7 +10620,7 @@ function SWBManageView({project,onUpdateProject}) {
 // HISTORY VIEW
 // ─────────────────────────────────────────────────────────────────────────
 function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}) {
-  const [expanded,setExpanded]=React.useState(null);const [deleteId,setDeleteId]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);
+  const [expanded,setExpanded]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);
   const SS=swbStyles();
   const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
   const fmtDT=d=>{if(!d)return"";try{return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return d;}};
@@ -10891,13 +10690,7 @@ function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
             ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:"#a855f744",fontWeight:700},onClick:()=>setViewSnap(snap)},"👁 View Results")
             ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"↓ Export")
             ,React.createElement(SWBContinueBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn})
-            ,deleteId===snap.id
-              ?React.createElement(React.Fragment,null
-                ,React.createElement('span',{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap",alignSelf:"center"}},"Delete?")
-                ,React.createElement('button',{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"🗑 Delete")
-                ,React.createElement('button',{style:{...SS.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep")
-              )
-              :React.createElement('button',{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
+            ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
         )
       );
@@ -11459,13 +11252,7 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const [showAdd,setShowAdd]=React.useState(false);const [tab,setTab]=React.useState("manual");
   const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
-  const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);const [deleteId,setDeleteId]=React.useState(null);
-  React.useEffect(()=>{
-    if(!deleteId)return;
-    const dismiss=()=>setDeleteId(null);
-    document.addEventListener('click',dismiss);
-    return()=>document.removeEventListener('click',dismiss);
-  },[deleteId]);
+  const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=irtStyles();
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
@@ -11484,12 +11271,11 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       const s=irtSiteSummary(allResults,proj);
       const total=(proj.areas||[]).reduce((acc,a)=>(a.panels||[]).reduce((acc2,p)=>acc2+(p.items||[]).length,acc),0);
       return React.createElement("div",{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
-        React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{if(deleteId===proj.id)return;onSelect(proj.id);}},
+        React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{onSelect(proj.id);}},
           React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},proj.name),React.createElement("div",{style:SS.siteCardSub},(proj.areas||[]).length," areas \u00b7 ",total," items"+(proj.company?` \u00b7 ${proj.company}`:""))),
           React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},s.fail>0&&React.createElement("span",{style:SS.failBadge},s.fail," FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
         ),
-        deleteId===proj.id?React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 18px",background:"#1e1010",borderTop:"1px solid #ef444433"}},React.createElement("span",{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?"),React.createElement("button",{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:e=>{e.stopPropagation();onDeleteProject(proj.id);setDeleteId(null);}},"🗑 Delete"),React.createElement("button",{style:{...SS.smallBtn,padding:"7px 12px"},onClick:e=>{e.stopPropagation();setDeleteId(null);}},"Keep"))
-        :React.createElement("button",{style:{background:"transparent",border:"none",borderTop:"1px solid #2a2a2a",color:"#555",fontSize:11,padding:"6px 18px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:e=>{e.stopPropagation();setDeleteId(proj.id);}},"🗑 Remove site")
+        React.createElement("div",{style:{padding:"6px 18px",borderTop:"1px solid #2a2a2a",display:"flex",justifyContent:"flex-end"}},React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" }))
       );
     }),
     showAdd?React.createElement("div",{style:SS.addCard},
@@ -11530,7 +11316,6 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 function IRTManageView({project,onUpdateProject}){
   const [newAreaName,setNewAreaName]=React.useState("");const [newPanel,setNewPanel]=React.useState({});const [newItem,setNewItem]=React.useState({});
   const [expandedArea,setExpandedArea]=React.useState(null);const [expandedPanel,setExpandedPanel]=React.useState(null);
-  const [confirmDelArea,setConfirmDelArea]=React.useState(null);const [confirmDelPanel,setConfirmDelPanel]=React.useState(null);const [confirmDelItem,setConfirmDelItem]=React.useState(null);
   const [editingProject,setEditingProject]=React.useState(false);
   const [projName,setProjName]=React.useState(project.name);
   const [projCo,setProjCo]=React.useState(project.company||"");
@@ -11570,26 +11355,26 @@ function IRTManageView({project,onUpdateProject}){
     React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment"),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{background:"#161616",border:`1px solid ${expandedArea===area.id?IRT_COLOR+"55":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}},
       React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px"}},
-        React.createElement("div",{style:{flex:1,cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setConfirmDelArea(null);setConfirmDelPanel(null);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
+        React.createElement("div",{style:{flex:1,cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
         React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center"}},
-          confirmDelArea===area.id?React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center"}},React.createElement("span",{style:{fontSize:11,color:"#f87171"}},"Delete?"),React.createElement("button",{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{delArea(area.id);setConfirmDelArea(null);}},"🗑 Delete"),React.createElement("button",{style:{...SS.smallBtn,padding:"7px 12px"},onClick:()=>setConfirmDelArea(null)},"Keep")):React.createElement("button",{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setConfirmDelArea(area.id)},"🗑"),
-          React.createElement("span",{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setConfirmDelArea(null);setConfirmDelPanel(null);}},expandedArea===area.id?"\u25b2":"\u25bc")
+          React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" }),
+          React.createElement("span",{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"\u25b2":"\u25bc")
         )
       ),
       expandedArea===area.id&&React.createElement("div",{style:{padding:"0 14px 14px"}},
         (area.panels||[]).map(panel=>React.createElement("div",{key:panel.id,style:{border:`1px solid ${expandedPanel===panel.id?IRT_COLOR+"44":"#222"}`,borderRadius:8,marginBottom:8,background:"#111"}},
           React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px"}},
-            React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);setConfirmDelPanel(null);setConfirmDelArea(null);}},
+            React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);}},
               React.createElement("span",{style:{fontSize:14,color:expandedPanel===panel.id?IRT_COLOR:"#aaa"}},expandedPanel===panel.id?"\u25be":"\u25b8"),
               React.createElement("span",{style:{fontWeight:700,color:"#eee",fontSize:13}},panel.name),
               React.createElement("span",{style:{fontSize:11,color:"#555"}},(panel.items||[]).length," items")
             ),
-            confirmDelPanel===panel.id?React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center"}},React.createElement("span",{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap"}},"Delete?"),React.createElement("button",{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:e=>{e.stopPropagation();delPanel(area.id,panel.id);setConfirmDelPanel(null);}},"🗑 Delete"),React.createElement("button",{style:{...SS.smallBtn,padding:"7px 12px"},onClick:e=>{e.stopPropagation();setConfirmDelPanel(null);}},"Keep")):React.createElement("button",{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433",fontSize:11},onClick:()=>setConfirmDelPanel(panel.id)},"🗑")
+            React.createElement(DeleteButton, { onDelete: ()=>delPanel(area.id,panel.id), label: "Delete panel?" })
           ),
           expandedPanel===panel.id&&React.createElement("div",{style:{padding:"8px 12px 12px"}},
             React.createElement("div",{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:6}},"ITEMS (motors / cables / CBs)"),
             React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
-              (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;const isConfirmingItem=confirmDelItem&&confirmDelItem.panelId===panel.id&&confirmDelItem.itemId===itemId;if(isConfirmingItem){return React.createElement("div",{key:itemId,style:{background:"#2a1010",border:"1px solid #ef444466",borderRadius:8,padding:"8px 10px",display:"flex",flexDirection:"column",gap:6,width:"100%",boxSizing:"border-box"}},React.createElement("span",{style:{fontSize:12,color:"#f87171",fontWeight:700}},"Delete \""+name+"\"?"),React.createElement("div",{style:{display:"flex",gap:6}},React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#f87171",borderColor:"#ef444466",fontSize:13,padding:"8px 0"},onClick:e=>{e.stopPropagation();delItem(area.id,panel.id,itemId);setConfirmDelItem(null);}},"🗑 Delete"),React.createElement("button",{style:{...SS.smallBtn,flex:1,fontSize:13,padding:"8px 0"},onClick:e=>{e.stopPropagation();setConfirmDelItem(null);}},"Keep")));}return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}33`,borderRadius:8,padding:"6px 10px"}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1}},name),React.createElement("button",{style:{background:"#2a1010",border:"1px solid #ef444433",color:"#ef4444",cursor:"pointer",fontSize:12,padding:"3px 8px",borderRadius:5},onClick:e=>{e.stopPropagation();setConfirmDelItem({panelId:panel.id,itemId});setConfirmDelArea(null);setConfirmDelPanel(null);}},"✕"));}),
+              (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}33`,borderRadius:8,padding:"6px 10px"}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1}},name),React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,panel.id,itemId), label: `Delete "${name}"?` }));}),
               (panel.items||[]).length===0&&React.createElement("span",{style:{fontSize:12,color:"#444"}},"No items yet")
             ),
             React.createElement("div",{style:{display:"flex",gap:6}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"Add motor / cable / CB name\u2026",value:newItem[`${area.id}-${panel.id}`]||"",onChange:e=>setNewItem(x=>({...x,[`${area.id}-${panel.id}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,panel.id)}),React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR+"55"},onClick:()=>addItem(area.id,panel.id)},"+ Add"))
@@ -11670,7 +11455,7 @@ function IRTReportView({project,results,meta}){
 
 // ─── History view ─────────────────────────────────────────────────────────
 function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}){
-  const [expanded,setExpanded]=React.useState(null);const [deleteId,setDeleteId]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);const SS=irtStyles();
+  const [expanded,setExpanded]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);const SS=irtStyles();
   const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
   const fmtDT=d=>{if(!d)return"";try{return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return d;}};
 
@@ -11757,7 +11542,7 @@ function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
             React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:`${IRT_COLOR}44`,fontWeight:700},onClick:()=>setViewSnap(snap)},"\uD83D\uDC41 View Results"),
             React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},"\u2193 Export"),
             React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:"#a855f744",fontWeight:700},onClick:()=>onContinueFromSnap(snap)},"\u25b6 Continue"),
-            deleteId===snap.id?React.createElement(React.Fragment,null,React.createElement("span",{style:{fontSize:11,color:"#f87171",whiteSpace:"nowrap",alignSelf:"center"}},"Delete?"),React.createElement("button",{style:{...SS.smallBtn,color:"#f87171",borderColor:"#ef444466",padding:"7px 12px"},onClick:()=>{onDelete(snap.id);setDeleteId(null);}},"🗑 Delete"),React.createElement("button",{style:{...SS.smallBtn,padding:"7px 12px"},onClick:()=>setDeleteId(null)},"Keep")):React.createElement("button",{style:{...SS.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDeleteId(snap.id)},"🗑")
+            React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
         )
       );
@@ -11850,5 +11635,60 @@ function IRTApp({onGoHome}){
 // ─────────────────────────────────────────────────────────────────────────
 // MOUNT
 // ─────────────────────────────────────────────────────────────────────────
+
+/*
+DELETE CONSISTENCY AUDIT — 2026-06-04
+===========================================
+STANDARDISED (replaced with DeleteButton):
+  - RCD · ProjectListView · was: deleteId state + useEffect + inline ternary confirm row
+  - RCD · HistoryView · was: deleteId state + inline ternary confirm
+  - RCD · ManageView (areas) · was: confirmDeleteArea state + inline ternary confirm
+  - RCD · ManageView (panels) · was: confirmDeletePanel state + inline ternary confirm
+  - RCD · ManageView (circuits) · was: confirmDeleteCircuit state + full-width confirm card
+  - IEL · IELProjectListView · was: deleteId state + useEffect + inline ternary confirm row
+  - IEL · IELHistoryView · was: deleteId state + inline ternary confirm
+  - IEL · IELManageView (areas) · was: confirmDeleteArea state + inline ternary confirm
+  - IEL · IELManageView (items) · was: confirmDeleteItem state + full-width confirm card
+  - TAT · TATProjectListView · was: deleteId state + useEffect + inline ternary confirm row
+  - TAT · TATHistoryView · was: deleteId state + inline ternary confirm
+  - TAT · TATManageView (areas) · was: confirmDeleteArea state + inline ternary confirm
+  - TAT · TATManageView (items) · was: confirmDeleteItem state + full-width confirm card
+  - Thermo · ThermoProjectListView · was: deleteId state + useEffect + inline ternary confirm row
+  - Thermo · ThermoHistoryView · was: deleteId state + inline ternary confirm
+  - Thermo · ThermoManageView (areas) · was: confirmDeleteArea state + separate confirm row
+  - Thermo · ThermoManageView (boards) · was: confirmDeleteBoard state + separate confirm row
+  - Thermo · ThermoManageView (circuits) · was: confirmDeleteCircuit state + full-width confirm card
+  - Thermo · ThermoPhotoPage (photos) · was: confirmDeleteIdx state + inline ternary confirm
+  - SWB · SWBProjectListView · was: deleteId state + useEffect + inline ternary confirm row
+  - SWB · SWBHistoryView · was: deleteId state + inline ternary confirm
+  - SWB · SWBManageView (areas) · was: confirmDelArea state + inline ternary confirm
+  - SWB · SWBManageView (boards) · was: confirmDelBoard state + separate confirm row
+  - IRT · IRTProjectListView · was: deleteId state + useEffect + inline ternary confirm row
+  - IRT · IRTHistoryView · was: deleteId state + inline ternary confirm
+  - IRT · IRTManageView (areas) · was: confirmDelArea state + inline ternary confirm
+  - IRT · IRTManageView (panels) · was: confirmDelPanel state + inline ternary confirm
+  - IRT · IRTManageView (items) · was: confirmDelItem state + full-width confirm card
+
+MANUALLY REVIEWED — no change needed:
+  - ContinueConfirmBtn: not a delete action — confirms audit continuation, not destructive
+  - CalendarApp: no delete actions present requiring standardisation
+  - AppRoot: no delete actions
+
+REMAINING INCONSISTENCIES:
+  - None
+
+DUPLICATE IMPLEMENTATIONS REMOVED:
+  - 6x deleteId / setDeleteId state vars (one per ProjectListView)
+  - 6x deleteId / setDeleteId state vars (one per HistoryView)
+  - 6x document.addEventListener click-dismiss useEffect blocks
+  - confirmDeleteArea, confirmDeletePanel, confirmDeleteCircuit (RCDManageView)
+  - confirmDeleteArea, confirmDeleteItem (IELManageView)
+  - confirmDeleteArea, confirmDeleteItem (TATManageView)
+  - confirmDeleteArea, confirmDeleteBoard, confirmDeleteCircuit (ThermoManageView)
+  - confirmDeleteIdx (ThermoPhotoPage)
+  - confirmDelArea, confirmDelBoard (SWBManageView)
+  - confirmDelArea, confirmDelPanel, confirmDelItem (IRTManageView)
+  - All inline "Delete? [🗑 Delete] [Keep]" row implementations
+*/
 
 export default AppRoot;
