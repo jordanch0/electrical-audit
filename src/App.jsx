@@ -696,7 +696,7 @@ else goProjects();
 )
 , React.createElement('div', { style: S.topbarRight,}
 , React.createElement('div', { style: {...S.saveIndicator,opacity:saveFlash?1:0},}, "✓ Saved" )
-, onGoHomeModule&&React.createElement('button',{style:{fontSize:11,color:"#e8731a",background:"#1a1a1a",border:"1px solid #e8731a44",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},onClick:onGoHomeModule},"⌂ Modules")
+, onGoHomeModule&&React.createElement('button',{style:{fontSize:11,color:"#e8731a",background:"#1a1a1a",border:"1px solid #e8731a44",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},onClick:onGoHomeModule},"Modules")
 )
 )
 , view!=="projects"&&(
@@ -2406,7 +2406,7 @@ function IELApp({ onGoHome }) {
       )
       ,React.createElement('div',{style:SI.topbarRight}
         ,React.createElement('div',{style:{...SI.saveIndicator,opacity:saveFlash?1:0}},"✓ Saved")
-        ,React.createElement('button',{style:SI.homeModuleBtn,onClick:onGoHome},"⌂ Modules")
+        ,React.createElement('button',{style:SI.homeModuleBtn,onClick:onGoHome},"Modules")
       )
     )
 
@@ -3807,7 +3807,7 @@ function CalendarApp({ onGoHome }) {
       )
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
         ,React.createElement('div',{style:{fontSize:11,color:"#22c55e",opacity:saveFlash?1:0,transition:"opacity 0.4s"}},"✓ Saved")
-        ,React.createElement('button',{style:{fontSize:11,color:"#555",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600},onClick:onGoHome},"⌂ Modules")
+        ,React.createElement('button',{style:{fontSize:11,color:"#555",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600},onClick:onGoHome},"Modules")
       )
     )
 
@@ -4489,7 +4489,7 @@ function TATApp({ onGoHome }) {
       )
       ,React.createElement('div',{style:ST.topbarRight}
         ,React.createElement('div',{style:{...ST.saveIndicator,opacity:saveFlash?1:0}},"✓ Saved")
-        ,React.createElement('button',{style:ST.homeModuleBtn,onClick:onGoHome},"⌂ Modules")
+        ,React.createElement('button',{style:ST.homeModuleBtn,onClick:onGoHome},"Modules")
       )
     )
 
@@ -9283,7 +9283,7 @@ function ThermoApp({
       cursor: "pointer",
       fontWeight: 600
     }
-  }, "\u2302 Modules"))), view !== "projects" && /*#__PURE__*/React.createElement("div", {
+  }, "Modules"))), view !== "projects" && /*#__PURE__*/React.createElement("div", {
     style: STH.breadcrumb
   }, /*#__PURE__*/React.createElement("span", {
     style: STH.bcItem,
@@ -9555,6 +9555,23 @@ function AppRoot() {
   if (module === "swb") return React.createElement(SWBApp, {onGoHome: ()=>setModule(null)});
   if (module === "irt") return React.createElement(IRTApp, {onGoHome: ()=>setModule(null)});
 
+  const modules = [
+    {key:"cal",color:"#818cf8",name:"TEST CALENDAR",desc:"Due dates & reminders",onClick:()=>setModule("cal"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))},
+    {key:"rcd",color:"#e8731a",name:"RCD TESTING",desc:"Push & injection tests",onClick:()=>setModule("rcd"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"currentColor",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13L13 2Z"}))},
+    {key:"iel",color:"#10b981",name:"IEL TESTING",desc:"Lanyards, e-stops, isolators",onClick:()=>setModule("iel"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"}),React.createElement('path',{d:"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"}))},
+    {key:"tat",color:"#60a5fa",name:"TEST & TAG",desc:"In-service equipment",onClick:()=>setModule("tat"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7}))},
+    {key:"thermo",color:"#f97316",name:"THERMOGRAPHIC",desc:"FLIR thermal imaging",onClick:()=>setModule("thermo"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"}))},
+    {key:"swb",color:"#a855f7",name:"SWITCHBOARD",desc:"11-point visual audit",onClick:()=>setModule("swb"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12}))},
+    {key:"irt",color:"#60a5fa",name:"IR TESTING",desc:"Insulation resistance",onClick:()=>setModule("irt"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:"M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"}))},
+  ];
+
   return React.createElement('div', {
     style:{
       display:"flex",flexDirection:"column",
@@ -9570,212 +9587,69 @@ function AppRoot() {
     ref: el => { if(el) el.scrollTop = 0; }
   }
     , React.createElement('div', {style:{
-        padding:"60px 24px 48px",
+        paddingTop:52,
         display:"flex",flexDirection:"column",
         alignItems:"center",
-        gap:0,
         minHeight:"100%",
         width:"100%",
         boxSizing:"border-box",
       }}
 
-      // Brand
-      , React.createElement('div', {style:{textAlign:"center",marginBottom:32}}
-        , React.createElement('div', {style:{fontSize:11,color:"#444",letterSpacing:2,fontWeight:700,marginBottom:8}}, "SPARKCHECK")
-        , React.createElement('div', {style:{fontSize:36,fontWeight:900,letterSpacing:-1,lineHeight:1,marginBottom:6,color:"#eee"}}, "AUDIT")
-        , React.createElement('div', {style:{fontSize:36,fontWeight:900,letterSpacing:-1,lineHeight:1,color:"#e8731a"}}, "PORTAL")
-        , React.createElement('div', {style:{width:60,height:3,background:"linear-gradient(90deg,#e8731a,#10b981)",borderRadius:2,margin:"16px auto 0"}})
-        , React.createElement('div', {style:{fontSize:12,color:"#555",marginTop:12,letterSpacing:0.5}}, "Electrical Audit Software")
-      )
-
-      // Module cards
-      , React.createElement('div', {style:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1.5,marginBottom:16,textAlign:"center"}}, "SELECT MODULE")
-
-      // Schedule
-, React.createElement('button', {
-          style:{
-            width:"100%",maxWidth:420,
-            display:"flex",alignItems:"center",gap:20,
-            padding:"24px 24px",
-            background:"#161616",
-            border:"2px solid #6366f144",
-            borderRadius:20,
-            cursor:"pointer",
-            color:"#eee",
+      // Title block
+      , React.createElement('div', {style:{textAlign:"center",marginBottom:20,padding:"0 24px"}}
+        , React.createElement('div', {style:{
+            display:"inline-flex",alignItems:"center",gap:5,
+            background:"rgba(232,115,26,0.1)",
+            border:"1px solid rgba(232,115,26,0.25)",
+            borderRadius:999,
+            padding:"4px 10px",
             marginBottom:14,
-            textAlign:"left",
+          }}
+          , React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"#e8731a",stroke:"none"}
+            , React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13L13 2Z"})
+          )
+          , React.createElement('span',{style:{fontSize:10,color:"#e8731a",fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}, "Electrical Audit Software")
+        )
+        , React.createElement('div', {style:{fontSize:38,fontWeight:900,letterSpacing:-1,lineHeight:1,marginBottom:0}}
+          , React.createElement('span',{style:{color:"#eee"}}, "SPARK")
+          , React.createElement('span',{style:{color:"#e8731a"}}, "CHECK")
+        )
+        , React.createElement('div', {style:{width:"100%",maxWidth:180,height:1,background:"rgba(232,115,26,0.35)",margin:"14px auto 0"}})
+      )
+
+      , React.createElement('div', {style:{fontSize:10,color:"#444",fontWeight:700,letterSpacing:2,marginBottom:12,textAlign:"center",textTransform:"uppercase"}}, "Select Module")
+
+      // 2-column module grid
+      , React.createElement('div', {style:{
+          display:"grid",
+          gridTemplateColumns:"repeat(2, 1fr)",
+          gap:10,
+          padding:"0 16px 32px 16px",
+          width:"100%",
+          maxWidth:500,
+          boxSizing:"border-box",
+        }}
+        , modules.map(m => React.createElement('button',{
+            key:m.key, onClick:m.onClick,
+            style:{background:"#141414",border:"1px solid #1a1a1a",borderRadius:16,padding:14,position:"relative",overflow:"hidden",cursor:"pointer",color:"#eee",textAlign:"left",display:"block"},
+            onMouseDown:e=>{e.currentTarget.style.transform="scale(0.97)"},
+            onMouseUp:e=>{e.currentTarget.style.transform="scale(1)"},
+            onTouchStart:e=>{e.currentTarget.style.transform="scale(0.97)"},
+            onTouchEnd:e=>{e.currentTarget.style.transform="scale(1)"},
           },
-          onClick: ()=>setModule("cal")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#6366f122",border:"1px solid #6366f144",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "📅")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#818cf8",letterSpacing:0.5}}, "TEST CALENDAR")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "Track upcoming test due dates, get reminders for RCD, IEL and other scheduled audits")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#818cf8",background:"#6366f122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 Monthly Push")
-            , React.createElement('span', {style:{fontSize:10,color:"#10b981",background:"#10b98122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔗 IEL 3-Month")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔬 Annual Injection")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
+          React.createElement('div',{style:{position:"absolute",top:0,left:0,right:0,height:3,background:m.color}}),
+          React.createElement('div',{style:{position:"absolute",top:0,left:0,width:80,height:80,background:`radial-gradient(circle at top left, ${m.color}0d, transparent 70%)`,pointerEvents:"none"}}),
+          React.createElement('div',{style:{width:40,height:40,borderRadius:10,background:`${m.color}1a`,display:"flex",alignItems:"center",justifyContent:"center",color:m.color,marginBottom:10}},m.icon),
+          React.createElement('div',{style:{fontFamily:"'Barlow Condensed','DM Sans',sans-serif",fontSize:13,fontWeight:700,textTransform:"uppercase",color:m.color,marginBottom:3,lineHeight:1.1}},m.name),
+          React.createElement('div',{style:{fontSize:11,color:"#555",lineHeight:1.3}},m.desc)
+        ))
       )
 
-      
-      // Testing
-, React.createElement('button', {
-          style:{
-            width:"100%",maxWidth:420,
-            display:"flex",alignItems:"center",gap:20,
-            padding:"24px 24px",
-            background:"#161616",
-            border:"2px solid #e8731a44",
-            borderRadius:20,
-            cursor:"pointer",
-            color:"#eee",
-            marginBottom:14,
-            textAlign:"left",
-          },
-          onClick: ()=>setModule("rcd")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#e8731a22",border:"1px solid #e8731a44",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "⚡")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#e8731a",letterSpacing:0.5}}, "RCD TESTING")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "Monthly push tests & annual injection tests for RCDs, RCBOs, and circuit breakers")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#e8731a",background:"#e8731a22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 Monthly Push")
-            , React.createElement('span', {style:{fontSize:10,color:"#60a5fa",background:"#3b82f622",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔬 Annual Injection")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
-      )
-
-      , React.createElement('button', {
-          style:{
-            width:"100%",maxWidth:420,
-            display:"flex",alignItems:"center",gap:20,
-            padding:"24px 24px",
-            background:"#161616",
-            border:"2px solid #10b98144",
-            borderRadius:20,
-            cursor:"pointer",
-            color:"#eee",
-            marginBottom:14,
-            textAlign:"left",
-          },
-          onClick: ()=>setModule("iel")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#10b98122",border:"1px solid #10b98144",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "🔗")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#10b981",letterSpacing:0.5}}, "IEL TESTING")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "3-monthly testing for lanyards, emergency stops, and electrical isolators")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#10b981",background:"#10b98122",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔗 Lanyards")
-            , React.createElement('span', {style:{fontSize:10,color:"#ef4444",background:"#ef444422",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🔴 E-Stops")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "⚡ Isolators")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
-      )
-
-      // Footer
-      , React.createElement('button', {
-          style:{
-            width:"100%",maxWidth:420,
-            display:"flex",alignItems:"center",gap:20,
-            padding:"24px 24px",
-            background:"#161616",
-            border:"2px solid #3b82f644",
-            borderRadius:20,
-            cursor:"pointer",
-            color:"#eee",
-            marginBottom:14,
-            textAlign:"left",
-          },
-          onClick: ()=>setModule("tat")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#3b82f622",border:"1px solid #3b82f644",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "🏷")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#60a5fa",letterSpacing:0.5}}, "TEST & TAG")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "In-service testing of tools, leads, appliances and portable equipment")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#60a5fa",background:"#3b82f622",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "🏷 Asset Tagging")
-            , React.createElement('span', {style:{fontSize:10,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "☑ Visual Inspection")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 1-12 Month Cycles")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
-      )
-
-      , React.createElement('button', {
-          style:{
-            width:"100%",maxWidth:420,
-            display:"flex",alignItems:"center",gap:20,
-            padding:"24px 24px",
-            background:"#161616",
-            border:"2px solid #f9731644",
-            borderRadius:20,
-            cursor:"pointer",
-            color:"#eee",
-            marginBottom:14,
-            textAlign:"left",
-          },
-          onClick: ()=>setModule("thermo")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#f9731622",border:"1px solid #f9731644",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "\uD83C\uDF21")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#f97316",letterSpacing:0.5}}, "THERMOGRAPHIC TESTING")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "FLIR camera photo logging for thermal imaging audits of electrical equipment")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#f97316",background:"#f9731622",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\uD83C\uDF21 FLIR Logging")
-            , React.createElement('span', {style:{fontSize:10,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\u2713 Pass / Fail / Monitor")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\uD83D\uDCC5 Annual Cycle")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "\u203a")
-      )
-
-
-
-
-      , React.createElement('button', {
-          style:{width:"100%",maxWidth:420,display:"flex",alignItems:"center",gap:20,padding:"24px",background:"#161616",border:"2px solid #a855f744",borderRadius:20,cursor:"pointer",color:"#eee",marginBottom:14,textAlign:"left"},
-          onClick: ()=>setModule("swb")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#a855f722",border:"1px solid #a855f744",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "🔌")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#a855f7",letterSpacing:0.5}}, "SWITCHBOARD AUDIT")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "Visual inspection of switchboards and enclosures")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#a855f7",background:"#a855f722",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "☑ 11-Point Checklist")
-            , React.createElement('span', {style:{fontSize:10,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📋 Defect Register")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "📅 Annual Cycle")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "›")
-      )
-
-      , React.createElement('button', {
-          style:{width:"100%",maxWidth:420,display:"flex",alignItems:"center",gap:20,padding:"24px",background:"#161616",border:"2px solid #3b82f644",borderRadius:20,cursor:"pointer",color:"#eee",marginBottom:14,textAlign:"left"},
-          onClick: ()=>setModule("irt")
-        }
-        , React.createElement('div', {style:{width:56,height:56,borderRadius:14,background:"#3b82f622",border:"1px solid #3b82f644",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,flexShrink:0}}, "\uD83D\uDD2C")
-        , React.createElement('div', {style:{flex:1}}
-          , React.createElement('div', {style:{fontSize:18,fontWeight:800,color:"#60a5fa",letterSpacing:0.5}}, "INSULATION RESISTANCE")
-          , React.createElement('div', {style:{fontSize:12,color:"#888",marginTop:4,lineHeight:1.5}}, "IR testing of cables, motors & equipment across all conductor combinations")
-          , React.createElement('div', {style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}}
-            , React.createElement('span', {style:{fontSize:10,color:"#60a5fa",background:"#3b82f622",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\u26a1 250/500/1000V")
-            , React.createElement('span', {style:{fontSize:10,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\uD83D\uDCCB Defect Register")
-            , React.createElement('span', {style:{fontSize:10,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 8px",fontWeight:700}}, "\uD83D\uDCC5 Annual Cycle")
-          )
-        )
-        , React.createElement('span', {style:{fontSize:24,color:"#555"}}, "\u203a")
-      )
-                        , React.createElement('div', {style:{marginTop:24,textAlign:"center",fontSize:11,color:"#333",letterSpacing:0.5}}, "SparkCheck · v11")
+      , React.createElement('div',{style:{paddingBottom:24,textAlign:"center",fontSize:11,color:"#2a2a2a",letterSpacing:0.5}},"© SparkCheck")
     )
   );
 }
 
-// RCDApp wrapper — passes onGoHome to RCDApp via context or direct render
 function RCDAppWrapper({ onGoHome }) {
   return React.createElement('div', {style:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative"}}
     , React.createElement(RCDApp, {onGoHome})
@@ -10109,7 +9983,7 @@ function SWBApp({ onGoHome }) {
       )
       ,React.createElement('div',{style:SS.topbarRight}
         ,React.createElement('span',{style:{fontSize:11,color:"#22c55e",fontWeight:600,opacity:saveFlash?1:0,transition:"opacity 0.4s",pointerEvents:"none"}},"✓ Saved")
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",fontSize:11},onClick:onGoHome},"⌂ Modules")
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",fontSize:11},onClick:onGoHome},"Modules")
       )
     )
     ,view!=="projects"&&React.createElement('div',{style:SS.breadcrumb}
@@ -11628,7 +11502,7 @@ function IRTApp({onGoHome}){
       ),
       React.createElement("div",{style:SS.topbarRight},
         React.createElement("span",{style:{fontSize:11,color:"#22c55e",fontWeight:600,opacity:saveFlash?1:0,transition:"opacity 0.4s",pointerEvents:"none"}},"\u2713 Saved"),
-        React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR_BORDER,fontSize:11},onClick:onGoHome},"\u2302 Modules")
+        React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR_BORDER,fontSize:11},onClick:onGoHome},"Modules")
       )
     ),
     // Breadcrumb
