@@ -1016,7 +1016,7 @@ const area = _optionalChain([project, 'optionalAccess', _71 => _71.areas, 'acces
 return (
 React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,marginBottom:16},}
-, React.createElement('button', { style: {...S.smallBtn,color:"#aaa"}, onClick: ()=>setViewArea(null),}, "‹ Back" )
+, React.createElement('button', { style: {...S.smallBtn,color:"#aaa"}, onClick: ()=>setViewArea(null),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'})), " Back" )
 , React.createElement('div', null
 , React.createElement('div', { style: {fontSize:16,fontWeight:800,color:"#eee"},}, _optionalChain([area, 'optionalAccess', _74 => _74.name]))
 , React.createElement('div', { style: {fontSize:11,color:"#555"},}, snap.label, " · "  , fmtDate(snap.testDate), " · Read-only"  )
@@ -1075,7 +1075,7 @@ React.createElement('div', { key: c, style: {marginTop:8,background:"#1e1010",bo
 return (
 React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,marginBottom:6},}
-, React.createElement('button', { style: {...S.smallBtn,color:"#aaa"}, onClick: ()=>setViewSnap(null),}, "‹ Back" )
+, React.createElement('button', { style: {...S.smallBtn,color:"#aaa"}, onClick: ()=>setViewSnap(null),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'})), " Back" )
 , React.createElement('div', null
 , React.createElement('div', { style: {fontSize:16,fontWeight:800,color:"#eee"},}, snap.label)
 , React.createElement('div', { style: {fontSize:11,color:"#555"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor", " · Read-only"  )
@@ -1713,7 +1713,7 @@ React.createElement('div', { style: {paddingLeft:8},}
     React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}},c),
     cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#64748b",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},cm.cbType),
     cm.ampRating&&React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0,whiteSpace:"nowrap"}}," · "+cm.ampRating),
-    React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},"✎"),
+    React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))),
     React.createElement(DeleteButton, { onDelete: ()=>delCircuit(area.id,pnl.id,c), label: `Delete ${c}?`, compact: true })
   ));
 })
@@ -1862,7 +1862,7 @@ onClick: ()=>onOpenDetail(circuit),}
 )
 /* Push: small note button. Annual: no secondary button needed (main tap opens modal) */
 , isPush && (
-React.createElement('button', { style: {...S.circuitEditBtn,borderColor:`${modeColor}44`,color:modeColor}, onClick: ()=>onOpenDetail(circuit),}, "✎ note" )
+React.createElement('button', { style: {...S.circuitEditBtn,borderColor:`${modeColor}44`,color:modeColor}, onClick: ()=>onOpenDetail(circuit),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})), " note" )
 )
 ));
 })
@@ -2019,7 +2019,7 @@ circuitBtn:{display:"flex",flexDirection:"column",alignItems:"center",justifyCon
 circuitBtnLabel:{fontSize:13,fontWeight:800,letterSpacing:0.3},circuitBtnStatus:{fontSize:11,fontWeight:700,marginTop:6,letterSpacing:0.5},
 circuitEditBtn:{fontSize:11,background:"#161616",border:"1px solid",borderRadius:6,padding:"4px 0",cursor:"pointer",width:"100%",fontWeight:600},
 tapHint:{marginTop:20,textAlign:"center",fontSize:11,color:"#444"},
-summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5,color:"#e8731a"},summaryMeta:{fontSize:13,color:"#777",marginTop:4},
+summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
 manageSection:{border:"1px solid",borderRadius:12,marginBottom:10,overflow:"hidden"},
 manageSectionHeader:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"nowrap",minWidth:0},
 managePanel:{border:"1px solid",borderRadius:8,padding:"10px 12px",marginBottom:8,background:"#161616"},
@@ -2895,7 +2895,7 @@ function IELEditableDropdown({options,value,onChange,placeholder}){
     ,open&&React.createElement('div',{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}}
       ,options.map(o=>React.createElement('div',{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?"#10b981":"#ccc",background:o===value?"#1a3d1a":"transparent",borderBottom:"1px solid #2a2a2a"},
         onClick:()=>{onChange(o);setOpen(false);}},o))
-      ,React.createElement('div',{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},"✏ Type custom…")
+      ,React.createElement('div',{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Type custom…")
     )
   );
 }
@@ -3066,7 +3066,6 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
 // IEL REPORT VIEW
 // ─────────────────────────────────────────────────────────────────────────
 function IELReportView({project,results,meta}){
-  const handleArchive=()=>{onArchive();setArchiveMsg("Audit archived!");setTimeout(()=>setArchiveMsg(""),2500);};
   // Collect all fails across categories
   const allFails=[];
   IEL_CATEGORIES.forEach(cat=>{
@@ -3237,7 +3236,7 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
       (cp&&cp.circuits||[]).forEach(id=>{const v=((((snap.results||{})[area.id]||{})[viewCat])||{})[id];const st=(v&&v.status)||IEL_STATUS.UNTESTED;if(st===IEL_STATUS.PASS)pass++;else if(st===IEL_STATUS.FAIL)fail++;else if(st===IEL_STATUS.NA)na++;else unt++;});
       return React.createElement('div',{style:SI.listWrap}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
-          ,React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:()=>setViewCat(null)},"‹ Back")
+          ,React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:()=>setViewCat(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:cat&&cat.color||"#eee"}},cat&&cat.icon," ",cat&&cat.label)
             ,React.createElement('div',{style:{fontSize:11,color:"#555"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
@@ -3279,7 +3278,7 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
       const area=project&&project.areas.find(a=>a.id===viewArea);
       return React.createElement('div',{style:SI.listWrap}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
-          ,React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:()=>setViewArea(null)},"‹ Back")
+          ,React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:()=>setViewArea(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name)
             ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
@@ -3325,7 +3324,7 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
     return React.createElement('div',{style:SI.listWrap}
       // Header
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:8}}
-        ,React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:()=>{setViewSnap(null);setViewArea(null);setViewCat(null);}},"‹ Back")
+        ,React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:()=>{setViewSnap(null);setViewArea(null);setViewCat(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#10b981"}},"IEL Audit Snapshot")
           ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
@@ -3455,7 +3454,7 @@ const SI={
   panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#666",marginTop:2},
   panelStats:{display:"flex",gap:10,fontSize:15,fontWeight:800},
   circuitWrap:{padding:"16px"},
-  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:20},
+  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
   secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   exportBtn:{padding:"11px",background:"#161616",color:"#4ade80",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
@@ -3833,7 +3832,7 @@ function CalendarApp({ onGoHome }) {
       ,view==="calendar"&&!showAdd&&React.createElement('div',{style:{padding:"16px"}}
         // Month navigation
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}
-          ,React.createElement('button',{style:{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,color:"#aaa",fontSize:20,width:40,height:40,cursor:"pointer"},onClick:()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);}},"‹")
+          ,React.createElement('button',{style:{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,color:"#aaa",fontSize:20,width:40,height:40,cursor:"pointer"},onClick:()=>{if(calMonth===0){setCalMonth(11);setCalYear(y=>y-1);}else setCalMonth(m=>m-1);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'})))
           ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},monthName)
           ,React.createElement('button',{style:{background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,color:"#aaa",fontSize:20,width:40,height:40,cursor:"pointer"},onClick:()=>{if(calMonth===11){setCalMonth(0);setCalYear(y=>y+1);}else setCalMonth(m=>m+1);}},"›")
         )
@@ -3873,7 +3872,7 @@ function CalendarApp({ onGoHome }) {
             ,React.createElement('div',{style:{fontSize:13,fontWeight:800,color:"#c4b5fd"}}
               ,new Date(calYear,calMonth,selectedDay).toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})
             )
-            ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:18,cursor:"pointer",lineHeight:1},onClick:()=>setSelectedDay(null)},"✕")
+            ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:18,cursor:"pointer",lineHeight:1},onClick:()=>setSelectedDay(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
           )
           ,selectedEvents.length===0
             ? React.createElement('div',{style:{fontSize:13,color:"#555",textAlign:"center",padding:"12px 0"}},"No events on this date")
@@ -5006,7 +5005,6 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 // ─────────────────────────────────────────────────────────────────────────
 function TATReportView({project,results,meta}){
   const sum=tatSiteSummary(results,project);
-  const handleArchive=()=>{onArchive();setArchiveMsg("Audit archived!");setTimeout(()=>setArchiveMsg(""),2500);};
   // Collect fails
   const fails=[];
   project.areas.forEach(area=>{
@@ -5294,7 +5292,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                 ,tag&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px",flexShrink:0}},tag)
                 ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},itemLabel)
                 ,React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0,whiteSpace:"nowrap"}},freqLabel)
-                ,React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>startEditItem(area,itemId)},"✎")
+                ,React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>startEditItem(area,itemId)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})))
                 ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,itemId), label: `Delete "${itemLabel}"?`, compact: true })
               );
             })
@@ -5379,7 +5377,7 @@ function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
     if(project){project.areas.forEach(a=>(a.items||[]).forEach(id=>{total++;const v=(((snap.results||{})[a.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)pass++;else if(st===TAT_STATUS.FAIL)fail++;else if(st===TAT_STATUS.NA)na++;else unt++;}));}
     return React.createElement('div',{style:ST.listWrap}
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
-        ,React.createElement('button',{style:{...ST.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},"‹ Back")
+        ,React.createElement('button',{style:{...ST.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:TAT_COLOR}},"Test & Tag Snapshot")
           ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
@@ -5599,7 +5597,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#666",marginTop:2},
   panelStats:{display:"flex",gap:10,fontSize:15,fontWeight:800},
   circuitWrap:{padding:"16px"},
-  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:20},
+  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
   secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   exportBtn:{padding:"11px",background:"#161616",color:"#4ade80",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
@@ -7512,7 +7510,7 @@ function ThermoEditableDropdown({options,value,onChange,placeholder}){
     ,open&&React.createElement("div",{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}}
       ,options.map(o=>React.createElement("div",{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?"#f97316":"#ccc",background:o===value?"#1a1a0a":"transparent",borderBottom:"1px solid #2a2a2a"},
         onClick:()=>{onChange(o);setOpen(false);}},o))
-      ,React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},"✏ Type custom…")
+      ,React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Type custom…")
     )
   );
 }
@@ -7730,7 +7728,7 @@ function PhotoPage({
           padding: "6px 12px"
         },
         onClick: () => startEdit(idx)
-      }, "✎ Edit"),
+      }, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})), " Edit"),
       React.createElement(DeleteButton, { onDelete: () => deletePhoto(idx) })
     )
     ));
@@ -7955,9 +7953,10 @@ function ThermoReportView({
     style: {
       fontSize: 13,
       color: "#777",
-      marginBottom: meta.testDate ? 8 : 20
+      marginTop: 4,
+      marginBottom: 16
     }
-  }, "THERMOGRAPHIC REPORT ", meta.auditor ? `· ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${THERMO_COLOR}55`,color:THERMO_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",fmtDate(addYearsISO(meta.testDate,1)))), /*#__PURE__*/React.createElement("div", {
+  }, "THERMOGRAPHIC REPORT", meta.auditor ? `· ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${THERMO_COLOR}55`,color:THERMO_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",fmtDate(addYearsISO(meta.testDate,1)))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -9716,7 +9715,6 @@ function exportSWBExcel(project, allResults, meta) {
   const pid=project.id;const results=allResults[pid]||{};
   const sName=project.name||"Site";
   const testDate=(meta&&meta.testDate)||"";
-  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
   const nextDue=testDate?swbAddYear(testDate):"";
   const coLine=`${project.company||"SparkCheck"} Electrical Audit Software Pty. Ltd.${project.abn?`  |  ABN: ${project.abn}`:""}${project.licence?`  |  Electrical Licence: ${project.licence}`:""}`;
   const titleSt =swbXCS("FF1A1A2E",{bold:true,sz:14,color:{rgb:"FFc084fc"}},{horizontal:"left"});
@@ -9729,7 +9727,7 @@ function exportSWBExcel(project, allResults, meta) {
   swbXC2(ws,"A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
   for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
   swbXC2(ws,"A2",coLine,subSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
-  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtD(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt); swbXC2(ws,"G3","",metaSt);
+  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt); swbXC2(ws,"G3","",metaSt);
   merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:6}}); r=3;
   for(let c=0;c<n;c++) swbXC2(ws,cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
   ["Item","Pass / Fail","Defect ID","Comments","Risk","Responsibility / Action","Priority"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
@@ -10186,7 +10184,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard}) {
             ,React.createElement('button',{style:SS.confirmYes,onClick:()=>{onResetBoard();setConfirmReset(false);}},"Yes")
             ,React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
           )
-          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},"↺ Reset board results")
+          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")
       )
     )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
@@ -10322,7 +10320,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
 function SWBReportView({project,results,meta,onExport,onArchive}) {
   const SS=swbStyles();const summary=swbSiteSummary(results,project);
   const testDate=meta.testDate||"";
-  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
   const [archiveMsg,setArchiveMsg]=React.useState("");
   const fails=[];
   (project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{
@@ -10335,7 +10332,7 @@ function SWBReportView({project,results,meta,onExport,onArchive}) {
     ,React.createElement('div',{style:SS.summaryTitle},project.name)
     ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:SS.summaryMeta},"SWITCHBOARD AUDIT REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
-    ,testDate&&React.createElement('div',{style:{fontSize:12,color:"#a855f7",background:"#a855f711",border:"1px solid #a855f733",borderRadius:8,padding:"8px 12px",marginBottom:16}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtD(testDate)," → next due: ",swbAddYear(testDate))
+    ,testDate&&React.createElement('div',{style:{fontSize:12,color:"#a855f7",background:"#a855f711",border:"1px solid #a855f733",borderRadius:8,padding:"8px 12px",marginBottom:16}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," → next due: ",swbAddYear(testDate))
     ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}
       ,[["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>
         React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}}
@@ -10427,12 +10424,12 @@ function SWBManageView({project,onUpdateProject}) {
           ?React.createElement('div',{style:{display:"flex",gap:8,flex:1,alignItems:"center"}}
             ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editAreaName,autoFocus:true,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveArea(area.id);}})
             ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveArea(area.id)},"Save")
-            ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},"✕")
+            ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
           )
           :React.createElement(React.Fragment,null
             ,React.createElement('div',{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
             ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"nowrap",flexShrink:0}}
-              ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},"✎ Edit")
+              ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Edit")
               ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
               ,React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"▲":"▼")
             )
@@ -10444,11 +10441,11 @@ function SWBManageView({project,onUpdateProject}) {
             ?React.createElement('div',{style:{display:"flex",gap:8,padding:"8px 10px",background:"#111",borderRadius:8,alignItems:"center"}}
               ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editBoardName,autoFocus:true,onChange:e=>setEditBoardName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveBoard(area.id,b.id);}})
               ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveBoard(area.id,b.id)},"Save")
-              ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},"✕")
+              ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
             )
               :React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8,flexWrap:"nowrap",minWidth:0}}
                 ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},b.name)
-                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",flexShrink:0},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});}},"✎ Edit")
+                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",flexShrink:0},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Edit")
                 ,React.createElement(DeleteButton, { onDelete: ()=>delBoard(area.id,b.id), label: "Delete board?", compact: true })
               )
         ))
@@ -10472,18 +10469,16 @@ function SWBManageView({project,onUpdateProject}) {
 function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}) {
   const [expanded,setExpanded]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);
   const SS=swbStyles();
-  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
-  const fmtDT=d=>{if(!d)return"";try{return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return d;}};
 
   if(viewSnap){
     const snap=viewSnap;let pass=0,fail=0,na=0,unt=0,total=0;
     if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;else if(st===SWB_STATUS.NA)na++;else unt++;});}));}
     return React.createElement('div',{style:SS.listWrap}
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},"‹ Back")
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#a855f7"}},"Switchboard Audit Snapshot")
-          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtD(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
         ,React.createElement('button',{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
@@ -10525,8 +10520,8 @@ function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#a855f7",marginBottom:4}},"Switchboard Audit")
-            ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtD(snap.testDate)," · ",snap.auditor||"No auditor")
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDT(snap.archivedAt))
+            ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
@@ -10648,7 +10643,7 @@ function swbStyles() {
     untestedBadge:{fontSize:11,fontWeight:700,color:"#fbbf24",background:"#2a1e00",borderRadius:6,padding:"3px 8px"},
     arrow:{fontSize:22,color:"#555",lineHeight:1},
     addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
-    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4},
+    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
     smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},
     modalOverlay:{position:"absolute",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"},
     modalBox:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto"},
@@ -10694,7 +10689,7 @@ function irtSlug(s){return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+
 function irtAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
 function irtGetItem(results,siteId,areaId,panelId,itemId){try{const v=results[siteId][areaId][panelId][itemId];if(v)return v;}catch(_){}return{status:"untested",testVoltage:"500V",readings:{},notes:"",priority:"",rectified:"",scheduledDate:"",defectId:"",responsibility:""};}
 function irtAutoStatus(readings){const vals=Object.values(readings||{}).filter(v=>v&&String(v).trim());if(!vals.length)return"untested";return vals.some(v=>{const s=String(v).trim();if(s.startsWith(">"))return false;if(s.startsWith("<"))return true;const n=parseFloat(s);return!isNaN(n)&&n<1;})?"fail":"pass";}
-function irtSiteSummary(results,project){let total=0,pass=0,fail=0,untested=0;(project.areas||[]).forEach(a=>(a.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,a.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else untested++;})));return{total,pass,fail,untested};}
+function irtSiteSummary(results,project){let total=0,pass=0,fail=0,na=0,untested=0;(project.areas||[]).forEach(a=>(a.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,a.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="na")na++;else untested++;})));return{total,pass,fail,na,untested};}
 
 function irtStyles(){
   return{
@@ -10718,7 +10713,7 @@ function irtStyles(){
     metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",boxSizing:"border-box",overflow:"hidden"},
     metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
     metaInput:{background:"#1a1a1a",border:"1px solid #222",borderRadius:8,color:"#eee",padding:"12px 16px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
-    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4},
+    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
     modalField:{marginBottom:14},
     modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
     modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
@@ -11270,9 +11265,9 @@ function IRTReportView({project,results,meta}){
     React.createElement("div",{style:SS.summaryTitle},project.name),
     project.company&&React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company),
     React.createElement("div",{style:SS.summaryMeta},"INSULATION RESISTANCE TEST REPORT"+(meta.auditor?` \u00b7 ${meta.auditor}`:"")),
-    testDate&&React.createElement("div",{style:{fontSize:12,color:"#60a5fa",background:IRT_COLOR_DIM,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:8,padding:"8px 12px",marginBottom:16}},"\uD83D\uDCC5 Tested: ",fmtDate(testDate)," \u2192 next due: ",irtAddYear(testDate)),
+    testDate&&React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${IRT_COLOR}55`,color:IRT_COLOR,borderRadius:8,padding:"7px 12px",marginBottom:16}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," \u2192 next due: ",irtAddYear(testDate)),
     React.createElement("div",{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}},
-      [["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>React.createElement("div",{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}},React.createElement("div",{style:{fontSize:22,fontWeight:800,color:c}},v),React.createElement("div",{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())))
+      [["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>React.createElement("div",{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}},React.createElement("div",{style:{fontSize:22,fontWeight:800,color:c}},v),React.createElement("div",{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())))
     ),
     React.createElement("div",{style:{marginBottom:20}},
       React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#60a5fa",letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY"),
@@ -11301,8 +11296,6 @@ function IRTReportView({project,results,meta}){
 // ─── History view ─────────────────────────────────────────────────────────
 function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}){
   const [expanded,setExpanded]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);const SS=irtStyles();
-  const fmtD=d=>{if(!d)return"";try{return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return d;}};
-  const fmtDT=d=>{if(!d)return"";try{return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(_){return d;}};
 
   // ── Read-only snapshot viewer ──────────────────────────────────────────
   if(viewSnap){
@@ -11315,7 +11308,7 @@ function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
         React.createElement("button",{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},"\u2039 Back"),
         React.createElement("div",{style:{flex:1}},
           React.createElement("div",{style:{fontSize:15,fontWeight:800,color:IRT_COLOR}},"IR Test Snapshot"),
-          React.createElement("div",{style:{fontSize:11,color:"#555"}},fmtD(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 Read-only")
+          React.createElement("div",{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 Read-only")
         ),
         React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       ),
@@ -11379,7 +11372,7 @@ function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
       const sum=irtSiteSummary(snap.results&&project?{[project.id]:snap.results}:{},project||{areas:[],id:""});
       return React.createElement("div",{key:snap.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#60a5fa",marginBottom:4}},"IR Test Audit"),React.createElement("div",{style:{fontSize:12,color:"#888"}},fmtD(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDT(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#ef4444"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},sum.untested," Untested"))),
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#60a5fa",marginBottom:4}},"IR Test Audit"),React.createElement("div",{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#ef4444"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},sum.untested," Untested"))),
           React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#60a5fa":"#555"}},expanded===snap.id?"\u25be":"\u203a")
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}},
@@ -11538,6 +11531,33 @@ DUPLICATE IMPLEMENTATIONS REMOVED:
   - confirmDelArea, confirmDelBoard (SWBManageView)
   - confirmDelArea, confirmDelPanel, confirmDelItem (IRTManageView)
   - All inline "Delete? [Delete] [Keep]" row implementations
+*/
+
+/*
+UI CONSISTENCY AUDIT — 2026-06-05
+===========================================
+FIXED:
+  - ReportView summaryTitle colour: RCD S.summaryTitle color:"#e8731a" removed (project name now renders in #eee like all other modules)
+  - ReportView summaryMeta marginBottom: standardised to 16px across RCD (S), IEL (SI), TAT (ST), SWB (SS), IRT (irtStyles)
+  - ThermoReportView summaryMeta: inline marginBottom changed from conditional (8/20) to unconditional 16; marginTop:4 added
+  - IELReportView: dead handleArchive declaration removed (onArchive/setArchiveMsg not in scope)
+  - TATReportView: dead handleArchive declaration removed (onArchive/setArchiveMsg not in scope)
+  - SWBReportView: local fmtD replaced with shared fmtDate
+  - IRTReportView: 📅 emoji replaced with SVG calendar icon (matching IEL/TAT/Thermo pattern)
+  - IRTReportView: N/A stat bucket added to summary row; irtSiteSummary now returns .na count
+  - SWBHistoryView: local fmtD/fmtDT replaced with shared fmtDate/fmtDateTime
+  - IRTHistoryView: local fmtD/fmtDT replaced with shared fmtDate/fmtDateTime
+  - SWB Excel export builder: local fmtD replaced with shared fmtDate
+
+REVIEWED — no change needed:
+  - ThermoReportView export button: already present and wired to onExport prop — no change needed
+  - IRTReportView: uses SS=irtStyles() (not SS=swbStyles()) — intentional, each module has its own styles object; shared summaryMeta properties are now consistent
+  - IRT date pill border style: updated to use IRT_COLOR+"55" (matching IEL/TAT/Thermo pattern) rather than IRT_COLOR_BORDER (which was "44")
+  - Thermo stats row uses Pass/Fail/Monitor (no N/A bucket) — intentional, thermographic results have no N/A concept
+  - SWBHistoryView snapshot viewer fmtD: was in read-only snapshot viewer subview, now uses shared fmtDate
+
+REMAINING:
+  - None identified
 */
 
 export default AppRoot;
