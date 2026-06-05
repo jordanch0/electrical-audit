@@ -924,8 +924,8 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
 , !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#ef4444",marginTop:4}}, "⚠ Auditor name required before starting a test")
 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,width:"100%",boxSizing:"border-box"},}
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('input', { style: {...S.metaInput,marginTop:4}, type: "date", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")), onChange: e=>setMeta({pushDate:e.target.value}),}))
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('input', { style: {...S.metaInput,marginTop:4}, type: "date", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")), onChange: e=>setMeta({injectDate:e.target.value}),}))
+, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.pushDate?fmtDate(meta.pushDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")),onChange:e=>setMeta({pushDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.injectDate?fmtDate(meta.injectDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")),onChange:e=>setMeta({injectDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
 )
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:10,flexWrap:"wrap"},}
 , _optionalChain([meta, 'optionalAccess', _69 => _69.pushDate])&&React.createElement('div', { style: {...S.duePill,borderColor:"#e8731a55",color:"#e8731a"},}, "📋 Next push: "   , React.createElement('strong', null, addMonths(meta.pushDate,1)))
@@ -2695,7 +2695,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       )
       ,React.createElement('div',{style:{marginBottom:8}}
         ,React.createElement('div',{style:SI.metaLabelText},"TEST DATE")
-        ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value})})
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SI.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
       ,meta.testDate&&React.createElement('div',{style:{...SI.duePill,borderColor:"#10b98155",color:"#10b981",display:"inline-block",marginTop:4,marginBottom:4}},"Next due: ",React.createElement('strong',null,addMonths(meta.testDate,3)))
     )
@@ -3934,7 +3934,7 @@ function CalendarApp({ onGoHome }) {
         // Due date
         ,React.createElement('div',{style:{marginBottom:12,width:"100%",boxSizing:"border-box",overflow:"hidden"}}
           ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
-          ,React.createElement('input',{style:{width:"100%",background:"#1a1a1a",border:`1px solid ${!form.dueDate?"#ef4444":"#333"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},type:"date",value:form.dueDate,onChange:e=>setForm(f=>({...f,dueDate:e.target.value}))})
+          ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{width:"100%",background:"#1a1a1a",border:`1px solid ${!form.dueDate?"#ef4444":"#333"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",textAlign:"center"}},form.dueDate?fmtDate(form.dueDate):"Select date…"),React.createElement('input',{type:"date",value:form.dueDate,onChange:e=>setForm(f=>({...f,dueDate:e.target.value})),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
         )
         // Series edit mode picker — shown when editing a recurring event
         ,editId&&(()=>{
@@ -4709,7 +4709,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
-        ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value})})
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
@@ -7110,17 +7110,7 @@ function ThermoHomeView({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: STH.metaLabelText
-  }, "TEST DATE"), /*#__PURE__*/React.createElement("input", {
-    style: {
-      ...STH.metaInput,
-      marginTop: 4
-    },
-    type: "date",
-    value: meta.testDate || "",
-    onChange: e => setMeta({
-      testDate: e.target.value
-    })
-  })), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "TEST DATE"), /*#__PURE__*/React.createElement("div", {style:{position:"relative",marginTop:4}}, React.createElement("div", {style:{...STH.metaInput,textAlign:"center",cursor:"pointer"}}, meta.testDate?fmtDate(meta.testDate):"Select date…"), React.createElement("input", {type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: STH.metaLabelText
   }, "STARTING FLIR NUMBER"), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -10309,7 +10299,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:SS.metaLabelText},"TEST DATE")
-        ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value})})
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #a855f733",borderRadius:14,padding:"14px"}}
@@ -11256,7 +11246,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     React.createElement("div",{style:SS.siteSub},project.company||""),
     React.createElement("div",{style:{...SS.metaCard}},
       React.createElement("div",{style:{marginBottom:10}},React.createElement("div",{style:SS.metaLabelText},"AUDITOR"),React.createElement("input",{style:{...SS.metaInput,marginTop:4,borderColor:!hasAuditor?"#ef4444":"#333"},value:meta.auditor||"",placeholder:"Enter name to begin audit\u2026",onChange:e=>setMeta({auditor:e.target.value})}),!hasAuditor&&React.createElement("div",{style:{fontSize:11,color:"#ef4444",marginTop:4}},"\u26a0 Auditor name required before starting")),
-      React.createElement("div",null,React.createElement("div",{style:SS.metaLabelText},"TEST DATE"),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value})}))
+      React.createElement("div",null,React.createElement("div",{style:SS.metaLabelText},"TEST DATE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement("input",{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
     ),
     React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${IRT_COLOR}33`,borderRadius:14,padding:"14px"}},
       React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress"),React.createElement("div",{style:{fontSize:12,color:"#555"}},summary.pass," / ",summary.total," tested")),
