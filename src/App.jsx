@@ -1283,7 +1283,7 @@ const CbAmpReadOnly = React.createElement('div', { style: {display:"flex",gap:8,
     , React.createElement('div', { style: S.modalLabel,}, "CB / RCD TYPE")
     , React.createElement('div', { style: {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",fontSize:13,color:displayCbType?"#ccc":"#444",display:"flex",alignItems:"center",gap:6},}
       , displayCbType
-        ? React.createElement(React.Fragment,null, React.createElement('span',{style:{fontSize:11,color:"#555"}},"🔒"), React.createElement('span',null,displayCbType))
+        ? React.createElement(React.Fragment,null, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"})), React.createElement('span',null,displayCbType))
         : React.createElement('span',{style:{color:"#444",fontStyle:"italic"}},"Not set — edit in Manage")
     )
   )
@@ -1291,7 +1291,7 @@ const CbAmpReadOnly = React.createElement('div', { style: {display:"flex",gap:8,
     , React.createElement('div', { style: S.modalLabel,}, "AMP RATING")
     , React.createElement('div', { style: {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",fontSize:13,color:displayAmpRating?"#ccc":"#444",display:"flex",alignItems:"center",gap:6},}
       , displayAmpRating
-        ? React.createElement(React.Fragment,null, React.createElement('span',{style:{fontSize:11,color:"#555"}},"🔒"), React.createElement('span',null,displayAmpRating))
+        ? React.createElement(React.Fragment,null, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"})), React.createElement('span',null,displayAmpRating))
         : React.createElement('span',{style:{color:"#444",fontStyle:"italic"}},"—")
     )
   )
@@ -2503,7 +2503,7 @@ function IELDropdownsView({dropdowns,setDropdowns}){
             return React.createElement('div',{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#111",border:`1px solid ${isDefault?color+"44":"#1e1e1e"}`,borderRadius:7,padding:"7px 10px"}}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#ccc"}},item)
-              ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},"★")
+              ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
               ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
             );
           })
@@ -2668,7 +2668,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:importLic,placeholder:"e.g. 123456C",onChange:e=>setImportLic(e.target.value)})
             )
             ,React.createElement('div',{style:{display:"flex",gap:8}}
-              ,React.createElement('button',{style:SI.ctaPrimary,onClick:confirmImport},"✓ Import Site")
+              ,React.createElement('button',{style:SI.ctaPrimary,onClick:confirmImport},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Import Site")
               ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
               ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
             )
@@ -2729,7 +2729,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
     })
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${activeCatKey?"#10b98144":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},activeCatKey?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT")
-      ,activeCatKey&&React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#10b981"}).color,label:"✓ Complete & Archive IEL Audit",onComplete:onCompleteAudit})
+      ,activeCatKey&&React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#10b981"}).color,label:React.createElement(React.Fragment,null,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Complete & Archive IEL Audit"),onComplete:onCompleteAudit})
       ,!activeCatKey&&React.createElement('button',{style:{...SI.smallBtn,width:"100%",color:"#10b981",borderColor:"#10b98144",padding:"8px"},onClick:handleArchive},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive IEL Audit")
       ,archiveMsg&&React.createElement('div',{style:{fontSize:12,color:"#4ade80",marginTop:6,textAlign:"center"}},"✓ ",archiveMsg)
     )
@@ -2955,7 +2955,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:item.mechCheck?"#1a3d1a":"#1a1a1a",border:`2px solid ${item.mechCheck?"#22c55e":"#333"}`,borderRadius:12,cursor:"pointer",color:"#eee",textAlign:"left"},
             onClick:()=>toggleCheck("mechCheck")}
             ,React.createElement('div',{style:{width:28,height:28,borderRadius:6,background:item.mechCheck?"#22c55e":"#2a2a2a",border:`2px solid ${item.mechCheck?"#22c55e":"#444"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-              ,item.mechCheck&&React.createElement('span',{style:{color:"#fff",fontSize:16,fontWeight:900}},"✓")
+              ,item.mechCheck&&React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"#fff",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))
             )
             ,React.createElement('div',null
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.mechCheck?"#4ade80":"#aaa"}},"Mechanism / Reset Check")
@@ -2967,7 +2967,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:item.circuitIso?"#1a3d1a":"#1a1a1a",border:`2px solid ${item.circuitIso?"#22c55e":"#333"}`,borderRadius:12,cursor:"pointer",color:"#eee",textAlign:"left"},
             onClick:()=>toggleCheck("circuitIso")}
             ,React.createElement('div',{style:{width:28,height:28,borderRadius:6,background:item.circuitIso?"#22c55e":"#2a2a2a",border:`2px solid ${item.circuitIso?"#22c55e":"#444"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-              ,item.circuitIso&&React.createElement('span',{style:{color:"#fff",fontSize:16,fontWeight:900}},"✓")
+              ,item.circuitIso&&React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"#fff",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))
             )
             ,React.createElement('div',null
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.circuitIso?"#4ade80":"#aaa"}},"Circuit Isolation Verified")
@@ -2979,7 +2979,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:item.lanyardCond?"#1a3d1a":"#1a1a1a",border:`2px solid ${item.lanyardCond?"#22c55e":"#333"}`,borderRadius:12,cursor:"pointer",color:"#eee",textAlign:"left"},
             onClick:()=>toggleCheck("lanyardCond")}
             ,React.createElement('div',{style:{width:28,height:28,borderRadius:6,background:item.lanyardCond?"#22c55e":"#2a2a2a",border:`2px solid ${item.lanyardCond?"#22c55e":"#444"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-              ,item.lanyardCond&&React.createElement('span',{style:{color:"#fff",fontSize:16,fontWeight:900}},"✓")
+              ,item.lanyardCond&&React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"#fff",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))
             )
             ,React.createElement('div',null
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.lanyardCond?"#4ade80":"#aaa"}},"Lanyard Tension / Condition")
@@ -3487,7 +3487,7 @@ const CAL_TYPES = [
   { key:"rcd_inject",  label:"RCD Injection Test",     color:"#3b82f6", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), period:"Annual"     },
   { key:"iel_estop",   label:"IEL E-Stops",            color:"#ef4444", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#ef4444',stroke:'none'},React.createElement('circle',{cx:12,cy:12,r:10})), period:"3-Monthly"  },
   { key:"iel_lanyard", label:"IEL Lanyards",           color:"#10b981", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},React.createElement('path',{d:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'}),React.createElement('path',{d:'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'})), period:"3-Monthly"  },
-  { key:"iel_iso",     label:"IEL Isolators",          color:"#f59e0b", icon:"⚡", period:"3-Monthly"  },
+  { key:"iel_iso",     label:"IEL Isolators",          color:"#f59e0b", icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#e8731a",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})), period:"3-Monthly"  },
   { key:"tat",         label:"Test & Tag",             color:"#60a5fa", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7})), period:"Variable"   },
   { key:"thermo",      label:"Thermographic Testing",  color:"#f97316", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'})), period:"Variable"   },
   { key:"other",       label:"Other / Custom",         color:"#a855f7", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
@@ -3604,7 +3604,7 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
 
     // ── DUE THIS WEEK ─────────────────────────────────────────────────
     ,upcoming7.length>0&&React.createElement('div',{style:{marginBottom:14}}
-      ,React.createElement(SectionHeader,{color:"#ef4444",icon:"⚡",label:"DUE THIS WEEK",count:upcoming7.length})
+      ,React.createElement(SectionHeader,{color:"#ef4444",icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#e8731a",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})),label:"DUE THIS WEEK",count:upcoming7.length})
       ,upcoming7.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete,onDeleteSeries,onStartEdit}))
     )
 
@@ -4892,14 +4892,14 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         ,React.createElement('div',{style:{flex:2}}
           ,React.createElement('label',{style:ST.modalLabel},"EQUIPMENT TYPE")
           ,React.createElement('div',{style:{...ST.modalInput,background:"#111",color:effectiveItem.equipType?"#aaa":"#444",display:"flex",alignItems:"center",gap:6}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#555"}},"🔒")
+            ,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"}))
             ,React.createElement('span',null,effectiveItem.equipType||"Not set — edit in Manage")
           )
         )
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('label',{style:ST.modalLabel},"TEST FREQ.")
           ,React.createElement('div',{style:{...ST.modalInput,background:"#111",color:"#aaa",display:"flex",alignItems:"center",gap:6}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#555"}},"🔒")
+            ,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"}))
             ,React.createElement('span',null,(()=>{const v=effectiveItem.freq;return v==="12"?"Annual":v==="1"?"1 Month":v?v+" Months":"3 Months";})())
           )
         )
@@ -9029,7 +9029,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns}){
           ,items(key).map((item,i)=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#111",borderRadius:8,padding:"8px 10px"}}
             ,React.createElement("span",{style:{flex:1,fontSize:12,color:"#ccc"}},item)
             ,i===0&&React.createElement("span",{style:{fontSize:10,color:"#555",marginRight:4}},"default")
-            ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:color,cursor:"pointer",fontSize:13,padding:"0 4px"},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},"★")
+            ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:color,cursor:"pointer",fontSize:13,padding:"0 4px"},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
             ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
           ))
           ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
@@ -10082,7 +10082,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               )
             )
             ,React.createElement('div',{style:{display:"flex",gap:8}}
-              ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7"},onClick:confirmImport},"✓ Import Site")
+              ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7"},onClick:confirmImport},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Import Site")
               ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
               ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
             )
@@ -10591,7 +10591,7 @@ function SWBDropdownsView({dropdowns, setDropdowns}) {
             return React.createElement('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#111",border:`1px solid ${isDefault?color+"44":"#1e1e1e"}`,borderRadius:7,padding:"7px 10px"}}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#ccc"}},item)
-              ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},"★")
+              ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
               ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
             );
           })
