@@ -3696,6 +3696,7 @@ function CalendarApp({ onGoHome }) {
   const [editSeriesMode, setEditSeriesMode] = React.useState(null); // null | "single" | "series"
   const [form,  setForm]  = React.useState({...blank});
   const [customSite, setCustomSite] = React.useState("");
+  const [validErr,   setValidErr]   = React.useState({type:false,site:false,date:false});
 
   React.useEffect(()=>{
     (async()=>{
@@ -3746,7 +3747,11 @@ function CalendarApp({ onGoHome }) {
 
   const saveEvent = () => {
     const finalSite = (form.site==="__custom__"||!form.site) ? customSite.trim() : form.site.trim();
-    if(!form.dueDate||!finalSite) return;
+    if(!form.dueDate||!finalSite){
+      setValidErr({type:false,site:!finalSite,date:!form.dueDate});
+      return;
+    }
+    setValidErr({type:false,site:false,date:false});
     const formToSave = {...form, site: finalSite};
 
     if(editId){
@@ -3930,56 +3935,74 @@ function CalendarApp({ onGoHome }) {
         ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#818cf8",marginBottom:editId?8:16}},editId?React.createElement(React.Fragment,null,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))," Edit Event"):"+ Add Test Event")
         
         // Type
-        ,React.createElement('div',{style:{marginBottom:12}}
-          ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:6}},"TEST TYPE")
+        ,React.createElement('div',{style:{marginBottom:12,border:validErr.type?"2px solid #ef4444":"none",borderRadius:validErr.type?10:0,padding:validErr.type?"10px 10px 6px":"0"}}
+          ,React.createElement('div',{style:{fontSize:10,color:validErr.type?"#ef4444":"#666",letterSpacing:0.8,fontWeight:700,marginBottom:6}},"TEST TYPE")
           ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
             ,CAL_TYPES.map(t=>React.createElement('button',{key:t.key,
               style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:form.type===t.key?t.color+"22":"#161616",border:`2px solid ${form.type===t.key?t.color:"#2a2a2a"}`,borderRadius:10,cursor:"pointer",color:"#eee",textAlign:"left"},
-              onClick:()=>setForm(f=>({...f,type:t.key}))}
+              onClick:()=>{setForm(f=>({...f,type:t.key}));setValidErr(v=>({...v,type:false}));}}
               ,React.createElement('span',{style:{fontSize:18}},t.icon)
               ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:form.type===t.key?t.color:"#aaa"}},t.label)
               ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:"auto"}},t.period)
             ))
           )
+          ,validErr.type&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:6}},"Select a type")
         )
-        // Site / Location — dropdown from saved projects + custom entry
+        // Site / Location — direct input when no sites exist; dropdown + custom otherwise
         ,React.createElement('div',{style:{marginBottom:12}}
-          ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"SITE / LOCATION")
-          ,React.createElement(React.Fragment,null
-              ,React.createElement('select',{
-                style:{width:"100%",background:"#1a1a1a",border:`1px solid ${!form.site&&!customSite?"#ef4444":"#333"}`,borderRadius:8,color:form.site||customSite?"#eee":"#666",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:6},
-                value:customSite?"__custom__":form.site,
-                onChange:e=>{
-                  if(e.target.value==="__custom__"){
-                    setCustomSite("");
-                    setForm(f=>({...f,site:"__custom__"}));
-                  } else {
-                    setCustomSite("");
-                    setForm(f=>({...f,site:e.target.value}));
+          ,React.createElement('div',{style:{fontSize:10,color:validErr.site?"#ef4444":"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"SITE / LOCATION")
+          ,allSites.length===0
+            ? React.createElement(React.Fragment,null
+                ,React.createElement('input',{
+                  style:{width:"100%",background:"#1a1a1a",border:`1px solid ${validErr.site?"#ef4444":"#6366f1"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
+                  placeholder:"Enter site name…",
+                  value:customSite,
+                  onChange:e=>{
+                    setCustomSite(e.target.value);
+                    setForm(f=>({...f,site:e.target.value||"__custom__"}));
+                    setValidErr(v=>({...v,site:false}));
                   }
-                }}
-                ,React.createElement('option',{value:""},"— Select a site")
-                ,allSites.map(s=>React.createElement('option',{key:s,value:s},s))
-                ,allSites.length===0&&React.createElement('option',{value:"",disabled:true},"No sites yet — add one in RCD or IEL first, or use custom below")
-                ,React.createElement('option',{value:"__custom__"},"+ Enter custom site…")
+                })
+                ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"No sites yet — add one in RCD or IEL, or type a custom name above")
               )
-              ,(form.site==="__custom__"||customSite)&&React.createElement('input',{
-                style:{width:"100%",background:"#1a1a1a",border:"1px solid #6366f1",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
-                placeholder:"Type site name…",
-                value:customSite,
-                autoFocus:true,
-                onChange:e=>{
-                  setCustomSite(e.target.value);
-                  setForm(f=>({...f,site:e.target.value||"__custom__"}));
-                }
-              })
-            )
-          ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"Sites auto-filled from RCD & IEL modules")
+            : React.createElement(React.Fragment,null
+                ,React.createElement('select',{
+                  style:{width:"100%",background:"#1a1a1a",border:`1px solid ${validErr.site?"#ef4444":"#333"}`,borderRadius:8,color:form.site||customSite?"#eee":"#666",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:6},
+                  value:customSite?"__custom__":form.site,
+                  onChange:e=>{
+                    if(e.target.value==="__custom__"){
+                      setCustomSite("");
+                      setForm(f=>({...f,site:"__custom__"}));
+                    } else {
+                      setCustomSite("");
+                      setForm(f=>({...f,site:e.target.value}));
+                    }
+                    setValidErr(v=>({...v,site:false}));
+                  }}
+                  ,React.createElement('option',{value:""},"— Select a site")
+                  ,allSites.map(s=>React.createElement('option',{key:s,value:s},s))
+                  ,React.createElement('option',{value:"__custom__"},"+ Enter custom site…")
+                )
+                ,(form.site==="__custom__"||customSite)&&React.createElement('input',{
+                  style:{width:"100%",background:"#1a1a1a",border:"1px solid #6366f1",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
+                  placeholder:"Type site name…",
+                  value:customSite,
+                  autoFocus:true,
+                  onChange:e=>{
+                    setCustomSite(e.target.value);
+                    setForm(f=>({...f,site:e.target.value||"__custom__"}));
+                    setValidErr(v=>({...v,site:false}));
+                  }
+                })
+                ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"Sites auto-filled from RCD & IEL modules")
+              )
+          ,validErr.site&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:4}},"Select or enter a site")
         )
         // Due date
         ,React.createElement('div',{style:{marginBottom:12,width:"100%",boxSizing:"border-box",overflow:"hidden"}}
-          ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
-          ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{width:"100%",background:"#1a1a1a",border:`1px solid ${!form.dueDate?"#ef4444":"#333"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",textAlign:"center"}},form.dueDate?fmtDate(form.dueDate):"Select date…"),React.createElement('input',{type:"date",value:form.dueDate,onChange:e=>setForm(f=>({...f,dueDate:e.target.value})),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+          ,React.createElement('div',{style:{fontSize:10,color:validErr.date?"#ef4444":"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
+          ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{width:"100%",background:"#1a1a1a",border:`1px solid ${validErr.date?"#ef4444":"#333"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",textAlign:"center"}},form.dueDate?fmtDate(form.dueDate):"Select date…"),React.createElement('input',{type:"date",value:form.dueDate,onChange:e=>{setForm(f=>({...f,dueDate:e.target.value}));setValidErr(v=>({...v,date:false}));},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+          ,validErr.date&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:4}},"Select a due date")
         )
         // Series edit mode picker — shown when editing a recurring event
         ,editId&&(()=>{
@@ -4038,7 +4061,7 @@ function CalendarApp({ onGoHome }) {
               !(form.site==="__custom__"?customSite.trim():form.site.trim())||
               (editId&&events.find(e=>e.id===editId)?.seriesId&&!editSeriesMode)
             )?0.5:1},onClick:saveEvent},editId?"Save Changes":"Add Event")
-          ,React.createElement('button',{style:{padding:"13px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>{setShowAdd(false);setEditId(null);setEditSeriesMode(null);setForm({...blank});}},  "Cancel")
+          ,React.createElement('button',{style:{padding:"13px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>{setShowAdd(false);setEditId(null);setEditSeriesMode(null);setForm({...blank});setCustomSite("");setValidErr({type:false,site:false,date:false});}},  "Cancel")
         )
       )
     )
@@ -4053,7 +4076,7 @@ function CalendarApp({ onGoHome }) {
         ,React.createElement('span',{style:{fontSize:18}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10})))
         ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Calendar")
       )
-      ,React.createElement('button',{onClick:()=>{setShowAdd(true);setEditId(null);setForm({...blank});},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:showAdd?"#818cf8":"#555",borderTop:showAdd?"2px solid #6366f1":"2px solid transparent"}}
+      ,React.createElement('button',{onClick:()=>{setShowAdd(true);setEditId(null);setForm({...blank});setCustomSite("");setValidErr({type:false,site:false,date:false});},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:showAdd?"#818cf8":"#555",borderTop:showAdd?"2px solid #6366f1":"2px solid transparent"}}
         ,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:12,y1:5,x2:12,y2:19}),React.createElement('line',{x1:5,y1:12,x2:19,y2:12}))
         ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Add Event")
       )
