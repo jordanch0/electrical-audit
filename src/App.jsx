@@ -331,7 +331,7 @@ ws[ref] = { v: _nullishCoalesce(value, () => ( "")), t, s: style };
 function exportExcel(results, project, meta, mode, logoBase64) {
 const wb = XLSX.utils.book_new();
 const testDate = mode==="inject" ? (_optionalChain([meta, 'optionalAccess', _10 => _10.injectDate])||"") : (_optionalChain([meta, 'optionalAccess', _11 => _11.pushDate])||"");
-const nextDue  = mode==="inject" ? addYears(testDate,1)   : addMonths(testDate,1);
+const nextDue  = mode==="inject" ? (meta&&meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(testDate,1)) : (meta&&meta.nextPushDate?fmtDate(meta.nextPushDate):addMonths(testDate,1));
 const label    = mode==="inject" ? "Annual Injection Test" : "Monthly Push Test";
 const isInject = mode === "inject";
 const headers = isInject
@@ -776,7 +776,7 @@ onContinueFromSnap: (snap)=>{
   setActivePanelId(null);
   setView("audit");
 },})
-, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, logo: logo, setLogo: setLogo,})
+, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, logo: logo, setLogo: setLogo, onBack:()=>setView("home"),})
 )
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
@@ -944,7 +944,6 @@ const pushSum=summariseProject(results,project,"push");
 const injectSum=summariseProject(results,project,"inject");
 const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.na)/pushSum.total)*100):0;
 const injectPct=injectSum.total>0?Math.round(((injectSum.pass+injectSum.na)/injectSum.total)*100):0;
-const [showExports,setShowExports]=React.useState(false);
 const [confirmReset,setConfirmReset]=React.useState(false);
 const [archiveMsg,setArchiveMsg]=React.useState("");
 const handleArchive=(m)=>{onArchive(m);setArchiveMsg(`${m==="inject"?"Injection":"Push"} test archived!`);setTimeout(()=>setArchiveMsg(""),2500);};
@@ -957,25 +956,25 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
 , !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#ef4444",marginTop:4}}, "⚠ Auditor name required before starting a test")
 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,width:"100%",boxSizing:"border-box"},}
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.pushDate?fmtDate(meta.pushDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")),onChange:e=>setMeta({pushDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.injectDate?fmtDate(meta.injectDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")),onChange:e=>setMeta({injectDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.pushDate?fmtDate(meta.pushDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")),onChange:e=>{const nd=e.target.value;const autoPrev=meta&&meta.pushDate?addMonthsISO(meta.pushDate,1):"";const upd=!meta.nextPushDate||meta.nextPushDate===autoPrev;setMeta({pushDate:nd,...(upd?{nextPushDate:addMonthsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.injectDate?fmtDate(meta.injectDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")),onChange:e=>{const nd=e.target.value;const autoPrev=meta&&meta.injectDate?addYearsISO(meta.injectDate,1):"";const upd=!meta.nextInjectDate||meta.nextInjectDate===autoPrev;setMeta({injectDate:nd,...(upd?{nextInjectDate:addYearsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
 )
-, React.createElement('div', { style: {display:"flex",gap:8,marginTop:10,flexWrap:"wrap"},}
-, _optionalChain([meta, 'optionalAccess', _69 => _69.pushDate])&&React.createElement('div', { style: {...S.duePill,borderColor:"#e8731a55",color:"#e8731a"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})), " Next push: "   , React.createElement('strong', null, addMonths(meta.pushDate,1)))
-, _optionalChain([meta, 'optionalAccess', _70 => _70.injectDate])&&React.createElement('div', { style: {...S.duePill,borderColor:"#3b82f655",color:"#60a5fa"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), " Next injection: "   , React.createElement('strong', null, addYears(meta.injectDate,1)))
+, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,width:"100%",boxSizing:"border-box",marginTop:10},}
+, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "NEXT PUSH DUE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.nextPushDate?fmtDate(meta.nextPushDate):"Not set"),React.createElement('input',{type:"date",value:(meta&&meta.nextPushDate)||"",onChange:e=>setMeta({nextPushDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "NEXT INJECTION DUE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.nextInjectDate?fmtDate(meta.nextInjectDate):"Not set"),React.createElement('input',{type:"date",value:(meta&&meta.nextInjectDate)||"",onChange:e=>setMeta({nextInjectDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
 )
 )
 , React.createElement('div', { style: S.modeSelectLabel,}, "SELECT TEST TYPE"  )
 , React.createElement('div', { style: S.modeBtnRow,}
 , React.createElement('button', { style: {...S.modeBtnPush,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartPush:undefined,}
 , React.createElement('span', { style: S.modeBtnIcon,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-, React.createElement('span', { style: S.modeBtnTitle,}, "Monthly", React.createElement('br', null), "Push Test" )
+, React.createElement('span', { style: S.modeBtnTitle,}, "Push Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${pushPct}%`,background:"#e8731a"},}))
 , React.createElement('span', { style: S.modeBtnPct,}, pushPct, "% · "  , pushSum.fail>0?`${pushSum.fail} FAIL`:"clear")
 )
 , React.createElement('button', { style: {...S.modeBtnInject,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartInject:undefined,}
 , React.createElement('span', { style: S.modeBtnIcon,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})))
-, React.createElement('span', { style: S.modeBtnTitle,}, "Annual", React.createElement('br', null), "Injection Test" )
+, React.createElement('span', { style: S.modeBtnTitle,}, "Injection Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${injectPct}%`,background:"#3b82f6"},}))
 , React.createElement('span', { style: S.modeBtnPct,}, injectPct, "% · "  , injectSum.fail>0?`${injectSum.fail} FAIL`:"clear")
 )
@@ -989,17 +988,6 @@ React.createElement('div', { style: S.homeWrap,}
   , React.createElement('button', { style: {...S.smallBtn,flex:1,color:hasAuditor?"#60a5fa":"#555",borderColor:hasAuditor?"#3b82f644":"#333",padding:"8px",opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?()=>handleArchive("inject"):undefined,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Archive Injection Test")
 )
 , archiveMsg&&React.createElement('div', { style: {fontSize:12,color:"#4ade80",marginTop:6,textAlign:"center"},}, "✓ " , archiveMsg)
-)
-, React.createElement('div', { style: {width:"100%",maxWidth:500,display:"flex",gap:8,flexWrap:"wrap"},}
-, React.createElement('button', { style: {...S.secondaryBtn,flex:1}, onClick: onReport,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'}),React.createElement('polyline',{points:'14 2 14 8 20 8'}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}))," Report" )
-, React.createElement('button', { style: {...S.secondaryBtn,flex:1,color:"#f59e0b",borderColor:"#f59e0b33"}, onClick: onHistory,}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:'12 6 12 12 16 14'})), " History" )
-, React.createElement('button', { style: {...S.secondaryBtn,flex:1,color:"#c084fc",borderColor:"#a855f744"}, onClick: onManage,}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Structure" )
-, React.createElement('button', { style: {...S.secondaryBtn,flex:1,color:"#64748b",borderColor:"#64748b44"}, onClick: onSettings,}, "▾ Dropdowns" )
-, React.createElement('button', { style: {...S.secondaryBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"}, onClick: ()=>setShowExports(x=>!x),}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export" )
-)
-, showExports&&React.createElement('div', { style: {width:"100%",maxWidth:500,display:"flex",gap:8},}
-, React.createElement('button', { style: {...S.exportBtn,flex:1,background:"#1a1200",borderColor:"#e8731a55",color:"#e8731a"}, onClick: onExportPush,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push Test xlsx"   )
-, React.createElement('button', { style: {...S.exportBtn,flex:1,background:"#0a1628",borderColor:"#3b82f655",color:"#60a5fa"}, onClick: onExportInject,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Injection Test xlsx"   )
 )
 , confirmReset
 ?React.createElement('div', { style: S.confirmRow,}, React.createElement('span', { style: {color:"#ef4444",fontSize:13},}, "Reset all results?"  ), React.createElement('button', { style: S.confirmYes, onClick: ()=>{onReset();setConfirmReset(false);},}, "Yes"), React.createElement('button', { style: S.confirmNo, onClick: ()=>setConfirmReset(false),}, "Cancel"))
@@ -1190,7 +1178,7 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:4},}
 , React.createElement('span', { style: {fontSize:13,fontWeight:800,color:"#eee"},}, snap.label)
 , React.createElement('span', { style: {fontSize:11,padding:"2px 8px",borderRadius:5,background:snap.mode==="inject"?"#0a1628":"#1a1200",color:snap.mode==="inject"?"#60a5fa":"#e8731a",border:`1px solid ${snap.mode==="inject"?"#3b82f644":"#e8731a44"}`},}
-, snap.mode==="inject"?React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Annual"):React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Monthly")
+, snap.mode==="inject"?React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Injection"):React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push")
 )
 , hasFail&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 )
@@ -1225,7 +1213,7 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 // ─────────────────────────────────────────────────────────────────────────
 // SETTINGS VIEW — logo + all dropdown lists
 // ─────────────────────────────────────────────────────────────────────────
-function SettingsView({ dropdowns, setDropdowns, logo, setLogo }) {
+function SettingsView({ dropdowns, setDropdowns, logo, setLogo, onBack }) {
 const [newVals, setNewVals] = React.useState({});
 const logoRef = React.useRef();
 const handleLogoUpload = e => {
@@ -1250,6 +1238,7 @@ const LISTS = [
 ];
 return (
 React.createElement('div', { style: S.listWrap,}
+, onBack&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...S.smallBtn,color:"#aaa"},onClick:onBack},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
 , React.createElement('div', { style: {...S.listTitle,color:"#64748b"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Settings" )
 
 /* Dropdown lists */
@@ -1918,8 +1907,8 @@ return(React.createElement('div',{style:S.summaryWrap}
   ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
   ,React.createElement('div',{style:S.summaryMeta},"RCD AUDIT REPORT",_optionalChain([meta,'optionalAccess',_177=>_177.auditor])?` · ${meta.auditor}`:"")
   ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}
-    ,_optionalChain([meta,'optionalAccess',_178=>_178.pushDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#e8731a55",color:"#e8731a",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push: ",fmtDate(meta.pushDate)," → next ",addMonths(meta.pushDate,1))
-    ,_optionalChain([meta,'optionalAccess',_179=>_179.injectDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#3b82f655",color:"#60a5fa",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Injection: ",fmtDate(meta.injectDate)," → next ",addYears(meta.injectDate,1))
+    ,_optionalChain([meta,'optionalAccess',_178=>_178.pushDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#e8731a55",color:"#e8731a",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push: ",fmtDate(meta.pushDate)," → next ",(meta.nextPushDate?fmtDate(meta.nextPushDate):addMonths(meta.pushDate,1)))
+    ,_optionalChain([meta,'optionalAccess',_179=>_179.injectDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#3b82f655",color:"#60a5fa",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Injection: ",fmtDate(meta.injectDate)," → next ",(meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(meta.injectDate,1)))
   )
   ,[["MONTHLY PUSH TEST",pushSum,"#e8731a"],["ANNUAL INJECTION TEST",injectSum,"#3b82f6"]].map(([lbl,sum,col])=>(
     React.createElement('div',{key:lbl,style:{marginBottom:20}}
@@ -2158,7 +2147,7 @@ function exportIELExcel(project, results, meta) {
   const wb=XLSX.utils.book_new();
   const testDate=(meta&&meta.testDate)||"";
   const auditor=(meta&&meta.auditor)||"";
-  const nextDue=addMonths(testDate,3);
+  const nextDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(testDate,3);
   const sName=project.name||"Site";
   const headers=["Location","Type","Machine","Date","Mechanism / Reset Check","Circuit Isolation Verified","Lanyard Tension / Cond.","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)","Next Test Due (3 months)"];
   const n=headers.length;
@@ -2475,7 +2464,7 @@ function IELApp({ onGoHome }) {
       ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);}})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
-      ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns})
+      ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns,onBack:()=>setView("home")})
       ,!detailInfo&&view==="history"&&React.createElement(IELHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIELExcel(project,snap.results||{},snap.meta||{}),
         onContinueFromSnap:(snap)=>{
           setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
@@ -2505,7 +2494,7 @@ function IELApp({ onGoHome }) {
 // ─────────────────────────────────────────────────────────────────────────
 // IEL DROPDOWNS VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function IELDropdownsView({dropdowns,setDropdowns}){
+function IELDropdownsView({dropdowns,setDropdowns,onBack}){
   const [newVals,setNewVals]=React.useState({});
   const items=(key)=>(dropdowns&&dropdowns[key])||[];
   const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
@@ -2516,6 +2505,7 @@ function IELDropdownsView({dropdowns,setDropdowns}){
     {key:"rectified",    label:"RECTIFIED / SCHEDULED",color:"#f59e0b",desc:"Actions available when rectifying a defect",defaults:IEL_DEFAULT_RECTIFIED},
   ];
   return React.createElement('div',{style:{padding:"16px",paddingBottom:100}}
+    ,onBack&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SI.smallBtn,color:"#aaa"},onClick:onBack},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
     ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee",marginBottom:4}},"Dropdown Options")
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:20}},"Add or remove options available when testing items")
     ,sections.map(({key,label,color,desc,defaults})=>{
@@ -2718,7 +2708,6 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
 function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onArchive,onCompleteAudit,activeCatKey}){
-  const[showExports,setShowExports]=React.useState(false);
   const[confirmReset,setConfirmReset]=React.useState(false);
   const[archiveMsg,setArchiveMsg]=React.useState("");
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
@@ -2734,9 +2723,12 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       )
       ,React.createElement('div',{style:{marginBottom:8}}
         ,React.createElement('div',{style:SI.metaLabelText},"TEST DATE")
-        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SI.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SI.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addMonthsISO(meta.testDate,3):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addMonthsISO(nd,3)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
-      ,meta.testDate&&React.createElement('div',{style:{...SI.duePill,borderColor:"#10b98155",color:"#10b981",display:"inline-block",marginTop:4,marginBottom:4}},"Next due: ",React.createElement('strong',null,addMonths(meta.testDate,3)))
+      ,React.createElement('div',{style:{marginBottom:8}}
+        ,React.createElement('div',{style:SI.metaLabelText},"NEXT TEST DUE")
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SI.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement('input',{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+      )
     )
     ,React.createElement('div',{style:SI.modeSelectLabel},"SELECT TEST CATEGORY")
     ,IEL_CATEGORIES.map(cat=>{
@@ -2768,13 +2760,6 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       ,!activeCatKey&&React.createElement('button',{style:{...SI.smallBtn,width:"100%",color:"#10b981",borderColor:"#10b98144",padding:"8px"},onClick:handleArchive},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive IEL Audit")
       ,archiveMsg&&React.createElement('div',{style:{fontSize:12,color:"#4ade80",marginTop:6,textAlign:"center"}},"✓ ",archiveMsg)
     )
-    ,React.createElement('div',{style:{width:"100%",maxWidth:500,display:"flex",gap:8,flexWrap:"wrap"}}
-      ,React.createElement('button',{style:{...SI.secondaryBtn,flex:1},onClick:onReport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'}),React.createElement('polyline',{points:'14 2 14 8 20 8'}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}))," Report")
-      ,React.createElement('button',{style:{...SI.secondaryBtn,flex:1,color:"#f59e0b",borderColor:"#f59e0b33"},onClick:onHistory},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:'12 6 12 12 16 14'}))," History")
-      ,React.createElement('button',{style:{...SI.secondaryBtn,flex:1,color:"#a855f7",borderColor:"#a855f744"},onClick:onManage},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure")
-      ,React.createElement('button',{style:{...SI.secondaryBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>setShowExports(x=>!x)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
-    )
-    ,showExports&&React.createElement('button',{style:{...SI.exportBtn,width:"100%",maxWidth:500,color:"#10b981",borderColor:"#10b98144",background:"#0a1a12"},onClick:onExport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export IEL xlsx (All Categories)")
     ,confirmReset
       ?React.createElement('div',{style:SI.confirmRow},React.createElement('span',{style:{color:"#ef4444",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SI.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SI.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
       :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
@@ -3117,8 +3102,8 @@ function IELReportView({project,results,meta}){
     ,React.createElement('div',{style:SI.summaryTitle},project.name)
     ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:SI.summaryMeta},"IEL AUDIT REPORT",meta.auditor?` · ${meta.auditor}`:"")
-    ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
-      ,React.createElement('div',{style:{fontSize:12,background:"#161616",border:"1px solid #10b98155",color:"#10b981",borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",addMonths(meta.testDate,3))
+    ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}
+      ,React.createElement('div',{style:{...SI.duePill,borderColor:"#10b98155",color:"#10b981",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(meta.testDate,3)))
     )
     ,IEL_CATEGORIES.map(cat=>{
       const sum=ielSiteSummary(results,project,cat.key);
@@ -3147,6 +3132,7 @@ function IELReportView({project,results,meta}){
         ,f.comment&&React.createElement('div',{style:{fontSize:12,color:"#aaa",marginTop:2}},f.comment)
       ))
     )
+    ,allFails.length===0&&React.createElement('div',{style:{textAlign:"center",color:"#22c55e",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -3416,18 +3402,22 @@ function IELHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
     ,React.createElement('div',{style:SI.listTitle},"IEL History")
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
-      let pass=0,fail=0,total=0;
-      if(project){project.areas.forEach(a=>{IEL_CATEGORIES.forEach(cat=>{const cp=a.panels.find(p=>p.name===cat.key);if(!cp)return;cp.circuits.forEach(id=>{total++;const v=((((snap.results||{})[a.id]||{})[cat.key])||{})[id];const st=(v&&v.status)||IEL_STATUS.UNTESTED;if(st===IEL_STATUS.PASS)pass++;else if(st===IEL_STATUS.FAIL)fail++;});});});}
+      let pass=0,fail=0,na=0,total=0;
+      if(project){project.areas.forEach(a=>{IEL_CATEGORIES.forEach(cat=>{const cp=a.panels.find(p=>p.name===cat.key);if(!cp)return;cp.circuits.forEach(id=>{total++;const v=((((snap.results||{})[a.id]||{})[cat.key])||{})[id];const st=(v&&v.status)||IEL_STATUS.UNTESTED;if(st===IEL_STATUS.PASS)pass++;else if(st===IEL_STATUS.FAIL)fail++;else if(st===IEL_STATUS.NA)na++;});});});}
       return React.createElement('div',{key:snap.id,style:{...SI.siteCard,flexDirection:"column",padding:0,marginBottom:10,overflow:"hidden"}}
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
           ,React.createElement('div',{style:{flex:1}}
-            ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#10b981",marginBottom:4}},"IEL Audit")
+            ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
+              ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#10b981"}},snap.label||"IEL Audit")
+              ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
+            )
             ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
             ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail," Untested")
+              ,React.createElement('span',{style:{fontSize:11,color:"#64748b"}},na," N/A")
+              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail-na," Untested")
             )
           )
           ,React.createElement('span',{style:{...SI.arrow,color:expanded===snap.id?"#10b981":"#555"}},expanded===snap.id?"▾":"›")
@@ -3701,18 +3691,20 @@ function CalendarApp({ onGoHome }) {
   React.useEffect(()=>{
     (async()=>{
       try{
-        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs] = await Promise.all([
+        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs, swbProjs, irtProjs] = await Promise.all([
           load(K_CAL_EVENTS,[]),
           load(K_PROJECTS,[]),
           load(K_IEL_PROJECTS,[]),
           load(K_TAT_PROJECTS,[]),
           load("thermo-projects-v1",[]),
+          load(K_SWB_PROJECTS,[]),
+          load(K_IRT_PROJECTS,[]),
         ]);
         setEvents(ev);
         // Merge site names from all modules, deduplicate by name
         const names = new Set();
         const combined = [];
-        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[])].forEach(p=>{
+        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[]), ...(swbProjs||[]), ...(irtProjs||[])].forEach(p=>{
           if(p&&p.name&&!names.has(p.name)){ names.add(p.name); combined.push(p.name); }
         });
         setAllSites(combined);
@@ -3787,7 +3779,21 @@ function CalendarApp({ onGoHome }) {
     setShowAdd(false);
   };
 
-  const deleteEvent = id => setEvents(prev=>prev.filter(e=>e.id!==id));
+  const deleteEvent = id => setEvents(prev => {
+    const ev = prev.find(e => e.id === id);
+    const filtered = prev.filter(e => e.id !== id);
+    if (!ev || !ev.seriesId) return filtered;
+    const remaining = filtered
+      .filter(e => e.seriesId === ev.seriesId)
+      .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+    const newTotal = remaining.length;
+    const newIndexMap = {};
+    remaining.forEach((e, i) => { newIndexMap[e.id] = i; });
+    return filtered.map(e => {
+      if (e.seriesId !== ev.seriesId) return e;
+      return { ...e, seriesTotal: newTotal, seriesIndex: newIndexMap[e.id] };
+    });
+  });
   const deleteSeries = seriesId => setEvents(prev=>prev.filter(e=>e.seriesId!==seriesId));
   const toggleComplete = id => setEvents(prev=>prev.map(e=>e.id===id?{...e,completed:!e.completed,completedAt:!e.completed?new Date().toISOString():null}:e));
 
@@ -3943,7 +3949,6 @@ function CalendarApp({ onGoHome }) {
               onClick:()=>{setForm(f=>({...f,type:t.key}));setValidErr(v=>({...v,type:false}));}}
               ,React.createElement('span',{style:{fontSize:18}},t.icon)
               ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:form.type===t.key?t.color:"#aaa"}},t.label)
-              ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:"auto"}},t.period)
             ))
           )
           ,validErr.type&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:6}},"Select a type")
@@ -3994,7 +3999,7 @@ function CalendarApp({ onGoHome }) {
                     setValidErr(v=>({...v,site:false}));
                   }
                 })
-                ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"Sites auto-filled from RCD & IEL modules")
+                ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"Sites auto-filled from all modules")
               )
           ,validErr.site&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:4}},"Select or enter a site")
         )
@@ -4295,7 +4300,8 @@ function exportTATExcel(project, results, meta) {
   const rows=[];
   rows.push([`${sName} — Test & Tag`,...Array(n-1).fill("")]);
   rows.push([coLine,...Array(n-1).fill("")]);
-  rows.push([`Auditor: ${auditor}`,"",`Date Tested: ${fmtDate(testDate)}`,...Array(n-3).fill("")]);
+  const nextTestDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(testDate,3);
+  rows.push([`Auditor: ${auditor}`,"",`Date Tested: ${fmtDate(testDate)}`,"",`Next Test Due: ${nextTestDue}`,...Array(Math.max(0,n-5)).fill("")]);
   rows.push(Array(n).fill(""));
   rows.push(headers);
   const dataRows=[];
@@ -4608,7 +4614,7 @@ function TATApp({ onGoHome }) {
       ,!detailItemId&&view==="report"&&project&&React.createElement(TATReportView,{project,results:allResults,meta,
         onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit})
       ,!detailItemId&&view==="manage"&&project&&React.createElement(TATManageView,{project,equipTypes,freqOptions,tatDefaults,applianceNames,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
-      ,!detailItemId&&view==="settings"&&React.createElement(TATSettingsView,{equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults})
+      ,!detailItemId&&view==="settings"&&React.createElement(TATSettingsView,{equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults,onBack:()=>setView("home")})
       ,!detailItemId&&view==="history"&&React.createElement(TATHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,
         onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),
         onExportSnap:snap=>exportTATExcel(project,snap.results||{},snap.meta||{}),
@@ -4762,7 +4768,6 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // T&T HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
 function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,onArchive,auditEntered,onCompleteAudit}){
-  const[showExports,setShowExports]=React.useState(false);
   const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.na)/summary.total)*100):0;
@@ -4777,7 +4782,11 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
-        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addMonthsISO(meta.testDate,3):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addMonthsISO(nd,3)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+      )
+      ,React.createElement('div',{style:{marginTop:8}}
+        ,React.createElement('div',{style:ST.metaLabelText},"NEXT TEST DUE")
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement('input',{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
@@ -4805,14 +4814,6 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,auditEntered&&React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Complete & Archive Test & Tag Audit"),onComplete:onCompleteAudit})
       ,!auditEntered&&React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive Completed Audit"),onComplete:()=>onArchive&&onArchive()})
     )
-    ,React.createElement('div',{style:{width:"100%",maxWidth:500,display:"flex",gap:8,flexWrap:"wrap"}}
-      ,React.createElement('button',{style:{...ST.secondaryBtn,flex:1},onClick:onReport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'}),React.createElement('polyline',{points:'14 2 14 8 20 8'}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}))," Report")
-      ,React.createElement('button',{style:{...ST.secondaryBtn,flex:1,color:"#f59e0b",borderColor:"#f59e0b33"},onClick:onHistory},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:'12 6 12 12 16 14'}))," History")
-      ,React.createElement('button',{style:{...ST.secondaryBtn,flex:1,color:"#a855f7",borderColor:"#a855f744"},onClick:onManage},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure")
-      ,React.createElement('button',{style:{...ST.secondaryBtn,flex:1,color:"#64748b",borderColor:"#64748b44"},onClick:onSettings},"≔ Dropdowns")
-      ,React.createElement('button',{style:{...ST.secondaryBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>setShowExports(x=>!x)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
-    )
-    ,showExports&&React.createElement('button',{style:{...ST.exportBtn,width:"100%",maxWidth:500,color:TAT_COLOR,borderColor:`${TAT_COLOR}44`,background:"#0a1020"},onClick:onExport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export Test & Tag xlsx")
     ,confirmReset
       ?React.createElement('div',{style:{...ST.confirmRow,width:"100%",maxWidth:500}}
         ,React.createElement('span',{style:{color:"#ef4444",fontSize:13,flex:1}},"Reset all test results?")
@@ -5086,7 +5087,7 @@ function TATReportView({project,results,meta}){
     ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:ST.summaryMeta},"TEST & TAG REPORT",meta.auditor?` · ${meta.auditor}`:"")
     ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
-      ,React.createElement('div',{style:{fontSize:12,background:"#161616",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
+      ,React.createElement('div',{style:{fontSize:12,background:"#161616",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(meta.testDate,3)))
     )
     ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}
       ,[["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#60a5fa"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>
@@ -5126,6 +5127,7 @@ function TATReportView({project,results,meta}){
         ,f.notes&&React.createElement('div',{style:{fontSize:12,color:"#aaa",marginTop:2}},f.notes)
       ))
     )
+    ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#22c55e",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -5188,7 +5190,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     const numericTag=parseInt(rawTag);
     let tag=rawTag;
     if(!isNaN(numericTag)&&tagExists(rawTag)&&!newItemTag[areaId])tag=nextTag();
-    const eType=(newItemEquip[areaId]||"").trim();
+    const eType=(newItemEquip[areaId]||(equipOpts[0]||"")).trim();
     const area=project.areas.find(a=>a.id===areaId);
     const freq=(newItemFreq[areaId]||(area&&area.defaultFreq)||((tatDefaults||{}).freq)||"3").trim();
     const itemId=tatUid();
@@ -5208,7 +5210,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const addBulk=(areaId)=>{
     const raw=(bulkItems[areaId]||"").trim();if(!raw)return;
     const names=raw.split(",").map(s=>s.trim()).filter(Boolean);
-    const bulkEquip=(newItemEquip[areaId]||"").trim();
+    const bulkEquip=(newItemEquip[areaId]||(equipOpts[0]||"")).trim();
     const area=project.areas.find(a=>a.id===areaId);
     const bulkFreq=(newItemFreq[areaId]||(area&&area.defaultFreq)||((tatDefaults||{}).freq)||"3").trim();
     const usedInBulk=new Set();
@@ -5399,7 +5401,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"EQUIPMENT TYPE")
-                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemEquip[area.id]||"",onChange:e=>setNewItemEquip(x=>({...x,[area.id]:e.target.value}))}
+                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemEquip[area.id]||(equipOpts[0]||""),onChange:e=>setNewItemEquip(x=>({...x,[area.id]:e.target.value}))}
                   ,React.createElement('option',{value:""},"— Optional")
                   ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
                 )
@@ -5434,56 +5436,88 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
 function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}){
   const[expanded,setExpanded]=React.useState(null);
   const[viewSnap,setViewSnap]=React.useState(null);
+  const[viewArea,setViewArea]=React.useState(null);
 
   if(viewSnap){
     const snap=viewSnap;
     let pass=0,fail=0,na=0,unt=0,total=0;
     if(project){project.areas.forEach(a=>(a.items||[]).forEach(id=>{total++;const v=(((snap.results||{})[a.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)pass++;else if(st===TAT_STATUS.FAIL)fail++;else if(st===TAT_STATUS.NA)na++;else unt++;}));}
+
+    // LEVEL 2: Items for one area
+    if(viewArea){
+      const area=project&&project.areas.find(a=>a.id===viewArea);
+      const aItems=(area&&area.items)||[];
+      return React.createElement('div',{style:ST.listWrap}
+        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
+          ,React.createElement('button',{style:{...ST.smallBtn,color:"#aaa"},onClick:()=>setViewArea(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
+          ,React.createElement('div',null
+            ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name)
+            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
+          )
+        )
+        ,aItems.map(id=>{
+          const mn=(area.itemNames||{})[id]||id;
+          const tag=(area.itemTags||{})[id]||"";
+          const v=(((snap.results||{})[area.id]||{})[id])||{};
+          const st=v.status||TAT_STATUS.UNTESTED;
+          const sm=TAT_SM[st]||TAT_SM.untested;
+          return React.createElement('div',{key:id,style:{display:"flex",alignItems:"stretch",background:sm.bg,border:`2px solid ${sm.border}44`,borderRadius:10,marginBottom:6,overflow:"hidden"}}
+            ,React.createElement('div',{style:{width:52,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",borderRight:`1px solid ${sm.border}44`,padding:"10px 4px"}}
+              ,React.createElement('span',{style:{fontSize:10,fontWeight:800,color:sm.fg}},sm.label)
+            )
+            ,React.createElement('div',{style:{flex:1,padding:"8px 12px",minWidth:0}}
+              ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:6}}
+                ,tag&&React.createElement('span',{style:{fontSize:9,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:3,padding:"1px 5px"}},tag)
+                ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:"#eee"}},mn.replace(/^\d+\s*—\s*/,""))
+              )
+              ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#555",marginTop:3}}
+                ,React.createElement('span',{style:{color:v.visualCheck?"#22c55e":"#444"}},v.visualCheck?"✓":"✕"," Visual")
+                ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
+              )
+              ,v.notes&&React.createElement('div',{style:{fontSize:10,color:"#e8731a",marginTop:2}},"✎ ",v.notes)
+            )
+          );
+        })
+      );
+    }
+
+    // LEVEL 1: Area cards
     return React.createElement('div',{style:ST.listWrap}
-      ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
-        ,React.createElement('button',{style:{...ST.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
+      ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:6}}
+        ,React.createElement('button',{style:{...ST.smallBtn,color:"#aaa"},onClick:()=>{setViewSnap(null);setViewArea(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:TAT_COLOR}},"Test & Tag Snapshot")
           ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
-        ,React.createElement('button',{style:{...ST.smallBtn,color:"#4ade80",borderColor:"#22c55e44",marginLeft:"auto"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+        ,React.createElement('button',{style:{...ST.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
         ,[["Pass",pass,"#60a5fa"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",unt,"#f59e0b"]].map(([l,v,c])=>
           React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:c}},v)
+            ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
             ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
           )
         )
       )
+      ,React.createElement('div',{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view results")
       ,project&&project.areas.map(area=>{
         const aItems=(area.items||[]);
         if(!aItems.length)return null;
-        return React.createElement('div',{key:area.id,style:{marginBottom:16}}
-          ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#aaa",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${TAT_COLOR}33`}},area.name)
-          ,aItems.map(id=>{
-            const mn=(area.itemNames||{})[id]||id;
-            const tag=(area.itemTags||{})[id]||"";
-            const v=(((snap.results||{})[area.id]||{})[id])||{};
-            const st=v.status||TAT_STATUS.UNTESTED;
-            const sm=TAT_SM[st]||TAT_SM.untested;
-            return React.createElement('div',{key:id,style:{display:"flex",alignItems:"stretch",background:sm.bg,border:`2px solid ${sm.border}44`,borderRadius:10,marginBottom:6,overflow:"hidden"}}
-              ,React.createElement('div',{style:{width:52,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",borderRight:`1px solid ${sm.border}44`,padding:"10px 4px"}}
-                ,React.createElement('span',{style:{fontSize:10,fontWeight:800,color:sm.fg}},sm.label)
-              )
-              ,React.createElement('div',{style:{flex:1,padding:"8px 12px",minWidth:0}}
-                ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:6}}
-                  ,tag&&React.createElement('span',{style:{fontSize:9,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:3,padding:"1px 5px"}},tag)
-                  ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:"#eee"}},mn.replace(/^\d+\s*—\s*/,""))
-                )
-                ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#555",marginTop:3}}
-                  ,React.createElement('span',{style:{color:v.visualCheck?"#22c55e":"#444"}},v.visualCheck?"✓":"✕"," Visual")
-                  ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
-                )
-                ,v.notes&&React.createElement('div',{style:{fontSize:10,color:"#e8731a",marginTop:2}},"✎ ",v.notes)
-              )
-            );
-          })
+        let aPass=0,aFail=0,aTotal=aItems.length;
+        aItems.forEach(id=>{const v=(((snap.results||{})[area.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS||st===TAT_STATUS.NA)aPass++;else if(st===TAT_STATUS.FAIL)aFail++;});
+        const pct=aTotal>0?Math.round((aPass/aTotal)*100):0;
+        return React.createElement('button',{key:area.id,style:{...ST.siteCard,...(aFail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},onClick:()=>setViewArea(area.id)}
+          ,React.createElement('div',{style:ST.siteCardLeft}
+            ,React.createElement('div',{style:ST.siteCardName},area.name)
+            ,React.createElement('div',{style:ST.siteCardSub},aTotal," item",aTotal!==1?"s":"")
+            ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}}
+              ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:aFail>0?"#ef4444":TAT_COLOR}})
+            )
+          )
+          ,React.createElement('div',{style:ST.siteCardRight}
+            ,aFail>0&&React.createElement('span',{style:ST.failBadge},aFail," FAIL")
+            ,React.createElement('span',{style:ST.arrow},"›")
+          )
         );
       })
     );
@@ -5494,18 +5528,22 @@ function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
     ,React.createElement('div',{style:ST.listTitle},"Test & Tag History")
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
-      let pass=0,fail=0,total=0;
-      if(project){project.areas.forEach(a=>{(a.items||[]).forEach(id=>{total++;const v=(((snap.results||{})[a.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)pass++;else if(st===TAT_STATUS.FAIL)fail++;});});}
+      let pass=0,fail=0,na=0,total=0;
+      if(project){project.areas.forEach(a=>{(a.items||[]).forEach(id=>{total++;const v=(((snap.results||{})[a.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)pass++;else if(st===TAT_STATUS.FAIL)fail++;else if(st===TAT_STATUS.NA)na++;});});}
       return React.createElement('div',{key:snap.id,style:{...ST.siteCard,flexDirection:"column",padding:0,marginBottom:10,overflow:"hidden"}}
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
           ,React.createElement('div',{style:{flex:1}}
-            ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:TAT_COLOR,marginBottom:4}},"Test & Tag Audit")
+            ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
+              ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:TAT_COLOR}},"Test & Tag Audit")
+              ,fail>0&&React.createElement('span',{style:ST.failBadge},fail," FAIL")
+            )
             ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
             ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#60a5fa"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail," Untested")
+              ,React.createElement('span',{style:{fontSize:11,color:"#64748b"}},na," N/A")
+              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail-na," Untested")
             )
           )
           ,React.createElement('span',{style:{...ST.arrow,color:expanded===snap.id?TAT_COLOR:"#555"}},expanded===snap.id?"▾":"›")
@@ -5529,13 +5567,13 @@ function TATHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
 // ─────────────────────────────────────────────────────────────────────────
 // T&T SETTINGS VIEW — manage equipment type dropdown
 // ─────────────────────────────────────────────────────────────────────────
-function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions, applianceNames, setApplianceNames, tatDefaults, setTatDefaults}) {
+function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions, applianceNames, setApplianceNames, tatDefaults, setTatDefaults, onBack}) {
   const [newEquip, setNewEquip] = React.useState("");
   const [newFreqMonths, setNewFreqMonths] = React.useState("");
   const [newName, setNewName] = React.useState("");
   const addName = () => {
     if(!newName.trim()||(applianceNames||[]).includes(newName.trim())) return;
-    setApplianceNames(prev=>[...(prev||[]), newName.trim()].sort());
+    setApplianceNames(prev=>[...(prev||[]), newName.trim()]);
     setNewName("");
   };
   const removeName = n => setApplianceNames(prev=>(prev||[]).filter(x=>x!==n));
@@ -5564,14 +5602,18 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
   const secTitle=t=>React.createElement('div',{style:{fontSize:13,fontWeight:700,color:TAT_COLOR,marginBottom:12}},t);
 
   return React.createElement('div',{style:{...ST.listWrap,paddingBottom:80}}
+    ,onBack&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...ST.smallBtn,color:"#aaa"},onClick:onBack},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
     ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#64748b",marginBottom:4}},"≔ Dropdowns")
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:20}},"Manage dropdown options shown in the test form.")
 
     ,React.createElement('div',{style:secStyle}
-      ,secTitle("APPLIANCE NAMES (dropdown suggestions)")
+      ,secTitle("APPLIANCE NAMES")
+      ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:8}},"Tap ★ on any item to make it the default. The default is pre-filled when adding a new appliance.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(applianceNames||TAT_DEFAULT_NAMES).map(n=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
+        ,(applianceNames||TAT_DEFAULT_NAMES).map((n,i)=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${i===0?TAT_COLOR+"66":TAT_COLOR+"33"}`,borderRadius:8,padding:"8px 12px"}}
+          ,i===0&&React.createElement('span',{style:{fontSize:9,color:TAT_COLOR,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},n)
+          ,i!==0&&React.createElement('button',{style:{background:"transparent",border:"none",color:TAT_COLOR,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setApplianceNames(prev=>[n,...(prev||[]).filter(x=>x!==n)])},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
           ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 8px"},onClick:()=>removeName(n)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
         ))
       )
@@ -5583,10 +5625,12 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
     )
     ,React.createElement('div',{style:secStyle}
       ,secTitle("EQUIPMENT TYPE")
-
+      ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:8}},"Tap ★ on any item to make it the default.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,equipTypes.map(t=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px"}}
+        ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${i===0?TAT_COLOR+"66":TAT_COLOR+"33"}`,borderRadius:8,padding:"8px 12px"}}
+          ,i===0&&React.createElement('span',{style:{fontSize:9,color:TAT_COLOR,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#eee",flex:1}},t)
+          ,i!==0&&React.createElement('button',{style:{background:"transparent",border:"none",color:TAT_COLOR,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setEquipTypes(prev=>[t,...prev.filter(x=>x!==t)])},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
           ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:"0 0 0 4px"},onClick:()=>removeEquip(t)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
         ))
       )
@@ -5796,8 +5840,8 @@ function exportThermoExcel(project, results, meta) {
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
-  const nextDue = testDate ? addYearsISO(testDate, 1) : "";
-  const headers = ["Location", "Board", "Circuit", "Date", "FLIR File", "Temperature (°C)", "Pass / Fail", "Rectified / Scheduled", "Date Rectified / Scheduled", "Defect ID", "Responsibility", "Notes / Recommendations", "Priority (L,M,H,U)"];
+  const nextDue = meta && meta.nextTestDate ? meta.nextTestDate : (testDate ? addYearsISO(testDate, 1) : "");
+  const headers = ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Rectified / Scheduled", "Date Rectified / Scheduled", "Defect ID", "Responsibility", "Notes / Recommendations", "Priority (L,M,H,U)"];
   const n = headers.length;
   const rows = [];
   rows.push([`${sName} — Thermographic Test`, ...Array(n - 1).fill("")]);
@@ -6158,7 +6202,7 @@ function downloadThermoTemplate() {
     ["Site Name — enter your site name here"],
     ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
     [""],
-    ["INSTRUCTIONS: Fill in Location (area), Board name and Circuit name. One circuit per row. Leave Circuit blank for board-level photos only. Test results and FLIR photos are recorded inside the app — do not add result columns. Rows 1-3 are read automatically."],
+    ["INSTRUCTIONS: Fill in Location (area), Board name and Circuit name. One circuit per row. Leave Circuit blank for board-level photos only. Test results and Thermo Camera Photos are recorded inside the app — do not add result columns. Rows 1-3 are read automatically."],
     ["Location","Board","Circuit"],
     ["Wash Plant","MSB — Main Switchboard","Main Incomer"],
     ["Wash Plant","MSB — Main Switchboard","Main Neutral Bar"],
@@ -6584,7 +6628,11 @@ const STH = {
     borderTop: `3px solid ${THERMO_COLOR}`,
     borderRadius: "50%",
     animation: "spin 0.8s linear infinite"
-  }
+  },
+  summaryWrap: {padding:"16px"},
+  summaryTitle: {fontSize:22,fontWeight:900,letterSpacing:1.5},
+  summaryMeta: {fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+  duePill: {fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
 };
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -6972,7 +7020,7 @@ function ThermoProjectListView({
       color: "#666",
       marginBottom: 12
     }
-  }, "Upload your existing thermographic Excel report. Columns needed: Location, Board, Circuit, Date, Pass/Fail. The full site structure, results, notes and priorities are imported. FLIR file numbers are not imported \u2014 enter them fresh for the new audit cycle."), !importPreview && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+  }, "Upload your existing thermographic Excel report. Columns needed: Location, Board, Circuit, Date, Pass/Fail. The full site structure, results, notes and priorities are imported. Photo numbers are not imported \u2014 enter them fresh for the new audit cycle."), !importPreview && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
     ref: fileRef,
     type: "file",
     accept: ".xlsx,.xls,.csv",
@@ -7041,7 +7089,7 @@ function ThermoProjectListView({
       borderTop: "1px solid #2a2a2a",
       paddingTop: 8
     }
-  }, "Structure imported. All photo logs start blank \u2014 enter FLIR numbers as you test.")), [["SITE NAME", importName, setImportName, "Site name"], ["COMPANY (optional)", importCo, setImportCo, "Company name"], ["ABN (optional)", importAbn, setImportAbn, "e.g. 12 345 678 901"], ["ELECTRICAL LICENCE (optional)", importLic, setImportLic, "e.g. 123456C"]].map(([label, val, setter, ph]) => /*#__PURE__*/React.createElement("div", {
+  }, "Structure imported. All photo logs start blank \u2014 enter photo numbers as you test.")), [["SITE NAME", importName, setImportName, "Site name"], ["COMPANY (optional)", importCo, setImportCo, "Company name"], ["ABN (optional)", importAbn, setImportAbn, "e.g. 12 345 678 901"], ["ELECTRICAL LICENCE (optional)", importLic, setImportLic, "e.g. 123456C"]].map(([label, val, setter, ph]) => /*#__PURE__*/React.createElement("div", {
     key: label,
     style: {
       marginBottom: 8
@@ -7098,7 +7146,6 @@ function ThermoHomeView({
   auditEntered,
   onCompleteAudit
 }) {
-  const [showExports, setShowExports] = React.useState(false);
   const [confirmReset, setConfirmReset] = React.useState(false);
   const photoCount = sitePhotoCount(results, project);
   const hasFail = siteHasFail(results, project);
@@ -7149,15 +7196,15 @@ function ThermoHomeView({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: STH.metaLabelText
-  }, "TEST DATE"), /*#__PURE__*/React.createElement("div", {style:{position:"relative",marginTop:4}}, React.createElement("div", {style:{...STH.metaInput,textAlign:"center",cursor:"pointer"}}, meta.testDate?fmtDate(meta.testDate):"Select date…"), React.createElement("input", {type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
+  }, "TEST DATE"), /*#__PURE__*/React.createElement("div", {style:{position:"relative",marginTop:4}}, React.createElement("div", {style:{...STH.metaInput,textAlign:"center",cursor:"pointer"}}, meta.testDate?fmtDate(meta.testDate):"Select date…"), React.createElement("input", {type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addYearsISO(meta.testDate,1):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addYearsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))), /*#__PURE__*/React.createElement("div", {style:{marginBottom:10,width:"100%",boxSizing:"border-box"}}, /*#__PURE__*/React.createElement("div", {style:STH.metaLabelText}, "NEXT TEST DUE"), /*#__PURE__*/React.createElement("div", {style:{position:"relative",marginTop:4}}, React.createElement("div", {style:{...STH.metaInput,textAlign:"center",cursor:"pointer"}}, meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"), React.createElement("input", {type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))), /*#__PURE__*/React.createElement("div", null, /*#__PURE__*/React.createElement("div", {
     style: STH.metaLabelText
-  }, "STARTING FLIR NUMBER"), /*#__PURE__*/React.createElement("div", {
+  }, "STARTING PHOTO NUMBER"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
       color: "#555",
       marginBottom: 4
     }
-  }, "First FLIR file number on camera today (e.g. 168). Used to auto-suggest next number while logging."), /*#__PURE__*/React.createElement("input", {
+  }, "First photo number on camera today (e.g. 168). Used to auto-suggest the next number while logging."), /*#__PURE__*/React.createElement("input", {
     style: {
       ...STH.metaInput,
       marginTop: 2
@@ -7203,24 +7250,7 @@ function ThermoHomeView({
       failCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#f87171", fontWeight: 800}}, failCount, " FAIL"),
       /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#555"}}, total, " total")
     ));
-  })(), meta.testDate && /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "100%",
-      maxWidth: 500,
-      display: "flex",
-      justifyContent: "flex-end"
-    }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#555"
-    }
-  }, "Next due: ", /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: THERMO_COLOR,
-      fontWeight: 700
-    }
-  }, fmtDate(addYearsISO(meta.testDate, 1))))), /*#__PURE__*/React.createElement("button", {
+  })(), /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
       maxWidth: 500,
@@ -7254,55 +7284,7 @@ function ThermoHomeView({
     }
   }, "COMPLETE & ARCHIVE AUDIT"), /*#__PURE__*/React.createElement(ThermoCompleteAuditBtn, {
     onComplete: onCompleteAudit
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: "100%",
-      maxWidth: 500,
-      display: "flex",
-      gap: 8,
-      flexWrap: "wrap"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.secondaryBtn,
-      flex: 1
-    },
-    onClick: onReport
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'}),React.createElement('polyline',{points:'14 2 14 8 20 8'}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}))," Report"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.secondaryBtn,
-      flex: 1,
-      color: "#f59e0b",
-      borderColor: "#f59e0b33"
-    },
-    onClick: onHistory
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:'12 6 12 12 16 14'}))," History"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.secondaryBtn,
-      flex: 1,
-      color: "#a855f7",
-      borderColor: "#a855f744"
-    },
-    onClick: onManage
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage"), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.secondaryBtn,
-      flex: 1,
-      color: "#4ade80",
-      borderColor: "#22c55e44"
-    },
-    onClick: () => setShowExports(x => !x)
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), showExports && /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.exportBtn,
-      width: "100%",
-      maxWidth: 500,
-      color: THERMO_COLOR,
-      borderColor: `${THERMO_COLOR}44`,
-      background: "#1a0e00"
-    },
-    onClick: onExport
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export Thermographic xlsx"), confirmReset ? /*#__PURE__*/React.createElement("div", {
+  })), confirmReset ? /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       alignItems: "center",
@@ -7482,7 +7464,7 @@ function ThermoCircuitView({
       padding: "8px 12px",
       marginBottom: 12
     }
-  }, "\uD83C\uDF21 Tap any item to log FLIR photos"), rows.map(row => {
+  }, "\uD83C\uDF21 Tap any item to log Thermo Camera Photos"), rows.map(row => {
     const photos = getPhotos(results, area.id, board.id, row.id);
     const hasFail = photos.some(p => p.result === "FAIL");
     const hasMonitor = photos.some(p => p.result === "MONITOR");
@@ -7813,7 +7795,7 @@ function PhotoPage({
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
-  }, "FLIR FILE NAME *"), /*#__PURE__*/React.createElement("input", {
+  }, "PHOTO NUMBER *"), /*#__PURE__*/React.createElement("input", {
     style: {
       ...STH.modalInput,
       fontSize: 17,
@@ -7821,7 +7803,7 @@ function PhotoPage({
       borderColor: form.flirFile.trim() ? `${THERMO_COLOR}88` : "#333"
     },
     value: form.flirFile,
-    placeholder: "e.g. FLIR0171",
+    placeholder: "e.g. 0171",
     onChange: e => setForm(f => ({
       ...f,
       flirFile: e.target.value
@@ -8002,25 +7984,14 @@ function ThermoReportView({
   });
   const fails = rows.filter(r => r.photo.result === "FAIL");
   const monitors = rows.filter(r => r.photo.result === "MONITOR");
+  const passes = rows.filter(r => r.photo.result === "PASS");
   return /*#__PURE__*/React.createElement("div", {
-    style: {
-      padding: "16px"
-    }
+    style: STH.summaryWrap
   }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 22,
-      fontWeight: 900,
-      letterSpacing: 1.5,
-      marginBottom: 4
-    }
+    style: STH.summaryTitle
   }, project.name), project.company && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}}, project.company), /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 13,
-      color: "#777",
-      marginTop: 4,
-      marginBottom: 16
-    }
-  }, "THERMOGRAPHIC REPORT", meta.auditor ? `· ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${THERMO_COLOR}55`,color:THERMO_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",fmtDate(addYearsISO(meta.testDate,1)))), /*#__PURE__*/React.createElement("div", {
+    style: STH.summaryMeta
+  }, "THERMOGRAPHIC REPORT", meta.auditor ? ` · ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{...STH.duePill,borderColor:`${THERMO_COLOR}55`,color:THERMO_COLOR,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):fmtDate(addYearsISO(meta.testDate,1))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -8050,7 +8021,27 @@ function ThermoReportView({
       color: "#666",
       marginTop: 2
     }
-  }, l.toUpperCase())))), (fails.length > 0 || monitors.length > 0) && /*#__PURE__*/React.createElement("div", {
+  }, l.toUpperCase())))),
+  React.createElement("div",{style:{marginBottom:20}},
+    React.createElement("div",{style:{fontSize:12,fontWeight:700,color:THERMO_COLOR,letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY"),
+    (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
+      React.createElement("div",{style:{fontSize:11,color:"#555",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
+      (area.boards||[]).map(board=>{
+        const bRows=rows.filter(r=>r.area===area.name&&r.board===board.name);
+        const bFail=bRows.filter(r=>r.photo.result==="FAIL").length;
+        const bMon=bRows.filter(r=>r.photo.result==="MONITOR").length;
+        const bPass=bRows.filter(r=>r.photo.result==="PASS").length;
+        return React.createElement("div",{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#161616",border:`1px solid ${bFail>0?"#ef444433":THERMO_COLOR+"22"}`,borderRadius:8,marginBottom:4}},
+          React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#eee"}},board.name),
+          bPass>0&&React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},bPass," P"),
+          bFail>0&&React.createElement("span",{style:{fontSize:11,color:"#ef4444",fontWeight:800}},bFail," F"),
+          bMon>0&&React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},bMon," M"),
+          bRows.length===0&&React.createElement("span",{style:{fontSize:11,color:"#555"}},"No photos")
+        );
+      })
+    ))
+  ),
+  (fails.length > 0 || monitors.length > 0) && /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 20
     }
@@ -8107,7 +8098,9 @@ function ThermoReportView({
       color: "#888",
       marginTop: 3
     }
-  }, "\u270E ", r.photo.notes)))), /*#__PURE__*/React.createElement("button", {
+  }, "\u270E ", r.photo.notes)))),
+  fails.length===0&&monitors.length===0&&/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",color:"#22c55e",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"),
+  /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
       padding: "13px",
@@ -8953,6 +8946,8 @@ function ThermoHistoryView({
     const snapResults = snap.results || {};
     const totalPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.length : 0), 0), 0), 0);
     const failPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.filter(p => p.result === "FAIL").length : 0), 0), 0), 0);
+    const monitorPhotos = Object.values(snapResults).reduce((s1, area) => s1 + Object.values(area || {}).reduce((s2, board) => s2 + Object.values(board || {}).reduce((s3, photos) => s3 + (Array.isArray(photos) ? photos.filter(p => p.result === "MONITOR").length : 0), 0), 0), 0);
+    const passPhotos = totalPhotos - failPhotos - monitorPhotos;
     return /*#__PURE__*/React.createElement("div", {
       key: snap.id,
       style: {
@@ -8998,7 +8993,7 @@ function ThermoHistoryView({
         color: "#555",
         marginTop: 2
       }
-    }, "Archived ", fmtDateTime(snap.archivedAt)), /*#__PURE__*/React.createElement("div", {
+    }, "Archived ", fmtDateTime(snap.archivedAt)), totalPhotos > 0 && /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         gap: 8,
@@ -9007,20 +9002,20 @@ function ThermoHistoryView({
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
-        color: "#60a5fa"
+        color: "#22c55e"
       }
-    }, totalPhotos, " photos"), failPhotos > 0 && /*#__PURE__*/React.createElement("span", {
+    }, passPhotos, " Pass"), failPhotos > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
         color: "#f87171",
         fontWeight: 800
       }
-    }, failPhotos, " FAIL"), failPhotos === 0 && totalPhotos > 0 && /*#__PURE__*/React.createElement("span", {
+    }, failPhotos, " Fail"), monitorPhotos > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
-        color: "#22c55e"
+        color: "#f59e0b"
       }
-    }, "All pass"))), /*#__PURE__*/React.createElement("span", {
+    }, monitorPhotos, " Monitor"))), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 22,
         color: isExpanded ? THERMO_COLOR : "#555"
@@ -9068,7 +9063,7 @@ function ThermoHistoryView({
 // ─────────────────────────────────────────────────────────────────────────
 // THERMO DROPDOWNS VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function ThermoDropdownsView({dropdowns,setDropdowns}){
+function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
   const[newVals,setNewVals]=React.useState({});
   const items=key=>(dropdowns&&dropdowns[key])||[];
   const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
@@ -9082,6 +9077,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns}){
     {key:"rectified",label:"RECTIFIED / SCHEDULED",color:"#f59e0b",desc:"Actions available when rectifying a defect"},
   ];
   return React.createElement("div",{style:{padding:"16px",paddingBottom:100}}
+    ,onBack&&React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement("button",{style:{...STH.smallBtn,color:"#aaa"},onClick:onBack},React.createElement("svg",{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement("polyline",{points:'15 18 9 12 15 6'}))," Back"))
     ,React.createElement("div",{style:{fontSize:16,fontWeight:800,color:"#eee",marginBottom:4}},"Dropdown Options")
     ,React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:20}},"Add or remove options available when recording defects")
     ,sections.map(({key,label,color,desc})=>{
@@ -9461,7 +9457,8 @@ function ThermoApp({
     onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta)
   }), view === "dropdowns" && /*#__PURE__*/React.createElement(ThermoDropdownsView, {
     dropdowns: thermoDropdowns,
-    setDropdowns: setThermoDropdowns
+    setDropdowns: setThermoDropdowns,
+    onBack: () => setView("home")
   }), view === "manage" && project && /*#__PURE__*/React.createElement(ThermoManageView, {
     project: project,
     onUpdateProject: updated => setProjects(prev => prev.map(p => p.id === updated.id ? {
@@ -9574,7 +9571,7 @@ function AppRoot() {
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"}),React.createElement('path',{d:"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"}))},
     {key:"tat",color:"#60a5fa",name:"TEST & TAG",desc:"In-service equipment",onClick:()=>setModule("tat"),
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7}))},
-    {key:"thermo",color:"#f97316",name:"THERMOGRAPHIC",desc:"FLIR thermal imaging",onClick:()=>setModule("thermo"),
+    {key:"thermo",color:"#f97316",name:"THERMOGRAPHIC",desc:"Thermo Camera Photos",onClick:()=>setModule("thermo"),
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"}))},
     {key:"swb",color:"#a855f7",name:"SWITCHBOARD",desc:"11-point visual audit",onClick:()=>setModule("swb"),
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12}))},
@@ -9779,7 +9776,7 @@ function exportSWBExcel(project, allResults, meta) {
   const pid=project.id;const results=allResults[pid]||{};
   const sName=project.name||"Site";
   const testDate=(meta&&meta.testDate)||"";
-  const nextDue=testDate?swbAddYear(testDate):"";
+  const nextDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):(testDate?swbAddYear(testDate):"");
   const coLine=`${project.company||"SparkCheck"} Electrical Audit Software Pty. Ltd.${project.abn?`  |  ABN: ${project.abn}`:""}${project.licence?`  |  Electrical Licence: ${project.licence}`:""}`;
   const titleSt =swbXCS("FF1A1A2E",{bold:true,sz:14,color:{rgb:"FFc084fc"}},{horizontal:"left"});
   const subSt   =swbXCS("FF1A1A2E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
@@ -10031,7 +10028,7 @@ function SWBApp({ onGoHome }) {
       ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onExport:()=>exportSWBExcel(project,allResults,meta),onArchive:archiveAudit})
       ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
-      ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns})
+      ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns,onBack:()=>setView("home")})
       ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");}})
     )
     ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
@@ -10178,7 +10175,11 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:SS.metaLabelText},"TEST DATE")
-        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addYearsISO(meta.testDate,1):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addYearsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+      )
+      ,React.createElement('div',{style:{marginTop:8}}
+        ,React.createElement('div',{style:SS.metaLabelText},"NEXT AUDIT DUE")
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement('input',{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #a855f733",borderRadius:14,padding:"14px"}}
@@ -10205,13 +10206,6 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
           ?React.createElement(SWBCompleteAuditBtn,{onComplete:()=>{onCompleteAudit();setArchiveMsg("📁 Archived — ready for new audit");setTimeout(()=>setArchiveMsg(""),3000);}})
           :React.createElement('button',{style:{width:"100%",padding:"10px",background:"#a855f722",color:"#a855f7",border:"1px solid #a855f755",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onArchive();setArchiveMsg("📁 Audit archived to history");setTimeout(()=>setArchiveMsg(""),3000);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive Completed Audit")
     )
-    ,React.createElement('div',{style:{width:"100%",maxWidth:500,display:"flex",gap:8,flexWrap:"wrap"}}
-      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1},onClick:onReport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'}),React.createElement('polyline',{points:'14 2 14 8 20 8'}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}))," Report")
-      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1,color:"#f59e0b",borderColor:"#f59e0b33"},onClick:onHistory},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:'12 6 12 12 16 14'}))," History")
-      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1,color:"#a855f7",borderColor:"#a855f744"},onClick:onManage},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure")
-      ,React.createElement('button',{style:{...SS.secondaryBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:onExport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
-    )
-    ,nextDue&&React.createElement('div',{style:{fontSize:11,color:"#555",width:"100%",maxWidth:500,textAlign:"center"}},"Next annual audit due: ",React.createElement('span',{style:{color:"#a855f7",fontWeight:700}},nextDue))
   );
 }
 
@@ -10291,7 +10285,7 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
   const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
 
-  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk,rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:"",priority:isFail?priority:""});onClose();};
+  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk:isFail?risk:"",rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:"",priority:isFail?priority:""});onClose();};
 
   return React.createElement('div',{style:{padding:"16px",background:"#111",minHeight:"100%"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}
@@ -10324,8 +10318,13 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
           })
         )
       )
-      // Risk Rating (always visible) + Comments
-      ,React.createElement('div',{style:{display:"flex",gap:10}}
+      ,React.createElement('div',{style:SS.modalField}
+        ,React.createElement('label',{style:SS.modalLabel},"COMMENTS")
+        ,React.createElement('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:comment,placeholder:"Observations, recommendations…",onChange:e=>setComment(e.target.value)})
+      )
+      // Fail-only section — red panel, same as RCD push
+      ,isFail&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}
           ,React.createElement('label',{style:SS.modalLabel},"RISK RATING")
           ,React.createElement('select',{style:{...SS.modalInput,cursor:"pointer"},value:risk,onChange:e=>setRisk(e.target.value)}
@@ -10336,15 +10335,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
             ,React.createElement('option',{value:"U"},"U – Urgent")
           )
         )
-      )
-      
-      ,React.createElement('div',{style:SS.modalField}
-        ,React.createElement('label',{style:SS.modalLabel},"COMMENTS")
-        ,React.createElement('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:comment,placeholder:"Observations, recommendations…",onChange:e=>setComment(e.target.value)})
-      )
-      // Fail-only section — red panel, same as RCD push
-      ,isFail&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
           ,React.createElement(SWBEditableDropdown,{options:rectOptions,value:rectified,onChange:v=>setRectified(v),placeholder:"Select or type…",color:"#f59e0b"})
@@ -10396,7 +10386,9 @@ function SWBReportView({project,results,meta,onExport,onArchive}) {
     ,React.createElement('div',{style:SS.summaryTitle},project.name)
     ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:SS.summaryMeta},"SWITCHBOARD AUDIT REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
-    ,testDate&&React.createElement('div',{style:{fontSize:12,color:"#a855f7",background:"#a855f711",border:"1px solid #a855f733",borderRadius:8,padding:"8px 12px",marginBottom:16}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," → next due: ",swbAddYear(testDate))
+    ,testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
+      ,React.createElement('div',{style:{...SS.duePill,borderColor:"#a855f755",color:"#a855f7",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):swbAddYear(testDate)))
+    )
     ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}
       ,[["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>
         React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}}
@@ -10440,6 +10432,7 @@ function SWBReportView({project,results,meta,onExport,onArchive}) {
         )
       ))
     )
+    ,fails.length===0&&summary.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#22c55e",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -10532,33 +10525,28 @@ function SWBManageView({project,onUpdateProject}) {
 // ─────────────────────────────────────────────────────────────────────────
 function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}) {
   const [expanded,setExpanded]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);
+  const [viewArea,setViewArea]=React.useState(null);
   const SS=swbStyles();
 
   if(viewSnap){
     const snap=viewSnap;let pass=0,fail=0,na=0,unt=0,total=0;
     if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;else if(st===SWB_STATUS.NA)na++;else unt++;});}));}
-    return React.createElement('div',{style:SS.listWrap}
-      ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
-        ,React.createElement('div',{style:{flex:1}}
-          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#a855f7"}},"Switchboard Audit Snapshot")
-          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
-        )
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
-      )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",unt,"#f59e0b"]].map(([l,v,col])=>
-          React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:col}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
+
+    // LEVEL 2: Boards + checklist for one area
+    if(viewArea){
+      const area=project&&(project.areas||[]).find(a=>a.id===viewArea);
+      return React.createElement('div',{style:SS.listWrap}
+        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
+          ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewArea(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
+          ,React.createElement('div',null
+            ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name)
+            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
           )
         )
-      )
-      ,project&&(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{marginBottom:16}}
-        ,(area.boards||[]).map(board=>{
+        ,area&&(area.boards||[]).map(board=>{
           const br=(((snap.results||{})[area.id]||{})[board.id])||{};
           return React.createElement('div',{key:board.id,style:{marginBottom:10}}
-            ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#aaa",marginBottom:6,paddingBottom:4,borderBottom:"1px solid #a855f733"}},area.name," › ",board.name)
+            ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#aaa",marginBottom:6,paddingBottom:4,borderBottom:"1px solid #a855f733"}},board.name)
             ,SWB_CHECKLIST.map(({key,label})=>{
               const item=br[key]||{status:SWB_STATUS.UNTESTED};const sm=SWB_SM[item.status||SWB_STATUS.UNTESTED];
               return React.createElement('div',{key,style:{display:"flex",alignItems:"center",gap:10,padding:"7px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}}
@@ -10569,7 +10557,49 @@ function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
             })
           );
         })
-      ))
+      );
+    }
+
+    // LEVEL 1: Area cards
+    return React.createElement('div',{style:SS.listWrap}
+      ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:6}}
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>{setViewSnap(null);setViewArea(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back")
+        ,React.createElement('div',{style:{flex:1}}
+          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#a855f7"}},"Switchboard Audit Snapshot")
+          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+        )
+        ,React.createElement('button',{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+      )
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
+        ,[["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",unt,"#f59e0b"]].map(([l,v,col])=>
+          React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
+            ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:col}},v)
+            ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
+          )
+        )
+      )
+      ,React.createElement('div',{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view results")
+      ,project&&(project.areas||[]).map(area=>{
+        let aFail=0,aTotal=0;
+        (area.boards||[]).forEach(board=>{
+          SWB_CHECKLIST.forEach(({key})=>{
+            aTotal++;
+            const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];
+            const st=(v&&v.status)||SWB_STATUS.UNTESTED;
+            if(st===SWB_STATUS.FAIL)aFail++;
+          });
+        });
+        return React.createElement('button',{key:area.id,style:{...SS.siteCard,...(aFail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},onClick:()=>setViewArea(area.id)}
+          ,React.createElement('div',{style:SS.siteCardLeft}
+            ,React.createElement('div',{style:SS.siteCardName},area.name)
+            ,React.createElement('div',{style:SS.siteCardSub},(area.boards||[]).length," board",((area.boards||[]).length!==1?"s":""))
+          )
+          ,React.createElement('div',{style:SS.siteCardRight}
+            ,aFail>0&&React.createElement('span',{style:SS.failBadge},aFail," FAIL")
+            ,React.createElement('span',{style:SS.arrow},"›")
+          )
+        );
+      })
     );
   }
 
@@ -10578,18 +10608,22 @@ function SWBHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
     ,React.createElement('div',{style:SS.listTitle},"History")
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
-      let pass=0,fail=0,total=0;
-      if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;});}))}
+      let pass=0,fail=0,na=0,total=0;
+      if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;else if(st===SWB_STATUS.NA)na++;});}))}
       return React.createElement('div',{key:snap.id,style:{...SS.siteCard,flexDirection:"column",padding:0,marginBottom:10,overflow:"hidden"}}
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
           ,React.createElement('div',{style:{flex:1}}
-            ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#a855f7",marginBottom:4}},"Switchboard Audit")
+            ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
+              ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#a855f7"}},"Switchboard Audit")
+              ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
+            )
             ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
             ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail," Untested")
+              ,React.createElement('span',{style:{fontSize:11,color:"#64748b"}},na," N/A")
+              ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail-na," Untested")
             )
           )
           ,React.createElement('span',{style:{...SS.arrow,color:expanded===snap.id?"#a855f7":"#555"}},expanded===snap.id?"▾":"›")
@@ -10615,7 +10649,7 @@ function SWBContinueBtn({onConfirm,styleObj}) {
 // ─────────────────────────────────────────────────────────────────────────
 // DROPDOWNS SETTINGS VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBDropdownsView({dropdowns, setDropdowns}) {
+function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
   const [newVals, setNewVals] = React.useState({});
   const SS = swbStyles();
   const addItem = (key, val) => {
@@ -10636,6 +10670,7 @@ function SWBDropdownsView({dropdowns, setDropdowns}) {
   ];
 
   return React.createElement('div',{style:SS.listWrap}
+    ,onBack&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:onBack},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
     ,React.createElement('div',{style:{...SS.listTitle,color:"#64748b"}},"▾ Dropdowns")
     ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening an item form.")
     ,LISTS.map(({key,label,defaults,color,desc})=>{
@@ -10725,6 +10760,7 @@ function swbStyles() {
     confirmYes:{padding:"7px 14px",background:"#3d1a1a",color:"#f87171",border:"1px solid #ef4444",borderRadius:8,fontSize:13,cursor:"pointer"},
     confirmNo: {padding:"7px 14px",background:"#1a1a1a",color:"#aaa", border:"1px solid #333",  borderRadius:8,fontSize:13,cursor:"pointer"},
     smallBtn:  {padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
+    duePill:   {fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
   };
 }
 
@@ -10769,6 +10805,7 @@ function irtStyles(){
     siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
     listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
+    siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
     siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
     failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
     arrow:{fontSize:22,color:"#555",lineHeight:1},
@@ -10876,6 +10913,7 @@ function exportIRTExcel(project,results,meta){
   rows.push([`${sName} \u2014 Insulation Resistance Test \u2014 ${td}`]);
   rows.push([`${project.company||"Your Company Name"}${project.abn?"  |  ABN: "+project.abn:""}${project.licence?"  |  Electrical Licence: "+project.licence:""}`]);
   if(meta.auditor)rows.push([`Tested by: ${meta.auditor}`]);
+  if(meta.nextTestDate)rows.push([`Next Test Due: ${fmtDate(meta.nextTestDate)}`]);else if(meta.testDate)rows.push([`Next Test Due: ${irtAddYear(meta.testDate)}`]);
   rows.push([]);
   rows.push(["Location","Panel / DB","Equipment / Circuit","Test Date","Test Voltage","L1-E (M\u03a9)","L2-E (M\u03a9)","L3-E (M\u03a9)","N-E (M\u03a9)","L1-L2 (M\u03a9)","L1-L3 (M\u03a9)","L2-L3 (M\u03a9)","L1-N (M\u03a9)","L2-N (M\u03a9)","L3-N (M\u03a9)","Pass / Fail","Rectified / Scheduled","Date Rectified","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)"]);
   (project.areas||[]).forEach(area=>(area.panels||[]).forEach(panel=>(panel.items||[]).forEach(itemId=>{
@@ -10966,9 +11004,8 @@ function IRTMegInput({value,onChange,label}){
 }
 
 // ─── Item test page ────────────────────────────────────────────────────────
-function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnDismissed,onDismissWarn,onPatch,onBack}){
+function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnDismissed,onDismissWarn,onPatch,onBack,onShowGuide}){
   const existing=irtGetItem(results,project.id,area.id,panel.id,itemId);
-  const [showInfo,setShowInfo]=React.useState(false);
   const [form,setForm]=React.useState({...existing,readings:{...(existing.readings||{})}});
   const [showPP,setShowPP]=React.useState(IRT_PHASE_PHASE.some(p=>(existing.readings||{})[p.key]));
   const SS=irtStyles();
@@ -10986,12 +11023,11 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     React.createElement(IRTWarningBanner,{onDismiss:onDismissWarn})
   );
   return React.createElement("div",{style:{padding:"16px 16px 40px"}},
-    showInfo&&React.createElement(IRTMotorInfoModal,{onClose:()=>setShowInfo(false)}),
     // Header
     React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}},
       React.createElement("div",null,React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"#eee"}},itemName),React.createElement("div",{style:{fontSize:12,color:"#555",marginTop:3}},panel.name," \u00b7 ",area.name)),
       React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
-        React.createElement("button",{style:{padding:"6px 12px",background:IRT_COLOR_DIM,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:8,color:"#60a5fa",fontSize:11,fontWeight:700,cursor:"pointer"},onClick:()=>setShowInfo(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('line',{x1:12,y1:8,x2:12,y2:12}),React.createElement('line',{x1:12,y1:16,x2:12.01,y2:16}))," Guide"),
+        React.createElement("button",{style:{padding:"6px 12px",background:IRT_COLOR_DIM,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:8,color:"#60a5fa",fontSize:11,fontWeight:700,cursor:"pointer"},onClick:()=>onShowGuide&&onShowGuide()},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('line',{x1:12,y1:8,x2:12,y2:12}),React.createElement('line',{x1:12,y1:16,x2:12.01,y2:16}))," Guide"),
         React.createElement("div",{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},sm.label)
       )
     ),
@@ -11118,7 +11154,8 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     React.createElement("div",{style:SS.siteSub},project.company||""),
     React.createElement("div",{style:{...SS.metaCard}},
       React.createElement("div",{style:{marginBottom:10}},React.createElement("div",{style:SS.metaLabelText},"AUDITOR"),React.createElement("input",{style:{...SS.metaInput,marginTop:4,borderColor:!hasAuditor?"#ef4444":"#333"},value:meta.auditor||"",placeholder:"Enter name to begin audit\u2026",onChange:e=>setMeta({auditor:e.target.value})}),!hasAuditor&&React.createElement("div",{style:{fontSize:11,color:"#ef4444",marginTop:4}},"\u26a0 Auditor name required before starting")),
-      React.createElement("div",null,React.createElement("div",{style:SS.metaLabelText},"TEST DATE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement("input",{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+      React.createElement("div",null,React.createElement("div",{style:SS.metaLabelText},"TEST DATE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement("input",{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addYearsISO(meta.testDate,1):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addYearsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))),
+      React.createElement("div",{style:{marginTop:8}},React.createElement("div",{style:SS.metaLabelText},"NEXT TEST DUE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement("input",{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
     ),
     React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${IRT_COLOR}33`,borderRadius:14,padding:"14px"}},
       React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress"),React.createElement("div",{style:{fontSize:12,color:"#555"}},summary.pass," / ",summary.total," tested")),
@@ -11137,13 +11174,6 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       auditInProgress?React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:()=>{onCompleteAudit();setArchiveMsg("\uD83D\uDCC1 Archived \u2014 ready for new audit");setTimeout(()=>setArchiveMsg(""),3000);}})
       :React.createElement("button",{style:{width:"100%",padding:"10px",background:IRT_COLOR_DIM,color:IRT_COLOR,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onArchive();setArchiveMsg("\uD83D\uDCC1 Audit archived to history");setTimeout(()=>setArchiveMsg(""),3000);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive Completed Audit")
     ),
-    React.createElement("div",{style:{width:"100%",maxWidth:500,display:"flex",gap:8,flexWrap:"wrap"}},
-      React.createElement("button",{style:{...SS.secondaryBtn,flex:1},onClick:onReport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'}),React.createElement('polyline',{points:'14 2 14 8 20 8'}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}))," Report"),
-      React.createElement("button",{style:{...SS.secondaryBtn,flex:1,color:"#f59e0b",borderColor:"#f59e0b33"},onClick:onHistory},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:'12 6 12 12 16 14'}))," History"),
-      React.createElement("button",{style:{...SS.secondaryBtn,flex:1,color:"#a855f7",borderColor:"#a855f744"},onClick:onManage},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure"),
-      React.createElement("button",{style:{...SS.secondaryBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:onExport},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
-    ),
-    nextDue&&React.createElement("div",{style:{fontSize:11,color:"#555",width:"100%",maxWidth:500,textAlign:"center"}},"Next annual audit due: ",React.createElement("span",{style:{color:IRT_COLOR,fontWeight:700}},nextDue))
   );
 }
 
@@ -11293,24 +11323,40 @@ function IRTManageView({project,onUpdateProject}){
 }
 
 // ─── Dropdowns view — mirrors SWBDropdownsView ────────────────────────────
-function IRTDropdownsView({dropdowns,setDropdowns}){
+function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
   const [newVals,setNewVals]=React.useState({});const SS=irtStyles();
   const addItem=(key,val)=>{if(!val.trim())return;setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));setNewVals(v=>({...v,[key]:""}));};
   const removeItem=(key,val)=>setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
   const resetKey=(key,def)=>setDropdowns(d=>({...d,[key]:def}));
+  const setDefault=(key,val)=>setDropdowns(d=>({...d,[key]:[val,...(d[key]||[]).filter(x=>x!==val)]}));
   const LISTS=[{key:"rectified",label:"RECTIFIED / SCHEDULED",defaults:IRT_DEFAULT_RECTIFIED,color:"#f59e0b",desc:"Options shown in Rectified / Scheduled Action on FAIL items"},{key:"responsibility",label:"RESPONSIBILITY",defaults:IRT_DEFAULT_RESPONSIBILITY,color:"#c084fc",desc:"Options shown in the Responsibility dropdown on FAIL items"}];
   return React.createElement("div",{style:SS.listWrap},
+    onBack&&React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement("button",{style:{...SS.smallBtn,color:"#aaa"},onClick:onBack},React.createElement("svg",{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement("polyline",{points:'15 18 9 12 15 6'}))," Back")),
     React.createElement("div",{style:{...SS.listTitle,color:"#64748b"}},"\u25be Dropdowns"),
-    React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:16}},"Add or remove options for fail item fields. Tap \u2715 on any item to remove it."),
+    React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap \u2605 on any item to make it the default. The default is pre-selected when opening an item form."),
     LISTS.map(({key,label,defaults,color,desc})=>{
       const items=(dropdowns[key]||[]);const newVal=newVals[key]||"";
       return React.createElement("div",{key,style:{background:"#161616",border:`1px solid ${color}22`,borderRadius:12,padding:"14px",marginBottom:12}},
-        React.createElement("div",{style:{fontSize:10,fontWeight:800,color,letterSpacing:0.8,marginBottom:4}},label),
-        React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:10}},desc),
+        React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},
+          React.createElement("div",null,
+            React.createElement("div",{style:{fontSize:10,fontWeight:800,color,letterSpacing:0.8,marginBottom:4}},label),
+            React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:10}},desc)
+          ),
+          React.createElement("button",{style:{background:"transparent",border:"none",color:"#444",fontSize:11,cursor:"pointer",textDecoration:"underline"},onClick:()=>resetKey(key,defaults)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset")
+        ),
         items.length===0?React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options \u2014 add one below"):
-        items.map(item=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",background:"#111",borderRadius:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,color:"#ccc"}},item),React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"}))))),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")),
-        React.createElement("button",{style:{background:"transparent",border:"none",color:"#444",fontSize:11,cursor:"pointer",textDecoration:"underline",marginTop:6},onClick:()=>resetKey(key,defaults)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset to defaults")
+        React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}},
+          items.map((item,i)=>{
+            const isDefault=i===0;
+            return React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#111",border:`1px solid ${isDefault?color+"44":"#1e1e1e"}`,borderRadius:7,padding:"7px 10px"}},
+              isDefault&&React.createElement("span",{style:{fontSize:9,color,fontWeight:700,letterSpacing:0.5,flexShrink:0}},"\u2605 DEFAULT"),
+              React.createElement("span",{style:{flex:1,fontSize:12,color:"#ccc"}},item),
+              !isDefault&&React.createElement("button",{style:{background:"transparent",border:"none",color,cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"}))),
+              React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
+            );
+          })
+        ),
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"))
       );
     })
   );
@@ -11330,7 +11376,9 @@ function IRTReportView({project,results,meta}){
     React.createElement("div",{style:SS.summaryTitle},project.name),
     project.company&&React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company),
     React.createElement("div",{style:SS.summaryMeta},"INSULATION RESISTANCE TEST REPORT"+(meta.auditor?` \u00b7 ${meta.auditor}`:"")),
-    testDate&&React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${IRT_COLOR}55`,color:IRT_COLOR,borderRadius:8,padding:"7px 12px",marginBottom:16}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," \u2192 next due: ",irtAddYear(testDate)),
+    testDate&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}},
+      React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${IRT_COLOR}55`,color:IRT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," \u2192 next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):irtAddYear(testDate)))
+    ),
     React.createElement("div",{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}},
       [["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>React.createElement("div",{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}},React.createElement("div",{style:{fontSize:22,fontWeight:800,color:c}},v),React.createElement("div",{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())))
     ),
@@ -11361,6 +11409,7 @@ function IRTReportView({project,results,meta}){
 // ─── History view ─────────────────────────────────────────────────────────
 function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSnap}){
   const [expanded,setExpanded]=React.useState(null);const [viewSnap,setViewSnap]=React.useState(null);const SS=irtStyles();
+  const [viewArea,setViewArea]=React.useState(null);const [viewPanel,setViewPanel]=React.useState(null);
 
   // ── Read-only snapshot viewer ──────────────────────────────────────────
   if(viewSnap){
@@ -11368,6 +11417,80 @@ function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
     const snapResults=snap.results&&project?{[project.id]:snap.results}:{};
     const sum=irtSiteSummary(snapResults,project||{areas:[],id:""});
     const PC={U:"#ef4444",H:"#f97316",M:"#f59e0b",L:"#22c55e"};
+
+    const ItemRow=(itemId,panel,area)=>{
+      const name=(panel.itemNames||{})[itemId]||itemId;
+      const d=irtGetItem(snapResults,project.id,area.id,panel.id,itemId);
+      const r=d.readings||{};
+      const eff=d.status==="untested"?irtAutoStatus(r):d.status;
+      const sm=IRT_SM[eff]||IRT_SM.untested;
+      const hasR=Object.values(r).some(v=>v&&String(v).trim());
+      return React.createElement("div",{key:itemId,style:{padding:"8px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:hasR?6:0}},
+          React.createElement("div",{style:{width:52,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0,background:sm.bg,border:`1px solid ${sm.border}`,borderRadius:5,padding:"2px 0"}},sm.label),
+          React.createElement("div",{style:{flex:1,fontSize:13,color:"#ccc",fontWeight:600}},name),
+          d.priority&&React.createElement("span",{style:{fontSize:10,fontWeight:800,color:PC[d.priority]||"#aaa",background:`${PC[d.priority]||"#aaa"}22`,borderRadius:4,padding:"2px 5px"}},d.priority),
+          d.testVoltage&&React.createElement("span",{style:{fontSize:10,color:"#555"}},d.testVoltage)
+        ),
+        hasR&&React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
+          IRT_PHASE_EARTH.filter(p=>r[p.key]).map(p=>React.createElement("span",{key:p.key,style:{fontSize:11,color:"#60a5fa",background:"#1a2a3a",borderRadius:5,padding:"2px 7px",fontFamily:"monospace"}},p.label,": ",r[p.key]," MΩ")),
+          IRT_PHASE_PHASE.filter(p=>r[p.key]).map(p=>React.createElement("span",{key:p.key,style:{fontSize:11,color:"#818cf8",background:"#1a1a2e",borderRadius:5,padding:"2px 7px",fontFamily:"monospace"}},p.label,": ",r[p.key]," MΩ"))
+        ),
+        (eff==="fail"&&(d.defectId||d.rectified||d.responsibility))&&React.createElement("div",{style:{marginTop:6,fontSize:11,color:"#f87171",display:"flex",flexWrap:"wrap",gap:8}},
+          d.defectId&&React.createElement("span",null,"Defect #",d.defectId),
+          d.responsibility&&React.createElement("span",null,"→ ",d.responsibility),
+          d.rectified&&React.createElement("span",null,d.rectified)
+        ),
+        d.notes&&React.createElement("div",{style:{marginTop:4,fontSize:11,color:"#888",fontStyle:"italic"}},d.notes)
+      );
+    };
+
+    // LEVEL 3: Items in one panel
+    if(viewArea&&viewPanel){
+      const area=project&&(project.areas||[]).find(a=>a.id===viewArea);
+      const panel=area&&(area.panels||[]).find(p=>p.id===viewPanel);
+      return React.createElement("div",{style:SS.listWrap},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},
+          React.createElement("button",{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewPanel(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"),
+          React.createElement("div",null,
+            React.createElement("div",{style:{fontSize:16,fontWeight:800,color:"#eee"}},panel&&panel.name),
+            React.createElement("div",{style:{fontSize:11,color:"#555"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
+          )
+        ),
+        (panel&&panel.items||[]).map(itemId=>ItemRow(itemId,panel,area))
+      );
+    }
+
+    // LEVEL 2: Panel cards for one area
+    if(viewArea){
+      const area=project&&(project.areas||[]).find(a=>a.id===viewArea);
+      return React.createElement("div",{style:SS.listWrap},
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},
+          React.createElement("button",{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewArea(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"),
+          React.createElement("div",null,
+            React.createElement("div",{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name),
+            React.createElement("div",{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
+          )
+        ),
+        area&&(area.panels||[]).map(panel=>{
+          const items=panel.items||[];if(!items.length)return null;
+          let pFail=0;
+          items.forEach(id=>{const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(eff==="fail")pFail++;});
+          return React.createElement("button",{key:panel.id,style:{...SS.siteCard,...(pFail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},onClick:()=>setViewPanel(panel.id)},
+            React.createElement("div",{style:SS.siteCardLeft},
+              React.createElement("div",{style:SS.siteCardName},panel.name),
+              React.createElement("div",{style:SS.siteCardSub},items.length," item",items.length!==1?"s":"")
+            ),
+            React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},
+              pFail>0&&React.createElement("span",{style:SS.failBadge},pFail," FAIL"),
+              React.createElement("span",{style:SS.arrow},"›")
+            )
+          );
+        })
+      );
+    }
+
+    // LEVEL 1: Area cards
     return React.createElement("div",{style:SS.listWrap},
       React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},
         React.createElement("button",{style:{...SS.smallBtn,color:"#aaa"},onClick:()=>setViewSnap(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"),
@@ -11378,54 +11501,38 @@ function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
         React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       ),
       React.createElement("div",{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}},
-        [["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["Untested",sum.untested,"#f59e0b"],["Total",sum.total,"#94a3b8"]].map(([l,v,col])=>
+        [["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,col])=>
           React.createElement("div",{key:l,style:{background:"#1a1a1a",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}},
-            React.createElement("div",{style:{fontSize:20,fontWeight:800,color:col}},v),
+            React.createElement("div",{style:{fontSize:18,fontWeight:800,color:col}},v),
             React.createElement("div",{style:{fontSize:10,color:"#666"}},l)
           )
         )
       ),
-      project&&(project.areas||[]).map(area=>
-        React.createElement("div",{key:area.id,style:{marginBottom:18}},
-          (area.panels||[]).map(panel=>{
-            const items=panel.items||[];
-            if(!items.length)return null;
-            return React.createElement("div",{key:panel.id,style:{marginBottom:12}},
-              React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#aaa",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${IRT_COLOR}33`}},area.name," \u203a ",panel.name),
-              items.map(itemId=>{
-                const name=(panel.itemNames||{})[itemId]||itemId;
-                const d=irtGetItem(snapResults,project.id,area.id,panel.id,itemId);
-                const r=d.readings||{};
-                const eff=d.status==="untested"?irtAutoStatus(r):d.status;
-                const sm=IRT_SM[eff]||IRT_SM.untested;
-                const hasR=Object.values(r).some(v=>v&&String(v).trim());
-                return React.createElement("div",{key:itemId,style:{padding:"8px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}},
-                  React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:hasR?6:0}},
-                    React.createElement("div",{style:{width:52,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0,background:sm.bg,border:`1px solid ${sm.border}`,borderRadius:5,padding:"2px 0"}},sm.label),
-                    React.createElement("div",{style:{flex:1,fontSize:13,color:"#ccc",fontWeight:600}},name),
-                    d.priority&&React.createElement("span",{style:{fontSize:10,fontWeight:800,color:PC[d.priority]||"#aaa",background:`${PC[d.priority]||"#aaa"}22`,borderRadius:4,padding:"2px 5px"}},d.priority),
-                    d.testVoltage&&React.createElement("span",{style:{fontSize:10,color:"#555"}},d.testVoltage)
-                  ),
-                  hasR&&React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
-                    IRT_PHASE_EARTH.filter(p=>r[p.key]).map(p=>
-                      React.createElement("span",{key:p.key,style:{fontSize:11,color:"#60a5fa",background:"#1a2a3a",borderRadius:5,padding:"2px 7px",fontFamily:"monospace"}},p.label,": ",r[p.key]," M\u03a9")
-                    ),
-                    IRT_PHASE_PHASE.filter(p=>r[p.key]).map(p=>
-                      React.createElement("span",{key:p.key,style:{fontSize:11,color:"#818cf8",background:"#1a1a2e",borderRadius:5,padding:"2px 7px",fontFamily:"monospace"}},p.label,": ",r[p.key]," M\u03a9")
-                    )
-                  ),
-                  (eff==="fail"&&(d.defectId||d.rectified||d.responsibility))&&React.createElement("div",{style:{marginTop:6,fontSize:11,color:"#f87171",display:"flex",flexWrap:"wrap",gap:8}},
-                    d.defectId&&React.createElement("span",null,"Defect #",d.defectId),
-                    d.responsibility&&React.createElement("span",null,"\u2192 ",d.responsibility),
-                    d.rectified&&React.createElement("span",null,d.rectified)
-                  ),
-                  d.notes&&React.createElement("div",{style:{marginTop:4,fontSize:11,color:"#888",fontStyle:"italic"}},d.notes)
-                );
-              })
-            );
-          })
-        )
-      )
+      React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view results"),
+      project&&(project.areas||[]).map(area=>{
+        let aFail=0,aTotal=0;
+        (area.panels||[]).forEach(panel=>(panel.items||[]).forEach(id=>{
+          aTotal++;
+          const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);
+          const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;
+          if(eff==="fail")aFail++;
+        }));
+        const aPass=aTotal-aFail;
+        const pct=aTotal>0?Math.round((aPass/aTotal)*100):0;
+        return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(aFail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},onClick:()=>setViewArea(area.id)},
+          React.createElement("div",{style:SS.siteCardLeft},
+            React.createElement("div",{style:SS.siteCardName},area.name),
+            React.createElement("div",{style:SS.siteCardSub},aTotal," item",aTotal!==1?"s":""),
+            React.createElement("div",{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}},
+              React.createElement("div",{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:aFail>0?"#ef4444":IRT_COLOR}})
+            )
+          ),
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},
+            aFail>0&&React.createElement("span",{style:SS.failBadge},aFail," FAIL"),
+            React.createElement("span",{style:SS.arrow},"\u203a")
+          )
+        );
+      })
     );
   }
 
@@ -11437,14 +11544,14 @@ function IRTHistoryView({history,project,onDelete,onExportSnap,onContinueFromSna
       const sum=irtSiteSummary(snap.results&&project?{[project.id]:snap.results}:{},project||{areas:[],id:""});
       return React.createElement("div",{key:snap.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#60a5fa",marginBottom:4}},"IR Test Audit"),React.createElement("div",{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#ef4444"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},sum.untested," Untested"))),
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#60a5fa"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#ef4444"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#64748b"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},sum.untested," Untested"))),
           React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#60a5fa":"#555"}},expanded===snap.id?"\u25be":"\u203a")
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}},
           React.createElement("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
-            React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:`${IRT_COLOR}44`,fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"),
+            React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:`${IRT_COLOR}44`,fontWeight:700},onClick:()=>{setViewSnap(snap);setViewArea(null);setViewPanel(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"),
             React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"),
-            React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:"#a855f744",fontWeight:700},onClick:()=>onContinueFromSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polygon',{points:'5 3 19 12 5 21 5 3'}))," Continue"),
+            React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SS.smallBtn}}),
             React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
         )
@@ -11461,6 +11568,7 @@ function IRTApp({onGoHome}){
   const [activeProject,setActiveProject]=React.useState(null);const [view,setView]=React.useState("projects");
   const [activeAreaId,setActiveAreaId]=React.useState(null);const [activePanelId,setActivePanelId]=React.useState(null);const [activeItemId,setActiveItemId]=React.useState(null);const [activeItemName,setActiveItemName]=React.useState("");
   const [irtWarnDismissed,setIrtWarnDismissed]=React.useState(false);
+  const [showGuide,setShowGuide]=React.useState(false);
   React.useEffect(()=>{(async()=>{try{const[p,r,m,h,dd]=await Promise.all([load(K_IRT_PROJECTS,[]),load(K_IRT_RESULTS,{}),load(K_IRT_META,{}),load(K_IRT_HISTORY,[]),load(K_IRT_DROPDOWNS,{responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setIrtDropdowns(dd);}finally{setLoaded(true);}})();},[]);
   React.useEffect(()=>{if(loaded)save(K_IRT_PROJECTS,projects);},[projects,loaded]);
   React.useEffect(()=>{if(loaded){save(K_IRT_RESULTS,allResults);setSaveFlash(true);const t=setTimeout(()=>setSaveFlash(false),1200);return()=>clearTimeout(t);}},[allResults,loaded]);
@@ -11520,12 +11628,14 @@ function IRTApp({onGoHome}){
       view==="audit"&&project&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
       view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
       view==="panel"&&panel&&React.createElement(IRTItemListView,{panel,area,project,results:allResults,onSelect:(itemId,name)=>{setActiveItemId(itemId);setActiveItemName(name);setView("item");},onBack:()=>{setActivePanelId(null);setView("area");}}),
-      view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");}}),
+      view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");},onShowGuide:()=>setShowGuide(true)}),
       view==="report"&&project&&React.createElement(IRTReportView,{project,results:allResults,meta,onExport:()=>exportIRTExcel(project,allResults,meta),onArchive:archiveAudit}),
       view==="manage"&&project&&React.createElement(IRTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))}),
-      view==="dropdowns"&&React.createElement(IRTDropdownsView,{dropdowns:irtDropdowns,setDropdowns:setIrtDropdowns}),
+      view==="dropdowns"&&React.createElement(IRTDropdownsView,{dropdowns:irtDropdowns,setDropdowns:setIrtDropdowns,onBack:()=>setView("home")}),
       view==="history"&&React.createElement(IRTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIRTExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}})
     ),
+    // Guide modal — direct child of root, outside overflow:hidden SS.main
+    showGuide&&React.createElement(IRTMotorInfoModal,{onClose:()=>setShowGuide(false)}),
     // Bottom nav — matches SWBApp exactly
     view!=="projects"&&React.createElement("nav",{style:SS.bottomNav},
       React.createElement(IRTNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     onClick:goHome,                                                                           color:IRT_COLOR}),
@@ -11623,6 +11733,147 @@ REVIEWED — no change needed:
 
 REMAINING:
   - None identified
+*/
+
+/*
+REPORT & HISTORY CONSISTENCY AUDIT — 2026-06-06
+===========================================
+REPORT TAB STANDARDISED:
+  - IEL · IELReportView · date pill wrapper marginBottom:16→20; pill uses SI.duePill spread; added "no defects" tick
+  - TAT · TATReportView · added "no defects" tick (uses sum.fail===0 guard)
+  - Thermo · ThermoReportView · summaryWrap/summaryTitle/summaryMeta now use STH references; added STH.duePill,summaryWrap,summaryTitle,summaryMeta to STH; date pill wrapper added marginTop:8; added board-level breakdown section; added "no defects" tick
+  - SWB · SWBReportView · date pill wrapped in display:flex/gap:8/marginTop:8/marginBottom:16 row; pill uses SS.duePill spread; added duePill to swbStyles(); added "no defects" tick
+  - IRT · IRTReportView · date pill wrapped in display:flex/gap:8/marginTop:8/marginBottom:16 row (was bare pill with marginBottom:16)
+
+HISTORY SNAPSHOT STANDARDISED:
+  - IEL · IELHistoryView · card label now uses snap.label||"IEL Audit"; added FAIL badge to header row; added N/A count to inline stat row; N/A now tracked in card stats calculation
+  - TAT · TATHistoryView · snapshot viewer replaced flat list with two-level area-card→item drill-down; added viewArea state; area cards use ST.siteCard with progress bar and FAIL badge; card header restructured with FAIL badge; added N/A count to inline stat row; summary pills fontSize:20→18
+  - SWB · SWBHistoryView · snapshot viewer replaced flat board+checklist with two-level area-card→board+checklist drill-down; added viewArea state; area cards use SS.siteCard; added "Tap an area to view results" hint; added N/A count to inline stat row; card header restructured with FAIL badge; summary pills fontSize:20→18
+  - IRT · IRTHistoryView · snapshot viewer replaced flat area→panel→item list with three-level drill-down (area cards → panel cards → item list); added viewArea/viewPanel state; area/panel cards use SS.siteCard with FAIL badge and progress bar; summary pills reordered to Pass·Fail·N/A·Untested and fontSize:18; Continue raw button replaced with ContinueConfirmBtn; card header restructured with FAIL badge; added N/A count to inline stat row
+  - IRT · irtStyles · added siteCardLeft/siteCardRight properties (previously missing)
+  - Thermo · ThermoHistoryView · history list card now shows Pass/Fail/Monitor inline stat row (was totalPhotos + failPhotos only); added monitorPhotos/passPhotos calculation per snap
+
+REVIEWED — no change needed:
+  - RCD · HistoryView · reference implementation; no changes made
+  - IEL · IELHistoryView snapshot viewer · already matches RCD two-level drill-down pattern exactly
+  - Thermo · ThermoHistoryView snapshot viewer · already has deepest drill-down (4 levels); archive line already uses fmtDateTime; summary pills already have flex:1
+  - TAT · TATReportView date pill · already has display:flex/gap:8/marginTop:8/marginBottom:16 wrapper
+  - IRT · IRTReportView · already had "no defects" tick (pattern followed)
+
+REMAINING INTENTIONAL DIFFERENCES:
+  - Thermo report uses Total·Pass·Fail·Monitor (no N/A/Untested) — no N/A concept in thermal imaging
+  - Thermo history uses Pass/Fail/Monitor stats (not Pass/Fail/N/A/Untested) — same reason
+  - TAT date pill has no next-due date — TAT has no fixed renewal frequency
+  - TAT Pass stat tile colour is #60a5fa (TAT_COLOR) not #22c55e — intentional brand difference
+  - Thermo export button is inline in ThermoReportView — intentional placement difference from other modules
+*/
+
+/*
+BUG FIX SESSION 1 — TEXT CHANGES — 2026-06-06
+===========================================
+FIXED:
+  - Calendar: period label (Monthly/Annual/3-Monthly/Variable/Custom) removed from type selector buttons
+  - RCD: "Monthly" prefix removed from Push Test button; "Annual" prefix removed from Injection Test button
+  - RCD HistoryView: snapshot mode badge changed from "Monthly"/"Annual" to "Push"/"Injection"
+  - TAT Settings: "(dropdown suggestions)" removed from APPLIANCE NAMES section title
+  - Thermo: All user-facing "FLIR" text replaced — "FLIR FILE NAME" → "PHOTO NUMBER",
+    "FLIR photos" → "Thermo Camera Photos", "FLIR File" Excel header → "Photo Number", etc.
+  - JavaScript identifiers (flirFile, makeFlirName) unchanged
+*/
+
+/*
+BUG FIX SESSION 2 — UI STRUCTURE — 2026-06-06
+===========================================
+FIXED:
+  - All modules: Quick-link shortcut buttons (Report/History/Structure/Dropdowns/Export)
+    removed from all ProjectHomeView / HomeView components
+  - RCD: showExports state and Export sub-row removed along with quick links
+  - IEL: showExports state and Export sub-row removed along with quick links
+  - TAT: showExports state removed along with quick links and Export sub-row
+  - Thermo: showExports state and Export sub-row removed along with quick links
+  - All modules: No minus/dash collapse buttons found — Change 2 not applicable
+  - All modules: Back buttons added to Dropdowns/Settings views where missing:
+      RCD SettingsView — back button added (onBack prop)
+      IEL IELDropdownsView — back button added (onBack prop)
+      TAT TATSettingsView — back button added (onBack prop)
+      Thermo ThermoDropdownsView — back button added (onBack prop)
+      SWB SWBDropdownsView — back button added (onBack prop)
+      IRT IRTDropdownsView — back button added (onBack prop)
+  - ManageView, ReportView, HistoryView: all modules have bottom nav providing
+    navigation — no top back button added (per instruction: only add if genuinely none)
+*/
+
+/*
+BUG FIX SESSION 3 — CALENDAR LOGIC — 2026-06-06
+===========================================
+FIXED:
+  - Calendar: Site auto-fill now loads SWB (K_SWB_PROJECTS) and IRT (K_IRT_PROJECTS) projects
+  - Calendar: Helper text updated to "Sites auto-filled from all modules"
+  - Calendar: deleteEvent now recalculates seriesTotal and seriesIndex for remaining
+    series members after a single event is deleted
+*/
+
+/*
+BUG FIX SESSION 4 — TAT DEFAULT SELECTION — 2026-06-06
+===========================================
+FIXED:
+  - TAT Settings: APPLIANCE NAMES now has ★ default selection feature (first item = default,
+    ★ button promotes any item to default position). addName no longer sorts (order preserved).
+  - TAT Settings: EQUIPMENT TYPE now has ★ default selection feature
+  - TAT Item form: Equipment type pre-populated from equipTypes[0] default for new items
+    (in TATManageView addItem, addBulk, and the select value)
+VERIFIED (no change needed):
+  - IEL Responsibility and Rectified dropdowns already have ★ default feature
+  - SWB Responsibility and Rectified dropdowns already have ★ default feature
+FIXED (was missing):
+  - IRT Responsibility and Rectified dropdowns now have ★ default selection feature (was missing)
+*/
+
+/*
+BUG FIX SESSION 5 — RISK RATING FAIL-ONLY — 2026-06-06
+===========================================
+FIXED:
+  - SWB SWBItemPage: Risk Rating field moved inside fail-only red panel
+  - SWB SWBItemPage: doSave now clears risk: "" for non-fail items
+VERIFIED (no change needed):
+  - IRT: Priority already inside isFail block; doSave passes full form (no change per spec)
+  - Thermo: Priority intentionally visible for FAIL and MONITOR (not fail-only)
+  - RCD: Defect fields already inside fail-only section
+FIXED (if applicable — fill in after audit):
+  - TAT: Priority already inside fail-only block (item.status===TAT_STATUS.FAIL); uses live onPatch (no doSave) — already correct
+  - IEL: Priority already inside fail-only block (item.status===IEL_STATUS.FAIL); uses live onPatch (no doSave) — already correct
+*/
+
+/*
+BUG FIX SESSION 6 — IRT GUIDE MODAL — 2026-06-06
+===========================================
+FIXED:
+  - IRT: IRTMotorInfoModal showGuide state lifted to IRTApp shell level
+  - IRT: Modal now renders as direct child of IRTApp root div (sibling of SS.main),
+    not nested inside overflow:hidden SS.main container
+  - IRT: IRTItemPage receives onShowGuide prop instead of managing showInfo state locally
+  - Result: Guide modal no longer blocks navigation; Close button works correctly
+*/
+
+/*
+BUG FIX SESSION 7 — USER-EDITABLE DUE DATES — 2026-06-06
+===========================================
+FIXED:
+  - RCD: nextPushDate and nextInjectDate added to meta; ProjectHomeView shows
+    editable "NEXT PUSH DUE" / "NEXT INJECTION DUE" date inputs; ReportView and
+    Excel export read from meta instead of recalculating
+  - IEL: nextTestDate added to meta; IELProjectHomeView shows editable "NEXT TEST DUE";
+    IELReportView and Excel export updated
+  - TAT: nextTestDate added to meta; TATHomeView shows editable "NEXT TEST DUE";
+    TATReportView and Excel export updated
+  - SWB: nextTestDate added to meta; SWBHomeView shows editable "NEXT AUDIT DUE";
+    SWBReportView and Excel export updated
+  - IRT: nextTestDate added to meta; IRTHomeView shows editable "NEXT TEST DUE";
+    IRTReportView and Excel export updated
+  - Thermo: nextTestDate added to meta; ThermoHomeView shows editable "NEXT TEST DUE";
+    ThermoReportView and Excel export updated
+  - All modules: auto-fill logic preserves manual overrides
+  - Storage keys NOT bumped (meta additions are additive, default gracefully)
 */
 
 export default AppRoot;
