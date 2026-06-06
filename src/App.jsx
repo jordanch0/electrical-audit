@@ -4320,8 +4320,7 @@ function exportTATExcel(project, results, meta) {
   const rows=[];
   rows.push([`${sName} — Test & Tag`,...Array(n-1).fill("")]);
   rows.push([coLine,...Array(n-1).fill("")]);
-  const nextTestDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(testDate,3);
-  rows.push([`Auditor: ${auditor}`,"",`Date Tested: ${fmtDate(testDate)}`,"",`Next Test Due: ${nextTestDue}`,...Array(Math.max(0,n-5)).fill("")]);
+  rows.push([`Auditor: ${auditor}`,"",`Date Tested: ${fmtDate(testDate)}`,...Array(n-3).fill("")]);
   rows.push(Array(n).fill(""));
   rows.push(headers);
   const dataRows=[];
@@ -4802,11 +4801,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
-        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addMonthsISO(meta.testDate,3):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addMonthsISO(nd,3)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
-      )
-      ,React.createElement('div',{style:{marginTop:8}}
-        ,React.createElement('div',{style:ST.metaLabelText},"NEXT TEST DUE")
-        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement('input',{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+        ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
@@ -5107,7 +5102,7 @@ function TATReportView({project,results,meta}){
     ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:ST.summaryMeta},"TEST & TAG REPORT",meta.auditor?` · ${meta.auditor}`:"")
     ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
-      ,React.createElement('div',{style:{fontSize:12,background:"#161616",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(meta.testDate,3)))
+      ,React.createElement('div',{style:{fontSize:12,background:"#161616",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
     )
     ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}
       ,[["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#60a5fa"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>
@@ -11903,6 +11898,16 @@ FIX — RCD META CARD DATE GROUPING — 2026-06-07
   - ProjectHomeView: Injection Test date + next-due grouped into paired 2-column row
   - Old separate next-due pills removed (if still present after Session 7)
   - Auto-fill logic preserved within new layout
+*/
+
+/*
+FIX — TAT NEXT DUE DATE REMOVED — 2026-06-07
+===========================================
+  - TATHomeView: "NEXT TEST DUE" date input removed (TAT due dates are per-item, not global)
+  - TATHomeView: testDate onChange auto-fill side effect for nextTestDate removed
+  - TATReportView: next-due date pill removed
+  - exportTATExcel: Next Test Due cell removed from meta row
+  - nextTestDate field left in meta storage (harmless, no key bump needed)
 */
 
 export default AppRoot;
