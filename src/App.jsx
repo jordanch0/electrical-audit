@@ -580,6 +580,30 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
     }, 'Keep')
   );
 }
+// ─────────────────────────────────────────────────────────────────────────
+// IMPORT ERROR BOUNDARY — catches render-phase errors in import preview
+// ─────────────────────────────────────────────────────────────────────────
+class ImportErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { err: null }; }
+  static getDerivedStateFromError(e) { return { err: e }; }
+  render() {
+    if (this.state.err) {
+      return React.createElement('div', {
+        style: { color:'#f87171', fontSize:12, padding:'10px 12px', background:'#3d1a1a',
+                 borderRadius:8, border:'1px solid #ef4444', marginTop:8 }
+      },
+        'Import preview error — ', this.state.err.message || 'unexpected error.',
+        React.createElement('button', {
+          style: { display:'block', marginTop:6, color:'#aaa', fontSize:11,
+                   background:'none', border:'none', cursor:'pointer', textDecoration:'underline' },
+          onClick: () => this.setState({ err: null })
+        }, 'Dismiss')
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // MAIN APP
 // ═════════════════════════════════════════════════════════════════════════
@@ -789,23 +813,30 @@ const [importError,setImportError]= React.useState("");
 const fileRef = React.useRef();
 const handleFile = e => {
 const file = e.target.files[0]; if(!file) return;
+if(!/\.(xlsx|xls|csv)$/i.test(file.name)){
+  setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");
+  return;
+}
 setImporting(true); setImportError("");
 const reader=new FileReader();
 reader.onload=ev=>{
 try {
-const data=XLSX.read(ev.target.result,{type:"array"});
-// Auto-detect project name from filename
-const fname=file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim();
-setImportName(fname);
-const proj=parseExcelToProject(data, fname||"New Project", importCo, importAbn, importLic);
-setImportPreview(proj);
-// Auto-fill fields from parsed header if currently empty
-if(!importCo && proj.company) setImportCo(proj.company);
-if(!importAbn && proj.abn) setImportAbn(proj.abn);
-if(!importLic && proj.licence) setImportLic(proj.licence);
-} catch(err){ setImportError("Could not parse file: "+err.message); }
-setImporting(false);
+  const buf=ev.target.result;
+  if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
+  const data=XLSX.read(buf,{type:"array"});
+  // Auto-detect project name from filename
+  const fname=file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim();
+  setImportName(fname);
+  const proj=parseExcelToProject(data, fname||"New Project", importCo, importAbn, importLic);
+  setImportPreview(proj);
+  // Auto-fill fields from parsed header if currently empty
+  if(!importCo && proj.company) setImportCo(proj.company);
+  if(!importAbn && proj.abn) setImportAbn(proj.abn);
+  if(!importLic && proj.licence) setImportLic(proj.licence);
+} catch(err){ setImportError("Could not parse file — check it is a valid Excel or CSV file."); }
+  finally{ setImporting(false); }
 };
+reader.onerror=()=>{ setImportError("Failed to read file."); setImporting(false); };
 reader.readAsArrayBuffer(file);
 e.target.value="";
 };
@@ -881,7 +912,7 @@ React.createElement('div', { style: S.addCard,}
 , React.createElement('button', { style: {...S.ctaSecondary,width:"100%",fontSize:12}, onClick: downloadTemplate,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template"   )
 , importError&&React.createElement('div', { style: {color:"#f87171",fontSize:12,marginTop:8},}, importError)
 )
-, importPreview&&React.createElement(React.Fragment, null
+, importPreview&&React.createElement(ImportErrorBoundary,null,React.createElement(React.Fragment, null
 , React.createElement('div', { style: {background:"#0e1a0e",border:"1px solid #22c55e44",borderRadius:10,padding:"12px",marginBottom:12},}
 , React.createElement('div', { style: {fontSize:12,fontWeight:700,color:"#4ade80",marginBottom:8},}, "✓ Preview — "   , importPreview.areas.length, " areas found"  )
 , importPreview.areas.slice(0,5).map(a=>(
@@ -896,7 +927,7 @@ React.createElement('div', { key: a.id, style: {fontSize:12,color:"#aaa",marginB
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setImportPreview(null),}, "Re-upload")
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setShowAdd(false),}, "Cancel")
 )
-)
+))
 )
 )
 ):(
@@ -2542,11 +2573,14 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
+    if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
     setImporting(true);setImportError("");
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
-        const data=XLSX.read(ev.target.result,{type:"array"});
+        const buf=ev.target.result;
+        if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
+        const data=XLSX.read(buf,{type:"array"});
         const parsed=parseIELExcel(data);
         setImportName(parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim());
         setImportPreview(parsed);
@@ -2554,9 +2588,10 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo && parsed.company) setImportCo(parsed.company);
         if(!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if(!importLic && parsed.licence) setImportLic(parsed.licence);
-      }catch(err){setImportError("Could not parse file: "+err.message);}
-      setImporting(false);
+      }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
+      finally{setImporting(false);}
     };
+    reader.onerror=()=>{setImportError("Failed to read file.");setImporting(false);};
     reader.readAsArrayBuffer(file);
     e.target.value="";
   };
@@ -2644,7 +2679,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('button',{style:{...SI.ctaSecondary,width:"100%",fontSize:12},onClick:downloadIELTemplate},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
             ,importError&&React.createElement('div',{style:{color:"#f87171",fontSize:12,marginTop:8}},importError)
           )
-          ,importPreview&&React.createElement(React.Fragment,null
+          ,importPreview&&React.createElement(ImportErrorBoundary,null,React.createElement(React.Fragment,null
             ,React.createElement('div',{style:{background:"#0e1a0e",border:"1px solid #10b98144",borderRadius:10,padding:"12px",marginBottom:12}}
               ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#10b981",marginBottom:8}},"✓ Preview")
               ,React.createElement('div',{style:{fontSize:12,color:"#aaa",marginBottom:4}},importPreview.areas.length," areas — ",importPreview.areas.reduce((s,a)=>s+a.panels.reduce((ss,p)=>ss+p.circuits.length,0),0)," total items")
@@ -2672,7 +2707,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
               ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
             )
-          )
+          ))
         )
       )
       :React.createElement('button',{style:{...SI.ctaPrimary,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add / Import Site")
@@ -4591,20 +4626,24 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
+    if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
     setImporting(true);setImportError("");
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
-        const data=XLSX.read(ev.target.result,{type:"array"});
+        const buf=ev.target.result;
+        if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
+        const data=XLSX.read(buf,{type:"array"});
         const parsed=parseTATExcel(data);
         setImportName(parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim());
         setImportPreview(parsed);
         if(!importCo&&parsed.company)setImportCo(parsed.company);
         if(!importAbn&&parsed.abn)setImportAbn(parsed.abn);
         if(!importLic&&parsed.licence)setImportLic(parsed.licence);
-      }catch(err){setImportError("Could not parse file: "+err.message);}
-      setImporting(false);
+      }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
+      finally{setImporting(false);}
     };
+    reader.onerror=()=>{setImportError("Failed to read file.");setImporting(false);};
     reader.readAsArrayBuffer(file);
     e.target.value="";
   };
@@ -4671,7 +4710,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('button',{style:{...ST.ctaSecondary,width:"100%",fontSize:12},onClick:downloadTATTemplate},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
             ,importError&&React.createElement('div',{style:{color:"#f87171",fontSize:12,marginTop:8}},importError)
           )
-          ,importPreview&&React.createElement(React.Fragment,null
+          ,importPreview&&React.createElement(ImportErrorBoundary,null,React.createElement(React.Fragment,null
             ,React.createElement('div',{style:{background:"#0e1a2a",border:`1px solid ${TAT_COLOR}44`,borderRadius:10,padding:"12px",marginBottom:12}}
               ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:TAT_COLOR,marginBottom:8}},"✓ Preview")
               ,React.createElement('div',{style:{fontSize:12,color:"#aaa",marginBottom:4}},importPreview.areas.length," areas — ",importPreview.areas.reduce((s,a)=>s+(a.items||[]).length,0)," items")
@@ -4689,7 +4728,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
               ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
             )
-          )
+          ))
         )
       )
       :React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add / Import Site")
