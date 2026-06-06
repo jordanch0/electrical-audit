@@ -955,13 +955,33 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('div', { style: S.metaCard,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
 , !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#ef4444",marginTop:4}}, "⚠ Auditor name required before starting a test")
-, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,width:"100%",boxSizing:"border-box"},}
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "PUSH TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.pushDate?fmtDate(meta.pushDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _67 => _67.pushDate]), () => ("")),onChange:e=>{const nd=e.target.value;const autoPrev=meta&&meta.pushDate?addMonthsISO(meta.pushDate,1):"";const upd=!meta.nextPushDate||meta.nextPushDate===autoPrev;setMeta({pushDate:nd,...(upd?{nextPushDate:addMonthsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "INJECTION TEST DATE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.injectDate?fmtDate(meta.injectDate):"Select date…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta, 'optionalAccess', _68 => _68.injectDate]), () => ("")),onChange:e=>{const nd=e.target.value;const autoPrev=meta&&meta.injectDate?addYearsISO(meta.injectDate,1):"";const upd=!meta.nextInjectDate||meta.nextInjectDate===autoPrev;setMeta({injectDate:nd,...(upd?{nextInjectDate:addYearsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+, React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:10,width:"100%",boxSizing:"border-box"}}
+, React.createElement('div',{style:{width:"100%",boxSizing:"border-box",background:"#111",border:"1px solid #e8731a22",borderRadius:10,padding:"10px 12px"}}
+  ,React.createElement('div',{style:{fontSize:10,color:"#e8731a",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"PUSH TEST")
+  ,React.createElement('div',{style:{display:"flex",gap:8}}
+    ,React.createElement('div',{style:{flex:1}}
+      ,React.createElement('div',{style:S.metaLabelText},"DATE TESTED")
+      ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.pushDate?fmtDate(meta.pushDate):"Select…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta,'optionalAccess',_67=>_67.pushDate]),()=>("")),onChange:e=>{const nd=e.target.value;const autoPrev=meta&&meta.pushDate?addMonthsISO(meta.pushDate,1):"";const upd=!meta.nextPushDate||meta.nextPushDate===autoPrev;setMeta({pushDate:nd,...(upd?{nextPushDate:addMonthsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+    )
+    ,React.createElement('div',{style:{flex:1}}
+      ,React.createElement('div',{style:S.metaLabelText},"NEXT DUE")
+      ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.nextPushDate?fmtDate(meta.nextPushDate):"Select…"),React.createElement('input',{type:"date",value:(meta&&meta.nextPushDate)||"",onChange:e=>setMeta({nextPushDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+    )
+  )
 )
-, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:8,width:"100%",boxSizing:"border-box",marginTop:10},}
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "NEXT PUSH DUE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.nextPushDate?fmtDate(meta.nextPushDate):"Not set"),React.createElement('input',{type:"date",value:(meta&&meta.nextPushDate)||"",onChange:e=>setMeta({nextPushDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
-, React.createElement('div', { style: {width:"100%",boxSizing:"border-box"},}, React.createElement('div', { style: S.metaLabelText,}, "NEXT INJECTION DUE"  ), React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.nextInjectDate?fmtDate(meta.nextInjectDate):"Not set"),React.createElement('input',{type:"date",value:(meta&&meta.nextInjectDate)||"",onChange:e=>setMeta({nextInjectDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
+, React.createElement('div',{style:{width:"100%",boxSizing:"border-box",background:"#111",border:"1px solid #3b82f644",borderRadius:10,padding:"10px 12px"}}
+  ,React.createElement('div',{style:{fontSize:10,color:"#60a5fa",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"INJECTION TEST")
+  ,React.createElement('div',{style:{display:"flex",gap:8}}
+    ,React.createElement('div',{style:{flex:1}}
+      ,React.createElement('div',{style:S.metaLabelText},"DATE TESTED")
+      ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.injectDate?fmtDate(meta.injectDate):"Select…"),React.createElement('input',{type:"date",value:_nullishCoalesce(_optionalChain([meta,'optionalAccess',_68=>_68.injectDate]),()=>("")),onChange:e=>{const nd=e.target.value;const autoPrev=meta&&meta.injectDate?addYearsISO(meta.injectDate,1):"";const upd=!meta.nextInjectDate||meta.nextInjectDate===autoPrev;setMeta({injectDate:nd,...(upd?{nextInjectDate:addYearsISO(nd,1)}:{})});},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+    )
+    ,React.createElement('div',{style:{flex:1}}
+      ,React.createElement('div',{style:S.metaLabelText},"NEXT DUE")
+      ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...S.metaInput,textAlign:"center",cursor:"pointer"}},meta&&meta.nextInjectDate?fmtDate(meta.nextInjectDate):"Select…"),React.createElement('input',{type:"date",value:(meta&&meta.nextInjectDate)||"",onChange:e=>setMeta({nextInjectDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
+    )
+  )
+)
 )
 )
 , React.createElement('div', { style: S.modeSelectLabel,}, "SELECT TEST TYPE"  )
@@ -11874,6 +11894,15 @@ FIXED:
     ThermoReportView and Excel export updated
   - All modules: auto-fill logic preserves manual overrides
   - Storage keys NOT bumped (meta additions are additive, default gracefully)
+*/
+
+/*
+FIX — RCD META CARD DATE GROUPING — 2026-06-07
+===========================================
+  - ProjectHomeView: Push Test date + next-due grouped into paired 2-column row
+  - ProjectHomeView: Injection Test date + next-due grouped into paired 2-column row
+  - Old separate next-due pills removed (if still present after Session 7)
+  - Auto-fill logic preserved within new layout
 */
 
 export default AppRoot;
