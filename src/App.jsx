@@ -1576,7 +1576,11 @@ const [expandedPanel,setExpandedPanel]=React.useState(null);
 const [newAreaName,setNewAreaName]=React.useState("");
 const [newPanelName,setNewPanelName]=React.useState({});
 const [newCircuit,setNewCircuit]=React.useState({});
+const [newCbType,setNewCbType]=React.useState({});
+const [newAmpRating,setNewAmpRating]=React.useState({});
 const [bulkCircuit,setBulkCircuit]=React.useState({});
+const [bulkCbType,setBulkCbType]=React.useState({});
+const [bulkAmpRating,setBulkAmpRating]=React.useState({});
 const [editingProject,setEditingProject]=React.useState(false);
 const [projName,setProjName]=React.useState(project.name);
 const [projCo,setProjCo]=React.useState(project.company||"");
@@ -1610,8 +1614,8 @@ const addPanel=(aid)=>{const n=(newPanelName[aid]||"").trim();if(!n)return;upd({
 const delPanel=(aid,pid)=>upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.filter(p=>p.id!==pid)}:a)});
 const addCircuit=(aid,pid)=>{
   const n=(newCircuit[pid]||"").trim();if(!n)return;
-  const cb=cbOptions[0]||"";
-  const amp=ampOptions[0]||"";
+  const cb=(newCbType[pid]!==undefined?newCbType[pid]:(cbOptions[0]||"")).trim();
+  const amp=(newAmpRating[pid]!==undefined?newAmpRating[pid]:(ampOptions[0]||"")).trim();
   upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{
     if(p.id!==pid)return p;
     if(p.circuits.includes(n))return p; // duplicate guard
@@ -1620,12 +1624,14 @@ const addCircuit=(aid,pid)=>{
     return{...p,circuits:[...p.circuits,n],circuitMeta:meta};
   })}:a)});
   setNewCircuit(x=>({...x,[pid]:""}));
+  setNewCbType(x=>({...x,[pid]:""}));
+  setNewAmpRating(x=>({...x,[pid]:""}));
 };
 const addBulk=(aid,pid)=>{
   const raw=(bulkCircuit[pid]||"").trim();if(!raw)return;
   const items=raw.split(",").map(s=>s.trim()).filter(Boolean);
-  const cb=cbOptions[0]||"";
-  const amp=ampOptions[0]||"";
+  const cb=(bulkCbType[pid]!==undefined?bulkCbType[pid]:(cbOptions[0]||"")).trim();
+  const amp=(bulkAmpRating[pid]!==undefined?bulkAmpRating[pid]:(ampOptions[0]||"")).trim();
   upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{
     if(p.id!==pid)return p;
     const newCs=items.filter(c=>!p.circuits.includes(c));
@@ -1634,6 +1640,8 @@ const addBulk=(aid,pid)=>{
     return{...p,circuits:[...p.circuits,...newCs],circuitMeta:meta};
   })}:a)});
   setBulkCircuit(x=>({...x,[pid]:""}));
+  setBulkCbType(x=>({...x,[pid]:""}));
+  setBulkAmpRating(x=>({...x,[pid]:""}));
 };
 const delCircuit=(aid,pid,c)=>{
   if(editingCircuit&&editingCircuit.pid===pid&&editingCircuit.circuit===c)setEditingCircuit(null);
@@ -1784,11 +1792,27 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "Circuit name e.g. CB5", value: newCircuit[pnl.id]||"", onChange: e=>setNewCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addCircuit(area.id,pnl.id),})
 , React.createElement('button', { style: {...S.smallBtn,color:"#60a5fa",borderColor:"#3b82f655"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
 )
+, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%",overflow:"hidden"},}
+, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: newCbType[pnl.id]!==undefined?newCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
+  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
+)
+, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: newAmpRating[pnl.id]!==undefined?newAmpRating[pnl.id]:(ampOptions[0]||""), onChange: e=>setNewAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
+  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
+)
+)
 )
 , React.createElement('div', { style: {fontSize:10,color:"#555",marginBottom:4},}, "BULK ADD (comma-separated)")
 , React.createElement('div', { style: {display:"flex",gap:6,marginBottom:6},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
 , React.createElement('button', { style: {...S.smallBtn,color:"#4ade80",borderColor:"#22c55e55"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Bulk" )
+)
+, React.createElement('div', { style: {display:"flex",gap:6,width:"100%",overflow:"hidden"},}
+, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: bulkCbType[pnl.id]!==undefined?bulkCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
+  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
+)
+, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: bulkAmpRating[pnl.id]!==undefined?bulkAmpRating[pnl.id]:(ampOptions[0]||""), onChange: e=>setBulkAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
+  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
+)
 )
 )
 )
