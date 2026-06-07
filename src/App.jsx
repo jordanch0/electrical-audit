@@ -763,8 +763,8 @@ onExportPush: ()=>exportExcel(allResults,project,meta,"push",logo),
 onExportInject: ()=>exportExcel(allResults,project,meta,"inject",logo),
 onArchive: archiveAudit,
 activeMode: mode,
-onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);},})
-, isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:mode?modeColor:"#e8731a",moduleLabel:"RCD TEST",auditLabel:mode?modeLabel:"",hasActiveAudit:!!mode,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:true})
+onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);},})
+, isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:mode?modeColor:"#e8731a",moduleLabel:"RCD TEST",auditLabel:mode?modeLabel:"",hasActiveAudit:!!mode,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:true})
 , isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(AreaListView, { project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>setActiveAreaId(id),})
 , isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(PanelListView, { area: area, project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>{setActivePanelId(id);setView("panel");},})
 , !detailInfo&&view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
@@ -951,8 +951,8 @@ React.createElement('button', { style: {...S.ctaPrimary,width:"100%",marginTop:8
 function ProjectHomeView({ project, meta, setMeta, results, onStartPush, onStartInject, onReport, onManage, onHistory, onSettings, onReset, onExportPush, onExportInject, onArchive, onCompleteAudit, activeMode }) {
 const pushSum=summariseProject(results,project,"push");
 const injectSum=summariseProject(results,project,"inject");
-const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.na)/pushSum.total)*100):0;
-const injectPct=injectSum.total>0?Math.round(((injectSum.pass+injectSum.na)/injectSum.total)*100):0;
+const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.fail+pushSum.na)/pushSum.total)*100):0;
+const injectPct=injectSum.total>0?Math.round(((injectSum.pass+injectSum.fail+injectSum.na)/injectSum.total)*100):0;
 const [confirmReset,setConfirmReset]=React.useState(false);
 const [archiveMsg,setArchiveMsg]=React.useState("");
 const handleArchive=(m)=>{onArchive(m);setArchiveMsg(`${m==="inject"?"Injection":"Push"} test archived!`);setTimeout(()=>setArchiveMsg(""),2500);};
@@ -1476,7 +1476,7 @@ React.createElement('div', { style: {background:"#1e0a0a",border:"1px solid #ef4
 , React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED")
-, React.createElement(EditableDropdown, {options:rectOptions, value:_nullishCoalesce(inj.rectified,()=>("")), onChange:v=>onPatch({inject:{...inj,rectified:v}}), placeholder:"Select or type…",})
+, React.createElement(EditableDropdown, {options:rectOptions, value:_nullishCoalesce(inj.rectified,()=>(rectOptions[0]||"")), onChange:v=>onPatch({inject:{...inj,rectified:v}}), placeholder:"Select or type…",})
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
@@ -1576,11 +1576,7 @@ const [expandedPanel,setExpandedPanel]=React.useState(null);
 const [newAreaName,setNewAreaName]=React.useState("");
 const [newPanelName,setNewPanelName]=React.useState({});
 const [newCircuit,setNewCircuit]=React.useState({});
-const [newCbType,setNewCbType]=React.useState({});
-const [newAmpRating,setNewAmpRating]=React.useState({});
 const [bulkCircuit,setBulkCircuit]=React.useState({});
-const [bulkCbType,setBulkCbType]=React.useState({});
-const [bulkAmpRating,setBulkAmpRating]=React.useState({});
 const [editingProject,setEditingProject]=React.useState(false);
 const [projName,setProjName]=React.useState(project.name);
 const [projCo,setProjCo]=React.useState(project.company||"");
@@ -1614,8 +1610,8 @@ const addPanel=(aid)=>{const n=(newPanelName[aid]||"").trim();if(!n)return;upd({
 const delPanel=(aid,pid)=>upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.filter(p=>p.id!==pid)}:a)});
 const addCircuit=(aid,pid)=>{
   const n=(newCircuit[pid]||"").trim();if(!n)return;
-  const cb=(newCbType[pid]||"").trim();
-  const amp=(newAmpRating[pid]||"").trim();
+  const cb=cbOptions[0]||"";
+  const amp=ampOptions[0]||"";
   upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{
     if(p.id!==pid)return p;
     if(p.circuits.includes(n))return p; // duplicate guard
@@ -1624,14 +1620,12 @@ const addCircuit=(aid,pid)=>{
     return{...p,circuits:[...p.circuits,n],circuitMeta:meta};
   })}:a)});
   setNewCircuit(x=>({...x,[pid]:""}));
-  setNewCbType(x=>({...x,[pid]:""}));
-  setNewAmpRating(x=>({...x,[pid]:""}));
 };
 const addBulk=(aid,pid)=>{
   const raw=(bulkCircuit[pid]||"").trim();if(!raw)return;
   const items=raw.split(",").map(s=>s.trim()).filter(Boolean);
-  const cb=(bulkCbType[pid]||"").trim();
-  const amp=(bulkAmpRating[pid]||"").trim();
+  const cb=cbOptions[0]||"";
+  const amp=ampOptions[0]||"";
   upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{
     if(p.id!==pid)return p;
     const newCs=items.filter(c=>!p.circuits.includes(c));
@@ -1640,8 +1634,6 @@ const addBulk=(aid,pid)=>{
     return{...p,circuits:[...p.circuits,...newCs],circuitMeta:meta};
   })}:a)});
   setBulkCircuit(x=>({...x,[pid]:""}));
-  setBulkCbType(x=>({...x,[pid]:""}));
-  setBulkAmpRating(x=>({...x,[pid]:""}));
 };
 const delCircuit=(aid,pid,c)=>{
   if(editingCircuit&&editingCircuit.pid===pid&&editingCircuit.circuit===c)setEditingCircuit(null);
@@ -1763,11 +1755,11 @@ React.createElement('div', { style: {paddingLeft:8},}
       ),
       React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%"},value:editCbType,onChange:e=>setEditCbType(e.target.value)},
         React.createElement('option',{value:""},"CB/RCD Type"),
-        cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
+        (editCbType&&!cbOptions.includes(editCbType)?[editCbType,...cbOptions]:cbOptions).map(o=>React.createElement('option',{key:o,value:o},o))
       ),
       React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:8,width:"100%"},value:editAmpRating,onChange:e=>setEditAmpRating(e.target.value)},
         React.createElement('option',{value:""},"Amp Rating"),
-        ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
+        (editAmpRating&&!ampOptions.includes(editAmpRating)?[editAmpRating,...ampOptions]:ampOptions).map(o=>React.createElement('option',{key:o,value:o},o))
       ),
       React.createElement('div',{style:{display:"flex",gap:8}},
         React.createElement('button',{style:{...S.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e55",fontSize:13,padding:"10px 0"},onClick:()=>saveCircuitMeta(area.id,pnl.id,c)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Save"),
@@ -1792,31 +1784,11 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "Circuit name e.g. CB5", value: newCircuit[pnl.id]||"", onChange: e=>setNewCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addCircuit(area.id,pnl.id),})
 , React.createElement('button', { style: {...S.smallBtn,color:"#60a5fa",borderColor:"#3b82f655"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%",overflow:"hidden"},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: newCbType[pnl.id]||"", onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
-  , React.createElement('option', {value:""},"CB/RCD Type (optional)")
-  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: newAmpRating[pnl.id]||"", onChange: e=>setNewAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
-  , React.createElement('option', {value:""},"Amps (optional)")
-  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-)
 )
 , React.createElement('div', { style: {fontSize:10,color:"#555",marginBottom:4},}, "BULK ADD (comma-separated)")
 , React.createElement('div', { style: {display:"flex",gap:6,marginBottom:6},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
 , React.createElement('button', { style: {...S.smallBtn,color:"#4ade80",borderColor:"#22c55e55"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Bulk" )
-)
-, React.createElement('div', { style: {display:"flex",gap:6,width:"100%",overflow:"hidden"},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: bulkCbType[pnl.id]||"", onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
-  , React.createElement('option', {value:""},"CB/RCD Type for all (optional)")
-  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: bulkAmpRating[pnl.id]||"", onChange: e=>setBulkAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
-  , React.createElement('option', {value:""},"Amps (opt.)")
-  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
 )
 )
 )
@@ -1846,7 +1818,7 @@ return(React.createElement('div', { style: S.listWrap,}, React.createElement('di
 , project.areas.map(area=>{
 let total=0,pass=0,fail=0,untested=0;
 area.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(results,project.id,area.id,p.id,c,mode);if(v===STATUS.PASS||v===STATUS.NA)pass++;else if(v===STATUS.FAIL)fail++;else untested++;}));
-const pct=total>0?Math.round((pass/total)*100):0;
+const pct=total>0?Math.round(((pass+fail)/total)*100):0;
 return(React.createElement('button', { key: area.id, style: {...S.siteCard,...(fail>0?S.siteCardFail:{})}, onClick: ()=>onSelect(area.id),}
 , React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, area.name), React.createElement('div', { style: S.siteCardSub,}, area.panels.length, " panels · "   , total, " circuits" )
 , React.createElement('div', { style: S.siteCardBar,}, React.createElement('div', { style: {...S.siteCardBarFill,width:`${pct}%`,background:fail>0?"#ef4444":untested>0?modeColor:"#22c55e"},})))
@@ -2788,7 +2760,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
     ,React.createElement('div',{style:SI.modeSelectLabel},"SELECT TEST CATEGORY")
     ,IEL_CATEGORIES.map(cat=>{
       const sum=ielSiteSummary(results,project,cat.key);
-      const pct=sum.total>0?Math.round(((sum.pass+sum.na)/sum.total)*100):0;
+      const pct=sum.total>0?Math.round(((sum.pass+sum.fail+sum.na)/sum.total)*100):0;
       return React.createElement('button',{key:cat.key,
         style:{...SI.catBtn,borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
         onClick:()=>hasAuditor&&onStartCat(cat.key)}
@@ -2835,7 +2807,7 @@ function IELAreaListView({project,results,cat,catColor,onSelect}){
       let pass=0,fail=0,untested=0;
       items.forEach(id=>{const v=ielGetStatus(results,project.id,area.id,cat,id);if(v===IEL_STATUS.PASS||v===IEL_STATUS.NA)pass++;else if(v===IEL_STATUS.FAIL)fail++;else untested++;});
       const total=items.length;
-      const pct=total>0?Math.round((pass/total)*100):0;
+      const pct=total>0?Math.round(((pass+fail)/total)*100):0;
       return React.createElement('button',{key:area.id,style:{...SI.siteCard,...(fail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},onClick:()=>onSelect(area.id)}
         ,React.createElement('div',{style:SI.siteCardLeft}
           ,React.createElement('div',{style:SI.siteCardName},area.name)
@@ -3104,7 +3076,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
         ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"RECTIFIED / SCHEDULED")
-          ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED,value:item.rectified||"",onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…"})
+          ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED,value:item.rectified||(((dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED)[0]||""),onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…"})
         )
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"DATE RECTIFIED")
@@ -3434,7 +3406,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             else if(st===IEL_STATUS.FAIL)aFail++;
           });
         });
-        const pct=aTotal>0?Math.round((aPass/aTotal)*100):0;
+        const pct=aTotal>0?Math.round(((aPass+aFail)/aTotal)*100):0;
         return React.createElement('button',{key:area.id,
           style:{...SI.siteCard,...(aFail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},
           onClick:()=>setViewArea(area.id)}
@@ -4752,7 +4724,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 
     ,projects.map(proj=>{
       const sum=tatSiteSummary(allResults,proj);
-      const pct=sum.total>0?Math.round((sum.pass+sum.na)/sum.total*100):0;
+      const pct=sum.total>0?Math.round((sum.pass+sum.fail+sum.na)/sum.total*100):0;
       return React.createElement('div',{key:proj.id,style:{...ST.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,React.createElement('div',{style:{flex:1}}
@@ -4831,7 +4803,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,onArchive,auditEntered,onCompleteAudit}){
   const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
-  const pct=summary.total>0?Math.round(((summary.pass+summary.na)/summary.total)*100):0;
+  const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   return React.createElement('div',{style:ST.homeWrap}
     ,React.createElement('div',{style:ST.siteTitle},project.name)
     ,React.createElement('div',{style:ST.siteSub},project.company||"")
@@ -4849,7 +4821,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#2a2a2a",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#ef4444":pct===100?"#22c55e":TAT_COLOR}})
@@ -4890,7 +4862,7 @@ function TATAreaListView({project,results,onSelect}){
     ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add areas and items.")
     ,project.areas.map(area=>{
       const s=tatAreaSummary(results,project.id,area.id,area.items);
-      const pct=s.total>0?Math.round(((s.pass+s.na)/s.total)*100):0;
+      const pct=s.total>0?Math.round(((s.pass+s.fail+s.na)/s.total)*100):0;
       return React.createElement('button',{key:area.id,
         style:{...ST.siteCard,...(s.fail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},
         onClick:()=>onSelect(area.id)}
@@ -5167,7 +5139,7 @@ function TATReportView({project,results,meta,onBack}){
       ,React.createElement('div',{style:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1,marginBottom:10}},"BY AREA")
       ,project.areas.map(area=>{
         const as=tatAreaSummary(results,project.id,area.id,area.items);
-        const pct=as.total>0?Math.round(((as.pass+as.na)/as.total)*100):0;
+        const pct=as.total>0?Math.round(((as.pass+as.fail+as.na)/as.total)*100):0;
         return React.createElement('div',{key:area.id,style:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,padding:"10px 14px",marginBottom:8}}
           ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},area.name)
@@ -5567,7 +5539,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         if(!aItems.length)return null;
         let aPass=0,aFail=0,aTotal=aItems.length;
         aItems.forEach(id=>{const v=(((snap.results||{})[area.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS||st===TAT_STATUS.NA)aPass++;else if(st===TAT_STATUS.FAIL)aFail++;});
-        const pct=aTotal>0?Math.round((aPass/aTotal)*100):0;
+        const pct=aTotal>0?Math.round(((aPass+aFail)/aTotal)*100):0;
         return React.createElement('button',{key:area.id,style:{...ST.siteCard,...(aFail>0?{background:"#1e1010",borderColor:"#ef444455"}:{})},onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:ST.siteCardLeft}
             ,React.createElement('div',{style:ST.siteCardName},area.name)
@@ -6753,7 +6725,7 @@ function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
         const bs=swbBoardSummary(results,project.id,area.id,b.id);
         pass+=bs.pass; fail+=bs.fail; untested+=bs.untested; total+=bs.total;
       });
-      const pct=total>0?Math.round(pass/total*100):0;
+      const pct=total>0?Math.round((pass+fail)/total*100):0;
       const allDone=(area.boards||[]).length>0&&(area.boards||[]).every(b=>swbBoardComplete(results,project.id,area.id,b.id));
       return React.createElement('button',{key:area.id,
         style:{...SS.siteCard,...(fail>0?{background:"#1e1010",borderColor:"#ef444455"}:allDone?{background:"#0e1e0e",borderColor:"#22c55e33"}:{})},
@@ -6786,7 +6758,7 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
     ,(area.boards||[]).map(b=>{
       const bs=swbBoardSummary(results,project.id,area.id,b.id);
       const isComp=swbBoardComplete(results,project.id,area.id,b.id);
-      const pct=bs.total>0?Math.round((bs.pass+bs.na)/bs.total*100):0;
+      const pct=bs.total>0?Math.round((bs.pass+bs.fail+bs.na)/bs.total*100):0;
       return React.createElement('button',{key:b.id,
         style:{...SS.siteCard,...(bs.fail>0?{background:"#1e1010",borderColor:"#ef444455"}:isComp?{background:"#0e1e0e",borderColor:"#22c55e33"}:{})},
         onClick:()=>onSelectBoard(b.id)}
@@ -10235,7 +10207,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
   const [archiveMsg,setArchiveMsg]=React.useState("");const SS=swbStyles();
   const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
-  const pct=summary.total>0?Math.round((summary.pass+summary.na)/summary.total*100):0;
+  const pct=summary.total>0?Math.round((summary.pass+summary.fail+summary.na)/summary.total*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?swbAddYear(testDate):"";
   const auditInProgress=summary.total>0&&summary.untested<summary.total;
 
@@ -10260,7 +10232,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #a855f733",borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#2a2a2a",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#ef4444":pct===100?"#22c55e":"#a855f7"}})
@@ -11253,7 +11225,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
   const [archiveMsg,setArchiveMsg]=React.useState("");const SS=irtStyles();
   const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
-  const pct=summary.total>0?Math.round((summary.pass)/summary.total*100):0;
+  const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?irtAddYear(testDate):"";
   const auditInProgress=summary.total>0&&summary.untested<summary.total;
   return React.createElement("div",{style:SS.homeWrap},
