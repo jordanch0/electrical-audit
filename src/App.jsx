@@ -1373,7 +1373,7 @@ placeholder: "Select or type…",})
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
-, React.createElement('input', { style: S.modalInput, type: "date", value: _nullishCoalesce(push.scheduledDate, () => ("")), onChange: e=>onPatch({push:{...push,scheduledDate:e.target.value}}),})
+, React.createElement('input', { style: {...S.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"}, type: "date", value: _nullishCoalesce(push.scheduledDate, () => ("")), onChange: e=>onPatch({push:{...push,scheduledDate:e.target.value}}),})
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DEFECT ID")
@@ -1477,7 +1477,7 @@ React.createElement('div', { style: {background:"#1e0a0a",border:"1px solid #ef4
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
-, React.createElement('input', { style: S.modalInput, type:"date", value:_nullishCoalesce(inj.scheduledDate,()=>("")), onChange:e=>onPatch({inject:{...inj,scheduledDate:e.target.value}}),})
+, React.createElement('input', { style: {...S.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"}, type:"date", value:_nullishCoalesce(inj.scheduledDate,()=>("")), onChange:e=>onPatch({inject:{...inj,scheduledDate:e.target.value}}),})
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DEFECT ID")
@@ -3102,7 +3102,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
         )
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"DATE RECTIFIED")
-          ,React.createElement('input',{style:SI.modalInput,type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value})})
+          ,React.createElement('input',{style:{...SI.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"},type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value})})
         )
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"DEFECT ID")
@@ -5081,7 +5081,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         )
         ,React.createElement('div',{style:ST.modalField}
           ,React.createElement('label',{style:ST.modalLabel},"DATE RECTIFIED")
-          ,React.createElement('input',{style:ST.modalInput,type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value})})
+          ,React.createElement('input',{style:{...ST.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"},type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value})})
         )
         ,React.createElement('div',{style:ST.modalField}
           ,React.createElement('label',{style:ST.modalLabel},"DEFECT ID")
@@ -7932,7 +7932,7 @@ function PhotoPage({
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
   }, "DATE RECTIFIED"), /*#__PURE__*/React.createElement("input", {
-    style: STH.modalInput, type: "date", value: form.rectifiedDate,
+    style: {...STH.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"}, type: "date", value: form.rectifiedDate,
     onChange: e => setForm(f => ({...f, rectifiedDate: e.target.value}))
   })), /*#__PURE__*/React.createElement("div", {
     style: STH.modalField
@@ -10405,7 +10405,7 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"DATE RECTIFIED")
-          ,React.createElement('input',{style:SS.modalInput,type:"date",value:rectDate,onChange:e=>setRectDate(e.target.value)})
+          ,React.createElement('input',{style:{...SS.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"},type:"date",value:rectDate,onChange:e=>setRectDate(e.target.value)})
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"DEFECT ID")
@@ -11149,7 +11149,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     isFail&&React.createElement("div",{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}},
       React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION"),React.createElement(IRTEditableDropdown,{options:rectOptions,value:form.rectified||"",onChange:v=>pf({rectified:v}),placeholder:"Select or type\u2026",color:"#f59e0b"})),
-      React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DATE RECTIFIED"),React.createElement("input",{style:SS.modalInput,type:"date",value:form.scheduledDate||"",onChange:e=>pf({scheduledDate:e.target.value})})),
+      React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DATE RECTIFIED"),React.createElement("input",{style:{...SS.modalInput, width:"100%", maxWidth:"100%", boxSizing:"border-box", display:"block"},type:"date",value:form.scheduledDate||"",onChange:e=>pf({scheduledDate:e.target.value})})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DEFECT ID"),React.createElement("input",{style:SS.modalInput,type:"text",placeholder:"e.g. 61",value:form.defectId||"",onChange:e=>pf({defectId:e.target.value})})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RESPONSIBILITY"),React.createElement(IRTEditableDropdown,{options:respOptions,value:form.responsibility||"",onChange:v=>pf({responsibility:v}),placeholder:"Select or type\u2026",color:"#c084fc"})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"PRIORITY"),React.createElement('div', {style: {display:"flex", gap:8, flexWrap:"wrap"}},
@@ -12146,6 +12146,15 @@ FIX — DATE RECTIFIED FIELD WIDTH — 2026-06-07
   - All modules: removed extra flex column wrapper from DATE RECTIFIED + DEFECT ID fields
   - Fields now use plain modalField div matching all other fields in the fail panel
   - Affected: RCD (push + inject), IEL, TAT, Thermo, SWB, IRT
+*/
+
+/*
+FIX — DATE RECTIFIED OVERFLOW — 2026-06-07
+===========================================
+  - All modules: removed flex column wrapper from DATE RECTIFIED + DEFECT ID
+  - Date input now uses display:block + maxWidth:100% to prevent native
+    date picker overflow on mobile browsers
+  - Applied to: RCD (push + inject), IEL, TAT, SWB, IRT, Thermo
 */
 
 export default AppRoot;
