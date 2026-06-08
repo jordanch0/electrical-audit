@@ -422,3 +422,17 @@ Run `npm run build` after all changes to confirm no build errors.
 - **GitHub Pages setting:** Source must be set to "GitHub Actions" (not "Deploy from branch")
 - **Never push directly to `main`** — always merge from `dev` after testing
 - **PWA caching:** Handled by `sw.js`. After a new deploy, users may need to force-refresh or clear the service worker to get the latest version
+
+---
+
+## Encoding Safety (Windows / UTF-8)
+
+`src/App.jsx` is a large UTF-8 file. On Windows, several shell tools corrupt it silently.
+
+**Always use the `Edit` tool (`str_replace`) for edits to `src/App.jsx`.**
+
+If `str_replace` cannot find a unique match and a file write is unavoidable, use Node.js — it handles UTF-8 correctly on Windows:
+```js
+node -e "const fs=require('fs'); let c=fs.readFileSync('src/App.jsx','utf8'); c=c.replace(/exact_old_text/,'new_text'); fs.writeFileSync('src/App.jsx',c,'utf8');"
+```
+Never use `cat >`, `sed -i`, heredoc (`<< 'EOF'`), or any shell redirect to write to `src/App.jsx`.
