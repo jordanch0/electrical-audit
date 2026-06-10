@@ -1,4 +1,4 @@
-const CACHE = 'electrical-audit-v3';
+const CACHE = 'electrical-audit-v4';
 const ASSETS = [
   './',
   './index.html',

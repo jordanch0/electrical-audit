@@ -736,18 +736,6 @@ else goProjects();
   )
   ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #e8731a, transparent 70%)',opacity:0.5}})
 )
-, view!=="projects"&&(
-React.createElement('div', { style: S.breadcrumb,}
-, React.createElement('span', { style: S.bcItem, onClick: goProjects,}, "Sites")
-, project&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: S.bcItem, onClick: goHome,}, project.name))
-, mode&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: {...S.bcItem,color:modeColor},}, modeLabel))
-, activeAreaId&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: S.bcItem, onClick: ()=>{setView("audit");setActivePanelId(null);setDetailInfo(null);},}, _optionalChain([area, 'optionalAccess', _61 => _61.name])))
-, activePanelId&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: {...S.bcItem,color:modeColor},}, _optionalChain([panel, 'optionalAccess', _62 => _62.name])))
-, view==="manage"&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: {...S.bcItem,color:"#a855f7"},}, "Manage"))
-, view==="history"&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: {...S.bcItem,color:"#f59e0b"},}, "History"))
-, view==="settings"&&React.createElement(React.Fragment, null, React.createElement('span', { style: S.bcSep,}, "›"), React.createElement('span', { style: {...S.bcItem,color:"#64748b"},}, "Settings"))
-)
-)
 , React.createElement('main', { style: S.main,}
 , view==="projects"&&React.createElement(ProjectListView, { projects: projects, allResults: allResults, dropdowns: dropdowns,
 onSelect: id=>{setActiveProject(id);setView("home");},
@@ -1296,7 +1284,7 @@ return React.createElement('div', { key: i, style: {display:"flex",alignItems:"c
 value: newVal,
 onChange: e=>setNewVals(v=>({...v,[key]:e.target.value})),
 onKeyDown: e=>{ if(e.key==="Enter"){ addItem(key,newVal); } },})
-, React.createElement('button', { style: {...S.smallBtn,color,borderColor:`${color}55`,fontWeight:700}, onClick: ()=>addItem(key,newVal),}, "+ Add" )
+, React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addItem(key,newVal),}, "+ Add" )
 )
 )
 );
@@ -1587,7 +1575,12 @@ const [projCo,setProjCo]=React.useState(project.company||"");
 const [projAbn,setProjAbn]=React.useState(project.abn||"");
 const [projLic,setProjLic]=React.useState(project.licence||"");
 
+const [editingArea,setEditingArea]=React.useState(null);
+const [editAreaName,setEditAreaName]=React.useState("");
+const [editingPanel,setEditingPanel]=React.useState(null);
+const [editPanelName,setEditPanelName]=React.useState("");
 const [editingCircuit,setEditingCircuit]=React.useState(null); // { pid, circuit }
+const [editCircuitName,setEditCircuitName]=React.useState("");
 const [editCbType,setEditCbType]=React.useState("");
 const [editAmpRating,setEditAmpRating]=React.useState("");
 
@@ -1596,15 +1589,22 @@ const ampOptions = _nullishCoalesce(_optionalChain([dropdowns, 'optionalAccess',
 
 const upd=u=>onUpdateProject(u);
 
-const startEditCircuit=(pid,circuit,cm)=>{setEditingCircuit({pid,circuit});setEditCbType((cm&&cm.cbType)||"");setEditAmpRating((cm&&cm.ampRating)||"");};
+const startEditArea=(area)=>{setEditingArea(area.id);setEditAreaName(area.name);};
+const saveAreaName=(aid)=>{const n=editAreaName.trim();if(!n){setEditingArea(null);return;}upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,name:n}:a)});setEditingArea(null);};
+const startEditPanel=(pnl)=>{setEditingPanel(pnl.id);setEditPanelName(pnl.name);};
+const savePanelName=(aid,pid)=>{const n=editPanelName.trim();if(!n){setEditingPanel(null);return;}upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>p.id===pid?{...p,name:n}:p)}:a)});setEditingPanel(null);};
+const startEditCircuit=(pid,circuit,cm)=>{setEditingCircuit({pid,circuit});setEditCircuitName(circuit);setEditCbType((cm&&cm.cbType)||(cbOptions[0]||""));setEditAmpRating((cm&&cm.ampRating)||(ampOptions[0]||""));};
 const saveCircuitMeta=(aid,pid,circuit)=>{
+  const name=editCircuitName.trim()||circuit;
   const cb=editCbType.trim();
   const amp=editAmpRating.trim();
   upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{
     if(p.id!==pid)return p;
+    if(name!==circuit&&p.circuits.includes(name))return p; // duplicate guard
     const meta={...(p.circuitMeta||{})};
-    if(cb||amp){meta[circuit]={cbType:cb,ampRating:amp};}else{delete meta[circuit];}
-    return{...p,circuitMeta:meta};
+    delete meta[circuit];
+    if(cb||amp){meta[name]={cbType:cb,ampRating:amp};}else{delete meta[name];}
+    return{...p,circuits:p.circuits.map(x=>x===circuit?name:x),circuitMeta:meta};
   })}:a)});
   setEditingCircuit(null);
 };
@@ -1721,7 +1721,7 @@ React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {fontSize:15,fontWeight:800,color:"#eee"}}, project.name)
 , project.company&&React.createElement('div', { style: {fontSize:12,color:"#666",marginTop:2}}, project.company)
 )
-, React.createElement('button', { style: {...S.smallBtn,color:"#c084fc",borderColor:"#a855f744"}, onClick: ()=>setEditingProject(true),}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
+, React.createElement('button', { style: {background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"}, onClick: ()=>setEditingProject(true)}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
 )
 )
 , React.createElement('div', { style: {fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10},}, "AREAS / LOCATIONS"  )
@@ -1729,24 +1729,38 @@ React.createElement('div', { style: S.listWrap,}
 , project.areas.map(area=>(
 React.createElement('div', { key: area.id, style: {...S.manageSection,borderColor:expandedArea===area.id?"#a855f755":"#2a2a2a"},}
 , React.createElement('div', { style: S.manageSectionHeader,}
+, editingArea===area.id?React.createElement(React.Fragment,null
+, React.createElement('input',{style:{...S.smallInput,flex:1,fontSize:14},value:editAreaName,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveAreaName(area.id),autoFocus:true})
+, React.createElement('button',{style:{...S.smallBtn,color:"#4ade80",borderColor:"#22c55e55"},onClick:()=>saveAreaName(area.id)},"Save")
+, React.createElement('button',{style:S.smallBtn,onClick:()=>setEditingArea(null)},"Cancel")
+):React.createElement(React.Fragment,null
 , React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"}, onClick: ()=>{setExpandedArea(expandedArea===area.id?null:area.id);setExpandedPanel(null);setEditingCircuit(null);},}
 , React.createElement('span', { style: {fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0},}, expandedArea===area.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},}, area.name)
 , React.createElement('span', { style: {fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"},}, area.panels.length, " panels · "   , area.panels.reduce((s,p)=>s+p.circuits.length,0), " circuits" )
 )
+, React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
 , React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
+)
 )
 , expandedArea===area.id&&(
 React.createElement('div', { style: {padding:"0 4px 8px 20px"},}
 , area.panels.map(pnl=>(
 React.createElement('div', { key: pnl.id, style: {...S.managePanel,borderColor:expandedPanel===pnl.id?"#60a5fa44":"#222"},}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:expandedPanel===pnl.id?10:0,flexWrap:"nowrap",minWidth:0},}
+, editingPanel===pnl.id?React.createElement(React.Fragment,null
+, React.createElement('input',{style:{...S.smallInput,flex:1,fontSize:13},value:editPanelName,onChange:e=>setEditPanelName(e.target.value),onKeyDown:e=>e.key==="Enter"&&savePanelName(area.id,pnl.id),autoFocus:true})
+, React.createElement('button',{style:{...S.smallBtn,color:"#4ade80",borderColor:"#22c55e55"},onClick:()=>savePanelName(area.id,pnl.id)},"Save")
+, React.createElement('button',{style:S.smallBtn,onClick:()=>setEditingPanel(null)},"Cancel")
+):React.createElement(React.Fragment,null
 , React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"}, onClick: ()=>{const closing=expandedPanel===pnl.id;setExpandedPanel(closing?null:pnl.id);setEditingCircuit(null);},}
 , React.createElement('span', { style: {fontSize:14,color:expandedPanel===pnl.id?"#60a5fa":"#666",flexShrink:0},}, expandedPanel===pnl.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:600,color:"#ccc",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},}, pnl.name)
 , React.createElement('span', { style: {fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"},}, pnl.circuits.length, " circuits" )
 )
+, React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditPanel(pnl)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
 , React.createElement(DeleteButton, { onDelete: ()=>delPanel(area.id,pnl.id), label: "Delete panel?" })
+)
 )
 , expandedPanel===pnl.id&&(
 React.createElement('div', { style: {paddingLeft:8},}
@@ -1758,9 +1772,10 @@ React.createElement('div', { style: {paddingLeft:8},}
   if(isEditing){
     return(React.createElement('div',{key:c,style:{background:"#1e1e1e",border:"1px solid #60a5fa",borderRadius:8,padding:"10px",width:"100%",boxSizing:"border-box"}},
       React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
-        React.createElement('span',{style:{fontSize:13,color:"#60a5fa",fontWeight:700}},c),
+        React.createElement('span',{style:{fontSize:13,color:"#60a5fa",fontWeight:700}},"Edit circuit"),
         React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingCircuit(null)},"×")
       ),
+      React.createElement('input',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%",boxSizing:"border-box"},value:editCircuitName,onChange:e=>setEditCircuitName(e.target.value),placeholder:"Circuit name"}),
       React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%"},value:editCbType,onChange:e=>setEditCbType(e.target.value)},
         React.createElement('option',{value:""},"CB/RCD Type"),
         (editCbType&&!cbOptions.includes(editCbType)?[editCbType,...cbOptions]:cbOptions).map(o=>React.createElement('option',{key:o,value:o},o))
@@ -1780,7 +1795,7 @@ React.createElement('div', { style: {paddingLeft:8},}
     React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}},c),
     cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#64748b",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},cm.cbType),
     cm.ampRating&&React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0,whiteSpace:"nowrap"}}," · "+cm.ampRating),
-    React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))),
+    React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#60a5fa',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))),
     React.createElement(DeleteButton, { onDelete: ()=>delCircuit(area.id,pnl.id,c), label: `Delete ${c}?`, compact: true })
   ));
 })
@@ -1790,7 +1805,7 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('div', { style: {fontSize:10,color:"#60a5fa",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "ADD CIRCUIT")
 , React.createElement('div', { style: {display:"flex",gap:6,marginBottom:6},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "Circuit name e.g. CB5", value: newCircuit[pnl.id]||"", onChange: e=>setNewCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addCircuit(area.id,pnl.id),})
-, React.createElement('button', { style: {...S.smallBtn,color:"#60a5fa",borderColor:"#3b82f655"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
+, React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
 )
 , React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%",overflow:"hidden"},}
 , React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: newCbType[pnl.id]!==undefined?newCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
@@ -1804,7 +1819,7 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('div', { style: {fontSize:10,color:"#555",marginBottom:4},}, "BULK ADD (comma-separated)")
 , React.createElement('div', { style: {display:"flex",gap:6,marginBottom:6},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
-, React.createElement('button', { style: {...S.smallBtn,color:"#4ade80",borderColor:"#22c55e55"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Bulk" )
+, React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Add" )
 )
 , React.createElement('div', { style: {display:"flex",gap:6,width:"100%",overflow:"hidden"},}
 , React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: bulkCbType[pnl.id]!==undefined?bulkCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
@@ -1820,7 +1835,7 @@ React.createElement('div', { style: {paddingLeft:8},}
 ))
 , React.createElement('div', { style: {display:"flex",gap:6,marginTop:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "New DB / Panel name"    , value: newPanelName[area.id]||"", onChange: e=>setNewPanelName(x=>({...x,[area.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addPanel(area.id),})
-, React.createElement('button', { style: {...S.smallBtn,color:"#a855f7",borderColor:"#a855f755"}, onClick: ()=>addPanel(area.id),}, "+ Panel" )
+, React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addPanel(area.id),}, "+ Add" )
 )
 )
 )
@@ -1828,7 +1843,7 @@ React.createElement('div', { style: {paddingLeft:8},}
 ))
 , React.createElement('div', { style: {display:"flex",gap:6,marginTop:12},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "New area / location name"    , value: newAreaName, onChange: e=>setNewAreaName(e.target.value), onKeyDown: e=>e.key==="Enter"&&addArea(),})
-, React.createElement('button', { style: {...S.ctaPrimary,padding:"10px 16px",fontSize:13}, onClick: addArea,}, "+ Area" )
+, React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: addArea,}, "+ Add" )
 )
 )
 );
@@ -2494,17 +2509,6 @@ function IELApp({ onGoHome }) {
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #10b981, transparent 70%)',opacity:0.5}})
     )
 
-    // ── Breadcrumb
-    ,view!=="projects"&&React.createElement('div',{style:SI.breadcrumb}
-      ,React.createElement('span',{style:SI.bcItem,onClick:goProjects},"Sites")
-      ,project&&React.createElement(React.Fragment,null,React.createElement('span',{style:SI.bcSep},"›"),React.createElement('span',{style:SI.bcItem,onClick:goHome},project.name))
-      ,activeCat&&React.createElement(React.Fragment,null,React.createElement('span',{style:SI.bcSep},"›"),React.createElement('span',{style:{...SI.bcItem,color:catColor}},catInfo.label))
-      ,activeAreaId&&React.createElement(React.Fragment,null,React.createElement('span',{style:SI.bcSep},"›"),React.createElement('span',{style:SI.bcItem,onClick:()=>{setView("audit");setActivePanelId(null);}},area&&area.name))
-      ,activePanelId&&panel&&React.createElement(React.Fragment,null,React.createElement('span',{style:SI.bcSep},"›"),React.createElement('span',{style:{...SI.bcItem,color:catColor}},IEL_CATEGORIES.find(c=>c.key===panel.name)?.label||panel.name))
-      ,view==="manage"&&React.createElement(React.Fragment,null,React.createElement('span',{style:SI.bcSep},"›"),React.createElement('span',{style:{...SI.bcItem,color:"#a855f7"}},"Manage"))
-      ,view==="history"&&React.createElement(React.Fragment,null,React.createElement('span',{style:SI.bcSep},"›"),React.createElement('span',{style:{...SI.bcItem,color:"#f59e0b"}},"History"))
-    )
-
     // ── Main
     ,React.createElement('main',{style:SI.main}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
@@ -2586,7 +2590,7 @@ function IELDropdownsView({dropdowns,setDropdowns,onBack}){
             placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
             onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
-          ,React.createElement('button',{style:{...SI.smallBtn,color,borderColor:`${color}55`,fontWeight:700},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
         )
       );
     })
@@ -3202,6 +3206,10 @@ function IELReportView({project,results,meta,onBack}){
 function IELManageView({project,onUpdateProject,onBack}){
   const[expandedArea,setExpandedArea]=React.useState(null);
   const[newAreaName,setNewAreaName]=React.useState("");
+  const[editingArea,setEditingArea]=React.useState(null);
+  const[editAreaName,setEditAreaName]=React.useState("");
+  const[editingItem,setEditingItem]=React.useState(null); // {areaId, catKey, itemId}
+  const[editItemName,setEditItemName]=React.useState("");
   const[newItemName,setNewItemName]=React.useState({});
   const[bulkItems,setBulkItems]=React.useState({});
   const[editingProject,setEditingProject]=React.useState(false);
@@ -3212,6 +3220,17 @@ function IELManageView({project,onUpdateProject,onBack}){
   const upd=u=>onUpdateProject(u);
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...project.areas,{id:ielSlug(newAreaName),name:newAreaName.trim(),panels:IEL_CATEGORIES.map(cat=>({id:ielSlug(cat.key+"-"+newAreaName),name:cat.key,circuits:[],machineNames:{}}))}]});setNewAreaName("");};
   const delArea=id=>upd({...project,areas:project.areas.filter(a=>a.id!==id)});
+  const startEditArea=(area)=>{setEditingArea(area.id);setEditAreaName(area.name);};
+  const saveAreaName=(aid)=>{const n=editAreaName.trim();if(!n){setEditingArea(null);return;}upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,name:n}:a)});setEditingArea(null);};
+  const startEditItem=(aid,catKey,itemId,name)=>{setEditingItem({areaId:aid,catKey,itemId});setEditItemName(name);};
+  const saveItemName=()=>{
+    if(!editingItem)return;
+    const{areaId,catKey,itemId}=editingItem;
+    const n=editItemName.trim();
+    if(!n){setEditingItem(null);return;}
+    upd({...project,areas:project.areas.map(a=>a.id===areaId?{...a,panels:a.panels.map(p=>p.name===catKey?{...p,machineNames:{...(p.machineNames||{}),[itemId]:n}}:p)}:a)});
+    setEditingItem(null);
+  };
   const addItem=(aid,catKey)=>{
     const key=`${aid}-${catKey}`;
     const n=(newItemName[key]||"").trim();if(!n)return;
@@ -3244,20 +3263,27 @@ function IELManageView({project,onUpdateProject,onBack}){
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
-          ,React.createElement('button',{style:{...SI.smallBtn,color:"#a855f7",borderColor:"#a855f755"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
+          ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
     )
     ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
     ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet.")
     ,project.areas.map(area=>
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#a855f755":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
-        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"nowrap",minWidth:0}}
-          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}}
-            ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0}},expandedArea===area.id?"▾":"▸")
-            ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
-            ,React.createElement('span',{style:{fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"}},area.panels.reduce((s,p)=>s+p.circuits.length,0)," items")
+        ,React.createElement('div',{style:editingArea===area.id?{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",width:"100%",boxSizing:"border-box"}:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"nowrap",minWidth:0}}
+          ,editingArea===area.id?React.createElement(React.Fragment,null
+            ,React.createElement('input',{style:{...SI.smallInput,flex:1,minWidth:0,fontSize:14},value:editAreaName,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveAreaName(area.id),autoFocus:true})
+            ,React.createElement('button',{style:{...SI.smallBtn,color:"#4ade80",borderColor:"#22c55e55",flexShrink:0,whiteSpace:"nowrap"},onClick:()=>saveAreaName(area.id)},"Save")
+            ,React.createElement('button',{style:{...SI.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>setEditingArea(null)},"Cancel")
+          ):React.createElement(React.Fragment,null
+            ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}}
+              ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0}},expandedArea===area.id?"▾":"▸")
+              ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
+              ,React.createElement('span',{style:{fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"}},area.panels.reduce((s,p)=>s+p.circuits.length,0)," items")
+            )
+            ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
+            ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
           )
-          ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
         )
         ,expandedArea===area.id&&React.createElement('div',{style:{padding:"8px 8px 12px 20px"}}
           ,IEL_CATEGORIES.map(cat=>
@@ -3267,8 +3293,17 @@ function IELManageView({project,onUpdateProject,onBack}){
                 ,(area.panels.find(p=>p.name===cat.key)||{circuits:[],machineNames:{}}).circuits.map(itemId=>{
                   const mn=(area.panels.find(p=>p.name===cat.key)||{machineNames:{}}).machineNames||{};
                   const itemName=mn[itemId]||itemId;
+                  const isEditingItem=editingItem&&editingItem.areaId===area.id&&editingItem.catKey===cat.key&&editingItem.itemId===itemId;
+                  if(isEditingItem){
+                    return React.createElement('div',{key:itemId,style:{display:"flex",flexWrap:"wrap",gap:6,background:"#1e1e1e",border:`1px solid ${cat.color}55`,borderRadius:8,padding:"6px 10px",width:"100%",boxSizing:"border-box"}}
+                      ,React.createElement('input',{style:{...SI.smallInput,flex:1,minWidth:0,fontSize:12},value:editItemName,onChange:e=>setEditItemName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveItemName(),autoFocus:true})
+                      ,React.createElement('button',{style:{...SI.smallBtn,color:"#4ade80",borderColor:"#22c55e55",flexShrink:0,whiteSpace:"nowrap"},onClick:saveItemName},"Save")
+                      ,React.createElement('button',{style:{...SI.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>setEditingItem(null)},"Cancel")
+                    );
+                  }
                   return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${cat.color}33`,borderRadius:8,padding:"6px 10px",flexWrap:"nowrap",minWidth:0}}
                     ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},itemName)
+                    ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditItem(area.id,cat.key,itemId,itemName)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
                     ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,cat.key,itemId), label: `Delete "${itemName}"?`, compact: true })
                   );
                 })
@@ -3276,12 +3311,12 @@ function IELManageView({project,onUpdateProject,onBack}){
               )
               ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:4}}
                 ,React.createElement('input',{style:{...SI.smallInput,flex:1},placeholder:`Add ${cat.label.slice(0,-1)} e.g. Screen Conveyor 1`,value:newItemName[`${area.id}-${cat.key}`]||"",onChange:e=>setNewItemName(x=>({...x,[`${area.id}-${cat.key}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,cat.key)})
-                ,React.createElement('button',{style:{...SI.smallBtn,color:cat.color,borderColor:`${cat.color}55`},onClick:()=>addItem(area.id,cat.key)},"+ Add")
+                ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(area.id,cat.key)},"+ Add")
               )
               ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:4}},"BULK ADD (comma-separated)")
               ,React.createElement('div',{style:{display:"flex",gap:6}}
                 ,React.createElement('input',{style:{...SI.smallInput,flex:1},placeholder:"Screen 1,Screen 2,Pump 3",value:bulkItems[`${area.id}-${cat.key}`]||"",onChange:e=>setBulkItems(x=>({...x,[`${area.id}-${cat.key}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addBulk(area.id,cat.key)})
-                ,React.createElement('button',{style:{...SI.smallBtn,color:"#4ade80",borderColor:"#22c55e55"},onClick:()=>addBulk(area.id,cat.key)},"+ Bulk")
+                ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addBulk(area.id,cat.key)},"+ Add")
               )
             )
           )
@@ -3290,7 +3325,7 @@ function IELManageView({project,onUpdateProject,onBack}){
     )
     ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:12}}
       ,React.createElement('input',{style:{...SI.smallInput,flex:1},placeholder:"New area / location name",value:newAreaName,onChange:e=>setNewAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addArea()})
-      ,React.createElement('button',{style:{...SI.ctaPrimary,padding:"10px 16px",fontSize:13},onClick:addArea},"+ Area")
+      ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addArea},"+ Add")
     )
   );
 }
@@ -4628,15 +4663,6 @@ function TATApp({ onGoHome }) {
     )
 
     // Breadcrumb
-    ,view!=="projects"&&React.createElement('div',{style:ST.breadcrumb}
-      ,React.createElement('span',{style:ST.bcItem,onClick:goProjects},"Sites")
-      ,project&&React.createElement(React.Fragment,null,React.createElement('span',{style:ST.bcSep},"›"),React.createElement('span',{style:ST.bcItem,onClick:goHome},project.name))
-      ,activeAreaId&&React.createElement(React.Fragment,null,React.createElement('span',{style:ST.bcSep},"›"),React.createElement('span',{style:{...ST.bcItem,color:TAT_COLOR}},area&&area.name))
-      ,view==="manage"&&React.createElement(React.Fragment,null,React.createElement('span',{style:ST.bcSep},"›"),React.createElement('span',{style:{...ST.bcItem,color:"#a855f7"}},"Manage"))
-      ,view==="history"&&React.createElement(React.Fragment,null,React.createElement('span',{style:ST.bcSep},"›"),React.createElement('span',{style:{...ST.bcItem,color:"#f59e0b"}},"History"))
-      ,view==="settings"&&React.createElement(React.Fragment,null,React.createElement('span',{style:ST.bcSep},"›"),React.createElement('span',{style:{...ST.bcItem,color:"#64748b"}},"Dropdowns"))
-    )
-
     // Main
     ,React.createElement('main',{style:ST.main}
       ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},
@@ -5210,6 +5236,8 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[projCo,setProjCo]=React.useState(project.company||"");
   const[projAbn,setProjAbn]=React.useState(project.abn||"");
   const[projLic,setProjLic]=React.useState(project.licence||"");
+  const[editingArea,setEditingArea]=React.useState(null);
+  const[editAreaName,setEditAreaName]=React.useState("");
   const[editingItem,setEditingItem]=React.useState(null); // {areaId, itemId}
   const[editName,setEditName]=React.useState("");
   const[editTag,setEditTag]=React.useState("");
@@ -5244,6 +5272,12 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     setNewAreaName("");
   };
   const delArea=id=>upd({...project,areas:project.areas.filter(a=>a.id!==id)});
+  const startEditArea=area=>{setEditAreaName(area.name);setEditingArea(area.id);};
+  const saveAreaName=areaId=>{
+    const n=editAreaName.trim();if(!n)return;
+    upd({...project,areas:project.areas.map(a=>a.id===areaId?{...a,name:n}:a)});
+    setEditingArea(null);
+  };
   const setAreaDefaultFreq=(areaId,freq)=>upd({...project,areas:project.areas.map(a=>a.id===areaId?{...a,defaultFreq:freq}:a)});
 
   const addItem=(areaId)=>{
@@ -5339,7 +5373,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
-          ,React.createElement('button',{style:{...ST.smallBtn,color:"#a855f7",borderColor:"#a855f755"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
+          ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
     )
     ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS")
@@ -5348,23 +5382,30 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#a855f755":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
         // Area header row
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 14px",background:"#1a1a1a",flexWrap:"nowrap",minWidth:0}}
-          ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setEditingItem(null);}}
-            ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0}},expandedArea===area.id?"▾":"▸")
-            ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
-            ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:4,flexShrink:0,whiteSpace:"nowrap"}},(area.items||[]).length," items")
-          )
-          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
-            ,React.createElement('span',{style:{fontSize:10,color:"#555",whiteSpace:"nowrap"}},"Default:")
-            ,React.createElement('select',{
-              style:{background:"#111",border:"1px solid #333",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
-              value:area.defaultFreq||(tatDefaults||{}).freq||"3",
-              onClick:e=>e.stopPropagation(),
-              onChange:e=>{e.stopPropagation();setAreaDefaultFreq(area.id,e.target.value);}
-            }
-              ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"))
+          ,editingArea===area.id?React.createElement(React.Fragment,null
+            ,React.createElement('input',{style:{...ST.smallInput,flex:1,fontSize:14},value:editAreaName,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveAreaName(area.id),autoFocus:true})
+            ,React.createElement('button',{style:{...ST.smallBtn,color:"#4ade80",borderColor:"#22c55e55"},onClick:()=>saveAreaName(area.id)},"Save")
+            ,React.createElement('button',{style:ST.smallBtn,onClick:()=>setEditingArea(null)},"Cancel")
+          ):React.createElement(React.Fragment,null
+            ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setEditingItem(null);}}
+              ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0}},expandedArea===area.id?"▾":"▸")
+              ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
+              ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:4,flexShrink:0,whiteSpace:"nowrap"}},(area.items||[]).length," items")
             )
+            ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
+              ,React.createElement('span',{style:{fontSize:10,color:"#555",whiteSpace:"nowrap"}},"Default:")
+              ,React.createElement('select',{
+                style:{background:"#111",border:"1px solid #333",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
+                value:area.defaultFreq||(tatDefaults||{}).freq||"3",
+                onClick:e=>e.stopPropagation(),
+                onChange:e=>{e.stopPropagation();setAreaDefaultFreq(area.id,e.target.value);}
+              }
+                ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"))
+              )
+            )
+            ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
+            ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
           )
-          ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
         )
         // Expanded content
         ,expandedArea===area.id&&React.createElement('div',{style:{padding:"8px 12px 12px"}}
@@ -5420,7 +5461,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                 ,tag&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px",flexShrink:0}},tag)
                 ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},itemLabel)
                 ,React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0,whiteSpace:"nowrap"}},freqLabel)
-                ,React.createElement('button',{style:{background:"#1a2a3a",border:"1px solid #3b82f644",color:"#60a5fa",cursor:"pointer",fontSize:13,padding:"4px 9px",borderRadius:6,flexShrink:0},onClick:()=>startEditItem(area,itemId)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})))
+                ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditItem(area,itemId)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
                 ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,itemId), label: `Delete "${itemLabel}"?`, compact: true })
               );
             })
@@ -5475,19 +5516,19 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                 )
               )
             )
-            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,width:"100%",padding:"9px",fontSize:13},onClick:()=>addItem(area.id)},"+ Add Item")
+            ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",width:"100%"},onClick:()=>addItem(area.id)},"+ Add")
           )
           ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:4}},"BULK ADD (comma-separated appliance names)")
           ,React.createElement('div',{style:{display:"flex",gap:6}}
             ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Grinder, Drill, Lead 10m",value:bulkItems[area.id]||"",onChange:e=>setBulkItems(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addBulk(area.id)})
-            ,React.createElement('button',{style:{...ST.smallBtn,color:"#4ade80",borderColor:"#22c55e55"},onClick:()=>addBulk(area.id)},"+ Bulk")
+            ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addBulk(area.id)},"+ Add")
           )
         )
       )
     )
     ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:12}}
       ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"New area name",value:newAreaName,onChange:e=>setNewAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addArea()})
-      ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,padding:"10px 16px",fontSize:13},onClick:addArea},"+ Area")
+      ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addArea},"+ Add")
     )
   );
 }
@@ -5678,7 +5719,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
         ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>setNewName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addName()})
-        ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,padding:"10px 16px",fontSize:13},onClick:addName},"+ Add")
+        ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addName},"+ Add")
       )
       ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetNames},"Reset to defaults")
     )
@@ -5695,7 +5736,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
         ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add equipment type…",value:newEquip,onChange:e=>setNewEquip(e.target.value),onKeyDown:e=>e.key==="Enter"&&addEquip()})
-        ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,padding:"10px 16px",fontSize:13},onClick:addEquip},"+ Add")
+        ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addEquip},"+ Add")
       )
       ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetEquip},"Reset to defaults")
     )
@@ -5713,7 +5754,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}
         ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Number of months e.g. 2",type:"number",min:"1",value:newFreqMonths,onChange:e=>setNewFreqMonths(e.target.value),onKeyDown:e=>e.key==="Enter"&&addFreq()})
-        ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,padding:"10px 16px",fontSize:13,flexShrink:0},onClick:addFreq},"+ Add")
+        ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:addFreq},"+ Add")
       )
       ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetFreq},"Reset to defaults")
     )
@@ -8184,6 +8225,12 @@ function ThermoManageView({
   const [newAreaName, setNewAreaName] = React.useState("");
   const [newBoardName, setNewBoardName] = React.useState({});
   const [newCircuit, setNewCircuit] = React.useState({});
+  const [editingArea, setEditingArea] = React.useState(null);
+  const [editAreaName, setEditAreaName] = React.useState("");
+  const [editingBoard, setEditingBoard] = React.useState(null);
+  const [editBoardName, setEditBoardName] = React.useState("");
+  const [editingCircuit, setEditingCircuit] = React.useState(null); // {areaId, boardId, cid}
+  const [editCircuitName, setEditCircuitName] = React.useState("");
   const update = updated => onUpdateProject({
     ...project,
     areas: updated
@@ -8198,6 +8245,19 @@ function ThermoManageView({
     setNewAreaName("");
   };
   const delArea = id => update(project.areas.filter(a => a.id !== id));
+  const startEditArea = (area) => { setEditingArea(area.id); setEditAreaName(area.name); };
+  const saveAreaName = (aid) => { const n = editAreaName.trim(); if (!n) { setEditingArea(null); return; } update(project.areas.map(a => a.id === aid ? { ...a, name: n } : a)); setEditingArea(null); };
+  const startEditBoard = (board) => { setEditingBoard(board.id); setEditBoardName(board.name); };
+  const saveBoardName = (aid, bid) => { const n = editBoardName.trim(); if (!n) { setEditingBoard(null); return; } update(project.areas.map(a => a.id !== aid ? a : { ...a, boards: (a.boards || []).map(b => b.id === bid ? { ...b, name: n } : b) })); setEditingBoard(null); };
+  const startEditCircuit = (areaId, boardId, cid, name) => { setEditingCircuit({ areaId, boardId, cid }); setEditCircuitName(name); };
+  const saveCircuitName = () => {
+    if (!editingCircuit) return;
+    const { areaId, boardId, cid } = editingCircuit;
+    const n = editCircuitName.trim();
+    if (!n) { setEditingCircuit(null); return; }
+    update(project.areas.map(a => a.id !== areaId ? a : { ...a, boards: (a.boards || []).map(b => b.id !== boardId ? b : { ...b, circuitNames: { ...(b.circuitNames || {}), [cid]: n } }) }));
+    setEditingCircuit(null);
+  };
   const addBoard = areaId => {
     const name = (newBoardName[areaId] || "").trim();
     if (!name) return;
@@ -8291,7 +8351,7 @@ function ThermoManageView({
             /*#__PURE__*/React.createElement("div",{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name),
             project.company&&/*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
           ),
-          /*#__PURE__*/React.createElement("button",{style:{...STH.smallBtn,color:THERMO_COLOR,borderColor:THERMO_COLOR+"55"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
+          /*#__PURE__*/React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
   ),
   project.areas.map(area => /*#__PURE__*/React.createElement("div", {
@@ -8312,7 +8372,11 @@ function ThermoManageView({
       flexWrap: "nowrap",
       minWidth: 0
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, editingArea === area.id ? /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("input", { style: { ...STH.smallInput, flex: 1, fontSize: 14 }, value: editAreaName, onChange: e => setEditAreaName(e.target.value), onKeyDown: e => e.key === "Enter" && saveAreaName(area.id), autoFocus: true }),
+    /*#__PURE__*/React.createElement("button", { style: { ...STH.smallBtn, color: "#4ade80", borderColor: "#22c55e55" }, onClick: () => saveAreaName(area.id) }, "Save"),
+    /*#__PURE__*/React.createElement("button", { style: STH.smallBtn, onClick: () => setEditingArea(null) }, "Cancel")
+  ) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: {
       flex: 1,
       display: "flex",
@@ -8353,14 +8417,10 @@ function ThermoManageView({
       flexShrink: 0,
       whiteSpace: "nowrap"
     }
-  }, (area.boards || []).length, " boards")), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.smallBtn,
-      color: "#ef4444",
-      borderColor: "#ef444433"
-    },
-    onClick: e => { e.stopPropagation(); }
-  }), React.createElement(DeleteButton, { onDelete: () => delArea(area.id), label: "Delete area?" })), expandedArea === area.id && /*#__PURE__*/React.createElement("div", {
+  }, (area.boards || []).length, " boards")),
+  /*#__PURE__*/React.createElement("button", { style: { background: "transparent", border: "1px solid rgba(59,130,246,0.35)", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", lineHeight: 1, color: "#60a5fa", cursor: "pointer", flexShrink: 0 }, onClick: () => startEditArea(area) }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
+  React.createElement(DeleteButton, { onDelete: () => delArea(area.id), label: "Delete area?" })
+  )), expandedArea === area.id && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 8px 12px 20px"
     }
@@ -8381,7 +8441,11 @@ function ThermoManageView({
       flexWrap: "nowrap",
       minWidth: 0
     }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, editingBoard === board.id ? /*#__PURE__*/React.createElement(React.Fragment, null,
+    /*#__PURE__*/React.createElement("input", { style: { ...STH.smallInput, flex: 1, fontSize: 13 }, value: editBoardName, onChange: e => setEditBoardName(e.target.value), onKeyDown: e => e.key === "Enter" && saveBoardName(area.id, board.id), autoFocus: true }),
+    /*#__PURE__*/React.createElement("button", { style: { ...STH.smallBtn, color: "#4ade80", borderColor: "#22c55e55" }, onClick: () => saveBoardName(area.id, board.id) }, "Save"),
+    /*#__PURE__*/React.createElement("button", { style: STH.smallBtn, onClick: () => setEditingBoard(null) }, "Cancel")
+  ) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("button", {
     style: {
       flex: 1,
       display: "flex",
@@ -8419,16 +8483,10 @@ function ThermoManageView({
       flexShrink: 0,
       whiteSpace: "nowrap"
     }
-  }, (board.circuits || []).length, " circuits")), /*#__PURE__*/React.createElement("button", {
-    style: {
-      ...STH.smallBtn,
-      color: "#ef4444",
-      borderColor: "#ef444433",
-      fontSize: 11,
-      flexShrink: 0
-    },
-    onClick: e => { e.stopPropagation(); }
-  }), React.createElement(DeleteButton, { onDelete: () => delBoard(area.id, board.id), label: "Delete board?" })), expandedBoard === board.id && /*#__PURE__*/React.createElement("div", {
+  }, (board.circuits || []).length, " circuits")),
+  /*#__PURE__*/React.createElement("button", { style: { background: "transparent", border: "1px solid rgba(59,130,246,0.35)", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", lineHeight: 1, color: "#60a5fa", cursor: "pointer", flexShrink: 0 }, onClick: () => startEditBoard(board) }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
+  React.createElement(DeleteButton, { onDelete: () => delBoard(area.id, board.id), label: "Delete board?" })
+  )), expandedBoard === board.id && /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "8px 12px 12px"
     }
@@ -8449,6 +8507,14 @@ function ThermoManageView({
     }
   }, (board.circuits || []).map(cid => {
     const cName = (board.circuitNames || {})[cid] || cid;
+    const isEditingC = editingCircuit && editingCircuit.areaId === area.id && editingCircuit.boardId === board.id && editingCircuit.cid === cid;
+    if (isEditingC) {
+      return /*#__PURE__*/React.createElement("div", { key: cid, style: { display: "flex", alignItems: "center", gap: 6, background: "#1e1e1e", border: `1px solid ${THERMO_COLOR}55`, borderRadius: 8, padding: "6px 10px", flexWrap: "nowrap", minWidth: 0 } },
+        /*#__PURE__*/React.createElement("input", { style: { ...STH.smallInput, flex: 1, fontSize: 12 }, value: editCircuitName, onChange: e => setEditCircuitName(e.target.value), onKeyDown: e => e.key === "Enter" && saveCircuitName(), autoFocus: true }),
+        /*#__PURE__*/React.createElement("button", { style: { ...STH.smallBtn, color: "#4ade80", borderColor: "#22c55e55" }, onClick: saveCircuitName }, "Save"),
+        /*#__PURE__*/React.createElement("button", { style: STH.smallBtn, onClick: () => setEditingCircuit(null) }, "Cancel")
+      );
+    }
     return /*#__PURE__*/React.createElement("div", {
       key: cid,
       style: {
@@ -8472,7 +8538,9 @@ function ThermoManageView({
         textOverflow: "ellipsis",
         whiteSpace: "nowrap"
       }
-    }, cName), React.createElement(DeleteButton, { onDelete: () => delCircuit(area.id, board.id, cid), label: `Delete ${cName}?`, compact: true }))
+    }, cName),
+    /*#__PURE__*/React.createElement("button", { style: { background: "transparent", border: "1px solid rgba(59,130,246,0.35)", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", lineHeight: 1, color: "#60a5fa", cursor: "pointer", flexShrink: 0 }, onClick: () => startEditCircuit(area.id, board.id, cid, cName) }, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
+    React.createElement(DeleteButton, { onDelete: () => delCircuit(area.id, board.id, cid), label: `Delete ${cName}?`, compact: true }))
   }), (board.circuits || []).length === 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
@@ -8497,9 +8565,14 @@ function ThermoManageView({
     onKeyDown: e => e.key === "Enter" && addCircuit(area.id, board.id)
   }), /*#__PURE__*/React.createElement("button", {
     style: {
-      ...STH.smallBtn,
-      color: THERMO_COLOR,
-      borderColor: `${THERMO_COLOR}55`
+      background: "#166534",
+      color: "#fff",
+      border: "none",
+      borderRadius: "8px",
+      padding: "8px 14px",
+      fontSize: "13px",
+      fontWeight: 700,
+      cursor: "pointer"
     },
     onClick: () => addCircuit(area.id, board.id)
   }, "+ Add"))))), /*#__PURE__*/React.createElement("div", {
@@ -8522,12 +8595,17 @@ function ThermoManageView({
     onKeyDown: e => e.key === "Enter" && addBoard(area.id)
   }), /*#__PURE__*/React.createElement("button", {
     style: {
-      ...STH.smallBtn,
-      color: THERMO_COLOR,
-      borderColor: `${THERMO_COLOR}55`
+      background: "#166534",
+      color: "#fff",
+      border: "none",
+      borderRadius: "8px",
+      padding: "8px 14px",
+      fontSize: "13px",
+      fontWeight: 700,
+      cursor: "pointer"
     },
     onClick: () => addBoard(area.id)
-  }, "+ Board"))))), /*#__PURE__*/React.createElement("div", {
+  }, "+ Add"))))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 6,
@@ -8544,12 +8622,17 @@ function ThermoManageView({
     onKeyDown: e => e.key === "Enter" && addArea()
   }), /*#__PURE__*/React.createElement("button", {
     style: {
-      ...STH.ctaPrimary,
-      padding: "10px 16px",
-      fontSize: 13
+      background: "#166534",
+      color: "#fff",
+      border: "none",
+      borderRadius: "8px",
+      padding: "8px 14px",
+      fontSize: "13px",
+      fontWeight: 700,
+      cursor: "pointer"
     },
     onClick: addArea
-  }, "+ Area")));
+  }, "+ Add")));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -9131,7 +9214,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
             placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
             onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
-          ,React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
         )
         ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>resetItem(key)},"Reset to defaults")
       );
@@ -9333,67 +9416,7 @@ function ThermoApp({
   const isAudit = view === "audit" || view === "area" || view === "board" || view === "circuit";
   return /*#__PURE__*/React.createElement("div", {
     style: STH.root
-  }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`), React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #181818',background:'#0d0d0d',flexShrink:0}},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}},view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack},React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")),React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"Thermographic"),React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")),onGoHome&&React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules"))),React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #f97316, transparent 70%)',opacity:0.5}})), view !== "projects" && /*#__PURE__*/React.createElement("div", {
-    style: STH.breadcrumb
-  }, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcItem,
-    onClick: goProjects
-  }, "Sites"), project && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: STH.bcItem,
-    onClick: goHome
-  }, project.name)), isAudit && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...STH.bcItem,
-      color: THERMO_COLOR
-    }
-  }, "Audit")), activeAreaId && area && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: STH.bcItem,
-    onClick: () => {
-      setView("area");
-      setActiveBoardId(null);
-    }
-  }, area.name)), activeBoardId && board && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...STH.bcItem,
-      color: THERMO_COLOR
-    }
-  }, board.name)), view === "circuit" && activeCircuitName && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...STH.bcItem,
-      color: THERMO_COLOR
-    }
-  }, activeCircuitName)), view === "manage" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...STH.bcItem,
-      color: "#a855f7"
-    }
-  }, "Manage")), view === "report" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...STH.bcItem,
-      color: "#94a3b8"
-    }
-  }, "Report")), view === "history" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("span", {
-    style: STH.bcSep
-  }, "\u203A"), /*#__PURE__*/React.createElement("span", {
-    style: {
-      ...STH.bcItem,
-      color: "#f59e0b"
-    }
-  }, "History"))), /*#__PURE__*/React.createElement("main", {
+  }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`), React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #181818',background:'#0d0d0d',flexShrink:0}},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}},view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack},React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")),React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"Thermographic"),React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")),onGoHome&&React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules"))),React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #f97316, transparent 70%)',opacity:0.5}})), /*#__PURE__*/React.createElement("main", {
     style: STH.main
   }, view === "projects" && /*#__PURE__*/React.createElement(ThermoProjectListView, {
     projects: projects,
@@ -10066,27 +10089,6 @@ function SWBApp({ onGoHome }) {
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #a855f7, transparent 70%)',opacity:0.5}})
     )
-    ,view!=="projects"&&React.createElement('div',{style:SS.breadcrumb}
-      ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"},onClick:goHome},project&&project.name||"")
-      ,(view==="audit"&&auditEntered&&activeAreaId)&&React.createElement(React.Fragment,null
-        ,React.createElement('span',{style:SS.bcSep},"›")
-        ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"}},area&&area.name||"")
-      )
-      ,(view==="board"||view==="item")&&board&&React.createElement(React.Fragment,null
-        ,React.createElement('span',{style:SS.bcSep},"›")
-        ,React.createElement('span',{style:{...SS.bcItem,color:"#aaa"},onClick:()=>{setActiveBoardId(null);setActiveItemKey(null);setView("audit");}},area&&area.name||"")
-        ,React.createElement('span',{style:SS.bcSep},"›")
-        ,React.createElement('span',{style:{...SS.bcItem,color:view==="item"?"#aaa":"#a855f7"},onClick:view==="item"?()=>{setActiveItemKey(null);setView("board");}:undefined},board.name)
-        ,view==="item"&&activeItemKey&&React.createElement(React.Fragment,null
-          ,React.createElement('span',{style:SS.bcSep},"›")
-          ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"}},(SWB_CHECKLIST.find(c=>c.key===activeItemKey)||{label:activeItemKey}).label)
-        )
-      )
-      ,["manage","report","history","dropdowns"].includes(view)&&React.createElement(React.Fragment,null
-        ,React.createElement('span',{style:SS.bcSep},"›")
-        ,React.createElement('span',{style:{...SS.bcItem,color:"#a855f7"}},view.charAt(0).toUpperCase()+view.slice(1))
-      )
-    )
     ,React.createElement('div',{style:SS.main}
       ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));}})
@@ -10557,7 +10559,7 @@ function SWBManageView({project,onUpdateProject,onBack}) {
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
           ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
         )
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
+        ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
       )
     ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",letterSpacing:0.8,marginBottom:10}},"AREAS & BOARDS")
     ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{background:"#161616",border:"1px solid #a855f722",borderRadius:12,marginBottom:10,overflow:"hidden"}}
@@ -10566,12 +10568,12 @@ function SWBManageView({project,onUpdateProject,onBack}) {
           ?React.createElement('div',{style:{display:"flex",gap:8,flex:1,alignItems:"center"}}
             ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editAreaName,autoFocus:true,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveArea(area.id);}})
             ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveArea(area.id)},"Save")
-            ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
+            ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},"Cancel")
           )
           :React.createElement(React.Fragment,null
             ,React.createElement('div',{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
             ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"nowrap",flexShrink:0}}
-              ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Edit")
+              ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#60a5fa',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})))
               ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
               ,React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"▲":"▼")
             )
@@ -10583,24 +10585,24 @@ function SWBManageView({project,onUpdateProject,onBack}) {
             ?React.createElement('div',{style:{display:"flex",gap:8,padding:"8px 10px",background:"#111",borderRadius:8,alignItems:"center"}}
               ,React.createElement('input',{style:{...SS.smallInput,flex:1},value:editBoardName,autoFocus:true,onChange:e=>setEditBoardName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")saveBoard(area.id,b.id);}})
               ,React.createElement('button',{style:{padding:"6px 12px",background:"#a855f7",color:"#fff",border:"none",borderRadius:7,fontSize:12,cursor:"pointer",fontWeight:700},onClick:()=>saveBoard(area.id,b.id)},"Save")
-              ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
+              ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingBoard(null)},"Cancel")
             )
               :React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 10px",background:"#111",borderRadius:8,flexWrap:"nowrap",minWidth:0}}
                 ,React.createElement('span',{style:{flex:1,fontSize:13,color:"#eee",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},b.name)
-                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",flexShrink:0},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Edit")
+                ,React.createElement('button',{style:{...SS.smallBtn,color:"#a855f7",borderColor:"#a855f744",flexShrink:0},onClick:()=>{setEditBoardName(b.name);setEditingBoard({aid:area.id,bid:b.id});}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#60a5fa',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})))
                 ,React.createElement(DeleteButton, { onDelete: ()=>delBoard(area.id,b.id), label: "Delete board?", compact: true })
               )
         ))
         ,(area.boards||[]).length===0&&React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:8}},"No boards yet.")
         ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:8}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:"New board name (e.g. MCC 1)",value:newBoardName[area.id]||"",onChange:e=>setNewBoardName(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addBoard(area.id);}})
-          ,React.createElement('button',{style:{padding:"8px 14px",background:"#a855f7",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>addBoard(area.id)},"+ Add")
+          ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addBoard(area.id)},"+ Add")
         )
       )
     ))
     ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
       ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:"New area name",value:newAreaName,onChange:e=>setNewAreaName(e.target.value),onKeyDown:e=>{if(e.key==="Enter")addArea();}})
-      ,React.createElement('button',{style:{padding:"8px 14px",background:"#a855f7",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:addArea},"+ Add Area")
+      ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addArea},"+ Add")
     )
   );
 }
@@ -10781,7 +10783,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
         )
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
-          ,React.createElement('button',{style:{...SS.smallBtn,color,borderColor:`${color}55`,fontWeight:700},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
         )
       );
     })
@@ -11357,6 +11359,9 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 function IRTManageView({project,onUpdateProject,onBack}){
   const [newAreaName,setNewAreaName]=React.useState("");const [newPanel,setNewPanel]=React.useState({});const [newItem,setNewItem]=React.useState({});
   const [expandedArea,setExpandedArea]=React.useState(null);const [expandedPanel,setExpandedPanel]=React.useState(null);
+  const [editingArea,setEditingArea]=React.useState(null);const [editAreaName,setEditAreaName]=React.useState("");
+  const [editingPanel,setEditingPanel]=React.useState(null);const [editPanelName,setEditPanelName]=React.useState("");
+  const [editingItem,setEditingItem]=React.useState(null);const [editItemName,setEditItemName]=React.useState("");
   const [editingProject,setEditingProject]=React.useState(false);
   const [projName,setProjName]=React.useState(project.name);
   const [projCo,setProjCo]=React.useState(project.company||"");
@@ -11367,6 +11372,19 @@ function IRTManageView({project,onUpdateProject,onBack}){
   const saveProj=()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd([...(project.areas||[]),{id:irtSlug(newAreaName),name:newAreaName.trim(),panels:[]}]);setNewAreaName("");};
   const delArea=id=>upd((project.areas||[]).filter(a=>a.id!==id));
+  const startEditArea=(area)=>{setEditingArea(area.id);setEditAreaName(area.name);};
+  const saveAreaName=(aid)=>{const n=editAreaName.trim();if(!n){setEditingArea(null);return;}upd((project.areas||[]).map(a=>a.id===aid?{...a,name:n}:a));setEditingArea(null);};
+  const startEditPanel=(panel)=>{setEditingPanel(panel.id);setEditPanelName(panel.name);};
+  const savePanelName=(aid,pid)=>{const n=editPanelName.trim();if(!n){setEditingPanel(null);return;}upd((project.areas||[]).map(a=>a.id!==aid?a:{...a,panels:(a.panels||[]).map(p=>p.id===pid?{...p,name:n}:p)}));setEditingPanel(null);};
+  const startEditItem=(aid,pid,itemId,name)=>{setEditingItem({aid,pid,itemId});setEditItemName(name);};
+  const saveItemName=()=>{
+    if(!editingItem)return;
+    const{aid,pid,itemId}=editingItem;
+    const n=editItemName.trim();
+    if(!n){setEditingItem(null);return;}
+    upd((project.areas||[]).map(a=>a.id!==aid?a:{...a,panels:(a.panels||[]).map(p=>p.id!==pid?p:{...p,itemNames:{...(p.itemNames||{}),[itemId]:n}})}));
+    setEditingItem(null);
+  };
   const addPanel=areaId=>{const name=(newPanel[areaId]||"").trim();if(!name)return;upd((project.areas||[]).map(a=>a.id!==areaId?a:{...a,panels:[...(a.panels||[]),{id:irtSlug(name),name,items:[],itemNames:{}}]}));setNewPanel(x=>({...x,[areaId]:""}));};
   const delPanel=(areaId,panelId)=>upd((project.areas||[]).map(a=>a.id!==areaId?a:{...a,panels:(a.panels||[]).filter(p=>p.id!==panelId)}));
   const addItem=(areaId,panelId)=>{const name=(newItem[`${areaId}-${panelId}`]||"").trim();if(!name)return;const itemId=irtUid();upd((project.areas||[]).map(a=>a.id!==areaId?a:{...a,panels:(a.panels||[]).map(p=>p.id!==panelId?p:{...p,items:[...(p.items||[]),itemId],itemNames:{...(p.itemNames||{}),[itemId]:name}})}));setNewItem(x=>({...x,[`${areaId}-${panelId}`]:""}));};
@@ -11390,41 +11408,64 @@ function IRTManageView({project,onUpdateProject,onBack}){
             ,React.createElement("div",{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
             ,project.company&&React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
           )
-          ,React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR+"55"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
+          ,React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
     ),
     React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment"),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{background:"#161616",border:`1px solid ${expandedArea===area.id?IRT_COLOR+"55":"#2a2a2a"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}},
       React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",flexWrap:"nowrap",gap:8,minWidth:0}},
-        React.createElement("div",{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
+        editingArea===area.id?React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,width:"100%",boxSizing:"border-box"}}
+          ,React.createElement("input",{style:{...SS.smallBtn,flex:1,minWidth:0,textAlign:"left",fontSize:14,background:"#111",color:"#eee"},value:editAreaName,onChange:e=>setEditAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveAreaName(area.id),autoFocus:true})
+          ,React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e55",flexShrink:0,whiteSpace:"nowrap"},onClick:()=>saveAreaName(area.id)},"Save")
+          ,React.createElement("button",{style:{...SS.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>setEditingArea(null)},"Cancel")
+        ):React.createElement(React.Fragment,null
+        ,React.createElement("div",{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
         React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"nowrap",flexShrink:0}},
+          React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
           React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" }),
           React.createElement("span",{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"\u25b2":"\u25bc")
+        )
         )
       ),
       expandedArea===area.id&&React.createElement("div",{style:{padding:"0 14px 14px"}},
         (area.panels||[]).map(panel=>React.createElement("div",{key:panel.id,style:{border:`1px solid ${expandedPanel===panel.id?IRT_COLOR+"44":"#222"}`,borderRadius:8,marginBottom:8,background:"#111"}},
           React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",flexWrap:"nowrap",minWidth:0}},
-            React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);}},
+            editingPanel===panel.id?React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,width:"100%",boxSizing:"border-box"}}
+              ,React.createElement("input",{style:{...SS.smallBtn,flex:1,minWidth:0,textAlign:"left",fontSize:13,background:"#111",color:"#eee"},value:editPanelName,onChange:e=>setEditPanelName(e.target.value),onKeyDown:e=>e.key==="Enter"&&savePanelName(area.id,panel.id),autoFocus:true})
+              ,React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e55",flexShrink:0,whiteSpace:"nowrap"},onClick:()=>savePanelName(area.id,panel.id)},"Save")
+              ,React.createElement("button",{style:{...SS.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>setEditingPanel(null)},"Cancel")
+            ):React.createElement(React.Fragment,null
+            ,React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);}},
               React.createElement("span",{style:{fontSize:14,color:expandedPanel===panel.id?IRT_COLOR:"#aaa",flexShrink:0}},expandedPanel===panel.id?"\u25be":"\u25b8"),
               React.createElement("span",{style:{fontWeight:700,color:"#eee",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},panel.name),
               React.createElement("span",{style:{fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"}},(panel.items||[]).length," items")
             ),
+            React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditPanel(panel)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
             React.createElement(DeleteButton, { onDelete: ()=>delPanel(area.id,panel.id), label: "Delete panel?" })
+            )
           ),
           expandedPanel===panel.id&&React.createElement("div",{style:{padding:"8px 12px 12px"}},
             React.createElement("div",{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:6}},"ITEMS (motors / cables / CBs)"),
             React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
-              (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}33`,borderRadius:8,padding:"6px 10px",flexWrap:"nowrap",minWidth:0}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},name),React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,panel.id,itemId), label: `Delete "${name}"?`, compact: true }));}),
+              (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;
+                const isEditingI=editingItem&&editingItem.aid===area.id&&editingItem.pid===panel.id&&editingItem.itemId===itemId;
+                if(isEditingI){
+                  return React.createElement("div",{key:itemId,style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}55`,borderRadius:8,padding:"6px 10px",width:"100%",boxSizing:"border-box"}},
+                    React.createElement("input",{style:{...SS.smallBtn,flex:1,minWidth:0,textAlign:"left",fontSize:12,background:"#111",color:"#eee"},value:editItemName,onChange:e=>setEditItemName(e.target.value),onKeyDown:e=>e.key==="Enter"&&saveItemName(),autoFocus:true}),
+                    React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e55",flexShrink:0,whiteSpace:"nowrap"},onClick:saveItemName},"Save"),
+                    React.createElement("button",{style:{...SS.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>setEditingItem(null)},"Cancel")
+                  );
+                }
+                return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:`1px solid ${IRT_COLOR}33`,borderRadius:8,padding:"6px 10px",flexWrap:"nowrap",minWidth:0}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},name),React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditItem(area.id,panel.id,itemId,name)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,panel.id,itemId), label: `Delete "${name}"?`, compact: true }));}),
               (panel.items||[]).length===0&&React.createElement("span",{style:{fontSize:12,color:"#444"}},"No items yet")
             ),
-            React.createElement("div",{style:{display:"flex",gap:6}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"Add motor / cable / CB name\u2026",value:newItem[`${area.id}-${panel.id}`]||"",onChange:e=>setNewItem(x=>({...x,[`${area.id}-${panel.id}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,panel.id)}),React.createElement("button",{style:{...SS.smallBtn,color:IRT_COLOR,borderColor:IRT_COLOR+"55"},onClick:()=>addItem(area.id,panel.id)},"+ Add"))
+            React.createElement("div",{style:{display:"flex",gap:6}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"Add motor / cable / CB name\u2026",value:newItem[`${area.id}-${panel.id}`]||"",onChange:e=>setNewItem(x=>({...x,[`${area.id}-${panel.id}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,panel.id)}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(area.id,panel.id)},"+ Add"))
           )
         )),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"New panel / DB / MCC name\u2026",value:newPanel[area.id]||"",onChange:e=>setNewPanel(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addPanel(area.id)}),React.createElement("button",{style:{padding:"8px 14px",background:IRT_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>addPanel(area.id)},"+ Panel"))
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"New panel / DB / MCC name\u2026",value:newPanel[area.id]||"",onChange:e=>setNewPanel(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addPanel(area.id)}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addPanel(area.id)},"+ Add"))
       )
     )),
-    React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("input",{style:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",flex:1,boxSizing:"border-box"},placeholder:"New area / location name",value:newAreaName,onChange:e=>setNewAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addArea()}),React.createElement("button",{style:{padding:"10px 16px",background:IRT_COLOR,color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},onClick:addArea},"+ Area"))
+    React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("input",{style:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",flex:1,boxSizing:"border-box"},placeholder:"New area / location name",value:newAreaName,onChange:e=>setNewAreaName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addArea()}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addArea},"+ Add"))
   );
 }
 
@@ -11461,7 +11502,7 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
             );
           })
         ),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:`1px solid ${color}55`,borderRadius:8,fontSize:12,cursor:"pointer",fontWeight:700,color,flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"))
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"))
       );
     })
   );
@@ -11720,14 +11761,6 @@ function IRTApp({onGoHome}){
         )
       ),
       React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #60a5fa, transparent 70%)',opacity:0.5}})
-    ),
-    // Breadcrumb
-    view!=="projects"&&React.createElement("div",{style:{display:"flex",alignItems:"center",gap:4,padding:"6px 16px",background:"#0d0d0d",borderBottom:"1px solid #1a1a1a",flexShrink:0,flexWrap:"wrap"}},
-      React.createElement("span",{style:{fontSize:11,color:IRT_COLOR,cursor:"pointer"},onClick:goHome},project&&project.name||""),
-      area&&React.createElement(React.Fragment,null,React.createElement("span",{style:{fontSize:11,color:"#333"}},"\u203a"),React.createElement("span",{style:{fontSize:11,color:["area","panel","item"].includes(view)?"#aaa":IRT_COLOR,cursor:"pointer"},onClick:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}},area.name)),
-      panel&&React.createElement(React.Fragment,null,React.createElement("span",{style:{fontSize:11,color:"#333"}},"\u203a"),React.createElement("span",{style:{fontSize:11,color:["panel","item"].includes(view)?"#aaa":IRT_COLOR,cursor:"pointer"},onClick:()=>{setActivePanelId(null);setActiveItemId(null);setView("area");}},panel.name)),
-      view==="item"&&activeItemName&&React.createElement(React.Fragment,null,React.createElement("span",{style:{fontSize:11,color:"#333"}},"\u203a"),React.createElement("span",{style:{fontSize:11,color:IRT_COLOR}},activeItemName)),
-      ["manage","report","history","dropdowns"].includes(view)&&React.createElement(React.Fragment,null,React.createElement("span",{style:{fontSize:11,color:"#333"}},"\u203a"),React.createElement("span",{style:{fontSize:11,color:IRT_COLOR}},view.charAt(0).toUpperCase()+view.slice(1)))
     ),
     // Main
     React.createElement("div",{style:SS.main},
