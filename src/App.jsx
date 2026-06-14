@@ -617,7 +617,7 @@ const [logo,          setLogo]         = React.useState(null);  // base64 data-U
 const [activeProject, setActiveProject]= React.useState(null);
 const [mode,          setMode]         = React.useState(null);
 const [view,          setView]         = React.useState("projects");
-const [auditEntered,  setAuditEntered] = React.useState(false);
+const [auditEntered,  setAuditEntered] = React.useState(() => { try { return !!JSON.parse(localStorage.getItem(K_MODE)); } catch { return false; } });
 const [activeAreaId,  setActiveAreaId] = React.useState(null);
 const [activePanelId, setActivePanelId]= React.useState(null);
 const [loaded,        setLoaded]       = React.useState(false);
@@ -749,10 +749,10 @@ onHistory: ()=>setView("history"), onSettings: ()=>setView("settings"),
 onReset: ()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),nextPushDate:"",nextInjectDate:""}}));},
 onExportPush: ()=>exportExcel(allResults,project,meta,"push",logo),
 onExportInject: ()=>exportExcel(allResults,project,meta,"inject",logo),
-onArchive: archiveAudit,
 activeMode: mode,
+auditEntered: auditEntered,
 onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);},})
-, isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:mode?modeColor:"#e8731a",moduleLabel:"RCD TEST",auditLabel:mode?modeLabel:"",hasActiveAudit:!!mode,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:true})
+, isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:mode?modeColor:"#e8731a",moduleLabel:"RCD TEST",auditLabel:mode?modeLabel:"",hasActiveAudit:!!mode,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:true})
 , isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(AreaListView, { project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>setActiveAreaId(id),})
 , isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(PanelListView, { area: area, project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>{setActivePanelId(id);setView("panel");},})
 , !detailInfo&&view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
@@ -777,7 +777,7 @@ onContinueFromSnap: (snap)=>{
 )
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
-, React.createElement(NavBtn, { icon: NAV_ICON_HOME,      label: "Home",      active: view==="home",     onClick: goHome, color: "#64748b",})
+, React.createElement(NavBtn, { icon: NAV_ICON_HOME,      label: "Home",      active: view==="home",     onClick: ()=>{setDetailInfo(null);goHome();}, color: "#64748b",})
 , React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{setView("audit");setActivePanelId(null);setDetailInfo(null);}, color: "#64748b",})
 , React.createElement(NavBtn, { icon: NAV_ICON_REPORT,    label: "Report",    active: view==="report",   onClick: ()=>{setDetailInfo(null);setView("report");}, color: "#64748b",})
 , React.createElement(NavBtn, { icon: NAV_ICON_HISTORY,   label: "History",   active: view==="history",  onClick: ()=>{setDetailInfo(null);setView("history");}, color: "#64748b",})
@@ -936,14 +936,12 @@ React.createElement('button', { style: {...S.ctaPrimary,width:"100%",marginTop:8
 // ─────────────────────────────────────────────────────────────────────────
 // PROJECT HOME
 // ─────────────────────────────────────────────────────────────────────────
-function ProjectHomeView({ project, meta, setMeta, results, onStartPush, onStartInject, onReport, onManage, onHistory, onSettings, onReset, onExportPush, onExportInject, onArchive, onCompleteAudit, activeMode }) {
+function ProjectHomeView({ project, meta, setMeta, results, onStartPush, onStartInject, onReport, onManage, onHistory, onSettings, onReset, onExportPush, onExportInject, onCompleteAudit, activeMode, auditEntered }) {
 const pushSum=summariseProject(results,project,"push");
 const injectSum=summariseProject(results,project,"inject");
 const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.fail+pushSum.na)/pushSum.total)*100):0;
 const injectPct=injectSum.total>0?Math.round(((injectSum.pass+injectSum.fail+injectSum.na)/injectSum.total)*100):0;
 const [confirmReset,setConfirmReset]=React.useState(false);
-const [archiveMsg,setArchiveMsg]=React.useState("");
-const handleArchive=(m)=>{onArchive(m);setArchiveMsg(`${m==="inject"?"Injection":"Push"} test archived!`);setTimeout(()=>setArchiveMsg(""),2500);};
 const hasAuditor=!!(meta&&meta.auditor&&meta.auditor.trim());
 return (
 React.createElement('div', { style: S.homeWrap,}
@@ -996,15 +994,10 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('span', { style: S.modeBtnPct,}, injectPct, "% · "  , injectSum.fail>0?`${injectSum.fail} FAIL`:"clear")
 )
 )
-/* Archive / Complete buttons */
-, React.createElement('div', { style: {width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${activeMode?"#e8731a44":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"},}
-, React.createElement('div', { style: {fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, activeMode?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT")
-, activeMode&&React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#e8731a":"#3b82f6", label:activeMode==="push"?React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Complete Push Test"):React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Complete Injection Test"), onComplete:onCompleteAudit})
-, !activeMode&&React.createElement('div', { style: {display:"flex",gap:8},}
-  , React.createElement('button', { style: {...S.smallBtn,flex:1,color:hasAuditor?"#e8731a":"#555",borderColor:hasAuditor?"#e8731a44":"#333",padding:"8px",opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?()=>handleArchive("push"):undefined,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Archive Push Test")
-  , React.createElement('button', { style: {...S.smallBtn,flex:1,color:hasAuditor?"#60a5fa":"#555",borderColor:hasAuditor?"#3b82f644":"#333",padding:"8px",opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?()=>handleArchive("inject"):undefined,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Archive Injection Test")
-)
-, archiveMsg&&React.createElement('div', { style: {fontSize:12,color:"#4ade80",marginTop:6,textAlign:"center"},}, "✓ " , archiveMsg)
+/* Complete audit button */
+, auditEntered===true&&React.createElement('div', { style: {width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"},}
+, React.createElement('div', { style: {fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "COMPLETE ACTIVE AUDIT")
+, React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#e8731a":activeMode==="inject"?"#3b82f6":"#e8731a", label:activeMode==="push"?React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))),React.createElement('span',null," Complete Push Test")):activeMode==="inject"?React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))),React.createElement('span',null," Complete Injection Test")):React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896"}},"✓"),React.createElement('span',{style:{color:"#FFFFFF"}}," Complete RCD Audit")), onComplete:onCompleteAudit})
 )
 , confirmReset
 ?React.createElement('div', { style: S.confirmRow,}, React.createElement('span', { style: {color:"#ef4444",fontSize:13},}, "Reset all results?"  ), React.createElement('button', { style: S.confirmYes, onClick: ()=>{onReset();setConfirmReset(false);},}, "Yes"), React.createElement('button', { style: S.confirmNo, onClick: ()=>setConfirmReset(false),}, "Cancel"))
@@ -1034,7 +1027,7 @@ function ContinueConfirmBtn({onConfirm,styleObj,color}){
       )
     );
   }
-  return React.createElement('button',{style:{...(styleObj||{}),flex:1,color:"#a78bfa",borderColor:`${accentColor}44`,fontWeight:700},onClick:()=>setConfirming(true)},"▶ Continue");
+  return React.createElement('button',{style:{...(styleObj||{}),flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB",fontWeight:700},onClick:()=>setConfirming(true)},"▶ Continue");
 }
 
 
@@ -1162,7 +1155,8 @@ React.createElement('button', { key: area.id, style: {...S.siteCard,...(fail>0?S
 if(history.length===0) return (
 React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: S.listTitle,}, "Audit History" )
-, React.createElement('div', { style: {color:"#555",fontSize:14},}, "No archived audits yet. After completing a test, tap \"Archive\" on the project home screen to save a snapshot here."                   )
+, React.createElement('div', {style:{fontSize:32,marginBottom:12,textAlign:"center"}}, "📋")
+, React.createElement('div', { style: {color:"#555",fontSize:14},}, "No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."                   )
 )
 );
 return (
@@ -1206,9 +1200,9 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , expanded===snap.id&&(
 React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"},}
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:10,flexWrap:"wrap"},}
-, React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700}, onClick: ()=>{ setViewSnap(snap); setViewArea(null); },}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"
+, React.createElement('button', { style: {...S.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB",fontWeight:700}, onClick: ()=>{ setViewSnap(snap); setViewArea(null); },}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"
 )
-, React.createElement('button', { style: {...S.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"}, onClick: ()=>onExportSnap(snap),}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export" )
+, React.createElement('button', { style: {...S.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB"}, onClick: ()=>onExportSnap(snap),}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export" )
 , React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...S.smallBtn}})
 , React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
 )
@@ -2410,7 +2404,7 @@ function IELApp({ onGoHome }) {
   const [saveFlash,     setSaveFlash]    = React.useState(false);
   const [activeProject, setActiveProject]= React.useState(null);
   const [activeCat,     setActiveCat]    = React.useState(null);
-  const [auditEntered,  setAuditEntered] = React.useState(false); // "estops"|"lanyards"|"isolators"
+  const [auditEntered,  setAuditEntered] = React.useState(() => { try { return !!JSON.parse(localStorage.getItem(K_IEL_CAT)); } catch { return false; } }); // "estops"|"lanyards"|"isolators"
   const [view,          setView]         = React.useState("projects"); // projects|home|audit|panel|manage|history|report
   const [activeAreaId,  setActiveAreaId] = React.useState(null);
   const [activePanelId, setActivePanelId]= React.useState(null);
@@ -2513,13 +2507,13 @@ function IELApp({ onGoHome }) {
     // ── Main
     ,React.createElement('main',{style:SI.main}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,activeCatKey:activeCat,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
-      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#10b981",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);setView("home");},onEnterAudit:()=>setAuditEntered(true),isRCD:false})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#10b981",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
       ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId})})
       ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
-      ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onBack:()=>setView("home")})
+      ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns,onBack:()=>setView("home")})
       ,!detailInfo&&view==="history"&&React.createElement(IELHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewCat,setViewCat,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIELExcel(project,snap.results||{},snap.meta||{}),
@@ -2763,11 +2757,9 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
-function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onArchive,onCompleteAudit,activeCatKey}){
+function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onCompleteAudit,activeCatKey,auditEntered}){
   const[confirmReset,setConfirmReset]=React.useState(false);
-  const[archiveMsg,setArchiveMsg]=React.useState("");
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
-  const handleArchive=()=>{onArchive();setArchiveMsg("Audit archived!");setTimeout(()=>setArchiveMsg(""),2500);};
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
     ,project.company&&React.createElement('div',{style:SI.siteSub},project.company)
@@ -2810,11 +2802,9 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
         ,React.createElement('span',{style:{fontSize:22,color:hasAuditor?cat.color+"88":"#444"}},"›")
       );
     })
-    ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${activeCatKey?"#10b98144":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"}}
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},activeCatKey?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT")
-      ,activeCatKey&&React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#10b981"}).color,label:React.createElement(React.Fragment,null,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Complete & Archive IEL Audit"),onComplete:onCompleteAudit})
-      ,!activeCatKey&&React.createElement('button',{style:{...SI.smallBtn,width:"100%",color:"#10b981",borderColor:"#10b98144",padding:"8px"},onClick:handleArchive},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive IEL Audit")
-      ,archiveMsg&&React.createElement('div',{style:{fontSize:12,color:"#4ade80",marginTop:6,textAlign:"center"}},"✓ ",archiveMsg)
+    ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}}
+      ,React.createElement('div',{style:{fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
+      ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#10b981"}).color,label:React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896",display:"inline-flex"}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))),React.createElement('span',null," Complete IEL Audit")),onComplete:onCompleteAudit})
     )
     ,confirmReset
       ?React.createElement('div',{style:SI.confirmRow},React.createElement('span',{style:{color:"#ef4444",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SI.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SI.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
@@ -3486,7 +3476,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(history.length===0)return React.createElement('div',{style:SI.listWrap},backBtn,React.createElement('div',{style:SI.listTitle},"IEL History"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet."));
+  if(history.length===0)return React.createElement('div',{style:SI.listWrap},backBtn,React.createElement('div',{style:SI.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement('div',{style:SI.listWrap}
     ,backBtn
     ,React.createElement('div',{style:SI.listTitle},"IEL History")
@@ -3514,8 +3504,8 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-            ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
-            ,React.createElement('button',{style:{...SI.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+            ,React.createElement('button',{style:{...SI.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
+            ,React.createElement('button',{style:{...SI.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SI.smallBtn}})
             ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -4185,16 +4175,16 @@ function CalendarApp({ onGoHome }) {
 function CompleteAuditBtn({ color, label, onComplete }) {
   const [confirm, setConfirm] = React.useState(false);
   if (confirm) {
-    return React.createElement('div', {style:{background:"#111",border:`1px solid ${color}55`,borderRadius:10,padding:"12px",marginTop:4}}
+    return React.createElement('div', {style:{background:"#131315",border:"1px solid #3A3A3A",borderRadius:10,padding:"12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#eee",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
-        ,React.createElement('button',{style:{flex:1,padding:"11px",background:color,color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Yes, Complete")
-        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>setConfirm(false)},"Cancel")
+        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#00C896",color:"#FFFFFF",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Yes, Complete")
+        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"transparent",color:"#8A8A8A",border:"1px solid #3A3A3A",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>setConfirm(false)},"Cancel")
       )
     );
   }
   return React.createElement('button',{
-    style:{width:"100%",padding:"10px",background:`${color}22`,color:color,border:`1px solid ${color}55`,borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},
+    style:{width:"100%",padding:"10px",background:"transparent",color:"#FFFFFF",border:"1px solid #00C896",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},
     onClick:()=>setConfirm(true)},label);
 }
 
@@ -4202,8 +4192,7 @@ function CompleteAuditBtn({ color, label, onComplete }) {
 // ─────────────────────────────────────────────────────────────────────────
 // AUDIT GATE PAGE — shown in audit tab when no audit is in progress
 // ─────────────────────────────────────────────────────────────────────────
-function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome, onCompleteAudit, onEnterAudit, isRCD}) {
-  const [confirmComplete, setConfirmComplete] = React.useState(false);
+function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome, onEnterAudit, isRCD}) {
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
     ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},hasActiveAudit?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
     ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:hasActiveAudit?color:"#555",marginBottom:8,letterSpacing:0.5}}
@@ -4219,9 +4208,7 @@ function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome
       : React.createElement('div',{style:{fontSize:13,color:"#555",marginBottom:28,lineHeight:1.6}}
           ,"No audit is currently in progress."
           ,React.createElement('br',null)
-          ,"Go to Home to select ",isRCD?"a test type (Push / Injection)":"a category (E-Stops / Lanyards / Isolators)"
-          ,React.createElement('br',null)
-          ,"and enter your auditor name to begin."
+          ,"Go to Home, enter your auditor name, then tap Start Audit."
         )
     ,!hasActiveAudit&&React.createElement('button',{
       style:{padding:"14px 32px",background:"#e8731a",color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},
@@ -4232,16 +4219,6 @@ function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome
     ,hasActiveAudit&&React.createElement('button',{
       style:{padding:"12px 32px",background:"transparent",color:"#888",border:"1px solid #2a2a2a",borderRadius:12,fontSize:13,cursor:"pointer",marginBottom:12,width:"100%",maxWidth:320},
       onClick:onGoHome},"⌂ Back to Home")
-    ,hasActiveAudit&&!confirmComplete&&React.createElement('button',{
-      style:{padding:"12px 32px",background:"transparent",color:"#555",border:"1px solid #333",borderRadius:12,fontSize:13,fontWeight:600,cursor:"pointer",width:"100%",maxWidth:320},
-      onClick:()=>setConfirmComplete(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Complete & Archive Audit")
-    ,hasActiveAudit&&confirmComplete&&React.createElement('div',{style:{background:"#1a1a1a",border:"1px solid #333",borderRadius:12,padding:"16px",width:"100%",maxWidth:320}}
-      ,React.createElement('div',{style:{fontSize:13,color:"#eee",marginBottom:12,fontWeight:600}},"Archive this audit and mark as complete?")
-      ,React.createElement('div',{style:{display:"flex",gap:8}}
-        ,React.createElement('button',{style:{flex:1,padding:"11px",background:color,color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onCompleteAudit();setConfirmComplete(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Yes, Complete")
-        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>setConfirmComplete(false)},"Cancel")
-      )
-    )
   );
 }
 
@@ -4667,7 +4644,7 @@ function TATApp({ onGoHome }) {
     // Breadcrumb
     // Main
     ,React.createElement('main',{style:ST.main}
-      ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},
+      ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const m=allMeta[id];setAuditEntered(!!(m&&m.auditor&&m.auditor.trim()));},
         onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},
         onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(TATHomeView,{project,meta,setMeta,results:allResults,summary,
@@ -4675,10 +4652,10 @@ function TATApp({ onGoHome }) {
         onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onSettings:()=>setView("settings"),
         onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));},
         onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),
-        onArchive:archiveAudit,auditEntered,
+        auditEntered,
         onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setAuditEntered(false);},
       })
-      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:TAT_COLOR,moduleLabel:"TEST & TAG",auditLabel:"Test & Tag Audit",hasActiveAudit:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setAuditEntered(false);},onEnterAudit:()=>setAuditEntered(true),isRCD:false})
+      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:TAT_COLOR,moduleLabel:"TEST & TAG",auditLabel:"Test & Tag Audit",hasActiveAudit:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(TATAreaListView,{project,results:allResults,onSelect:id=>setActiveAreaId(id)})
       ,!detailItemId&&isAudit&&project&&auditEntered&&activeAreaId&&area&&React.createElement(TATItemGrid,{area,project,results:allResults,meta,freqOptions,
         onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,itemId,patch),
@@ -4696,7 +4673,7 @@ function TATApp({ onGoHome }) {
       })
       ,detailItemId&&area&&React.createElement(TATItemModal,{equipTypes,freqOptions,itemId:detailItemId,area,project,results:allResults,meta,onPatch:patch=>patchItem(activeProject,activeAreaId,detailItemId,patch),onClose:()=>setDetailItemId(null)})
       ,!detailItemId&&view==="report"&&project&&React.createElement(TATReportView,{project,results:allResults,meta,
-        onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),onArchive:archiveAudit,onBack:()=>setView("home")})
+        onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),onBack:()=>setView("home")})
       ,!detailItemId&&view==="manage"&&project&&React.createElement(TATManageView,{project,equipTypes,freqOptions,tatDefaults,applianceNames,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,!detailItemId&&view==="settings"&&React.createElement(TATSettingsView,{equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults,onBack:()=>setView("home")})
       ,!detailItemId&&view==="history"&&React.createElement(TATHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,
@@ -4852,7 +4829,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // T&T HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,onArchive,auditEntered,onCompleteAudit}){
+function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,auditEntered,onCompleteAudit}){
   const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
@@ -4890,10 +4867,9 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       onClick:()=>hasAuditor&&onStartAudit()}
       ,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit"
     )
-    ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${auditEntered?TAT_COLOR+"44":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"}}
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},auditEntered?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT")
-      ,auditEntered&&React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Complete & Archive Test & Tag Audit"),onComplete:onCompleteAudit})
-      ,!auditEntered&&React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive Completed Audit"),onComplete:()=>onArchive&&onArchive()})
+    ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}}
+      ,React.createElement('div',{style:{fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
+      ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))),React.createElement('span',null," Complete Test & Tag Audit")),onComplete:onCompleteAudit})
     )
     ,confirmReset
       ?React.createElement('div',{style:{...ST.confirmRow,width:"100%",maxWidth:500}}
@@ -5626,7 +5602,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(history.length===0)return React.createElement('div',{style:ST.listWrap},backBtn,React.createElement('div',{style:ST.listTitle},"Test & Tag History"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet."));
+  if(history.length===0)return React.createElement('div',{style:ST.listWrap},backBtn,React.createElement('div',{style:ST.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement('div',{style:ST.listWrap}
     ,backBtn
     ,React.createElement('div',{style:ST.listTitle},"Test & Tag History")
@@ -5654,8 +5630,8 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-            ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#60a5fa",borderColor:"#3b82f644",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
-            ,React.createElement('button',{style:{...ST.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+            ,React.createElement('button',{style:{...ST.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
+            ,React.createElement('button',{style:{...ST.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...ST.smallBtn}})
             ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -6756,7 +6732,7 @@ function ThermoNavBtn({
 // ─────────────────────────────────────────────────────────────────────────
 // ThermoCompleteAuditBtn — alias of shared CompleteAuditBtn with Thermo colour
 function ThermoCompleteAuditBtn({onComplete}) {
-  return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: "✓ Complete & Archive Audit", onComplete});
+  return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896"}},"✓"),React.createElement('span',{style:{color:"#FFFFFF"}}," Complete Thermographic Audit")), onComplete});
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -6851,7 +6827,7 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
 // ─────────────────────────────────────────────────────────────────────────
 // SWBCompleteAuditBtn — alias of shared CompleteAuditBtn with SWB colour
 function SWBCompleteAuditBtn({onComplete}) {
-  return React.createElement(CompleteAuditBtn, {color: "#a855f7", label: "✓ Complete & Archive Audit", onComplete});
+  return React.createElement(CompleteAuditBtn, {color: "#a855f7", label: React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896"}},"✓"),React.createElement('span',{style:{color:"#FFFFFF"}}," Complete Switchboard Audit")), onComplete});
 }
 
 // SWB-specific EditableDropdown using swbStyles colors
@@ -7236,7 +7212,6 @@ function ThermoHomeView({
   onHistory,
   onReset,
   onExport,
-  onArchive,
   auditEntered,
   onCompleteAudit
 }) {
@@ -7359,24 +7334,24 @@ function ThermoHomeView({
       letterSpacing: 0.5
     },
     onClick: () => hasAuditor && onStartAudit()
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'}))," Start / Continue Audit"), /*#__PURE__*/React.createElement("div", {
+  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'}))," Start / Continue Audit"), auditEntered === true && /*#__PURE__*/React.createElement("div", {
     style: {
       width: "100%",
       maxWidth: 500,
-      background: "#161616",
-      border: `1px solid ${auditEntered ? THERMO_COLOR + "44" : "#2a2a2a"}`,
+      background: "#131315",
+      border: "1px solid #3A3A3A",
       borderRadius: 12,
       padding: "10px 14px"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
-      color: "#555",
+      color: "#8A8A8A",
       fontWeight: 700,
       letterSpacing: 0.8,
       marginBottom: 8
     }
-  }, "COMPLETE & ARCHIVE AUDIT"), /*#__PURE__*/React.createElement(ThermoCompleteAuditBtn, {
+  }, "COMPLETE ACTIVE AUDIT"), /*#__PURE__*/React.createElement(ThermoCompleteAuditBtn, {
     onComplete: onCompleteAudit
   })), confirmReset ? /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9025,20 +9000,27 @@ function ThermoHistoryView({
   const backBtn=null;
   if (history.length === 0) return /*#__PURE__*/React.createElement("div", {
     style: {
+      padding: "16px"
+    }
+  }, backBtn, /*#__PURE__*/React.createElement("div", {
+    style: STH.listTitle
+  }, "Audit History"), /*#__PURE__*/React.createElement("div", {
+    style: {
       padding: "40px 16px",
       textAlign: "center",
       color: "#555"
     }
-  }, backBtn, /*#__PURE__*/React.createElement("div", {
+  }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 32,
-      marginBottom: 12
+      marginBottom: 12,
+      textAlign: "center"
     }
-  }, "\uD83D\uDCCB"), /*#__PURE__*/React.createElement("div", {
+  }, "📋"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 14
     }
-  }, "No archived audits yet."));
+  }, "No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here.")));
   return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px"
@@ -9146,8 +9128,9 @@ function ThermoHistoryView({
       style: {
         ...STH.smallBtn,
         flex: 1,
-        color: "#60a5fa",
-        borderColor: "#3b82f644",
+        background: "#131315",
+        border: "1px solid #4F4F54",
+        color: "#ABABAB",
         fontWeight: 700
       },
       onClick: () => {
@@ -9160,8 +9143,9 @@ function ThermoHistoryView({
       style: {
         ...STH.smallBtn,
         flex: 1,
-        color: "#4ade80",
-        borderColor: "#22c55e44"
+        background: "#131315",
+        border: "1px solid #4F4F54",
+        color: "#ABABAB"
       },
       onClick: () => onExportSnap(snap)
     }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"), /*#__PURE__*/React.createElement(ContinueSnapBtn, {
@@ -9418,6 +9402,8 @@ function ThermoApp({
     onSelect: id => {
       setActiveProject(id);
       setView("home");
+      const m = allMeta[id];
+      setAuditEntered(!!(m && m.auditor && m.auditor.trim()));
     },
     onAddProject: (p, initialResults) => {
       setProjects(prev => [...prev, p]);
@@ -9475,7 +9461,6 @@ function ThermoApp({
       }));
     },
     onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta),
-    onArchive: () => archiveAudit(),
     onCompleteAudit: completeAudit
   }), view === "audit" && project && !auditEntered && /*#__PURE__*/React.createElement(AuditGatePage, {
     color: "#f97316",
@@ -9483,7 +9468,6 @@ function ThermoApp({
     auditLabel: "Thermographic Audit",
     hasActiveAudit: !!(meta && meta.auditor && meta.auditor.trim()),
     onGoHome: goHome,
-    onCompleteAudit: () => { completeAudit(); },
     onEnterAudit: () => setAuditEntered(true),
     isRCD: false
   }), view === "audit" && project && auditEntered && !activeAreaId && /*#__PURE__*/React.createElement(ThermoAreaListView, {
@@ -9581,8 +9565,11 @@ function ThermoApp({
     label: "Audit",
     active: isAudit,
     onClick: () => {
-      setView("audit");
+      setActiveAreaId(null);
       setActiveBoardId(null);
+      setActiveCircuitId(null);
+      setActiveCircuitName("");
+      setView("audit");
     },
     color: "#64748b"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
@@ -10087,15 +10074,15 @@ function SWBApp({ onGoHome }) {
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #a855f7, transparent 70%)',opacity:0.5}})
     )
     ,React.createElement('div',{style:SS.main}
-      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));}})
+      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#555",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&auditEntered&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
       ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onBack:()=>{setActiveBoardId(null);setView("audit");}})
       ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
-      ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onExport:()=>exportSWBExcel(project,allResults,meta),onArchive:archiveAudit,onBack:()=>setView("home")})
+      ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onExport:()=>exportSWBExcel(project,allResults,meta),onBack:()=>setView("home")})
       ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns,onBack:()=>setView("home")})
       ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onBack:()=>setView("home")})
@@ -10226,13 +10213,12 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onArchive,onCompleteAudit,onReset}) {
-  const [archiveMsg,setArchiveMsg]=React.useState("");const SS=swbStyles();
+function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditEntered}) {
+  const SS=swbStyles();
   const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round((summary.pass+summary.fail+summary.na)/summary.total*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?swbAddYear(testDate):"";
-  const auditInProgress=summary.total>0&&summary.untested<summary.total;
 
   return React.createElement('div',{style:SS.homeWrap}
     ,React.createElement('div',{style:SS.siteTitle},project.name)
@@ -10268,13 +10254,9 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
     )
     ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#a855f7":"#1a1a1a",color:hasAuditor?"#fff":"#555",border:`2px solid ${hasAuditor?"#a855f7":"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
-    ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${auditInProgress?"#a855f744":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"}}
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},auditInProgress?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT")
-      ,archiveMsg
-        ?React.createElement('div',{style:{fontSize:12,color:"#22c55e",padding:"4px 0"}},archiveMsg)
-        :auditInProgress
-          ?React.createElement(SWBCompleteAuditBtn,{onComplete:()=>{onCompleteAudit();setArchiveMsg("📁 Archived — ready for new audit");setTimeout(()=>setArchiveMsg(""),3000);}})
-          :React.createElement('button',{style:{width:"100%",padding:"10px",background:"#a855f722",color:"#a855f7",border:"1px solid #a855f755",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onArchive();setArchiveMsg("📁 Audit archived to history");setTimeout(()=>setArchiveMsg(""),3000);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive Completed Audit")
+    ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}}
+      ,React.createElement('div',{style:{fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
+      ,React.createElement(SWBCompleteAuditBtn,{onComplete:onCompleteAudit})
     )
     ,confirmReset
       ?React.createElement('div',{style:SS.confirmRow},React.createElement('span',{style:{color:"#ef4444",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SS.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
@@ -10455,10 +10437,9 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
 // ─────────────────────────────────────────────────────────────────────────
 // REPORT VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBReportView({project,results,meta,onExport,onArchive,onBack}) {
+function SWBReportView({project,results,meta,onExport,onBack}) {
   const SS=swbStyles();const summary=swbSiteSummary(results,project);
   const testDate=meta.testDate||"";
-  const [archiveMsg,setArchiveMsg]=React.useState("");
   const fails=[];
   (project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{
     SWB_CHECKLIST.forEach(({key,label})=>{
@@ -10687,7 +10668,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(!history||history.length===0) return React.createElement('div',{style:SS.listWrap},backBtn,React.createElement('div',{style:SS.listTitle},"History"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet."));
+  if(!history||history.length===0) return React.createElement('div',{style:SS.listWrap},backBtn,React.createElement('div',{style:SS.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement('div',{style:SS.listWrap}
     ,backBtn
     ,React.createElement('div',{style:SS.listTitle},"History")
@@ -10715,8 +10696,8 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:"#a855f744",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
-            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
+            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
             ,React.createElement(SWBContinueBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn})
             ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -11246,13 +11227,12 @@ function IRTAreaListView({project,results,onSelect}){
 }
 
 // ─── Home view — mirrors SWBHomeView exactly ──────────────────────────────
-function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onArchive,onCompleteAudit,onReset}){
-  const [archiveMsg,setArchiveMsg]=React.useState("");const SS=irtStyles();
+function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditEntered}){
+  const SS=irtStyles();
   const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?irtAddYear(testDate):"";
-  const auditInProgress=summary.total>0&&summary.untested<summary.total;
   return React.createElement("div",{style:SS.homeWrap},
     React.createElement("div",{style:SS.siteTitle},project.name),
     React.createElement("div",{style:SS.siteSub},project.company||""),
@@ -11272,11 +11252,9 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
     ),
     React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#1a1a1a",color:hasAuditor?"#fff":"#555",border:`2px solid ${hasAuditor?IRT_COLOR:"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Start / Continue Audit"),
-    React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${auditInProgress?IRT_COLOR+"44":"#2a2a2a"}`,borderRadius:12,padding:"10px 14px"}},
-      React.createElement("div",{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},auditInProgress?"COMPLETE ACTIVE AUDIT":"ARCHIVE COMPLETED AUDIT"),
-      archiveMsg?React.createElement("div",{style:{fontSize:12,color:"#22c55e",padding:"4px 0"}},archiveMsg):
-      auditInProgress?React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:()=>{onCompleteAudit();setArchiveMsg("\uD83D\uDCC1 Archived \u2014 ready for new audit");setTimeout(()=>setArchiveMsg(""),3000);}})
-      :React.createElement("button",{style:{width:"100%",padding:"10px",background:IRT_COLOR_DIM,color:IRT_COLOR,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onArchive();setArchiveMsg("\uD83D\uDCC1 Audit archived to history");setTimeout(()=>setArchiveMsg(""),3000);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}),React.createElement('line',{x1:12,y1:11,x2:12,y2:17}),React.createElement('line',{x1:9,y1:14,x2:15,y2:14}))," Archive Completed Audit")
+    auditEntered===true&&React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}},
+      React.createElement("div",{style:{fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT"),
+      React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit})
     ),
     confirmReset
       ?React.createElement('div',{style:SS.confirmRow},React.createElement('span',{style:{color:"#ef4444",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SS.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
@@ -11286,7 +11264,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
 
 // IRTCompleteBtn — alias of shared CompleteAuditBtn with IRT colour
 function IRTCompleteBtn({color,onComplete}){
-  const lbl=React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Complete & Archive Audit");
+  const lbl=React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#00C896",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'20 6 9 17 4 12'}))),React.createElement('span',null," Complete IR Testing Audit"));
   return React.createElement(CompleteAuditBtn, {color: color||IRT_COLOR, label: lbl, onComplete});
 }
 
@@ -11677,7 +11655,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(!history||history.length===0)return React.createElement("div",{style:SS.listWrap},backBtn,React.createElement("div",{style:SS.listTitle},"History"),React.createElement("div",{style:{color:"#555",fontSize:14}},"No archived audits yet."));
+  if(!history||history.length===0)return React.createElement("div",{style:SS.listWrap},backBtn,React.createElement("div",{style:SS.listTitle},"Audit History"),React.createElement("div",{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement("div",{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement("div",{style:SS.listWrap},
     backBtn,
     React.createElement("div",{style:SS.listTitle},"History"),
@@ -11691,8 +11669,8 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}},
           React.createElement("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
-            React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#a78bfa",borderColor:`${IRT_COLOR}44`,fontWeight:700},onClick:()=>{setViewSnap(snap);setViewArea(null);setViewPanel(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"),
-            React.createElement("button",{style:{...SS.smallBtn,flex:1,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"),
+            React.createElement("button",{style:{...SS.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB",fontWeight:700},onClick:()=>{setViewSnap(snap);setViewArea(null);setViewPanel(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"),
+            React.createElement("button",{style:{...SS.smallBtn,flex:1,background:"#131315",border:"1px solid #4F4F54",color:"#ABABAB"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"),
             React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SS.smallBtn}}),
             React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -11703,11 +11681,26 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 }
 
 // ─── Main app shell ────────────────────────────────────────────────────────
+function IRTAuditGate({summary, hasAuditor, onGoHome, onEnterAudit}) {
+  const auditInProgress = summary.total>0 && (summary.pass+summary.fail+summary.na)>0;
+  return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
+    ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},auditInProgress?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
+    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?IRT_COLOR:"#555",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
+    ,auditInProgress
+      ?React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}},"Tap Continue to test boards, or go Home to complete the audit.")
+      :React.createElement('div',{style:{fontSize:13,color:"#555",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
+    ,!auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:IRT_COLOR,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Go to Home to Start")
+    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?IRT_COLOR:"#2a2a2a",color:hasAuditor?"#fff":"#555",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
+    ,auditInProgress&&React.createElement('button',{style:{padding:"12px 32px",background:"transparent",color:"#888",border:"1px solid #2a2a2a",borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Back to Home")
+  );
+}
+
 function IRTApp({onGoHome}){
   const [projects,setProjects]=React.useState([]);const [allResults,setAllResults]=React.useState({});const [allMeta,setAllMeta]=React.useState({});const [history,setHistory]=React.useState([]);
   const [irtDropdowns,setIrtDropdowns]=React.useState({responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED});
   const [loaded,setLoaded]=React.useState(false);const [saveFlash,setSaveFlash]=React.useState(false);
   const [activeProject,setActiveProject]=React.useState(null);const [view,setView]=React.useState("projects");
+  const [auditEntered,setAuditEntered]=React.useState(false);
   const [viewSnap,setViewSnap]=React.useState(null);const [viewArea,setViewArea]=React.useState(null);const [viewPanel,setViewPanel]=React.useState(null);
   const [activeAreaId,setActiveAreaId]=React.useState(null);const [activePanelId,setActivePanelId]=React.useState(null);const [activeItemId,setActiveItemId]=React.useState(null);const [activeItemName,setActiveItemName]=React.useState("");
   const [irtWarnDismissed,setIrtWarnDismissed]=React.useState(false);
@@ -11747,7 +11740,9 @@ function IRTApp({onGoHome}){
             if(view==="item"){setActiveItemId(null);setView("panel");}
             else if(view==="panel"){setActivePanelId(null);setView("area");}
             else if(view==="area"){setActiveAreaId(null);setView("audit");}
-            else if(["audit","report","manage","history","dropdowns"].includes(view))goHome();
+            else if(view==="audit"&&!auditEntered)goHome();
+            else if(view==="audit"&&auditEntered){setAuditEntered(false);goHome();}
+            else if(["report","manage","history","dropdowns"].includes(view))goHome();
             else goProjects();
           }},
             React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),
@@ -11765,16 +11760,17 @@ function IRTApp({onGoHome}){
     ),
     // Main
     React.createElement("div",{style:SS.main},
-      view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
-      view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onArchive:archiveAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));}}),
-      view==="audit"&&project&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
+      view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
+      view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));setAuditEntered(false);},auditEntered}),
+      view==="audit"&&project&&!auditEntered&&React.createElement(IRTAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);}}),
+      view==="audit"&&project&&auditEntered&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
       view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
       view==="panel"&&panel&&React.createElement(IRTItemListView,{panel,area,project,results:allResults,onSelect:(itemId,name)=>{setActiveItemId(itemId);setActiveItemName(name);setView("item");},onBack:()=>{setActivePanelId(null);setView("area");}}),
       view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");},onShowGuide:()=>setShowGuide(true)}),
-      view==="report"&&project&&React.createElement(IRTReportView,{project,results:allResults,meta,onExport:()=>exportIRTExcel(project,allResults,meta),onArchive:archiveAudit,onBack:()=>setView("home")}),
+      view==="report"&&project&&React.createElement(IRTReportView,{project,results:allResults,meta,onExport:()=>exportIRTExcel(project,allResults,meta),onBack:()=>setView("home")}),
       view==="manage"&&project&&React.createElement(IRTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")}),
       view==="dropdowns"&&React.createElement(IRTDropdownsView,{dropdowns:irtDropdowns,setDropdowns:setIrtDropdowns,onBack:()=>setView("home")}),
-      view==="history"&&React.createElement(IRTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewPanel,setViewPanel,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIRTExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");},onBack:()=>setView("home")})
+      view==="history"&&React.createElement(IRTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewPanel,setViewPanel,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportIRTExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");},onBack:()=>setView("home")})
     ),
     // Guide modal — direct child of root, outside overflow:hidden SS.main
     showGuide&&React.createElement(IRTMotorInfoModal,{onClose:()=>setShowGuide(false)}),
