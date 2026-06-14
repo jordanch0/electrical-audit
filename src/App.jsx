@@ -738,7 +738,7 @@ else goProjects();
 )
 , React.createElement('main', { style: S.main,}
 , view==="projects"&&React.createElement(ProjectListView, { projects: projects, allResults: allResults, dropdowns: dropdowns,
-onSelect: id=>{setActiveProject(id);setView("home");},
+onSelect: id=>{const proj=projects.find(p=>p.id===id);const pushSum=summariseProject(allResults,proj,"push");const injectSum=summariseProject(allResults,proj,"inject");const hasProgress=(pushSum.total>0&&(pushSum.pass+pushSum.fail+pushSum.na)>0)||(injectSum.total>0&&(injectSum.pass+injectSum.fail+injectSum.na)>0);setAuditEntered(hasProgress);setActiveProject(id);setView("home");},
 onAddProject: p=>setProjects(prev=>[...prev,p]),
 onDeleteProject: id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();},})
 , view==="home"&&project&&React.createElement(ProjectHomeView, { project: project, meta: meta, setMeta: setMeta, results: allResults,
@@ -2506,7 +2506,7 @@ function IELApp({ onGoHome }) {
 
     // ── Main
     ,React.createElement('main',{style:SI.main}
-      ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
+      ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#10b981",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
@@ -4644,7 +4644,7 @@ function TATApp({ onGoHome }) {
     // Breadcrumb
     // Main
     ,React.createElement('main',{style:ST.main}
-      ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const m=allMeta[id];setAuditEntered(!!(m&&m.auditor&&m.auditor.trim()));},
+      ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);const s=tatSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);},
         onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},
         onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(TATHomeView,{project,meta,setMeta,results:allResults,summary,
@@ -9402,8 +9402,10 @@ function ThermoApp({
     onSelect: id => {
       setActiveProject(id);
       setView("home");
-      const m = allMeta[id];
-      setAuditEntered(!!(m && m.auditor && m.auditor.trim()));
+      const proj = projects.find(p => p.id === id);
+      const results = allResults[id] || {};
+      const photoCount = sitePhotoCount(results, proj);
+      setAuditEntered(photoCount > 0);
     },
     onAddProject: (p, initialResults) => {
       setProjects(prev => [...prev, p]);
