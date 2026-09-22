@@ -27,7 +27,7 @@ const slugify = s => s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-"
 const DEFAULT_RESPONSIBILITY = ["Site Electrician","Site Manager","Contractor","Client"];
 const DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair","Replacement Required","Fuse Replaced & Retested","Circuit Isolated","Under Investigation","No Action Required"];
 const DEFAULT_AMP_RATING     = ["6A","10A","16A","20A","25A","32A","40A","50A","63A","80A","100A","125A","160A","200A","250A","315A","400A"];
-const DEFAULT_CB_TYPE        = ["RCBO Type A","RCBO Type AC","RCBO Type B","RCBO Type F","RCD Type A","RCD Type AC","MCB Type B","MCB Type C","MCB Type D","ELCB","RCCB"];
+const DEFAULT_CB_TYPE        = ["RCBO Type A","RCBO Type AC","RCBO Type B","RCBO Type F","RCD Type A","RCD Type AC","MCB Type B","MCB Type C","MCB Type D","MCB D-curve","MCCB","ELCB","RCCB"];
 // ─────────────────────────────────────────────────────────────────────────
 // DEFAULT PROJECT DATA
 // ─────────────────────────────────────────────────────────────────────────
