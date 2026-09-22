@@ -7672,7 +7672,7 @@ function PhotoPage({
   };
   const makeFlirName = localPhotosLength => {
     const num = nextFlirNum(localPhotosLength);
-    return num !== "" ? `FLIR${String(num).padStart(4, "0")}` : "";
+    return num !== "" ? String(num).padStart(4, "0") : "";
   };
   const blankForm = localPhotosLength => ({
     id: uid(),
