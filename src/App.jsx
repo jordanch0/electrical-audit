@@ -717,7 +717,7 @@ else if(detailInfo){setDetailInfo(null);}
 else if(view==="panel"){setView("audit");setActivePanelId(null);setDetailInfo(null);}
 else if(view==="audit"&&activePanelId){setActivePanelId(null);setDetailInfo(null);}
 else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
-else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);setView("home");}
+else if(view==="audit"&&auditEntered&&!activeAreaId){const pushSum=project?summariseProject(allResults,project,"push"):{total:0,pass:0,fail:0,na:0};const injectSum=project?summariseProject(allResults,project,"inject"):{total:0,pass:0,fail:0,na:0};const hasProgress=(pushSum.total>0&&(pushSum.pass+pushSum.fail+pushSum.na)>0)||(injectSum.total>0&&(injectSum.pass+injectSum.fail+injectSum.na)>0);setAuditEntered(hasProgress);setView("home");}
 else if(view==="audit"){setView("home");}
 else if(view==="home"){goProjects();}
 else if(["manage","report","history","settings"].includes(view)){setView("home");}
