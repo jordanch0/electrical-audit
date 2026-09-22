@@ -7265,7 +7265,8 @@ function ThermoHomeView({
     value: meta.startFlir || "",
     placeholder: "e.g. 168",
     onChange: e => setMeta({
-      startFlir: e.target.value ? parseInt(e.target.value) : ""
+      startFlir: e.target.value ? parseInt(e.target.value) : "",
+      startFlirBaseCount: photoCount
     })
   }))), (() => {
     const failCount = siteFail(results, project);
@@ -7650,7 +7651,13 @@ function PhotoPage({
   const nextFlirNum = localPhotosLength => {
     const startFlir = meta.startFlir ? parseInt(meta.startFlir) : null;
     if (!startFlir) return "";
-    return startFlir + otherCountRef.current + localPhotosLength;
+    // startFlir is an override for the NEXT photo, not an addend on top of the
+    // running count — startFlirBaseCount snapshots the project's total photo
+    // count at the moment startFlir was set, so only photos logged since then
+    // increment past it.
+    const totalSoFar = otherCountRef.current + localPhotosLength;
+    const baseCount = meta.startFlirBaseCount || 0;
+    return startFlir + Math.max(0, totalSoFar - baseCount);
   };
   const makeFlirName = localPhotosLength => {
     const num = nextFlirNum(localPhotosLength);
@@ -9357,7 +9364,8 @@ function ThermoApp({
       [activeProject]: {
         ...meta,
         testDate: new Date().toISOString().slice(0, 10),
-        startFlir: ""
+        startFlir: "",
+        startFlirBaseCount: 0
       }
     }));
     setAuditEntered(false);
