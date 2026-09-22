@@ -4598,7 +4598,7 @@ function TATApp({ onGoHome }) {
     if(viewSnap){setViewSnap(null);setViewArea(null);return;}
     if(detailItemId){setDetailItemId(null);return;}
     if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
-    else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);goHome();}
+    else if(view==="audit"&&auditEntered&&!activeAreaId){const s=project?tatSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
     else if(view==="audit"){goHome();}
     else if(view==="home"){goProjects();}
     else if(["manage","report","history","settings"].includes(view)){goHome();}
