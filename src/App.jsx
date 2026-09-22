@@ -9399,7 +9399,8 @@ function ThermoApp({
     } else if (view === "audit" && activeAreaId) {
       setActiveAreaId(null);
     } else if (view === "audit" && auditEntered) {
-      setAuditEntered(false);
+      const photoCount = project ? sitePhotoCount(allResults[activeProject] || {}, project) : 0;
+      setAuditEntered(photoCount > 0);
       goHome();
     } else if (view === "audit") {
       goHome();
