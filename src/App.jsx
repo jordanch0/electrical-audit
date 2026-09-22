@@ -1,5 +1,6 @@
 ﻿import React from 'react';
 import * as XLSX_LIB from 'xlsx';
+import ExcelJS from 'exceljs';
 const XLSX = XLSX_LIB;
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; }
 // ─────────────────────────────────────────────────────────────────────────
@@ -21,6 +22,31 @@ const addMonths = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setM
 const addYears  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setFullYear(x.getFullYear()+n); return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return ""; } };
 const cycleS = s => s===STATUS.UNTESTED?STATUS.PASS:s===STATUS.PASS?STATUS.FAIL:s===STATUS.FAIL?STATUS.NA:STATUS.UNTESTED;
 const slugify = s => s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,20)+"-"+uid();
+// Downscale + JPEG-compress a captured photo before it goes into localStorage / an Excel export.
+function resizeImageToDataUrl(file, maxDim=1280, quality=0.72) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error);
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error("Could not read image"));
+      img.onload = () => {
+        let { width, height } = img;
+        if (width > maxDim || height > maxDim) {
+          const scale = maxDim / Math.max(width, height);
+          width = Math.round(width * scale);
+          height = Math.round(height * scale);
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width; canvas.height = height;
+        canvas.getContext("2d").drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
 // ─────────────────────────────────────────────────────────────────────────
 // DEFAULT DROPDOWN OPTIONS
 // ─────────────────────────────────────────────────────────────────────────
@@ -9830,7 +9856,7 @@ function swbAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);
 // ─── Data helpers ─────────────────────────────────────────────────────────
 function swbGetItem(results, projectId, areaId, boardId, itemKey) {
   return ((((results[projectId]||{})[areaId]||{})[boardId])||{})[itemKey]
-    || { status:SWB_STATUS.UNTESTED, defectId:"", comment:"", risk:"", rectified:"", responsibility:"", priority:"" };
+    || { status:SWB_STATUS.UNTESTED, defectId:"", comment:"", risk:"", rectified:"", responsibility:"", priority:"", photos:[] };
 }
 function swbGetStatus(results, projectId, areaId, boardId, itemKey) {
   return swbGetItem(results, projectId, areaId, boardId, itemKey).status || SWB_STATUS.UNTESTED;
@@ -9876,9 +9902,29 @@ function swbXCS(fill,font,align,borders){return{fill:{patternType:"solid",fgColo
 function swbXPC(p){if(p==="U")return{bg:SWB_XC.priorityU_bg,font:SWB_XC.priorityU_font,bold:true};if(p==="H")return{bg:SWB_XC.priorityH_bg,font:SWB_XC.priorityH_font,bold:false};if(p==="M")return{bg:SWB_XC.priorityM_bg,font:SWB_XC.priorityM_font,bold:false};if(p==="L")return{bg:SWB_XC.priorityL_bg,font:SWB_XC.priorityL_font,bold:false};return null;}
 function swbXRS(ri,risk){if(risk){const pc=swbXPC(risk);if(pc)return swbXCS(pc.bg,{sz:10,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},{bottom:swbXB("hair")});}const bg=ri%2===0?SWB_XC.white:SWB_XC.lightGrey;return swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},{bottom:swbXB("hair")});}
 function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="number"?"n":"s",s:st};}
+// Applies a swbXCS/swbXRS-shaped style object (SheetJS rgb convention) onto an ExcelJS cell (argb convention).
+function swbApplyXlStyle(cell,st){
+  if(!st) return;
+  if(st.fill&&st.fill.fgColor) cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:st.fill.fgColor.rgb}};
+  if(st.font){const f=st.font;cell.font={name:f.name,size:f.sz,bold:!!f.bold,italic:!!f.italic,color:f.color?{argb:f.color.rgb}:undefined};}
+  if(st.alignment) cell.alignment={...st.alignment};
+  if(st.border){
+    const b={};
+    ["top","bottom","left","right"].forEach(side=>{if(st.border[side])b[side]={style:st.border[side].style,color:{argb:st.border[side].color.rgb}};});
+    cell.border=b;
+  }
+}
 
-function exportSWBExcel(project, allResults, meta) {
-  const wb=XLSX.utils.book_new();const ws={};const merges=[];
+function swbArrayBufferToBase64(buf){
+  let binary=""; const bytes=new Uint8Array(buf); const len=bytes.byteLength;
+  for(let i=0;i<len;i++) binary+=String.fromCharCode(bytes[i]);
+  return window.btoa(binary);
+}
+async function exportSWBExcel(project, allResults, meta) {
+  const wb=new ExcelJS.Workbook();
+  const ws=wb.addWorksheet("Switchboard Audit");
+  const setCell=(ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
+  const merges=[];
   const n=6;const cols="ABCDEF".split("");
   let r=0;
   const pid=project.id;const results=allResults[pid]||{};
@@ -9893,41 +9939,63 @@ function exportSWBExcel(project, allResults, meta) {
   const bhdSt   =swbXCS("FF1E1428",{bold:true,sz:11,color:{rgb:"FFc084fc"}},{horizontal:"left"},{top:swbXB("medium","FFa855f7"),bottom:swbXB("medium","FFa855f7")});
   const spcSt   =swbXCS("FF181820");
   const phoSt   =swbXCS("FF181820",{sz:9,color:{rgb:"FF444466"},italic:true},{horizontal:"left"});
-  swbXC2(ws,"A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
-  for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
-  swbXC2(ws,"A2",coLine,subSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
-  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt);
+  const phoHdrSt=swbXCS("FF181820",{bold:true,sz:9,color:{rgb:"FFc084fc"}},{horizontal:"left"});
+  setCell("A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
+  for(let c=1;c<n;c++) setCell(cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
+  setCell("A2",coLine,subSt); for(let c=1;c<n;c++) setCell(cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
+  setCell("A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); setCell("B3","",metaSt); setCell("C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); setCell("D3","",metaSt); setCell("E3",`Next Annual Audit Due: ${nextDue}`,metaSt); setCell("F3","",metaSt);
   merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:5}}); r=3;
-  for(let c=0;c<n;c++) swbXC2(ws,cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
-  ["Item","Pass / Fail","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
+  for(let c=0;c<n;c++) setCell(cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
+  ["Item","Pass / Fail","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((h,i)=>setCell(cols[i]+"5",h,hdrSt)); r=5;
   let di=0;
   (project.areas||[]).forEach(area=>{
     (area.boards||[]).forEach(board=>{
       const bl=`${area.name}  ›  ${board.name}`;
-      swbXC2(ws,cols[0]+(r+1),bl,bhdSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+(r+1),"",bhdSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+      setCell(cols[0]+(r+1),bl,bhdSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",bhdSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+      const boardPhotoItems=[];
       SWB_CHECKLIST.forEach(({key,label})=>{
-        const item=((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
+        const item=((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:"",photos:[]};
         const st=item.status||SWB_STATUS.UNTESTED;
         const pfLabel=st===SWB_STATUS.PASS?"Pass":st===SWB_STATUS.FAIL?"Fail":st===SWB_STATUS.NA?"N/A":"Untested";
         const rs=swbXRS(di,item.risk||"");
         const bg=rs.fill.fgColor.rgb; const fc=rs.font.color; const bd=rs.font.bold;
         const cSt=(h)=>swbXCS(bg,{sz:10,color:fc,bold:bd},{wrapText:true,horizontal:h||"left"},{bottom:swbXB("hair")});
-        swbXC2(ws,cols[0]+(r+1),label,rs);
-        swbXC2(ws,cols[1]+(r+1),pfLabel,cSt("center"));
-        swbXC2(ws,cols[2]+(r+1),item.defectId||"",rs);
-        swbXC2(ws,cols[3]+(r+1),item.comment||"",rs);
-        swbXC2(ws,cols[4]+(r+1),item.risk||"",cSt("center"));
-        swbXC2(ws,cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
+        setCell(cols[0]+(r+1),label,rs);
+        setCell(cols[1]+(r+1),pfLabel,cSt("center"));
+        setCell(cols[2]+(r+1),item.defectId||"",rs);
+        setCell(cols[3]+(r+1),item.comment||"",rs);
+        setCell(cols[4]+(r+1),item.risk||"",cSt("center"));
+        setCell(cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
         r++; di++;
+        if(item.photos&&item.photos.length) boardPhotoItems.push({label,photos:item.photos});
       });
-      swbXC2(ws,cols[0]+(r+1),"← Insert board photos here",phoSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+      if(boardPhotoItems.length){
+        setCell(cols[0]+(r+1),"Photos",phoHdrSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+        boardPhotoItems.forEach(({label,photos})=>{
+          setCell(cols[0]+(r+1),`📷 ${label}`,phoSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+          photos.forEach(p=>{
+            const imgRow=r;
+            for(let c=0;c<n;c++) setCell(cols[c]+(imgRow+1),"",spcSt);
+            ws.getRow(imgRow+1).height=82;
+            const m=/^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+            if(m){
+              let ext=m[1]==="jpg"?"jpeg":m[1];
+              if(!["jpeg","png","gif"].includes(ext)) ext="jpeg";
+              const imgId=wb.addImage({base64:p.dataUrl,extension:ext});
+              ws.addImage(imgId,{tl:{col:0.15,row:imgRow+0.08},ext:{width:150,height:105},editAs:"oneCell"});
+            }
+            r++;
+          });
+        });
+      } else {
+        setCell(cols[0]+(r+1),"— No photos captured for this board —",phoSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
+      }
     });
   });
-  ws["!merges"]=merges;
-  ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:n-1}});
-  ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:42},{wch:8},{wch:30}];
-  XLSX.utils.book_append_sheet(wb,ws,"Switchboard Audit");
-  const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
+  merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
+  [28,12,12,42,8,30].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  const buf=await wb.xlsx.writeBuffer();
+  const wbOut=swbArrayBufferToBase64(buf);
   const fname=`SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
   if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
     window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
@@ -10058,14 +10126,14 @@ function SWBApp({ onGoHome }) {
 
   const patchItem=(areaId,boardId,itemKey,patch)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
-    const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
+    const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:"",photos:[]};
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,[itemKey]:{...old,...patch}}}}};
   });
 
   const resetBoard=(areaId,boardId)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};
     const cleared={};
-    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
+    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:"",photos:[]};});
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
   });
 
@@ -10350,7 +10418,10 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack
           ,React.createElement('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:11,fontWeight:800,textAlign:"center"}},sm.label)
           ,React.createElement('div',{style:{flex:1,minWidth:0}}
             ,React.createElement('div',{style:{fontSize:14,fontWeight:600,color:"#eee"}},label)
-            ,hasDetail&&React.createElement('div',{style:{fontSize:10,color:"#a855f7",marginTop:2}},"✎ has notes")
+            ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:2}}
+              ,hasDetail&&React.createElement('span',{style:{fontSize:10,color:"#a855f7"}},"✎ has notes")
+              ,item.photos&&item.photos.length>0&&React.createElement('span',{style:{fontSize:10,color:"#a855f7"}},"📷 ",item.photos.length)
+            )
           )
           ,item.risk&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:SWB_RISK_COLORS[item.risk],flexShrink:0}},item.risk)
           ,React.createElement('span',{style:{fontSize:14,color:"#888",flexShrink:0}},">")
@@ -10374,6 +10445,22 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
   const [rectified,   setRectified]   = React.useState(item.rectified||"");
   const [rectDate,    setRectDate]    = React.useState(item.rectifiedDate||"");
   const [resp,        setResp]        = React.useState(item.responsibility||"");
+  const [photos,      setPhotosL]     = React.useState(item.photos||[]);
+  const photoInputRef = React.useRef();
+  const addPhotos = async e => {
+    const files = Array.from(e.target.files||[]);
+    e.target.value = "";
+    if(!files.length) return;
+    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
+    const updated=[...photos,...added];
+    setPhotosL(updated);
+    onPatch(itemKey,{photos:updated});
+  };
+  const removePhoto = id => {
+    const updated=photos.filter(p=>p.id!==id);
+    setPhotosL(updated);
+    onPatch(itemKey,{photos:updated});
+  };
   const SS=swbStyles();const sm=SWB_SM[status];const isFail=status===SWB_STATUS.FAIL;
   const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
@@ -10415,6 +10502,17 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
       ,React.createElement('div',{style:SS.modalField}
         ,React.createElement('label',{style:SS.modalLabel},"COMMENTS")
         ,React.createElement('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:comment,placeholder:"Observations, recommendations…",onChange:e=>setComment(e.target.value)})
+      )
+      // Photos
+      ,React.createElement('div',{style:{marginBottom:14}}
+        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
+        ,photos.map(p=>React.createElement('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:8,marginBottom:8}}
+          ,React.createElement('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #333"}})
+          ,React.createElement('div',{style:{flex:1,minWidth:0}})
+          ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ))
+        ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+        ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#a855f7",border:"1px dashed #a855f766",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
       )
       // Fail-only section — red panel, same as RCD push
       ,isFail&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
