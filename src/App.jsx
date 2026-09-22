@@ -7753,13 +7753,19 @@ function PhotoPage({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 10,
-      color: "#666",
-      letterSpacing: 0.8,
-      fontWeight: 700,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
       marginBottom: 8
     }
-  }, "LOGGED PHOTOS"), photos.map((photo, idx) => {
+  },
+    React.createElement("div", {
+      style: { fontSize: 10, color: "#666", letterSpacing: 0.8, fontWeight: 700 }
+    }, "LOGGED PHOTOS"),
+    React.createElement("div", {
+      style: { fontSize: 11, color: "#888" }
+    }, "Last: ", React.createElement("span", { style: { color: THERMO_COLOR, fontWeight: 700 } },
+      photos[photos.length - 1].flirFile || "—"
+    ))
+  ), photos.map((photo, idx) => {
     const rc = RESULT_COLORS[photo.result] || "#555";
     const isBeingEdited = editingIdx === idx;
     return /*#__PURE__*/React.createElement("div", {
