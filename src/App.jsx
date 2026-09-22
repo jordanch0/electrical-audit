@@ -9904,7 +9904,7 @@ function swbSiteCompletedBoards(results, project) {
 
 // ─── Excel export ─────────────────────────────────────────────────────────
 const SWB_XC = {
-  purple:"FFA855F7",white:"FFFFFFFF",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",
+  purple:"FFA855F7",purpleTint:"FFF3E8FF",purpleText:"FF6B21A8",white:"FFFFFFFF",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",mutedGrey:"FF888888",
   priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
   priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
 };
@@ -9944,17 +9944,17 @@ async function exportSWBExcel(project, allResults, meta) {
   const testDate=(meta&&meta.testDate)||"";
   const nextDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):(testDate?swbAddYear(testDate):"");
   const coLine=`${project.company||"SparkCheck"} Electrical Audit Software Pty. Ltd.${project.abn?`  |  ABN: ${project.abn}`:""}${project.licence?`  |  Electrical Licence: ${project.licence}`:""}`;
-  const titleSt =swbXCS("FF1A1A2E",{bold:true,sz:14,color:{rgb:"FFc084fc"}},{horizontal:"left"});
-  const subSt   =swbXCS("FF1A1A2E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
-  const metaSt  =swbXCS("FF262626",{sz:9,color:{rgb:"FF999999"}},{horizontal:"left"});
-  const hdrSt   =swbXCS(SWB_XC.purple,{bold:true,sz:10,color:{rgb:SWB_XC.white}},{horizontal:"center",wrapText:true},swbXAB());
-  const bhdSt   =swbXCS("FF1E1428",{bold:true,sz:11,color:{rgb:"FFc084fc"}},{horizontal:"left"},{top:swbXB("medium","FFa855f7"),bottom:swbXB("medium","FFa855f7")});
-  const spcSt   =swbXCS("FF181820");
-  const phoSt   =swbXCS("FF181820",{sz:9,color:{rgb:"FF444466"},italic:true},{horizontal:"left"});
-  const phoHdrSt=swbXCS("FF181820",{bold:true,sz:9,color:{rgb:"FFc084fc"}},{horizontal:"left"});
+  const titleSt =swbXCS(SWB_XC.white,{bold:true,sz:14,color:{rgb:SWB_XC.darkGrey}},{horizontal:"left"});
+  const subSt   =swbXCS(SWB_XC.white,{sz:9,color:{rgb:SWB_XC.mutedGrey}},{horizontal:"left"});
+  const metaSt  =swbXCS(SWB_XC.lightGrey,{sz:9,color:{rgb:SWB_XC.darkGrey}},{horizontal:"left"});
+  const hdrSt   =swbXCS(SWB_XC.purpleTint,{bold:true,sz:10,color:{rgb:SWB_XC.purpleText}},{horizontal:"center",wrapText:true},swbXAB());
+  const bhdSt   =swbXCS(SWB_XC.purpleTint,{bold:true,sz:11,color:{rgb:SWB_XC.purpleText}},{horizontal:"left"},{top:swbXB("medium",SWB_XC.purple),bottom:swbXB("medium",SWB_XC.purple)});
+  const spcSt   =swbXCS(SWB_XC.white);
+  const phoSt   =swbXCS(SWB_XC.white,{sz:9,color:{rgb:SWB_XC.mutedGrey},italic:true},{horizontal:"left"});
+  const phoHdrSt=swbXCS(SWB_XC.white,{bold:true,sz:9,color:{rgb:SWB_XC.purpleText}},{horizontal:"left"});
   setCell("A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
-  for(let c=1;c<n;c++) setCell(cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
-  setCell("A2",coLine,subSt); for(let c=1;c<n;c++) setCell(cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
+  for(let c=1;c<n;c++) setCell(cols[c]+"1","",swbXCS(SWB_XC.white)); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
+  setCell("A2",coLine,subSt); for(let c=1;c<n;c++) setCell(cols[c]+"2","",swbXCS(SWB_XC.white)); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
   setCell("A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); setCell("B3","",metaSt); setCell("C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); setCell("D3","",metaSt); setCell("E3",`Next Annual Audit Due: ${nextDue}`,metaSt); setCell("F3","",metaSt);
   merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:5}}); r=3;
   for(let c=0;c<n;c++) setCell(cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
