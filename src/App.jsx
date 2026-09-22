@@ -7681,12 +7681,21 @@ function PhotoPage({
     setForm(blankForm(updated.length));
   };
   const deletePhoto = idx => {
-    const updated = photosRef.current.filter((_, i) => i !== idx);
+    let updated = photosRef.current.filter((_, i) => i !== idx);
+    updated = updated.map((p, i) => {
+      if (i >= idx && /^\d+$/.test(p.flirFile)) {
+        const dec = parseInt(p.flirFile) - 1;
+        return { ...p, flirFile: String(dec).padStart(p.flirFile.length, "0") };
+      }
+      return p;
+    });
     setPhotos(updated);
     onPatchPhotos(updated);
     if (editingIdx === idx) {
       setEditingIdx(null);
       setForm(blankForm(updated.length));
+    } else if (editingIdx !== null && editingIdx > idx) {
+      setEditingIdx(editingIdx - 1);
     }
   };
   const startEdit = idx => {
