@@ -11741,7 +11741,7 @@ function IRTApp({onGoHome}){
             else if(view==="panel"){setActivePanelId(null);setView("area");}
             else if(view==="area"){setActiveAreaId(null);setView("audit");}
             else if(view==="audit"&&!auditEntered)goHome();
-            else if(view==="audit"&&auditEntered){setAuditEntered(false);goHome();}
+            else if(view==="audit"&&auditEntered){const s=project?irtSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
             else if(["report","manage","history","dropdowns"].includes(view))goHome();
             else goProjects();
           }},
