@@ -9904,7 +9904,7 @@ function swbSiteCompletedBoards(results, project) {
 
 // ─── Excel export ─────────────────────────────────────────────────────────
 const SWB_XC = {
-  purple:"FFA855F7",purpleTint:"FFF3E8FF",purpleText:"FF6B21A8",white:"FFFFFFFF",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",mutedGrey:"FF888888",
+  white:"FFFFFFFF",black:"FF000000",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",mutedGrey:"FF888888",
   priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
   priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
 };
@@ -9947,11 +9947,11 @@ async function exportSWBExcel(project, allResults, meta) {
   const titleSt =swbXCS(SWB_XC.white,{bold:true,sz:14,color:{rgb:SWB_XC.darkGrey}},{horizontal:"left"});
   const subSt   =swbXCS(SWB_XC.white,{sz:9,color:{rgb:SWB_XC.mutedGrey}},{horizontal:"left"});
   const metaSt  =swbXCS(SWB_XC.lightGrey,{sz:9,color:{rgb:SWB_XC.darkGrey}},{horizontal:"left"});
-  const hdrSt   =swbXCS(SWB_XC.purpleTint,{bold:true,sz:10,color:{rgb:SWB_XC.purpleText}},{horizontal:"center",wrapText:true},swbXAB());
-  const bhdSt   =swbXCS(SWB_XC.purpleTint,{bold:true,sz:11,color:{rgb:SWB_XC.purpleText}},{horizontal:"left"},{top:swbXB("medium",SWB_XC.purple),bottom:swbXB("medium",SWB_XC.purple)});
+  const hdrSt   =swbXCS(SWB_XC.white,{bold:true,sz:10,color:{rgb:SWB_XC.black}},{horizontal:"center",wrapText:true},swbXAB());
+  const bhdSt   =swbXCS(SWB_XC.white,{bold:true,sz:11,color:{rgb:SWB_XC.black}},{horizontal:"left"},{top:swbXB("medium",SWB_XC.black),bottom:swbXB("medium",SWB_XC.black)});
   const spcSt   =swbXCS(SWB_XC.white);
   const phoSt   =swbXCS(SWB_XC.white,{sz:9,color:{rgb:SWB_XC.mutedGrey},italic:true},{horizontal:"left"});
-  const phoHdrSt=swbXCS(SWB_XC.white,{bold:true,sz:9,color:{rgb:SWB_XC.purpleText}},{horizontal:"left"});
+  const phoHdrSt=swbXCS(SWB_XC.white,{bold:true,sz:9,color:{rgb:SWB_XC.black}},{horizontal:"left"});
   setCell("A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
   for(let c=1;c<n;c++) setCell(cols[c]+"1","",swbXCS(SWB_XC.white)); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
   setCell("A2",coLine,subSt); for(let c=1;c<n;c++) setCell(cols[c]+"2","",swbXCS(SWB_XC.white)); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
