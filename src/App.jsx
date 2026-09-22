@@ -4335,9 +4335,9 @@ function exportTATExcel(project, results, meta) {
   const auditor=(meta&&meta.auditor)||"";
   const sName=project.name||"Site";
   const coLine=[project.company||"SparkCheck",project.abn?`ABN: ${project.abn}`:"",project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-  const headers=["Area","Asset ID / Tag","Description","Equipment Type","Visual Inspection","Pass / Fail","Date Tested","Test Frequency","Next Test Due","Notes / Comments","Priority (L,M,H,U)"];
+  const headers=["Area","Asset ID / Tag","Description","Equipment Type","Visual Inspection","Pass / Fail","Date Tested","Test Frequency","Next Test Due","Notes / Comments","Priority (L,M,H,U)","Defect ID","Rectified / Scheduled","Responsibility"];
   const n=headers.length;
-  const cols="ABCDEFGHIJK".slice(0,n).split("");
+  const cols="ABCDEFGHIJKLMN".slice(0,n).split("");
   const titleSt=tatCS("FF2D2D2D",{bold:true,sz:14,color:{rgb:"FFFFFFFF"}},{horizontal:"left"});
   const subSt=tatCS("FF1E1E1E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
   const metaSt=tatCS("FF262626",{sz:9,color:{rgb:"FF999999"}},{horizontal:"left"});
@@ -4367,7 +4367,8 @@ function exportTATExcel(project, results, meta) {
       rows.push([
         area.name, areaTag, cleanName, areaEquip,
         item.visualCheck?"Yes":"", pf, fmtDate(item.lastTested),
-        freqLabel, nextDue, item.notes||"", item.priority||""
+        freqLabel, nextDue, item.notes||"", item.priority||"",
+        item.defectId||"", item.rectified||"", item.responsibility||""
       ]);
       dataRows.push({pf,priority:item.priority||""});
     });
@@ -4375,7 +4376,7 @@ function exportTATExcel(project, results, meta) {
   rows.push(Array(n).fill(""));
   rows.push([`Notes: ${(meta&&meta.notes)||""}`,...Array(n-1).fill("")]);
   const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:20},{wch:14},{wch:30},{wch:16},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:36},{wch:10}];
+  ws["!cols"]=[{wch:20},{wch:14},{wch:30},{wch:16},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:36},{wch:10},{wch:12},{wch:20},{wch:22}];
   ws["!rows"]=[{hpt:32},{hpt:16},{hpt:16},{hpt:6},{hpt:40}];
   ws["!merges"]=[
     {s:{r:0,c:0},e:{r:0,c:n-1}},
