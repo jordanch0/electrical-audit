@@ -7,10 +7,10 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 // ─────────────────────────────────────────────────────────────────────────
 const STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const SM = {
-[STATUS.UNTESTED]: { label:"—",    bg:"#2a2a2a", fg:"#666",    border:"#333" },
+[STATUS.UNTESTED]: { label:"—",    bg:"#2a2a2a", fg:"#999",    border:"#333" },
 [STATUS.PASS]:     { label:"PASS", bg:"#1a3d1a", fg:"#4ade80", border:"#22c55e" },
 [STATUS.FAIL]:     { label:"FAIL", bg:"#3d1a1a", fg:"#f87171", border:"#ef4444" },
-[STATUS.NA]:       { label:"N/A",  bg:"#1e2535", fg:"#64748b", border:"#334155" },
+[STATUS.NA]:       { label:"N/A",  bg:"#1e2535", fg:"#94a3b8", border:"#334155" },
 };
 const uid = () => Math.random().toString(36).slice(2,9);
 const fmtDate = d => { if(!d) return ""; try { return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return d; } };
@@ -27,7 +27,7 @@ const slugify = s => s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-"
 const DEFAULT_RESPONSIBILITY = ["Site Electrician","Site Manager","Contractor","Client"];
 const DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair","Replacement Required","Fuse Replaced & Retested","Circuit Isolated","Under Investigation","No Action Required"];
 const DEFAULT_AMP_RATING     = ["6A","10A","16A","20A","25A","32A","40A","50A","63A","80A","100A","125A","160A","200A","250A","315A","400A"];
-const DEFAULT_CB_TYPE        = ["RCBO Type A","RCBO Type AC","RCBO Type B","RCBO Type F","RCD Type A","RCD Type AC","MCB Type B","MCB Type C","MCB Type D","ELCB","RCCB"];
+const DEFAULT_CB_TYPE        = ["RCBO Type A","RCBO Type AC","RCBO Type B","RCBO Type F","RCD Type A","RCD Type AC","MCB Type B","MCB Type C","MCB Type D","MCB D-curve","MCCB","ELCB","RCCB"];
 // ─────────────────────────────────────────────────────────────────────────
 // DEFAULT PROJECT DATA
 // ─────────────────────────────────────────────────────────────────────────
@@ -717,21 +717,21 @@ else if(detailInfo){setDetailInfo(null);}
 else if(view==="panel"){setView("audit");setActivePanelId(null);setDetailInfo(null);}
 else if(view==="audit"&&activePanelId){setActivePanelId(null);setDetailInfo(null);}
 else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
-else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);setView("home");}
+else if(view==="audit"&&auditEntered&&!activeAreaId){const pushSum=project?summariseProject(allResults,project,"push"):{total:0,pass:0,fail:0,na:0};const injectSum=project?summariseProject(allResults,project,"inject"):{total:0,pass:0,fail:0,na:0};const hasProgress=(pushSum.total>0&&(pushSum.pass+pushSum.fail+pushSum.na)>0)||(injectSum.total>0&&(injectSum.pass+injectSum.fail+injectSum.na)>0);setAuditEntered(hasProgress);setView("home");}
 else if(view==="audit"){setView("home");}
 else if(view==="home"){goProjects();}
 else if(["manage","report","history","settings"].includes(view)){setView("home");}
 else goProjects();
 }}
-        ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
-        ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")
+        ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
+        ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Back")
       )
       ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"RCD Testing")
-      ,React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
+      ,React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
     )
     ,onGoHomeModule&&React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHomeModule}
-      ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
-      ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules")
+      ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
+      ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules")
     )
   )
   ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #e8731a, transparent 70%)',opacity:0.5}})
@@ -777,12 +777,12 @@ onContinueFromSnap: (snap)=>{
 )
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
-, React.createElement(NavBtn, { icon: NAV_ICON_HOME,      label: "Home",      active: view==="home",     onClick: ()=>{setDetailInfo(null);goHome();}, color: "#64748b",})
-, React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{setView("audit");setActivePanelId(null);setDetailInfo(null);}, color: "#64748b",})
-, React.createElement(NavBtn, { icon: NAV_ICON_REPORT,    label: "Report",    active: view==="report",   onClick: ()=>{setDetailInfo(null);setView("report");}, color: "#64748b",})
-, React.createElement(NavBtn, { icon: NAV_ICON_HISTORY,   label: "History",   active: view==="history",  onClick: ()=>{setDetailInfo(null);setView("history");}, color: "#64748b",})
-, React.createElement(NavBtn, { icon: NAV_ICON_MANAGE,    label: "Manage",    active: view==="manage",   onClick: ()=>{setDetailInfo(null);setView("manage");}, color: "#64748b",})
-, React.createElement(NavBtn, { icon: NAV_ICON_DROPDOWNS, label: "Dropdowns", active: view==="settings", onClick: ()=>{setDetailInfo(null);setView("settings");}, color: "#64748b",})
+, React.createElement(NavBtn, { icon: NAV_ICON_HOME,      label: "Home",      active: view==="home",     onClick: ()=>{setDetailInfo(null);goHome();}, color: "#94a3b8",})
+, React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{setView("audit");setActivePanelId(null);setDetailInfo(null);}, color: "#94a3b8",})
+, React.createElement(NavBtn, { icon: NAV_ICON_REPORT,    label: "Report",    active: view==="report",   onClick: ()=>{setDetailInfo(null);setView("report");}, color: "#94a3b8",})
+, React.createElement(NavBtn, { icon: NAV_ICON_HISTORY,   label: "History",   active: view==="history",  onClick: ()=>{setDetailInfo(null);setView("history");}, color: "#94a3b8",})
+, React.createElement(NavBtn, { icon: NAV_ICON_MANAGE,    label: "Manage",    active: view==="manage",   onClick: ()=>{setDetailInfo(null);setView("manage");}, color: "#94a3b8",})
+, React.createElement(NavBtn, { icon: NAV_ICON_DROPDOWNS, label: "Dropdowns", active: view==="settings", onClick: ()=>{setDetailInfo(null);setView("settings");}, color: "#94a3b8",})
 )
 )
 )
@@ -851,7 +851,7 @@ setNewName("");setNewAbn("");setNewLic("");setShowAdd(false);
 return (
 React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {...S.listTitle,marginTop:24},}, "Sites")
-, projects.length===0&&React.createElement('div', { style: {color:"#555",fontSize:14,marginBottom:16},}, "No projects yet."  )
+, projects.length===0&&React.createElement('div', { style: {color:"#888",fontSize:14,marginBottom:16},}, "No projects yet."  )
 
 , projects.map(proj=>{
 let total=0,tested=0,fail=0;
@@ -896,7 +896,7 @@ React.createElement('div', { style: S.addCard,}
 )
 , tab==="import"&&React.createElement(React.Fragment, null
 , React.createElement('div', { style: {fontSize:14,fontWeight:800,color:"#eee",marginBottom:4},}, "Import from Excel"  )
-, React.createElement('div', { style: {fontSize:12,color:"#666",marginBottom:12},}, "Upload a spreadsheet with columns: "     , React.createElement('strong', { style: {color:"#aaa"},}, "Area | Panel/DB | Circuit"    ), ". The app will build the project structure automatically."        )
+, React.createElement('div', { style: {fontSize:12,color:"#999",marginBottom:12},}, "Upload a spreadsheet with columns: "     , React.createElement('strong', { style: {color:"#aaa"},}, "Area | Panel/DB | Circuit"    ), ". The app will build the project structure automatically."        )
 , React.createElement(LabelInput, { label: "SITE NAME" ,   value: importName, onChange: setImportName, placeholder: "Site name"  ,})
 , React.createElement(LabelInput, { label: "COMPANY (optional)", value: importCo, onChange: setImportCo, placeholder: "Company name" ,})
 , React.createElement(LabelInput, { label: "ABN (optional)", value: importAbn, onChange: setImportAbn, placeholder: "e.g. 12 345 678 901" ,})
@@ -917,7 +917,7 @@ React.createElement('div', { key: a.id, style: {fontSize:12,color:"#aaa",marginB
 , React.createElement('strong', { style: {color:"#ccc"},}, a.name), " — "  , a.panels.length, " panels, "  , a.panels.reduce((s,p)=>s+p.circuits.length,0), " circuits"
 )
 ))
-, importPreview.areas.length>5&&React.createElement('div', { style: {fontSize:11,color:"#666"},}, "…and " , importPreview.areas.length-5, " more areas"  )
+, importPreview.areas.length>5&&React.createElement('div', { style: {fontSize:11,color:"#999"},}, "…and " , importPreview.areas.length-5, " more areas"  )
 )
 , React.createElement('div', { style: {display:"flex",gap:8},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: confirmImport,}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Project"  )
@@ -1045,12 +1045,12 @@ React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,marginBottom:16},}
 , React.createElement('div', null
 , React.createElement('div', { style: {fontSize:16,fontWeight:800,color:"#eee"},}, _optionalChain([area, 'optionalAccess', _74 => _74.name]))
-, React.createElement('div', { style: {fontSize:11,color:"#555"},}, snap.label, " · "  , fmtDate(snap.testDate), " · Read-only"  )
+, React.createElement('div', { style: {fontSize:11,color:"#888"},}, snap.label, " · "  , fmtDate(snap.testDate), " · Read-only"  )
 )
 )
 , _optionalChain([area, 'optionalAccess', _75 => _75.panels, 'access', _76 => _76.map, 'call', _77 => _77(pnl=>(
 React.createElement('div', { key: pnl.id, style: {...S.addCard,marginBottom:10},}
-, React.createElement('div', { style: {fontSize:14,fontWeight:700,color:"#ccc",marginBottom:10},}, pnl.name, " " , React.createElement('span', { style: {fontSize:11,color:"#555",fontWeight:400},}, "(", pnl.circuits.length, " circuits)" ))
+, React.createElement('div', { style: {fontSize:14,fontWeight:700,color:"#ccc",marginBottom:10},}, pnl.name, " " , React.createElement('span', { style: {fontSize:11,color:"#888",fontWeight:400},}, "(", pnl.circuits.length, " circuits)" ))
 , React.createElement('div', { style: {display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(80px,1fr))",gap:8},}
 , pnl.circuits.map(c=>{
 const d  = _optionalChain([snap, 'access', _78 => _78.results, 'optionalAccess', _79 => _79[area.id], 'optionalAccess', _80 => _80[pnl.id], 'optionalAccess', _81 => _81[c]]);
@@ -1103,7 +1103,7 @@ React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:12,marginBottom:6},}
 , React.createElement('div', null
 , React.createElement('div', { style: {fontSize:16,fontWeight:800,color:"#eee"},}, snap.label)
-, React.createElement('div', { style: {fontSize:11,color:"#555"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor", " · Read-only"  )
+, React.createElement('div', { style: {fontSize:11,color:"#888"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor", " · Read-only"  )
 )
 )
 /* Summary pills */
@@ -1117,16 +1117,16 @@ if(st===STATUS.PASS)pass++;else if(st===STATUS.FAIL)fail++;else if(st===STATUS.N
 })));
 return (
 React.createElement('div', { style: {display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"},}
-, [["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",total-pass-fail-na,"#f59e0b"]].map(([l,v,c])=>(
+, [["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#94a3b8"],["Untested",total-pass-fail-na,"#f59e0b"]].map(([l,v,c])=>(
 React.createElement('div', { key: l, style: {background:"#1a1a1a",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"},}
 , React.createElement('div', { style: {fontSize:18,fontWeight:800,color:c},}, v)
-, React.createElement('div', { style: {fontSize:10,color:"#666"},}, l)
+, React.createElement('div', { style: {fontSize:10,color:"#999"},}, l)
 )
 ))
 )
 );
 })()
-, React.createElement('div', { style: {fontSize:11,color:"#555",marginBottom:12},}, "Tap an area to view circuit results"      )
+, React.createElement('div', { style: {fontSize:11,color:"#888",marginBottom:12},}, "Tap an area to view circuit results"      )
 , _optionalChain([project, 'optionalAccess', _124 => _124.areas, 'access', _125 => _125.map, 'call', _126 => _126(area=>{
 let pass=0,fail=0,total=0;
 area.panels.forEach(p=>p.circuits.forEach(c=>{
@@ -1156,13 +1156,13 @@ if(history.length===0) return (
 React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: S.listTitle,}, "Audit History" )
 , React.createElement('div', {style:{fontSize:32,marginBottom:12,textAlign:"center"}}, "📋")
-, React.createElement('div', { style: {color:"#555",fontSize:14},}, "No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."                   )
+, React.createElement('div', { style: {color:"#888",fontSize:14},}, "No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."                   )
 )
 );
 return (
 React.createElement('div', { style: S.listWrap,}
 , React.createElement('div', { style: S.listTitle,}, "Audit History" )
-, React.createElement('div', { style: {fontSize:12,color:"#555",marginBottom:16},}, history.length, " saved audit"  , history.length!==1?"s":"")
+, React.createElement('div', { style: {fontSize:12,color:"#888",marginBottom:16},}, history.length, " saved audit"  , history.length!==1?"s":"")
 , history.map(snap=>{
 let total=0,pass=0,fail=0,na=0;
 if(project){
@@ -1187,15 +1187,15 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , hasFail&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 )
 , React.createElement('div', { style: {fontSize:12,color:"#888"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor")
-, React.createElement('div', { style: {fontSize:11,color:"#555",marginTop:2},}, "Archived " , fmtDateTime(snap.archivedAt))
+, React.createElement('div', { style: {fontSize:11,color:"#888",marginTop:2},}, "Archived " , fmtDateTime(snap.archivedAt))
 , total>0&&React.createElement('div', { style: {display:"flex",gap:8,marginTop:6},}
 , React.createElement('span', { style: {fontSize:11,color:"#22c55e"},}, pass, " Pass" )
 , React.createElement('span', { style: {fontSize:11,color:"#ef4444"},}, fail, " Fail" )
-, React.createElement('span', { style: {fontSize:11,color:"#64748b"},}, na, " N/A" )
+, React.createElement('span', { style: {fontSize:11,color:"#94a3b8"},}, na, " N/A" )
 , React.createElement('span', { style: {fontSize:11,color:"#f59e0b"},}, total-pass-fail-na, " Untested" )
 )
 )
-, React.createElement('span', { style: {...S.arrow,color:expanded===snap.id?"#e8731a":"#555"},}, expanded===snap.id?"▾":"›")
+, React.createElement('span', { style: {...S.arrow,color:expanded===snap.id?"#e8731a": "#888"},}, expanded===snap.id?"▾":"›")
 )
 , expanded===snap.id&&(
 React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"},}
@@ -1242,10 +1242,10 @@ const LISTS = [
 ];
 return (
 React.createElement('div', { style: S.listWrap,}
-, React.createElement('div', { style: {...S.listTitle,color:"#64748b"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
+, React.createElement('div', { style: {...S.listTitle,color:"#94a3b8"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
 
 /* Dropdown lists */
-, React.createElement('div', { style: {fontSize:12,color:"#555",marginBottom:16},}, "Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
+, React.createElement('div', { style: {fontSize:12,color:"#888",marginBottom:16},}, "Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
 , LISTS.map(({key,label,defaults,color,desc})=>{
 const items = _nullishCoalesce(_optionalChain([dropdowns, 'optionalAccess', _146 => _146[key]]), () => ( defaults));
 const newVal = newVals[key] || "";
@@ -1254,9 +1254,9 @@ React.createElement('div', { key: key, style: {...S.addCard,marginBottom:14,bord
 , React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6},}
 , React.createElement('div', null
 , React.createElement('div', { style: {fontSize:13,fontWeight:700,color:"#fff"},}, label)
-, React.createElement('div', { style: {fontSize:11,color:"#555",marginTop:2},}, desc)
+, React.createElement('div', { style: {fontSize:11,color:"#888",marginTop:2},}, desc)
 )
-, React.createElement('button', { style: {...S.smallBtn,fontSize:10,color:"#555",borderColor:"#333",flexShrink:0}, onClick: ()=>resetKey(key,defaults),}, "Reset")
+, React.createElement('button', { style: {...S.smallBtn,fontSize:10,color:"#888",borderColor:"#333",flexShrink:0}, onClick: ()=>resetKey(key,defaults),}, "Reset")
 )
 , React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"},}
 , items.map((item,i)=>{
@@ -1271,7 +1271,7 @@ return React.createElement('div', { key: i, style: {display:"flex",alignItems:"c
 , React.createElement('button', { style: {background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"}, onClick: ()=>removeItem(key,item),}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
 );
 })
-, items.length===0&&React.createElement('div', { style: {fontSize:12,color:"#444",padding:"6px 0"},}, "No options — add one below"     )
+, items.length===0&&React.createElement('div', { style: {fontSize:12,color:"#888",padding:"6px 0"},}, "No options — add one below"     )
 )
 , React.createElement('div', { style: {display:"flex",gap:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: `Add new ${label.toLowerCase()} option…`,
@@ -1304,18 +1304,18 @@ const displayAmpRating= circuitMeta.ampRating || _optionalChain([d, 'access', _ 
 const CbAmpReadOnly = React.createElement('div', { style: {display:"flex",gap:8,marginBottom:14,alignItems:"center"},}
   , React.createElement('div', { style: {flex:2},}
     , React.createElement('div', { style: S.modalLabel,}, "CB / RCD TYPE")
-    , React.createElement('div', { style: {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",fontSize:13,color:displayCbType?"#ccc":"#444",display:"flex",alignItems:"center",gap:6},}
+    , React.createElement('div', { style: {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",fontSize:13,color:displayCbType?"#ccc":"#888",display:"flex",alignItems:"center",gap:6},}
       , displayCbType
-        ? React.createElement(React.Fragment,null, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"})), React.createElement('span',null,displayCbType))
-        : React.createElement('span',{style:{color:"#444",fontStyle:"italic"}},"Not set — edit in Manage")
+        ? React.createElement(React.Fragment,null, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#888",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"})), React.createElement('span',null,displayCbType))
+        : React.createElement('span',{style:{color:"#888",fontStyle:"italic"}},"Not set — edit in Manage")
     )
   )
   , React.createElement('div', { style: {flex:1},}
     , React.createElement('div', { style: S.modalLabel,}, "AMP RATING")
-    , React.createElement('div', { style: {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",fontSize:13,color:displayAmpRating?"#ccc":"#444",display:"flex",alignItems:"center",gap:6},}
+    , React.createElement('div', { style: {background:"#111",border:"1px solid #2a2a2a",borderRadius:8,padding:"10px 12px",fontSize:13,color:displayAmpRating?"#ccc":"#888",display:"flex",alignItems:"center",gap:6},}
       , displayAmpRating
-        ? React.createElement(React.Fragment,null, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"})), React.createElement('span',null,displayAmpRating))
-        : React.createElement('span',{style:{color:"#444",fontStyle:"italic"}},"—")
+        ? React.createElement(React.Fragment,null, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#888",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"})), React.createElement('span',null,displayAmpRating))
+        : React.createElement('span',{style:{color:"#888",fontStyle:"italic"}},"—")
     )
   )
 );
@@ -1338,7 +1338,7 @@ React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",padd
 , [STATUS.PASS,STATUS.FAIL,STATUS.NA,STATUS.UNTESTED].map(s=>{
 const sm=SM[s]; const active=(_nullishCoalesce(push.status, () => (STATUS.UNTESTED)))===s;
 return React.createElement('button', { key: s, onClick: ()=>onPatch({push:{...push,status:s}}),
-style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm.border:"#333"}`,background:active?sm.bg:"#1a1a1a",color:active?sm.fg:"#555",boxShadow:active?`0 0 8px ${sm.border}66`:"none"},}, sm.label);
+style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm.border:"#333"}`,background:active?sm.bg:"#1a1a1a",color:active?sm.fg:"#888",boxShadow:active?`0 0 8px ${sm.border}66`:"none"},}, sm.label);
 })
 )
 )
@@ -1352,13 +1352,6 @@ options: rectOptions,
 value: _nullishCoalesce(push.rectified, () => ("")),
 onChange: v=>onPatch({push:{...push,rectified:v}}),
 placeholder: "Select or type…",})
-)
-, React.createElement('div', { style: S.modalField,}
-, React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
-, React.createElement('div', {style:{position:"relative", marginTop:4}},
-    React.createElement('div', {style:{...S.modalInput, textAlign:"center", cursor:"pointer", color: push.scheduledDate ? "#eee" : "#555"}}, push.scheduledDate ? fmtDate(push.scheduledDate) : "Select date…"),
-    React.createElement('input', {type:"date", value:_nullishCoalesce(push.scheduledDate, () => ("")), onChange: e=>onPatch({push:{...push,scheduledDate:e.target.value}}), style:{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}})
-  )
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DEFECT ID")
@@ -1381,7 +1374,7 @@ placeholder: "Select or type…",})
         style: {
           padding: "10px 14px",
           background: (push.priority||"") === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-          color: (push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
+          color: (push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#888",
           border: `1px solid ${(push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
           borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
         },
@@ -1448,7 +1441,7 @@ return (React.createElement('div', { style: {...S.injectResult,background:failed
 , React.createElement('div', { style: {display:"flex",gap:8},}
 , [STATUS.PASS,STATUS.FAIL,STATUS.NA,STATUS.UNTESTED].map(s=>{
 const sm=SM[s];const active=(_nullishCoalesce(inj.status, () => (STATUS.UNTESTED)))===s;
-return React.createElement('button', { key: s, onClick: ()=>onPatch({inject:{...inj,status:s}}), style: {flex:1,padding:"10px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm.border:"#333"}`,background:active?sm.bg:"#1a1a1a",color:active?sm.fg:"#555",boxShadow:active?`0 0 8px ${sm.border}66`:"none"},}, sm.label);
+return React.createElement('button', { key: s, onClick: ()=>onPatch({inject:{...inj,status:s}}), style: {flex:1,padding:"10px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm.border:"#333"}`,background:active?sm.bg:"#1a1a1a",color:active?sm.fg:"#888",boxShadow:active?`0 0 8px ${sm.border}66`:"none"},}, sm.label);
 })
 )
 )
@@ -1459,13 +1452,6 @@ React.createElement('div', { style: {background:"#1e0a0a",border:"1px solid #ef4
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED")
 , React.createElement(EditableDropdown, {options:rectOptions, value:_nullishCoalesce(inj.rectified,()=>(rectOptions[0]||"")), onChange:v=>onPatch({inject:{...inj,rectified:v}}), placeholder:"Select or type…",})
-)
-, React.createElement('div', { style: S.modalField,}
-, React.createElement('label', { style: S.modalLabel,}, "DATE RECTIFIED")
-, React.createElement('div', {style:{position:"relative", marginTop:4}},
-    React.createElement('div', {style:{...S.modalInput, textAlign:"center", cursor:"pointer", color: inj.scheduledDate ? "#eee" : "#555"}}, inj.scheduledDate ? fmtDate(inj.scheduledDate) : "Select date…"),
-    React.createElement('input', {type:"date", value:_nullishCoalesce(inj.scheduledDate,()=>("")), onChange:e=>onPatch({inject:{...inj,scheduledDate:e.target.value}}), style:{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}})
-  )
 )
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "DEFECT ID")
@@ -1484,7 +1470,7 @@ React.createElement('div', { style: {background:"#1e0a0a",border:"1px solid #ef4
         style: {
           padding: "10px 14px",
           background: (inj.priority||"") === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-          color: (inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
+          color: (inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#888",
           border: `1px solid ${(inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
           borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
         },
@@ -1531,8 +1517,8 @@ React.createElement('div', { style: {display:"flex",gap:8},}
 return (
 React.createElement('div', { style: {position:"relative"},}
 , React.createElement('button', { style: {...S.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"}, onClick: ()=>setOpen(x=>!x),}
-, React.createElement('span', { style: {color:value?"#eee":"#555"},}, value||placeholder||"Select…")
-, React.createElement('span', { style: {color:"#666",fontSize:12},}, "▾")
+, React.createElement('span', { style: {color:value?"#eee": "#888"},}, value||placeholder||"Select…")
+, React.createElement('span', { style: {color:"#999",fontSize:12},}, "▾")
 )
 , open&&(
 React.createElement('div', { style: {position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1e1e1e",border:"1px solid #333",borderRadius:10,zIndex:300,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.6)"},}
@@ -1542,7 +1528,7 @@ onClick: ()=>{onChange(opt);setOpen(false);},}
 , i===0&&React.createElement('span', { style: {fontSize:9,color:"#e8731a",fontWeight:700,marginRight:6},}, "DEFAULT"), opt
 )
 ))
-, React.createElement('button', { style: {display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12}, onClick: ()=>{setOpen(false);setCustom(true);},}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Type custom value…"
+, React.createElement('button', { style: {display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#94a3b8",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12}, onClick: ()=>{setOpen(false);setCustom(true);},}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Type custom value…"
 )
 )
 )
@@ -1699,7 +1685,7 @@ setTimeout(() => setConsolidateMsg(""), 3000);
 const [consolidateMsg, setConsolidateMsg] = React.useState("");
 return (
 React.createElement('div', { style: S.listWrap,}
-, React.createElement('div', { style: {...S.listTitle,color:"#64748b"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage: ", project.name)
+, React.createElement('div', { style: {...S.listTitle,color:"#94a3b8"},}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage: ", project.name)
 , React.createElement('div', { style: {...S.addCard,border:"1px solid #60a5fa33",marginBottom:16},}
 , editingProject?React.createElement(React.Fragment, null
 , React.createElement(LabelInput, { label: "PROJECT NAME" , value: projName, onChange: setProjName, placeholder: "Project name" ,})
@@ -1713,14 +1699,14 @@ React.createElement('div', { style: S.listWrap,}
 ):React.createElement('div', { style: {display:"flex",justifyContent:"space-between",alignItems:"center"}}
 , React.createElement('div', null
 , React.createElement('div', { style: {fontSize:15,fontWeight:800,color:"#eee"}}, project.name)
-, project.company&&React.createElement('div', { style: {fontSize:12,color:"#666",marginTop:2}}, project.company)
+, project.company&&React.createElement('div', { style: {fontSize:12,color:"#999",marginTop:2}}, project.company)
 )
 , React.createElement('button', { style: {background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"}, onClick: ()=>setEditingProject(true)}, React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
 )
 )
-, React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment")
-, React.createElement('div', { style: {fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10},}, "AREAS / LOCATIONS"  )
-, project.areas.length===0&&React.createElement('div', { style: {color:"#555",fontSize:13,marginBottom:12},}, "No areas yet."  )
+, React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:12}},"Manage locations, panels and equipment")
+, React.createElement('div', { style: {fontSize:11,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:10},}, "AREAS / LOCATIONS"  )
+, project.areas.length===0&&React.createElement('div', { style: {color:"#888",fontSize:13,marginBottom:12},}, "No areas yet."  )
 , project.areas.map(area=>(
 React.createElement('div', { key: area.id, style: {...S.manageSection,border:`1px solid ${expandedArea===area.id?"#60a5fa88":"#60a5fa33"}`},}
 , React.createElement('div', { style: S.manageSectionHeader,}
@@ -1732,7 +1718,7 @@ React.createElement('div', { key: area.id, style: {...S.manageSection,border:`1p
 , React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"}, onClick: ()=>{setExpandedArea(expandedArea===area.id?null:area.id);setExpandedPanel(null);setEditingCircuit(null);},}
 , React.createElement('span', { style: {fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0},}, expandedArea===area.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},}, area.name)
-, React.createElement('span', { style: {fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"},}, area.panels.length, " panels · "   , area.panels.reduce((s,p)=>s+p.circuits.length,0), " circuits" )
+, React.createElement('span', { style: {fontSize:11,color:"#888",flexShrink:0,whiteSpace:"nowrap"},}, area.panels.length, " panels · "   , area.panels.reduce((s,p)=>s+p.circuits.length,0), " circuits" )
 )
 , React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
 , React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
@@ -1749,9 +1735,9 @@ React.createElement('div', { key: pnl.id, style: {...S.managePanel,border:`1px s
 , React.createElement('button',{style:S.smallBtn,onClick:()=>setEditingPanel(null)},"Cancel")
 ):React.createElement(React.Fragment,null
 , React.createElement('button', { style: {flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"}, onClick: ()=>{const closing=expandedPanel===pnl.id;setExpandedPanel(closing?null:pnl.id);setEditingCircuit(null);},}
-, React.createElement('span', { style: {fontSize:14,color:expandedPanel===pnl.id?"#60a5fa":"#666",flexShrink:0},}, expandedPanel===pnl.id?"▾":"▸")
+, React.createElement('span', { style: {fontSize:14,color:expandedPanel===pnl.id?"#60a5fa": "#999",flexShrink:0},}, expandedPanel===pnl.id?"▾":"▸")
 , React.createElement('span', { style: {fontWeight:600,color:"#ccc",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},}, pnl.name)
-, React.createElement('span', { style: {fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"},}, pnl.circuits.length, " circuits" )
+, React.createElement('span', { style: {fontSize:11,color:"#888",flexShrink:0,whiteSpace:"nowrap"},}, pnl.circuits.length, " circuits" )
 )
 , React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditPanel(pnl)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
 , React.createElement(DeleteButton, { onDelete: ()=>delPanel(area.id,pnl.id), label: "Delete panel?" })
@@ -1768,7 +1754,7 @@ React.createElement('div', { style: {paddingLeft:8},}
     return(React.createElement('div',{key:c,style:{background:"#1e1e1e",border:"1px solid #60a5fa55",borderRadius:8,padding:"10px",width:"100%",boxSizing:"border-box"}},
       React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}},
         React.createElement('span',{style:{fontSize:13,color:"#60a5fa",fontWeight:700}},"Edit circuit"),
-        React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingCircuit(null)},"×")
+        React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingCircuit(null)},"×")
       ),
       React.createElement('input',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%",boxSizing:"border-box"},value:editCircuitName,onChange:e=>setEditCircuitName(e.target.value),placeholder:"Circuit name"}),
       React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%"},value:editCbType,onChange:e=>setEditCbType(e.target.value)},
@@ -1788,13 +1774,13 @@ React.createElement('div', { style: {paddingLeft:8},}
   // Normal (view) state
   return(React.createElement('div',{key:c,style:{background:"#1e1e1e",border:"1px solid #60a5fa33",borderRadius:8,padding:"6px 8px",display:"flex",alignItems:"center",gap:6,flexWrap:"nowrap",minWidth:0}},
     React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flexShrink:0,whiteSpace:"nowrap"}},c),
-    cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#64748b",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},cm.cbType),
-    cm.ampRating&&React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0,whiteSpace:"nowrap"}}," · "+cm.ampRating),
+    cm.cbType&&React.createElement('span',{style:{fontSize:10,color:"#94a3b8",borderLeft:"1px solid #333",paddingLeft:5,marginLeft:1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},cm.cbType),
+    cm.ampRating&&React.createElement('span',{style:{fontSize:10,color:"#94a3b8",flexShrink:0,whiteSpace:"nowrap"}}," · "+cm.ampRating),
     React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",marginLeft:"auto",flexShrink:0},onClick:()=>startEditCircuit(pnl.id,c,cm)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#60a5fa',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))),
     React.createElement(DeleteButton, { onDelete: ()=>delCircuit(area.id,pnl.id,c), label: `Delete ${c}?`, compact: true })
   ));
 })
-, pnl.circuits.length===0&&React.createElement('span', { style: {fontSize:12,color:"#555"},}, "No circuits" )
+, pnl.circuits.length===0&&React.createElement('span', { style: {fontSize:12,color:"#888"},}, "No circuits" )
 )
 , React.createElement('div', { style: {background:"#111",border:"1px solid #1e2a3a",borderRadius:10,padding:"10px",marginBottom:8},}
 , React.createElement('div', { style: {fontSize:10,color:"#60a5fa",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "ADD CIRCUIT")
@@ -1811,7 +1797,7 @@ React.createElement('div', { style: {paddingLeft:8},}
 )
 )
 )
-, React.createElement('div', { style: {fontSize:10,color:"#555",marginBottom:4},}, "BULK ADD (comma-separated)")
+, React.createElement('div', { style: {fontSize:10,color:"#888",marginBottom:4},}, "BULK ADD (comma-separated)")
 , React.createElement('div', { style: {display:"flex",gap:6,marginBottom:6},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Add" )
@@ -1848,7 +1834,7 @@ React.createElement('div', { style: {paddingLeft:8},}
 // ─────────────────────────────────────────────────────────────────────────
 function AreaListView({project,results,mode,modeColor,onSelect}){
 return(React.createElement('div', { style: S.listWrap,}, React.createElement('div', { style: S.listTitle,}, "Select Area" )
-, project.areas.length===0&&React.createElement('div', { style: {color:"#555",fontSize:14},}, "No areas. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add areas."        )
+, project.areas.length===0&&React.createElement('div', { style: {color:"#888",fontSize:14},}, "No areas. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add areas."        )
 , project.areas.map(area=>{
 let total=0,pass=0,fail=0,untested=0;
 area.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(results,project.id,area.id,p.id,c,mode);if(v===STATUS.PASS||v===STATUS.NA)pass++;else if(v===STATUS.FAIL)fail++;else untested++;}));
@@ -1863,7 +1849,7 @@ return(React.createElement('button', { key: area.id, style: {...S.siteCard,...(f
 }
 function PanelListView({area,project,results,mode,modeColor,onSelect}){
 return(React.createElement('div', { style: S.listWrap,}, React.createElement('div', { style: S.listTitle,}, area.name)
-, area.panels.length===0&&React.createElement('div', { style: {color:"#555",fontSize:14},}, "No panels. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add panels."        )
+, area.panels.length===0&&React.createElement('div', { style: {color:"#888",fontSize:14},}, "No panels. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add panels."        )
 , area.panels.map(pnl=>{
 const ps=panelSummary(results,project.id,area.id,pnl,mode);
 const total=pnl.circuits.length;
@@ -1872,7 +1858,7 @@ return(React.createElement('button', { key: pnl.id, style: {...S.siteCard,...(ps
 , React.createElement('div', { style: {display:"flex",gap:6,marginTop:6},}
 , ps.pass>0&&React.createElement('span', { style: {fontSize:11,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.pass, " Pass" )
 , ps.fail>0&&React.createElement('span', { style: {fontSize:11,color:"#f87171",background:"#f8717122",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.fail, " Fail" )
-, ps.na>0&&React.createElement('span', { style: {fontSize:11,color:"#64748b",background:"#64748b22",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.na, " N/A" )
+, ps.na>0&&React.createElement('span', { style: {fontSize:11,color:"#94a3b8",background:"#94a3b822",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.na, " N/A" )
 , ps.untested>0&&React.createElement('span', { style: {fontSize:11,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.untested, " untested" )
 )
 )
@@ -1894,8 +1880,8 @@ return(React.createElement('div', { style: S.circuitWrap,}
 , React.createElement('div', { style: S.quickRow,}, React.createElement('span', { style: S.quickLabel,}, "Set all:" )
 , React.createElement('button', { style: {...S.quickBtn,background:"#1a3d1a",color:"#4ade80",borderColor:"#22c55e"}, onClick: ()=>onSetAll(STATUS.PASS),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Pass" )
 , React.createElement('button', { style: {...S.quickBtn,background:"#3d1a1a",color:"#f87171",borderColor:"#ef4444"}, onClick: ()=>onSetAll(STATUS.FAIL),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18}))," Fail" )
-, React.createElement('button', { style: {...S.quickBtn,background:"#1e2535",color:"#64748b",borderColor:"#334155"}, onClick: ()=>onSetAll(STATUS.NA),}, "N/A")
-, React.createElement('button', { style: {...S.quickBtn,background:"#222",color:"#666",borderColor:"#333"}, onClick: ()=>onSetAll(STATUS.UNTESTED),}, "Reset")
+, React.createElement('button', { style: {...S.quickBtn,background:"#1e2535",color:"#94a3b8",borderColor:"#334155"}, onClick: ()=>onSetAll(STATUS.NA),}, "N/A")
+, React.createElement('button', { style: {...S.quickBtn,background:"#222",color:"#999",borderColor:"#333"}, onClick: ()=>onSetAll(STATUS.UNTESTED),}, "Reset")
 )
 , !isPush && (
 React.createElement('div', { style: {fontSize:12,color:"#3b82f6",background:"#0a1628",border:"1px solid #3b82f633",borderRadius:8,padding:"8px 12px",marginBottom:12},}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), " "
@@ -1903,7 +1889,7 @@ React.createElement('div', { style: {fontSize:12,color:"#3b82f6",background:"#0a
 )
 )
 , React.createElement('div', { style: S.circuitGrid,}
-, circuits.length===0&&React.createElement('div', { style: {color:"#555",fontSize:13,gridColumn:"1/-1"},}, "No circuits. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add circuits."        )
+, circuits.length===0&&React.createElement('div', { style: {color:"#888",fontSize:13,gridColumn:"1/-1"},}, "No circuits. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add circuits."        )
 , circuits.map(circuit=>{
 const d=getCircuitData(results,project.id,area.id,panel.id,circuit);
 const st=isPush?(_nullishCoalesce(_optionalChain([d, 'access', _159 => _159.push, 'optionalAccess', _160 => _160.status]), () => (STATUS.UNTESTED))):(_nullishCoalesce(_optionalChain([d, 'access', _161 => _161.inject, 'optionalAccess', _162 => _162.status]), () => (STATUS.UNTESTED)));
@@ -1957,7 +1943,7 @@ project.areas.forEach(a=>a.panels.forEach(p=>p.circuits.forEach(c=>{
 })));
 return(React.createElement('div',{style:S.summaryWrap}
   ,React.createElement('div',{style:S.summaryTitle},project.name)
-  ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
+  ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:2,marginBottom:4}},project.company)
   ,React.createElement('div',{style:S.summaryMeta},"RCD AUDIT REPORT",_optionalChain([meta,'optionalAccess',_177=>_177.auditor])?` · ${meta.auditor}`:"")
   ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}
     ,_optionalChain([meta,'optionalAccess',_178=>_178.pushDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#e8731a55",color:"#e8731a",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push: ",fmtDate(meta.pushDate)," → next ",(meta.nextPushDate?fmtDate(meta.nextPushDate):addMonths(meta.pushDate,1)))
@@ -1967,10 +1953,10 @@ return(React.createElement('div',{style:S.summaryWrap}
     React.createElement('div',{key:lbl,style:{marginBottom:20}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:col,letterSpacing:0.8,marginBottom:8}},lbl)
       ,React.createElement('div',{style:{display:"flex",gap:8}},
-        [["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>(
+        [["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#94a3b8"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>(
           React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}}
             ,React.createElement('div',{style:{fontSize:22,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())
+            ,React.createElement('div',{style:{fontSize:9,color:"#999",marginTop:2}},l.toUpperCase())
           )
         ))
       )
@@ -2024,8 +2010,8 @@ const NAV_ICON_HISTORY=React.createElement('svg',{width:17,height:17,viewBox:"0 
 const NAV_ICON_MANAGE=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"}),React.createElement('path',{d:"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"}));
 const NAV_ICON_DROPDOWNS=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('line',{x1:8,y1:6,x2:21,y2:6}),React.createElement('line',{x1:8,y1:12,x2:21,y2:12}),React.createElement('line',{x1:8,y1:18,x2:21,y2:18}),React.createElement('line',{x1:3,y1:6,x2:3.01,y2:6}),React.createElement('line',{x1:3,y1:12,x2:3.01,y2:12}),React.createElement('line',{x1:3,y1:18,x2:3.01,y2:18}));
 function NavBtn({icon,label,active,onClick,color}){
-const c=active?(color||"#64748b"):"#333";
-return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#64748b"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
+const c=active?(color||"#94a3b8"):"#888";
+return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#94a3b8"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
 }
 // ─────────────────────────────────────────────────────────────────────────
 // STYLES
@@ -2037,62 +2023,62 @@ loaderSpinner:{width:40,height:40,border:"3px solid #333",borderTop:"3px solid #
 topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#161616",flexShrink:0,zIndex:10},
 topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
 appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#e8731a"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
-backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#555",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
+backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#888",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
 saveIndicator:{fontSize:11,color:"#22c55e",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#161616",borderBottom:"1px solid #1e1e1e",fontSize:12,flexWrap:"wrap",flexShrink:0},
-bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
+bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#888"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
 bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
 homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
 brandBlock:{textAlign:"center",borderBottom:"2px solid #e8731a",paddingBottom:8,width:"100%",maxWidth:500},
-brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#e8731a"},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
-siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
+brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#e8731a"},brandSub:{fontSize:11,color:"#999",letterSpacing:1,marginTop:2},
+siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#999"},
 metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",boxSizing:"border-box",overflow:"hidden"},
-metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
+metaLabelText:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700},
 metaInput:{background:"#1a1a1a",border:"1px solid #222",borderRadius:8,color:"#eee",padding:"12px 16px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
 metaRow:{marginBottom:8},metaLabel:{flex:1,display:"flex",flexDirection:"column",gap:4},
 duePill:{fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
-modeSelectLabel:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1},
+modeSelectLabel:{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1},
 modeBtnRow:{display:"flex",gap:12,width:"100%",maxWidth:500},
 modeBtnPush:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"18px 12px",background:"#1a1200",border:"2px solid #e8731a55",borderRadius:16,cursor:"pointer",color:"#eee"},
 modeBtnInject:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:6,padding:"18px 12px",background:"#0a1628",border:"2px solid #3b82f655",borderRadius:16,cursor:"pointer",color:"#eee"},
 modeBtnIcon:{fontSize:26},modeBtnTitle:{fontSize:13,fontWeight:800,textAlign:"center",letterSpacing:0.3},
 modeBtnProgress:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,overflow:"hidden"},
-modeBtnBar:{height:"100%",borderRadius:2,transition:"width 0.4s"},modeBtnPct:{fontSize:11,color:"#666"},
+modeBtnBar:{height:"100%",borderRadius:2,transition:"width 0.4s"},modeBtnPct:{fontSize:11,color:"#999"},
 secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
 exportBtn:{padding:"11px",background:"#161616",color:"#4ade80",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
 confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
 confirmYes:{padding:"7px 14px",background:"#3d1a1a",color:"#f87171",border:"1px solid #ef4444",borderRadius:8,fontSize:13,cursor:"pointer"},
 confirmNo:{padding:"7px 14px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},
-resetBtn:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},
+resetBtn:{background:"transparent",border:"none",color:"#888",fontSize:12,cursor:"pointer",textDecoration:"underline"},
 ctaPrimary:{padding:"11px 20px",background:"#e8731a",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
 ctaSecondary:{padding:"11px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
-tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#666",fontSize:12,fontWeight:600,cursor:"pointer"},
+tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#999",fontSize:12,fontWeight:600,cursor:"pointer"},
 tabBtnActive:{background:"#1e1e1e",border:"1px solid #e8731a",color:"#e8731a"},
 listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
 siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
 siteCardFail:{background:"#1e1010",borderColor:"#ef444455"},siteCardDone:{background:"#0e1e0e",borderColor:"#22c55e55"},
 siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
-siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
+siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#999",marginTop:2},
 siteCardBar:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:10,overflow:"hidden"},
 siteCardBarFill:{height:"100%",borderRadius:2,transition:"width 0.4s"},
 failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
 untestedBadge:{fontSize:11,fontWeight:700,color:"#fbbf24",background:"#2a1e00",borderRadius:6,padding:"3px 8px"},
-arrow:{fontSize:22,color:"#555",lineHeight:1},
+arrow:{fontSize:22,color:"#888",lineHeight:1},
 addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
 circuitWrap:{padding:"16px"},
 panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
-panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#666",marginTop:2},
+panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#999",marginTop:2},
 panelStats:{display:"flex",gap:10,fontSize:15,fontWeight:800},
 quickRow:{display:"flex",alignItems:"center",gap:8,marginBottom:16,flexWrap:"wrap"},
-quickLabel:{fontSize:12,color:"#555",fontWeight:600,letterSpacing:0.5},
+quickLabel:{fontSize:12,color:"#888",fontWeight:600,letterSpacing:0.5},
 quickBtn:{fontSize:12,fontWeight:700,border:"1px solid",borderRadius:8,padding:"7px 14px",cursor:"pointer"},
 circuitGrid:{display:"grid",gridTemplateColumns:"repeat(auto-fill, minmax(88px, 1fr))",gap:10},
 circuitBtn:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",border:"2px solid",borderRadius:12,padding:"14px 8px",cursor:"pointer",minHeight:80,width:"100%"},
 circuitBtnLabel:{fontSize:13,fontWeight:800,letterSpacing:0.3},circuitBtnStatus:{fontSize:11,fontWeight:700,marginTop:6,letterSpacing:0.5},
 circuitEditBtn:{fontSize:11,background:"#161616",border:"1px solid",borderRadius:6,padding:"4px 0",cursor:"pointer",width:"100%",fontWeight:600},
-tapHint:{marginTop:20,textAlign:"center",fontSize:11,color:"#444"},
-summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+tapHint:{marginTop:20,textAlign:"center",fontSize:11,color:"#888"},
+summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#999",marginTop:4,marginBottom:16},
 manageSection:{border:"1px solid",borderRadius:12,marginBottom:10,overflow:"hidden"},
 manageSectionHeader:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"nowrap",minWidth:0},
 managePanel:{border:"1px solid",borderRadius:8,padding:"10px 12px",marginBottom:8,background:"#161616"},
@@ -2101,9 +2087,9 @@ smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee
 modalOverlay:{position:"absolute",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"},
 modalBox:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto"},
 modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20},
-modalTitle:{fontSize:18,fontWeight:800,color:"#eee"},modalSub:{fontSize:12,color:"#666",marginTop:3},
+modalTitle:{fontSize:18,fontWeight:800,color:"#eee"},modalSub:{fontSize:12,color:"#999",marginTop:3},
 modalField:{marginBottom:14},
-modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
+modalLabel:{display:"block",fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5},
 modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
 injectResult:{border:"1px solid",borderRadius:8,padding:"10px 14px",marginBottom:14,fontSize:13},
 nextBanner:{display:"flex",alignItems:"center",background:"#111",border:"1px solid #3b82f633",borderRadius:8,padding:"10px 14px",marginBottom:14},
@@ -2134,10 +2120,10 @@ const IEL_CATEGORIES = [
 const IEL_TYPE_LABEL  = { estops:"Estop", lanyards:"Lanyard", isolators:"Isolator" };
 const IEL_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const IEL_SM = {
-  untested: { label:"—",    bg:"#2a2a2a", fg:"#666",    border:"#333" },
+  untested: { label:"—",    bg:"#2a2a2a", fg:"#999",    border:"#333" },
   pass:     { label:"PASS", bg:"#1a3d1a", fg:"#4ade80", border:"#22c55e" },
   fail:     { label:"FAIL", bg:"#3d1a1a", fg:"#f87171", border:"#ef4444" },
-  na:       { label:"N/A",  bg:"#1e2535", fg:"#64748b", border:"#334155" },
+  na:       { label:"N/A",  bg:"#1e2535", fg:"#94a3b8", border:"#334155" },
 };
 
 function ielUid()  { return Math.random().toString(36).slice(2,9); }
@@ -2432,6 +2418,14 @@ function IELApp({ onGoHome }) {
   React.useEffect(()=>{if(loaded)save(K_IEL_HISTORY,history);},[history,loaded]);
   React.useEffect(()=>{if(loaded)save(K_IEL_DROPDOWNS,ielDropdowns);},[ielDropdowns,loaded]);
 
+  const mainElRef = React.useRef(null);
+  const savedScrollRef = React.useRef(0);
+  React.useEffect(()=>{
+    if(!detailInfo&&mainElRef.current&&savedScrollRef.current>0){
+      mainElRef.current.scrollTop=savedScrollRef.current;
+    }
+  },[detailInfo]);
+
   const project  = projects.find(p=>p.id===activeProject);
   const _ielMeta = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
   const meta = {
@@ -2477,7 +2471,7 @@ function IELApp({ onGoHome }) {
     if(view==="panel"){setView("audit");setActivePanelId(null);}
     else if(view==="audit"&&activePanelId){setActivePanelId(null);}
     else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
-    else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);setView("home");}
+    else if(view==="audit"&&auditEntered&&!activeAreaId){const hasProgress=project?IEL_CATEGORIES.some(c=>{const s=ielSiteSummary(allResults,project,c.key);return s.total>0&&(s.pass+s.fail+s.na)>0;}):false;setAuditEntered(hasProgress);setView("home");}
     else if(view==="audit"&&!activeAreaId){setView("home");}
     else if(view==="home"){goProjects();}
     else if(["manage","report","history","dropdowns"].includes(view)){setView("home");}
@@ -2490,28 +2484,28 @@ function IELApp({ onGoHome }) {
       ,React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
         ,React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
           ,view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack}
-            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
-            ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")
+            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
+            ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Back")
           )
           ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"IEL Testing")
-          ,React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
+          ,React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
         )
         ,React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
-          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
-          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules")
+          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
+          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules")
         )
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #10b981, transparent 70%)',opacity:0.5}})
     )
 
     // ── Main
-    ,React.createElement('main',{style:SI.main}
+    ,React.createElement('main',{style:SI.main,ref:mainElRef}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#10b981",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
-      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId})})
+      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{if(mainElRef.current)savedScrollRef.current=mainElRef.current.scrollTop;setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
       ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
@@ -2532,12 +2526,12 @@ function IELApp({ onGoHome }) {
 
     // ── Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:SI.bottomNav}
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#64748b",onClick:()=>{setDetailInfo(null);goHome();}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#64748b",onClick:()=>{setDetailInfo(null);setView("audit");setActivePanelId(null);}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#64748b",onClick:()=>{setDetailInfo(null);setView("report");}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#64748b",onClick:()=>{setDetailInfo(null);setView("history");}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#64748b",onClick:()=>{setDetailInfo(null);setView("manage");}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#64748b",onClick:()=>{setDetailInfo(null);setView("dropdowns");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#94a3b8",onClick:()=>{setDetailInfo(null);goHome();}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#94a3b8",onClick:()=>{setDetailInfo(null);setView("audit");setActivePanelId(null);}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#94a3b8",onClick:()=>{setDetailInfo(null);setView("report");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#94a3b8",onClick:()=>{setDetailInfo(null);setView("history");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#94a3b8",onClick:()=>{setDetailInfo(null);setView("manage");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#94a3b8",onClick:()=>{setDetailInfo(null);setView("dropdowns");}})
     )
   );
 }
@@ -2556,17 +2550,17 @@ function IELDropdownsView({dropdowns,setDropdowns,onBack}){
     {key:"rectified",    label:"RECTIFIED / SCHEDULED",color:"#f59e0b",desc:"Actions available when rectifying a defect",defaults:IEL_DEFAULT_RECTIFIED},
   ];
   return React.createElement('div',{style:{padding:"16px",paddingBottom:100}}
-    ,React.createElement('div',{style:{...SI.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
-    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
+    ,React.createElement('div',{style:{...SI.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
+    ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
     ,sections.map(({key,label,color,desc,defaults})=>{
       const newVal=newVals[key]||"";
       return React.createElement('div',{key,style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:14}}
         ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#fff"}},label)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},desc)
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},desc)
           )
-          ,React.createElement('button',{style:{...SI.smallBtn,fontSize:10,color:"#555",borderColor:"#333",flexShrink:0},onClick:()=>resetKey(key,defaults)},"Reset")
+          ,React.createElement('button',{style:{...SI.smallBtn,fontSize:10,color:"#888",borderColor:"#333",flexShrink:0},onClick:()=>resetKey(key,defaults)},"Reset")
         )
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}}
           ,items(key).map((item,i)=>{
@@ -2578,7 +2572,7 @@ function IELDropdownsView({dropdowns,setDropdowns,onBack}){
               ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
             );
           })
-          ,items(key).length===0&&React.createElement('div',{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
+          ,items(key).length===0&&React.createElement('div',{style:{fontSize:12,color:"#888",padding:"6px 0"}},"No options — add one below")
         )
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,React.createElement('input',{style:{...SI.smallInput,flex:1},
@@ -2646,7 +2640,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 
   return React.createElement('div',{style:SI.listWrap}
     ,React.createElement('div',{style:{...SI.listTitle,marginTop:24}},"Sites")
-    ,projects.length===0&&React.createElement('div',{style:{color:"#555",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel below.")
+    ,projects.length===0&&React.createElement('div',{style:{color:"#888",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel below.")
 
     ,projects.map(proj=>{
       let total=0,tested=0,fails=0;
@@ -2669,7 +2663,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fails>0?"#ef4444":tested===total&&total>0?"#22c55e":"#10b981",transition:"width 0.4s"}})
             )
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:4}},tested," / ",total," tested")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:4}},tested," / ",total," tested")
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
             ,fails>0&&React.createElement('span',{style:SI.failBadge},fails," FAIL")
@@ -2712,7 +2706,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         )
         ,tab==="import"&&React.createElement(React.Fragment,null
           ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#eee",marginBottom:4}},"Import from Excel")
-          ,React.createElement('div',{style:{fontSize:12,color:"#666",marginBottom:12}},"Upload your IEL spreadsheet. Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Location | Type | Machine")," — all 3 categories imported from one sheet. Areas are built from Location column.")
+          ,React.createElement('div',{style:{fontSize:12,color:"#999",marginBottom:12}},"Upload your IEL spreadsheet. Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Location | Type | Machine")," — all 3 categories imported from one sheet. Areas are built from Location column.")
           ,!importPreview&&React.createElement(React.Fragment,null
             ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile})
             ,React.createElement('button',{style:{...SI.ctaPrimary,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel / CSV File"))
@@ -2723,8 +2717,8 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:{background:"#0e1a0e",border:"1px solid #10b98144",borderRadius:10,padding:"12px",marginBottom:12}}
               ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#10b981",marginBottom:8}},"✓ Preview")
               ,React.createElement('div',{style:{fontSize:12,color:"#aaa",marginBottom:4}},importPreview.areas.length," areas — ",importPreview.areas.reduce((s,a)=>s+a.panels.reduce((ss,p)=>ss+p.circuits.length,0),0)," total items")
-              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#666",marginBottom:2}},a.name," — ",a.panels.reduce((s,p)=>s+p.circuits.length,0)," items"))
-              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#555"}},"…and ",importPreview.areas.length-4," more areas")
+              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#999",marginBottom:2}},a.name," — ",a.panels.reduce((s,p)=>s+p.circuits.length,0)," items"))
+              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#888"}},"…and ",importPreview.areas.length-4," more areas")
             )
             ,React.createElement('div',{style:{marginBottom:8}}
               ,React.createElement('div',{style:SI.metaLabelText},"SITE NAME")
@@ -2757,12 +2751,13 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
-function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onCompleteAudit,activeCatKey,auditEntered}){
+function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onCompleteAudit,activeCatKey,auditEntered,lastArchivedAt}){
   const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
     ,project.company&&React.createElement('div',{style:SI.siteSub},project.company)
+    ,lastArchivedAt&&React.createElement('div',{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#22c55e",background:"#0e1e0e",border:"1px solid #22c55e44",borderRadius:999,padding:"4px 10px",alignSelf:"flex-start"}},"✓ Last completed ",fmtDateTime(lastArchivedAt))
     ,React.createElement('div',{style:SI.metaCard}
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SI.metaLabelText},"AUDITOR")
@@ -2787,8 +2782,8 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
         onClick:()=>hasAuditor&&onStartCat(cat.key)}
         ,React.createElement('span',{style:{fontSize:28,marginRight:4}},cat.icon)
         ,React.createElement('div',{style:{flex:1,textAlign:"left"}}
-          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#555",letterSpacing:0.3}},cat.label)
-          ,React.createElement('div',{style:{fontSize:11,color:"#666",marginTop:1}},cat.desc)
+          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#888",letterSpacing:0.3}},cat.label)
+          ,React.createElement('div',{style:{fontSize:11,color:"#999",marginTop:1}},cat.desc)
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:6,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:sum.fail>0?"#ef4444":cat.color,transition:"width 0.4s"}})
           )
@@ -2796,10 +2791,10 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
             ,sum.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass")
             ,sum.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#ef4444",fontWeight:800}},sum.fail," FAIL")
             ,sum.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},sum.untested," untested")
-            ,React.createElement('span',{style:{fontSize:11,color:"#555"}},sum.total," total")
+            ,React.createElement('span',{style:{fontSize:11,color:"#888"}},sum.total," total")
           )
         )
-        ,React.createElement('span',{style:{fontSize:22,color:hasAuditor?cat.color+"88":"#444"}},"›")
+        ,React.createElement('span',{style:{fontSize:22,color:hasAuditor?cat.color+"88":"#888"}},"›")
       );
     })
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}}
@@ -2808,7 +2803,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
     )
     ,confirmReset
       ?React.createElement('div',{style:SI.confirmRow},React.createElement('span',{style:{color:"#ef4444",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SI.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SI.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
+      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
   );
 }
 
@@ -2818,7 +2813,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
 function IELAreaListView({project,results,cat,catColor,onSelect}){
   return React.createElement('div',{style:SI.listWrap}
     ,React.createElement('div',{style:SI.listTitle},"Select Area")
-    ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No areas. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add areas.")
+    ,project.areas.length===0&&React.createElement('div',{style:{color:"#888",fontSize:14}},"No areas. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add areas.")
     ,project.areas.map(area=>{
       // Only count panels for this cat
       const catPanel=area.panels.find(p=>p.name===cat);
@@ -2851,7 +2846,7 @@ function IELAreaListView({project,results,cat,catColor,onSelect}){
 // ─────────────────────────────────────────────────────────────────────────
 function IELPanelListView({area,project,results,cat,catColor,onSelect}){
   const catPanel=area.panels.find(p=>p.name===cat);
-  if(!catPanel)return React.createElement('div',{style:SI.listWrap},React.createElement('div',{style:{color:"#555",fontSize:14}},"No items for this category in ",area.name,". Add items via ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage."));
+  if(!catPanel)return React.createElement('div',{style:SI.listWrap},React.createElement('div',{style:{color:"#888",fontSize:14}},"No items for this category in ",area.name,". Add items via ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage."));
   // Group items by their panel — for IEL the panel IS the catPanel, circuits are items
   // But to mirror RCD which has panels inside areas, we show one "panel" card for the cat
   const items=catPanel.circuits;
@@ -2899,7 +2894,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
       )
     )
     ,React.createElement('div',{style:{fontSize:12,color:catColor,background:"#0a1a10",border:`1px solid ${catColor}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},catI.icon," Tap any item to open the test form")
-    ,items.length===0&&React.createElement('div',{style:{color:"#555",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
+    ,items.length===0&&React.createElement('div',{style:{color:"#888",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
       ,items.map(itemId=>{
         const d=ielGetItem(results,project.id,area.id,cat,itemId);
@@ -2921,18 +2916,18 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
               ,overdue&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:"#ef4444",background:"#3d1a1a",borderRadius:4,padding:"1px 6px",border:"1px solid #ef444455"}},"OVERDUE")
               ,dueSoon&&React.createElement('span',{style:{fontSize:10,fontWeight:700,color:"#f59e0b",background:"#2a1e00",borderRadius:4,padding:"1px 6px"}},"DUE SOON")
             )
-            ,React.createElement('div',{style:{display:"flex",gap:10,marginTop:4,fontSize:11,color:"#555",flexWrap:"wrap"}}
+            ,React.createElement('div',{style:{display:"flex",gap:10,marginTop:4,fontSize:11,color:"#888",flexWrap:"wrap"}}
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
-              ,nextDue&&React.createElement('span',{style:{color:overdue?"#ef4444":dueSoon?"#f59e0b":"#555"}},"Due: ",nextDue)
+              ,nextDue&&React.createElement('span',{style:{color:overdue?"#ef4444":dueSoon?"#f59e0b": "#888"}},"Due: ",nextDue)
             )
             ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:10,color:d.mechCheck?"#22c55e":"#444",fontWeight:600}},d.mechCheck?"✓":"○"," Mech")
-              ,React.createElement('span',{style:{fontSize:10,color:d.circuitIso?"#22c55e":"#444",fontWeight:600}},d.circuitIso?"✓":"○"," Circuit")
-              ,cat==="lanyards"&&React.createElement('span',{style:{fontSize:10,color:d.lanyardCond?"#22c55e":"#444",fontWeight:600}},d.lanyardCond?"✓":"○"," Lanyard")
+              ,React.createElement('span',{style:{fontSize:10,color:d.mechCheck?"#22c55e":"#888",fontWeight:600}},d.mechCheck?"✓":"○"," Mech")
+              ,React.createElement('span',{style:{fontSize:10,color:d.circuitIso?"#22c55e":"#888",fontWeight:600}},d.circuitIso?"✓":"○"," Circuit")
+              ,cat==="lanyards"&&React.createElement('span',{style:{fontSize:10,color:d.lanyardCond?"#22c55e":"#888",fontWeight:600}},d.lanyardCond?"✓":"○"," Lanyard")
             )
             ,hasNote&&React.createElement('div',{style:{fontSize:10,color:"#e8731a",marginTop:3}},"✎ ",d.notes.slice(0,40),d.notes.length>40?"…":"")
           )
-          ,React.createElement('div',{style:{display:"flex",alignItems:"center",padding:"0 12px",color:"#555",fontSize:20}},"›")
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",padding:"0 12px",color:"#888",fontSize:20}},"›")
         );
       })
     )
@@ -2954,14 +2949,14 @@ function IELEditableDropdown({options,value,onChange,placeholder}){
     ,React.createElement('button',{style:{padding:"8px 10px",background:"transparent",border:"1px solid #333",borderRadius:8,color:"#aaa",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
   );}
   return React.createElement('div',{style:{position:"relative"}}
-    ,React.createElement('button',{style:{...SI.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee":"#555"},onClick:()=>setOpen(o=>!o)}
+    ,React.createElement('button',{style:{...SI.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee": "#888"},onClick:()=>setOpen(o=>!o)}
       ,React.createElement('span',null,value||placeholder||"Select…")
-      ,React.createElement('span',{style:{color:"#555",fontSize:12}},open?"▴":"▾")
+      ,React.createElement('span',{style:{color:"#888",fontSize:12}},open?"▴":"▾")
     )
     ,open&&React.createElement('div',{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}}
       ,options.map(o=>React.createElement('div',{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?"#10b981":"#ccc",background:o===value?"#1a3d1a":"transparent",borderBottom:"1px solid #2a2a2a"},
         onClick:()=>{onChange(o);setOpen(false);}},o))
-      ,React.createElement('div',{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Type custom…")
+      ,React.createElement('div',{style:{padding:"8px 12px",fontSize:12,color:"#888",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Type custom…")
     )
   );
 }
@@ -3007,14 +3002,14 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
       ,React.createElement('div',{style:SI.modalHeader}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:"#eee"}},catI.icon," ",machineName)
-          ,React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:3}},catI.label," · ",area&&area.name," · 3-month cycle")
+          ,React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:3}},catI.label," · ",area&&area.name," · 3-month cycle")
         )
         ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},sm.label)
       )
 
       // ── CHECKS ────────────────────────────────────────────────────────
       ,React.createElement('div',{style:{marginBottom:16}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"INSPECTION CHECKS")
+        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"INSPECTION CHECKS")
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
           // Mechanism / Reset Check
           ,React.createElement('button',{
@@ -3025,7 +3020,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             )
             ,React.createElement('div',null
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.mechCheck?"#4ade80":"#aaa"}},"Mechanism / Reset Check")
-              ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Verify mechanism operates correctly & resets properly")
+              ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Verify mechanism operates correctly & resets properly")
             )
           )
           // Circuit Isolation Verified
@@ -3037,7 +3032,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             )
             ,React.createElement('div',null
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.circuitIso?"#4ade80":"#aaa"}},"Circuit Isolation Verified")
-              ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Confirm circuit is correctly isolated when activated")
+              ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Confirm circuit is correctly isolated when activated")
             )
           )
           // Lanyard Tension / Condition — only for Lanyards
@@ -3049,7 +3044,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             )
             ,React.createElement('div',null
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.lanyardCond?"#4ade80":"#aaa"}},"Lanyard Tension / Condition")
-              ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Check tension, wear, and overall condition of lanyard")
+              ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Check tension, wear, and overall condition of lanyard")
             )
           )
         )
@@ -3057,7 +3052,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
 
       // ── RESULT ────────────────────────────────────────────────────────
       ,React.createElement('div',{style:{marginBottom:14}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
+        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
         ,!allChecked&&React.createElement('div',{style:{background:"#1e1e00",border:"1px solid #f59e0b44",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#f59e0b"}},"⚠ All checks must be ticked before marking as PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[IEL_STATUS.PASS,IEL_STATUS.FAIL,IEL_STATUS.NA,IEL_STATUS.UNTESTED].map(s=>{
@@ -3065,7 +3060,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
             const active=(item.status||IEL_STATUS.UNTESTED)===s;
             const blocked=s===IEL_STATUS.PASS&&!allChecked;
             return React.createElement('button',{key:s,
-              style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:blocked?"not-allowed":"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:blocked?"#333":"#555",boxShadow:active?`0 0 8px ${sm2.border}66`:"none",opacity:blocked?0.4:1},
+              style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:blocked?"not-allowed":"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:blocked?"#333": "#888",boxShadow:active?`0 0 8px ${sm2.border}66`:"none",opacity:blocked?0.4:1},
               onClick:()=>setStatus(s)},sm2.label);
           })
         )
@@ -3098,13 +3093,6 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
           ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED,value:item.rectified||(((dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED)[0]||""),onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…"})
         )
         ,React.createElement('div',{style:SI.modalField}
-          ,React.createElement('label',{style:SI.modalLabel},"DATE RECTIFIED")
-          ,React.createElement('div',{style:{position:"relative", marginTop:4}},
-            React.createElement('div',{style:{...SI.modalInput, textAlign:"center", cursor:"pointer", color: item.scheduledDate ? "#eee" : "#555"}}, item.scheduledDate ? fmtDate(item.scheduledDate) : "Select date…"),
-            React.createElement('input',{type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value}), style:{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}})
-          )
-        )
-        ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"DEFECT ID")
           ,React.createElement('input',{style:SI.modalInput,type:"text",placeholder:"e.g. 74",value:item.defectId||"",onChange:e=>onPatch({defectId:e.target.value})})
         )
@@ -3121,7 +3109,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
                 style: {
                   padding: "10px 14px",
                   background: (item.priority||"") === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
+                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#888",
                   border: `1px solid ${(item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
                   borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
                 },
@@ -3155,7 +3143,7 @@ function IELReportView({project,results,meta,onBack}){
   });
   return React.createElement('div',{style:SI.summaryWrap}
     ,React.createElement('div',{style:SI.summaryTitle},project.name)
-    ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
+    ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:SI.summaryMeta},"IEL AUDIT REPORT",meta.auditor?` · ${meta.auditor}`:"")
     ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{...SI.duePill,borderColor:"#10b98155",color:"#10b981",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(meta.testDate,3)))
@@ -3165,10 +3153,10 @@ function IELReportView({project,results,meta,onBack}){
       return React.createElement('div',{key:cat.key,style:{marginBottom:20}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:800,color:cat.color,marginBottom:8}},cat.icon," ",cat.label)
         ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-          ,[["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>
+          ,[["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#94a3b8"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>
             React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px",minWidth:48}}
               ,React.createElement('div',{style:{fontSize:22,fontWeight:800,color:c}},v)
-              ,React.createElement('div',{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())
+              ,React.createElement('div',{style:{fontSize:9,color:"#999",marginTop:2}},l.toUpperCase())
             )
           )
         )
@@ -3239,7 +3227,7 @@ function IELManageView({project,onUpdateProject,onBack}){
   };
   const delItem=(aid,catKey,itemId)=>upd({...project,areas:project.areas.map(a=>a.id===aid?{...a,panels:a.panels.map(p=>{if(p.name!==catKey)return p;const mn={...(p.machineNames||{})};delete mn[itemId];return{...p,circuits:p.circuits.filter(c=>c!==itemId),machineNames:mn};})}:a)});
   return React.createElement('div',{style:SI.listWrap}
-    ,React.createElement('div',{style:{...SI.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name)
+    ,React.createElement('div',{style:{...SI.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name)
     ,React.createElement('div',{style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:14}}
       ,editingProject
         ?React.createElement(React.Fragment,null
@@ -3257,9 +3245,9 @@ function IELManageView({project,onUpdateProject,onBack}){
           ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
     )
-    ,React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment")
-    ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
-    ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet.")
+    ,React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:12}},"Manage locations, panels and equipment")
+    ,React.createElement('div',{style:{fontSize:11,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
+    ,project.areas.length===0&&React.createElement('div',{style:{color:"#888",fontSize:13,marginBottom:12}},"No areas yet.")
     ,project.areas.map(area=>
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#60a5fa88":"#60a5fa33"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
         ,React.createElement('div',{style:editingArea===area.id?{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",width:"100%",boxSizing:"border-box"}:{display:"flex",alignItems:"center",gap:8,padding:"12px 14px",background:"#1a1a1a",flexWrap:"nowrap",minWidth:0}}
@@ -3271,7 +3259,7 @@ function IELManageView({project,onUpdateProject,onBack}){
             ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}}
               ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0}},expandedArea===area.id?"▾":"▸")
               ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
-              ,React.createElement('span',{style:{fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"}},area.panels.reduce((s,p)=>s+p.circuits.length,0)," items")
+              ,React.createElement('span',{style:{fontSize:11,color:"#888",flexShrink:0,whiteSpace:"nowrap"}},area.panels.reduce((s,p)=>s+p.circuits.length,0)," items")
             )
             ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
             ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
@@ -3299,13 +3287,13 @@ function IELManageView({project,onUpdateProject,onBack}){
                     ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,cat.key,itemId), label: `Delete "${itemName}"?`, compact: true })
                   );
                 })
-                ,(area.panels.find(p=>p.name===cat.key)||{circuits:[]}).circuits.length===0&&React.createElement('span',{style:{fontSize:12,color:"#555"}},"No items")
+                ,(area.panels.find(p=>p.name===cat.key)||{circuits:[]}).circuits.length===0&&React.createElement('span',{style:{fontSize:12,color:"#888"}},"No items")
               )
               ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:4}}
                 ,React.createElement('input',{style:{...SI.smallInput,flex:1},placeholder:`Add ${cat.label.slice(0,-1)} e.g. Screen Conveyor 1`,value:newItemName[`${area.id}-${cat.key}`]||"",onChange:e=>setNewItemName(x=>({...x,[`${area.id}-${cat.key}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,cat.key)})
                 ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(area.id,cat.key)},"+ Add")
               )
-              ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:4}},"BULK ADD (comma-separated)")
+              ,React.createElement('div',{style:{fontSize:10,color:"#888",marginBottom:4}},"BULK ADD (comma-separated)")
               ,React.createElement('div',{style:{display:"flex",gap:6}}
                 ,React.createElement('input',{style:{...SI.smallInput,flex:1},placeholder:"Screen 1,Screen 2,Pump 3",value:bulkItems[`${area.id}-${cat.key}`]||"",onChange:e=>setBulkItems(x=>({...x,[`${area.id}-${cat.key}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addBulk(area.id,cat.key)})
                 ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addBulk(area.id,cat.key)},"+ Add")
@@ -3343,7 +3331,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:cat&&cat.color||"#eee"}},cat&&cat.icon," ",cat&&cat.label)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
           )
           ,React.createElement('div',{style:{display:"flex",gap:6,marginLeft:"auto"}}
             ,React.createElement('span',{style:{fontSize:11,color:"#22c55e",background:"#22c55e22",borderRadius:4,padding:"2px 7px",fontWeight:700}},pass,"P")
@@ -3351,7 +3339,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b",background:"#f59e0b22",borderRadius:4,padding:"2px 7px",fontWeight:700}},unt," left")
           )
         )
-        ,(!cp||!cp.circuits.length)&&React.createElement('div',{style:{color:"#555",fontSize:13}},"No items for this category in this area.")
+        ,(!cp||!cp.circuits.length)&&React.createElement('div',{style:{color:"#888",fontSize:13}},"No items for this category in this area.")
         ,(cp&&cp.circuits||[]).map(id=>{
           const mn=(cp.machineNames||{})[id]||id;
           const v=((((snap.results||{})[area.id]||{})[viewCat])||{})[id]||{};
@@ -3364,11 +3352,11 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             ,React.createElement('div',{style:{flex:1,padding:"10px 12px",minWidth:0}}
               ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:"#eee",marginBottom:4}},mn)
               ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-                ,React.createElement('span',{style:{fontSize:10,fontWeight:600,color:v.mechCheck?"#22c55e":"#444"}},v.mechCheck?"✓":"✕"," Mech / Reset")
-                ,React.createElement('span',{style:{fontSize:10,fontWeight:600,color:v.circuitIso?"#22c55e":"#444"}},v.circuitIso?"✓":"✕"," Circuit Iso")
-                ,viewCat==="lanyards"&&React.createElement('span',{style:{fontSize:10,fontWeight:600,color:v.lanyardCond?"#22c55e":"#444"}},v.lanyardCond?"✓":"✕"," Lanyard Cond")
+                ,React.createElement('span',{style:{fontSize:10,fontWeight:600,color:v.mechCheck?"#22c55e":"#888"}},v.mechCheck?"✓":"✕"," Mech / Reset")
+                ,React.createElement('span',{style:{fontSize:10,fontWeight:600,color:v.circuitIso?"#22c55e":"#888"}},v.circuitIso?"✓":"✕"," Circuit Iso")
+                ,viewCat==="lanyards"&&React.createElement('span',{style:{fontSize:10,fontWeight:600,color:v.lanyardCond?"#22c55e":"#888"}},v.lanyardCond?"✓":"✕"," Lanyard Cond")
               )
-              ,v.lastTested&&React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:3}},"Tested: ",fmtDate(v.lastTested))
+              ,v.lastTested&&React.createElement('div',{style:{fontSize:10,color:"#888",marginTop:3}},"Tested: ",fmtDate(v.lastTested))
               ,v.notes&&React.createElement('div',{style:{fontSize:11,color:"#e8731a",marginTop:3}},"✎ ",v.notes)
               ,v.status===IEL_STATUS.FAIL&&v.priority&&React.createElement('div',{style:{fontSize:10,fontWeight:800,color:v.priority==="U"?"#ef4444":v.priority==="H"?"#f87171":"#f59e0b",marginTop:2}},"Priority: ",v.priority)
             )
@@ -3384,7 +3372,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · Read-only")
           )
         )
         ,IEL_CATEGORIES.map(cat=>{
@@ -3399,7 +3387,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             onClick:()=>setViewCat(cat.key)}
             ,React.createElement('div',{style:SI.siteCardLeft}
               ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:cat.color}},cat.icon," ",cat.label)
-              ,React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2}},total," item",total!==1?"s":"")
+              ,React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:2}},total," item",total!==1?"s":"")
               ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,marginTop:8,overflow:"hidden"}}
                 ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#ef4444":cat.color}})
               )
@@ -3429,20 +3417,20 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:8}}
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#10b981"}},"IEL Audit Snapshot")
-          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+          ,React.createElement('div',{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       // Summary pills
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",totPass,"#22c55e"],["Fail",totFail,"#ef4444"],["N/A",totNa,"#64748b"],["Untested",totAll-totPass-totFail-totNa,"#f59e0b"]].map(([l,v,c])=>
+        ,[["Pass",totPass,"#22c55e"],["Fail",totFail,"#ef4444"],["N/A",totNa,"#94a3b8"],["Untested",totAll-totPass-totFail-totNa,"#f59e0b"]].map(([l,v,c])=>
           React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
             ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
+            ,React.createElement('div',{style:{fontSize:10,color:"#999"}},l)
           )
         )
       )
-      ,React.createElement('div',{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view items")
+      ,React.createElement('div',{style:{fontSize:11,color:"#888",marginBottom:12}},"Tap an area to view items")
       // Area cards — mirrors RCD exactly
       ,project&&project.areas.map(area=>{
         let aPass=0,aFail=0,aTotal=0;
@@ -3476,11 +3464,11 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(history.length===0)return React.createElement('div',{style:SI.listWrap},backBtn,React.createElement('div',{style:SI.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
+  if(history.length===0)return React.createElement('div',{style:SI.listWrap},backBtn,React.createElement('div',{style:SI.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#888",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement('div',{style:SI.listWrap}
     ,backBtn
     ,React.createElement('div',{style:SI.listTitle},"IEL History")
-    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
+    ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
       let pass=0,fail=0,na=0,total=0;
       if(project){project.areas.forEach(a=>{IEL_CATEGORIES.forEach(cat=>{const cp=a.panels.find(p=>p.name===cat.key);if(!cp)return;cp.circuits.forEach(id=>{total++;const v=((((snap.results||{})[a.id]||{})[cat.key])||{})[id];const st=(v&&v.status)||IEL_STATUS.UNTESTED;if(st===IEL_STATUS.PASS)pass++;else if(st===IEL_STATUS.FAIL)fail++;else if(st===IEL_STATUS.NA)na++;});});});}
@@ -3492,15 +3480,15 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
             )
             ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#64748b"}},na," N/A")
+              ,React.createElement('span',{style:{fontSize:11,color:"#94a3b8"}},na," N/A")
               ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail-na," Untested")
             )
           )
-          ,React.createElement('span',{style:{...SI.arrow,color:expanded===snap.id?"#10b981":"#555"}},expanded===snap.id?"▾":"›")
+          ,React.createElement('span',{style:{...SI.arrow,color:expanded===snap.id?"#10b981": "#888"}},expanded===snap.id?"▾":"›")
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
@@ -3519,7 +3507,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 // IEL SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────
 function IELStatPill({label,val,col}){return React.createElement('div',{style:{display:"flex",alignItems:"center",gap:4,background:"#1a1a1a",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"}},React.createElement('span',{style:{fontSize:10,color:col,fontWeight:700,letterSpacing:0.5}},label),React.createElement('span',{style:{fontSize:14,color:col,fontWeight:800}},val));}
-function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#10b981"):"#333";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#10b981"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
+function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#10b981"):"#888";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#10b981"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
 
 // ─────────────────────────────────────────────────────────────────────────
 // IEL STYLES — mirrors S from RCD
@@ -3531,35 +3519,35 @@ const SI={
   topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#161616",flexShrink:0,zIndex:10},
   topbarLeft:{display:"flex",alignItems:"center",gap:12,minWidth:0,flex:1,overflow:"hidden"},topbarRight:{display:"flex",alignItems:"center",gap:8,flexShrink:0},
   appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#10b981"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
-  backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#555",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
-  homeModuleBtn:{fontSize:11,color:"#555",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
+  backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#888",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
+  homeModuleBtn:{fontSize:11,color:"#888",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
   saveIndicator:{fontSize:11,color:"#22c55e",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#161616",borderBottom:"1px solid #1e1e1e",fontSize:12,flexWrap:"wrap",flexShrink:0},
-  bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
+  bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#888"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
   bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #10b981",paddingBottom:8,width:"100%",maxWidth:500},
-  brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#10b981"},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
-  siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
+  brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#10b981"},brandSub:{fontSize:11,color:"#999",letterSpacing:1,marginTop:2},
+  siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#999"},
   homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
   metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",boxSizing:"border-box",overflow:"hidden"},
-  metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
+  metaLabelText:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700},
   metaInput:{background:"#1a1a1a",border:"1px solid #222",borderRadius:8,color:"#eee",padding:"12px 16px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
   duePill:{fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
-  modeSelectLabel:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1},
+  modeSelectLabel:{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1},
   catBtn:{width:"100%",maxWidth:500,display:"flex",alignItems:"center",gap:14,padding:"18px 16px",background:"#161616",border:"2px solid",borderRadius:16,cursor:"pointer",color:"#eee",marginBottom:10,textAlign:"left"},
   siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
   siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
-  siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
+  siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#999",marginTop:2},
   failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
-  arrow:{fontSize:22,color:"#555",lineHeight:1},
+  arrow:{fontSize:22,color:"#888",lineHeight:1},
   addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
   panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
-  panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#666",marginTop:2},
+  panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#999",marginTop:2},
   panelStats:{display:"flex",gap:10,fontSize:15,fontWeight:800},
   circuitWrap:{padding:"16px"},
-  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#999",marginTop:4,marginBottom:16},
   secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   exportBtn:{padding:"11px",background:"#161616",color:"#4ade80",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
@@ -3567,7 +3555,7 @@ const SI={
   confirmNo:{padding:"7px 14px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},
   smallBtn:{padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
   smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},
-  tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#666",fontSize:12,fontWeight:600,cursor:"pointer"},
+  tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#999",fontSize:12,fontWeight:600,cursor:"pointer"},
   tabBtnActive:{background:"#1a2e1a",border:"1px solid #10b981",color:"#10b981"},
   ctaPrimary:{padding:"11px 20px",background:"#10b981",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
   ctaSecondary:{padding:"11px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
@@ -3575,7 +3563,7 @@ const SI={
   modalBox:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto"},
   modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20},
   modalField:{marginBottom:14},
-  modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
+  modalLabel:{display:"block",fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5},
   modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
   modalClose:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8},
 };
@@ -3590,9 +3578,9 @@ const K_CAL_EVENTS = "cal-events-v1";
 const CAL_TYPES = [
   { key:"rcd_push",    label:"RCD Push Test",          color:"#e8731a", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})), period:"Monthly"    },
   { key:"rcd_inject",  label:"RCD Injection Test",     color:"#3b82f6", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), period:"Annual"     },
-  { key:"iel_estop",   label:"IEL E-Stops",            color:"#ef4444", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'#666',strokeWidth:2},React.createElement('circle',{cx:12,cy:12,r:10})), period:"3-Monthly"  },
+  { key:"iel_estop",   label:"IEL E-Stops",            color:"#ef4444", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'#999',strokeWidth:2},React.createElement('circle',{cx:12,cy:12,r:10})), period:"3-Monthly"  },
   { key:"iel_lanyard", label:"IEL Lanyards",           color:"#10b981", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},React.createElement('path',{d:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'}),React.createElement('path',{d:'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'})), period:"3-Monthly"  },
-  { key:"iel_iso",     label:"IEL Isolators",          color:"#f59e0b", icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#666",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})), period:"3-Monthly"  },
+  { key:"iel_iso",     label:"IEL Isolators",          color:"#f59e0b", icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill: "#999",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})), period:"3-Monthly"  },
   { key:"tat",         label:"Test & Tag",             color:"#60a5fa", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7})), period:"Variable"   },
   { key:"thermo",      label:"Thermographic Testing",  color:"#f97316", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'})), period:"Variable"   },
   { key:"swb",         label:"Switchboard Audit",      color:"#a855f7", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12})), period:"Variable"   },
@@ -3660,14 +3648,14 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
           ,React.createElement('span',{style:{fontSize:11,fontWeight:700,color:uc,background:uc+"22",borderRadius:4,padding:"2px 7px",border:`1px solid ${uc}44`}},ul)
         )
         ,React.createElement('div',{style:{fontSize:12,color:"#888",marginTop:3}},ev.site)
-        ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Due: ",React.createElement('strong',{style:{color:ev.completed?"#555":uc}},fmtDate(ev.dueDate)),ev.recur&&ev.recur!=="none"?React.createElement('span',{style:{color:"#6366f1",marginLeft:6}},"↻ "+(
+        ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Due: ",React.createElement('strong',{style:{color:ev.completed?"#555":uc}},fmtDate(ev.dueDate)),ev.recur&&ev.recur!=="none"?React.createElement('span',{style:{color:"#818cf8",marginLeft:6}},"↻ "+(
           ev.type==="tat"
             ? ev.recur==="3-Monthly"?"3-Monthly (Bldg/Const)":ev.recur==="6-Monthly"?"6-Monthly (Factory/Whs)":ev.recur==="Annual"?"Annual (Hostile)":ev.recur
             : ev.recur
         )):"")
         ,ev.completed&&ev.completedAt&&React.createElement('div',{style:{fontSize:10,color:"#22c55e",marginTop:2}},"✓ Completed ",fmtDate(ev.completedAt.slice(0,10)))
         ,ev.notes&&React.createElement('div',{style:{fontSize:11,color:"#aaa",marginTop:3}},ev.notes)
-        ,ev.seriesId&&React.createElement('div',{style:{fontSize:10,color:"#6366f1",marginTop:3}},"↻ ",ev.recur," · ",ev.seriesIndex!==undefined?`${ev.seriesIndex+1} of ${ev.seriesTotal}`:"series")
+        ,ev.seriesId&&React.createElement('div',{style:{fontSize:10,color:"#818cf8",marginTop:3}},"↻ ",ev.recur," · ",ev.seriesIndex!==undefined?`${ev.seriesIndex+1} of ${ev.seriesTotal}`:"series")
       )
       ,!compact&&!ev.completed&&React.createElement('div',{style:{display:"flex",gap:6,marginLeft:8,alignItems:"flex-start"}}
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#818cf8",borderColor:"#6366f144"},onClick:()=>onStartEdit&&onStartEdit(ev)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
@@ -3680,7 +3668,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
           )
           :React.createElement('button',{style:{...SI.smallBtn,color:"#ef4444",borderColor:"#ef444433"},onClick:()=>setDel(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
       )
-      ,!compact&&ev.completed&&React.createElement('button',{style:{...SI.smallBtn,color:"#555",marginLeft:8},onClick:()=>onToggleComplete&&onToggleComplete(ev.id)},"↩ Undo")
+      ,!compact&&ev.completed&&React.createElement('button',{style:{...SI.smallBtn,color:"#888",marginLeft:8},onClick:()=>onToggleComplete&&onToggleComplete(ev.id)},"↩ Undo")
     )
   );
 };
@@ -3691,16 +3679,16 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
 
   const SectionHeader=({color,icon,label,count,small})=>React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}}
     ,React.createElement('span',{style:{fontSize:small?10:11,color,fontWeight:700,letterSpacing:1}},icon," ",label)
-    ,React.createElement('span',{style:{fontSize:10,color:"#555",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:"1px 7px",fontWeight:600}},count)
+    ,React.createElement('span',{style:{fontSize:10,color:"#888",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:"1px 7px",fontWeight:600}},count)
   );
 
   return React.createElement('div',{style:{padding:"16px"}}
 
     // Empty state
-    ,activeEvents.length===0&&completedEvents.length===0&&React.createElement('div',{style:{textAlign:"center",padding:"40px 20px",color:"#555"}}
+    ,activeEvents.length===0&&completedEvents.length===0&&React.createElement('div',{style:{textAlign:"center",padding:"40px 20px",color:"#888"}}
       ,React.createElement('div',{style:{fontSize:40,marginBottom:16}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10})))
-      ,React.createElement('div',{style:{fontSize:16,fontWeight:700,color:"#444",marginBottom:8}},"No tests scheduled yet")
-      ,React.createElement('div',{style:{fontSize:13,color:"#444"}},"Tap + Add Event to get started")
+      ,React.createElement('div',{style:{fontSize:16,fontWeight:700,color:"#888",marginBottom:8}},"No tests scheduled yet")
+      ,React.createElement('div',{style:{fontSize:13,color:"#888"}},"Tap + Add Event to get started")
     )
 
     // ── OVERDUE — always visible, bold red ────────────────────────────
@@ -3727,10 +3715,10 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
         style:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,padding:"10px 14px",cursor:"pointer",color:"inherit",marginBottom:showFuture?8:0},
         onClick:()=>setShowFuture(x=>!x)}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
-          ,React.createElement('span',{style:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}),React.createElement('line',{x1:8,y1:14,x2:8.01,y2:14}),React.createElement('line',{x1:12,y1:14,x2:12.01,y2:14}),React.createElement('line',{x1:16,y1:14,x2:16.01,y2:14}))," FUTURE")
-          ,React.createElement('span',{style:{fontSize:10,color:"#555",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:"1px 7px",fontWeight:600}},future.length)
+          ,React.createElement('span',{style:{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}),React.createElement('line',{x1:8,y1:14,x2:8.01,y2:14}),React.createElement('line',{x1:12,y1:14,x2:12.01,y2:14}),React.createElement('line',{x1:16,y1:14,x2:16.01,y2:14}))," FUTURE")
+          ,React.createElement('span',{style:{fontSize:10,color:"#888",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:"1px 7px",fontWeight:600}},future.length)
         )
-        ,React.createElement('span',{style:{fontSize:14,color:"#555"}},showFuture?"▾":"▸")
+        ,React.createElement('span',{style:{fontSize:14,color:"#888"}},showFuture?"▾":"▸")
       )
       ,showFuture&&future.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete,onDeleteSeries,onStartEdit}))
     )
@@ -3932,16 +3920,16 @@ function CalendarApp({ onGoHome }) {
     ,React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #181818',background:'#0d0d0d',flexShrink:0}}
       ,React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
         ,React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
-          ,React.createElement('span',{style:{fontSize:12,color:'#555',display:'flex',alignItems:'center',gap:4,cursor:'pointer'},onClick:onGoHome}
-            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
+          ,React.createElement('span',{style:{fontSize:12,color:'#888',display:'flex',alignItems:'center',gap:4,cursor:'pointer'},onClick:onGoHome}
+            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
             ,"Modules"
           )
           ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1}},"Test Calendar")
-          ,React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},events.length," scheduled events")
+          ,React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},events.length," scheduled events")
         )
         ,React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
-          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
-          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules")
+          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
+          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules")
         )
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #818cf8, transparent 70%)',opacity:0.5}})
@@ -3966,7 +3954,7 @@ function CalendarApp({ onGoHome }) {
         )
         // Day headers
         ,React.createElement('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2,marginBottom:4}}
-          ,["S","M","T","W","T","F","S"].map((d,i)=>React.createElement('div',{key:i,style:{textAlign:"center",fontSize:10,color:"#555",fontWeight:700,padding:"4px 0"}},d))
+          ,["S","M","T","W","T","F","S"].map((d,i)=>React.createElement('div',{key:i,style:{textAlign:"center",fontSize:10,color:"#888",fontWeight:700,padding:"4px 0"}},d))
         )
         // Calendar grid
         ,React.createElement('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}
@@ -3980,7 +3968,7 @@ function CalendarApp({ onGoHome }) {
             const hasOverdue=evs.some(e=>daysUntil(e.dueDate)<0);
             const isSelected = selectedDay===day;
             return React.createElement('div',{key:day,onClick:()=>setSelectedDay(isSelected?null:day),style:{height:44,width:"100%",boxSizing:"border-box",overflow:"hidden",cursor:"pointer",background:isSelected?"#2a2040":isToday?"#1e2035":"#161616",border:`2px solid ${isSelected?"#818cf8":isToday?"#6366f1":hasOverdue?"#ef444455":"#2a2a2a"}`,borderRadius:8,padding:"4px 2px",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}
-              ,React.createElement('div',{style:{fontSize:11,color:isSelected?"#c4b5fd":isToday?"#818cf8":"#555",fontWeight:isSelected||isToday?800:400,lineHeight:1}},day)
+              ,React.createElement('div',{style:{fontSize:11,color:isSelected?"#c4b5fd":isToday?"#818cf8": "#888",fontWeight:isSelected||isToday?800:400,lineHeight:1}},day)
               ,evs.length>0&&React.createElement('div',{style:{display:"flex",gap:2,flexWrap:"nowrap",justifyContent:"center"}}
                 ,evs.slice(0,3).map((ev,j)=>{
                   const days2=daysUntil(ev.dueDate);
@@ -4000,15 +3988,15 @@ function CalendarApp({ onGoHome }) {
             ,React.createElement('div',{style:{fontSize:13,fontWeight:800,color:"#c4b5fd"}}
               ,new Date(calYear,calMonth,selectedDay).toLocaleDateString("en-AU",{weekday:"long",day:"numeric",month:"long"})
             )
-            ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:18,cursor:"pointer",lineHeight:1},onClick:()=>setSelectedDay(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
+            ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",fontSize:18,cursor:"pointer",lineHeight:1},onClick:()=>setSelectedDay(null)},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',style:{flexShrink:0}},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18})))
           )
           ,selectedEvents.length===0
-            ? React.createElement('div',{style:{fontSize:13,color:"#555",textAlign:"center",padding:"12px 0"}},"No events on this date")
+            ? React.createElement('div',{style:{fontSize:13,color:"#888",textAlign:"center",padding:"12px 0"}},"No events on this date")
             : selectedEvents.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete:deleteEvent,onDeleteSeries:deleteSeries,onStartEdit:startEdit}))
         )
         // Events this month
         ,React.createElement('div',{style:{marginTop:16}}
-          ,React.createElement('div',{style:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1,marginBottom:8}},"EVENTS THIS MONTH")
+          ,React.createElement('div',{style:{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1,marginBottom:8}},"EVENTS THIS MONTH")
           ,sorted.filter(e=>{
             const d=new Date(e.dueDate);
             return d.getFullYear()===calYear&&d.getMonth()===calMonth;
@@ -4022,7 +4010,7 @@ function CalendarApp({ onGoHome }) {
         
         // Type
         ,React.createElement('div',{style:{marginBottom:12,border:validErr.type?"2px solid #ef4444":"none",borderRadius:validErr.type?10:0,padding:validErr.type?"10px 10px 6px":"0"}}
-          ,React.createElement('div',{style:{fontSize:10,color:validErr.type?"#ef4444":"#666",letterSpacing:0.8,fontWeight:700,marginBottom:6}},"TEST TYPE")
+          ,React.createElement('div',{style:{fontSize:10,color:validErr.type?"#ef4444": "#999",letterSpacing:0.8,fontWeight:700,marginBottom:6}},"TEST TYPE")
           ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
             ,CAL_TYPES.map(t=>React.createElement('button',{key:t.key,
               style:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:form.type===t.key?t.color+"22":"#161616",border:`2px solid ${form.type===t.key?t.color:"#2a2a2a"}`,borderRadius:10,cursor:"pointer",color:"#eee",textAlign:"left"},
@@ -4035,7 +4023,7 @@ function CalendarApp({ onGoHome }) {
         )
         // Site / Location — direct input when no sites exist; dropdown + custom otherwise
         ,React.createElement('div',{style:{marginBottom:12}}
-          ,React.createElement('div',{style:{fontSize:10,color:validErr.site?"#ef4444":"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"SITE / LOCATION")
+          ,React.createElement('div',{style:{fontSize:10,color:validErr.site?"#ef4444": "#999",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"SITE / LOCATION")
           ,allSites.length===0
             ? React.createElement(React.Fragment,null
                 ,React.createElement('input',{
@@ -4048,11 +4036,11 @@ function CalendarApp({ onGoHome }) {
                     setValidErr(v=>({...v,site:false}));
                   }
                 })
-                ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"No sites yet — add one in RCD or IEL, or type a custom name above")
+                ,React.createElement('div',{style:{fontSize:10,color:"#888",marginTop:4}},"No sites yet — add one in RCD or IEL, or type a custom name above")
               )
             : React.createElement(React.Fragment,null
                 ,React.createElement('select',{
-                  style:{width:"100%",background:"#1a1a1a",border:`1px solid ${validErr.site?"#ef4444":"#333"}`,borderRadius:8,color:form.site||customSite?"#eee":"#666",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:6},
+                  style:{width:"100%",background:"#1a1a1a",border:`1px solid ${validErr.site?"#ef4444":"#333"}`,borderRadius:8,color:form.site||customSite?"#eee": "#999",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:6},
                   value:customSite?"__custom__":form.site,
                   onChange:e=>{
                     if(e.target.value==="__custom__"){
@@ -4079,13 +4067,13 @@ function CalendarApp({ onGoHome }) {
                     setValidErr(v=>({...v,site:false}));
                   }
                 })
-                ,React.createElement('div',{style:{fontSize:10,color:"#555",marginTop:4}},"Sites auto-filled from all modules")
+                ,React.createElement('div',{style:{fontSize:10,color:"#888",marginTop:4}},"Sites auto-filled from all modules")
               )
           ,validErr.site&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:4}},"Select or enter a site")
         )
         // Due date
         ,React.createElement('div',{style:{marginBottom:12,width:"100%",boxSizing:"border-box",overflow:"hidden"}}
-          ,React.createElement('div',{style:{fontSize:10,color:validErr.date?"#ef4444":"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
+          ,React.createElement('div',{style:{fontSize:10,color:validErr.date?"#ef4444": "#999",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
           ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{width:"100%",background:"#1a1a1a",border:`1px solid ${validErr.date?"#ef4444":"#333"}`,borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",textAlign:"center"}},form.dueDate?fmtDate(form.dueDate):"Select date…"),React.createElement('input',{type:"date",value:form.dueDate,onChange:e=>{setForm(f=>({...f,dueDate:e.target.value}));setValidErr(v=>({...v,date:false}));},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
           ,validErr.date&&React.createElement('div',{style:{color:"#ef4444",fontSize:12,marginTop:4}},"Select a due date")
         )
@@ -4101,13 +4089,13 @@ function CalendarApp({ onGoHome }) {
                 style:{flex:1,padding:"10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
                   border:`2px solid ${editSeriesMode==="single"?"#6366f1":"#333"}`,
                   background:editSeriesMode==="single"?"#1a1a30":"#1a1a1a",
-                  color:editSeriesMode==="single"?"#818cf8":"#555"},
+                  color:editSeriesMode==="single"?"#818cf8": "#888"},
                 onClick:()=>setEditSeriesMode("single")},"This event only")
               ,React.createElement('button',{
                 style:{flex:1,padding:"10px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
                   border:`2px solid ${editSeriesMode==="series"?"#f97316":"#333"}`,
                   background:editSeriesMode==="series"?"#1a0e00":"#1a1a1a",
-                  color:editSeriesMode==="series"?"#f97316":"#555"},
+                  color:editSeriesMode==="series"?"#f97316": "#888"},
                 onClick:()=>setEditSeriesMode("series")},"Entire series")
             )
             ,editSeriesMode==="series"&&React.createElement('div',{style:{fontSize:11,color:"#f59e0b",marginTop:8}}
@@ -4118,7 +4106,7 @@ function CalendarApp({ onGoHome }) {
 
         // Recurrence — T&T uses environment-labelled options, others use standard
         ,React.createElement('div',{style:{marginBottom:12}}
-          ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"RECURRENCE")
+          ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"RECURRENCE")
           ,form.type==="tat"
             ? React.createElement('select',{style:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
                 ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
@@ -4137,7 +4125,7 @@ function CalendarApp({ onGoHome }) {
         )
         // Notes
         ,React.createElement('div',{style:{marginBottom:16}}
-          ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"NOTES (optional)")
+          ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"NOTES (optional)")
           ,React.createElement('input',{style:{width:"100%",background:"#1a1a1a",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.notes,placeholder:"e.g. Contact: John — 0400 000 000",onChange:e=>setForm(f=>({...f,notes:e.target.value}))})
         )
         ,React.createElement('div',{style:{display:"flex",gap:8}}
@@ -4153,15 +4141,15 @@ function CalendarApp({ onGoHome }) {
 
     // Bottom nav
     ,React.createElement('nav',{style:CAL_STYLE.bottomNav}
-      ,React.createElement('button',{onClick:()=>{setView("upcoming");setShowAdd(false);},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:view==="upcoming"&&!showAdd?"#818cf8":"#555",borderTop:view==="upcoming"&&!showAdd?"2px solid #6366f1":"2px solid transparent"}}
+      ,React.createElement('button',{onClick:()=>{setView("upcoming");setShowAdd(false);},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:view==="upcoming"&&!showAdd?"#818cf8": "#888",borderTop:view==="upcoming"&&!showAdd?"2px solid #6366f1":"2px solid transparent"}}
         ,React.createElement('span',{style:{fontSize:18}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
         ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Upcoming")
       )
-      ,React.createElement('button',{onClick:()=>{setView("calendar");setShowAdd(false);},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:view==="calendar"&&!showAdd?"#818cf8":"#555",borderTop:view==="calendar"&&!showAdd?"2px solid #6366f1":"2px solid transparent"}}
+      ,React.createElement('button',{onClick:()=>{setView("calendar");setShowAdd(false);},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:view==="calendar"&&!showAdd?"#818cf8": "#888",borderTop:view==="calendar"&&!showAdd?"2px solid #6366f1":"2px solid transparent"}}
         ,React.createElement('span',{style:{fontSize:18}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10})))
         ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Calendar")
       )
-      ,React.createElement('button',{onClick:()=>{setShowAdd(true);setEditId(null);setForm({...blank});setCustomSite("");setValidErr({type:false,site:false,date:false});},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:showAdd?"#818cf8":"#555",borderTop:showAdd?"2px solid #6366f1":"2px solid transparent"}}
+      ,React.createElement('button',{onClick:()=>{setShowAdd(true);setEditId(null);setForm({...blank});setCustomSite("");setValidErr({type:false,site:false,date:false});},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:showAdd?"#818cf8": "#888",borderTop:showAdd?"2px solid #6366f1":"2px solid transparent"}}
         ,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:12,y1:5,x2:12,y2:19}),React.createElement('line',{x1:5,y1:12,x2:19,y2:12}))
         ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Add Event")
       )
@@ -4195,7 +4183,7 @@ function CompleteAuditBtn({ color, label, onComplete }) {
 function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome, onEnterAudit, isRCD}) {
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
     ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},hasActiveAudit?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:hasActiveAudit?color:"#555",marginBottom:8,letterSpacing:0.5}}
+    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:hasActiveAudit?color:"#888",marginBottom:8,letterSpacing:0.5}}
       ,hasActiveAudit?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT"
     )
     ,hasActiveAudit
@@ -4205,7 +4193,7 @@ function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome
           ,React.createElement('br',null)
           ,"Tap Continue to test items, or complete the audit when done."
         )
-      : React.createElement('div',{style:{fontSize:13,color:"#555",marginBottom:28,lineHeight:1.6}}
+      : React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}}
           ,"No audit is currently in progress."
           ,React.createElement('br',null)
           ,"Go to Home, enter your auditor name, then tap Start Audit."
@@ -4248,10 +4236,10 @@ const K_TAT_HISTORY  = "tat-history-v1";
 
 const TAT_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const TAT_SM = {
-  untested:{ label:"—",    bg:"#2a2a2a", fg:"#666",    border:"#333" },
+  untested:{ label:"—",    bg:"#2a2a2a", fg:"#999",    border:"#333" },
   pass:    { label:"PASS", bg:"#1a2e3d", fg:"#60a5fa", border:"#3b82f6" },
   fail:    { label:"FAIL", bg:"#3d1a1a", fg:"#f87171", border:"#ef4444" },
-  na:      { label:"N/A",  bg:"#1e2535", fg:"#64748b", border:"#334155" },
+  na:      { label:"N/A",  bg:"#1e2535", fg:"#94a3b8", border:"#334155" },
 };
 
 const TAT_COLOR = "#3b82f6";
@@ -4356,9 +4344,9 @@ function exportTATExcel(project, results, meta) {
   const auditor=(meta&&meta.auditor)||"";
   const sName=project.name||"Site";
   const coLine=[project.company||"SparkCheck",project.abn?`ABN: ${project.abn}`:"",project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-  const headers=["Area","Asset ID / Tag","Description","Equipment Type","Visual Inspection","Pass / Fail","Date Tested","Test Frequency","Next Test Due","Notes / Comments","Priority (L,M,H,U)"];
+  const headers=["Area","Asset ID / Tag","Description","Equipment Type","Visual Inspection","Pass / Fail","Date Tested","Test Frequency","Next Test Due","Notes / Comments","Priority (L,M,H,U)","Defect ID","Rectified / Scheduled","Responsibility"];
   const n=headers.length;
-  const cols="ABCDEFGHIJK".slice(0,n).split("");
+  const cols="ABCDEFGHIJKLMN".slice(0,n).split("");
   const titleSt=tatCS("FF2D2D2D",{bold:true,sz:14,color:{rgb:"FFFFFFFF"}},{horizontal:"left"});
   const subSt=tatCS("FF1E1E1E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
   const metaSt=tatCS("FF262626",{sz:9,color:{rgb:"FF999999"}},{horizontal:"left"});
@@ -4388,7 +4376,8 @@ function exportTATExcel(project, results, meta) {
       rows.push([
         area.name, areaTag, cleanName, areaEquip,
         item.visualCheck?"Yes":"", pf, fmtDate(item.lastTested),
-        freqLabel, nextDue, item.notes||"", item.priority||""
+        freqLabel, nextDue, item.notes||"", item.priority||"",
+        item.defectId||"", item.rectified||"", item.responsibility||""
       ]);
       dataRows.push({pf,priority:item.priority||""});
     });
@@ -4396,7 +4385,7 @@ function exportTATExcel(project, results, meta) {
   rows.push(Array(n).fill(""));
   rows.push([`Notes: ${(meta&&meta.notes)||""}`,...Array(n-1).fill("")]);
   const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:20},{wch:14},{wch:30},{wch:16},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:36},{wch:10}];
+  ws["!cols"]=[{wch:20},{wch:14},{wch:30},{wch:16},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:36},{wch:10},{wch:12},{wch:20},{wch:22}];
   ws["!rows"]=[{hpt:32},{hpt:16},{hpt:16},{hpt:6},{hpt:40}];
   ws["!merges"]=[
     {s:{r:0,c:0},e:{r:0,c:n-1}},
@@ -4609,7 +4598,7 @@ function TATApp({ onGoHome }) {
     if(viewSnap){setViewSnap(null);setViewArea(null);return;}
     if(detailItemId){setDetailItemId(null);return;}
     if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
-    else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);goHome();}
+    else if(view==="audit"&&auditEntered&&!activeAreaId){const s=project?tatSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
     else if(view==="audit"){goHome();}
     else if(view==="home"){goProjects();}
     else if(["manage","report","history","settings"].includes(view)){goHome();}
@@ -4627,15 +4616,15 @@ function TATApp({ onGoHome }) {
       ,React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
         ,React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
           ,view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack}
-            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
-            ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")
+            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
+            ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Back")
           )
           ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"Test & Tag")
-          ,React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
+          ,React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
         )
         ,React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
-          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
-          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules")
+          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
+          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules")
         )
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #60a5fa, transparent 70%)',opacity:0.5}})
@@ -4686,12 +4675,12 @@ function TATApp({ onGoHome }) {
 
     // Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:ST.bottomNav}
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#64748b",onClick:()=>{setDetailItemId(null);goHome();}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#64748b",onClick:()=>{setDetailItemId(null);setView("audit");setActiveAreaId(null);}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#64748b",onClick:()=>{setDetailItemId(null);setView("report");}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#64748b",onClick:()=>{setDetailItemId(null);setView("history");}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#64748b",onClick:()=>{setDetailItemId(null);setView("manage");}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="settings",color:"#64748b",onClick:()=>{setDetailItemId(null);setView("settings");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#94a3b8",onClick:()=>{setDetailItemId(null);goHome();}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#94a3b8",onClick:()=>{setDetailItemId(null);setView("audit");setActiveAreaId(null);}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#94a3b8",onClick:()=>{setDetailItemId(null);setView("report");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#94a3b8",onClick:()=>{setDetailItemId(null);setView("history");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#94a3b8",onClick:()=>{setDetailItemId(null);setView("manage");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="settings",color:"#94a3b8",onClick:()=>{setDetailItemId(null);setView("settings");}})
     )
   );
 }
@@ -4749,7 +4738,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 
   return React.createElement('div',{style:ST.listWrap}
     ,React.createElement('div',{style:{...ST.listTitle,marginTop:24}},"Sites")
-    ,projects.length===0&&React.createElement('div',{style:{color:"#555",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel.")
+    ,projects.length===0&&React.createElement('div',{style:{color:"#888",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel.")
 
     ,projects.map(proj=>{
       const sum=tatSiteSummary(allResults,proj);
@@ -4794,7 +4783,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         )
         ,tab==="import"&&React.createElement(React.Fragment,null
           ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#eee",marginBottom:4}},"Import from Excel")
-          ,React.createElement('div',{style:{fontSize:12,color:"#666",marginBottom:12}},"Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Area | Asset ID/Tag | Description")," — equipment type and frequency imported if present.")
+          ,React.createElement('div',{style:{fontSize:12,color:"#999",marginBottom:12}},"Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Area | Asset ID/Tag | Description")," — equipment type and frequency imported if present.")
           ,!importPreview&&React.createElement(React.Fragment,null
             ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile})
             ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel / CSV File"))
@@ -4805,8 +4794,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:{background:"#0e1a2a",border:`1px solid ${TAT_COLOR}44`,borderRadius:10,padding:"12px",marginBottom:12}}
               ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:TAT_COLOR,marginBottom:8}},"✓ Preview")
               ,React.createElement('div',{style:{fontSize:12,color:"#aaa",marginBottom:4}},importPreview.areas.length," areas — ",importPreview.areas.reduce((s,a)=>s+(a.items||[]).length,0)," items")
-              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#666",marginBottom:2}},a.name," — ",(a.items||[]).length," items"))
-              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#555"}},"…and ",importPreview.areas.length-4," more")
+              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#999",marginBottom:2}},a.name," — ",(a.items||[]).length," items"))
+              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#888"}},"…and ",importPreview.areas.length-4," more")
             )
             ,[["SITE NAME",importName,setImportName,"Site name"],["COMPANY (optional)",importCo,setImportCo,"Company name"],["ABN (optional)",importAbn,setImportAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)",importLic,setImportLic,"e.g. 123456C"]].map(([label,val,setter,ph])=>
               React.createElement('div',{key:label,style:{marginBottom:8}}
@@ -4850,7 +4839,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#888"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#2a2a2a",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#ef4444":pct===100?"#22c55e":TAT_COLOR}})
@@ -4859,11 +4848,11 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
         ,React.createElement('span',{style:{fontSize:11,color:"#60a5fa"}},summary.pass," Pass")
         ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#f87171",fontWeight:800}},summary.fail," FAIL")
         ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},summary.untested," untested")
-        ,React.createElement('span',{style:{fontSize:11,color:"#555"}},summary.total," total")
+        ,React.createElement('span',{style:{fontSize:11,color:"#888"}},summary.total," total")
       )
     )
     ,React.createElement('button',{
-      style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?TAT_COLOR:"#1a1a1a",color:hasAuditor?"#fff":"#555",border:`2px solid ${hasAuditor?TAT_COLOR:"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},
+      style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?TAT_COLOR:"#1a1a1a",color:hasAuditor?"#fff": "#888",border:`2px solid ${hasAuditor?TAT_COLOR:"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},
       onClick:()=>hasAuditor&&onStartAudit()}
       ,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit"
     )
@@ -4877,7 +4866,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
         ,React.createElement('button',{style:ST.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes")
         ,React.createElement('button',{style:ST.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
       )
-      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
+      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
   );
 }
 
@@ -4887,7 +4876,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
 function TATAreaListView({project,results,onSelect}){
   return React.createElement('div',{style:ST.listWrap}
     ,React.createElement('div',{style:ST.listTitle},"Select Area")
-    ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add areas and items.")
+    ,project.areas.length===0&&React.createElement('div',{style:{color:"#888",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add areas and items.")
     ,project.areas.map(area=>{
       const s=tatAreaSummary(results,project.id,area.id,area.items);
       const pct=s.total>0?Math.round(((s.pass+s.fail+s.na)/s.total)*100):0;
@@ -4931,7 +4920,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
       )
     )
     ,React.createElement('div',{style:{fontSize:12,color:TAT_COLOR,background:"#0a1020",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7}))," Tap any item to open the test form")
-    ,areaItems.length===0&&React.createElement('div',{style:{color:"#555",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
+    ,areaItems.length===0&&React.createElement('div',{style:{color:"#888",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
       ,areaItems.map(itemId=>{
         const d=tatGetItem(results,project.id,area.id,itemId);
@@ -4953,15 +4942,15 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
               ,tagNum&&tagNum!==cleanName&&tagNum!==rawName&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px"}},tagNum)
               ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#eee"}},cleanName||rawName)
             )
-            ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#666",marginBottom:4}},d.equipType)
-            ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#555",flexWrap:"wrap"}}
-              ,React.createElement('span',{style:{color:d.visualCheck?"#22c55e":"#444",fontWeight:600}},d.visualCheck?"✓":"○"," Visual")
+            ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#999",marginBottom:4}},d.equipType)
+            ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#888",flexWrap:"wrap"}}
+              ,React.createElement('span',{style:{color:d.visualCheck?"#22c55e":"#888",fontWeight:600}},d.visualCheck?"✓":"○"," Visual")
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
               ,React.createElement('span',null,freqLabel)
             )
             ,d.notes&&React.createElement('div',{style:{fontSize:10,color:"#e8731a",marginTop:3}},"✎ ",d.notes.slice(0,40))
           )
-          ,React.createElement('div',{style:{display:"flex",alignItems:"center",padding:"0 12px",color:"#555",fontSize:20}},"›")
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",padding:"0 12px",color:"#888",fontSize:20}},"›")
         );
       })
     )
@@ -5004,7 +4993,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
             ,(area.itemTags||{})[itemId]&&React.createElement('span',{style:{fontSize:12,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:6,padding:"2px 8px"}},(area.itemTags||{})[itemId])
             ,React.createElement('span',{style:{fontSize:18,fontWeight:800,color:"#eee"}},name.replace(/^\d+\s*—\s*/,""))
           )
-          ,React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:3}},area.name," · Test & Tag")
+          ,React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:3}},area.name," · Test & Tag")
         )
         ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},sm.label)
       )
@@ -5013,15 +5002,15 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       ,React.createElement('div',{style:{display:"flex",gap:10,marginBottom:14}}
         ,React.createElement('div',{style:{flex:2}}
           ,React.createElement('label',{style:ST.modalLabel},"EQUIPMENT TYPE")
-          ,React.createElement('div',{style:{...ST.modalInput,background:"#111",color:effectiveItem.equipType?"#aaa":"#444",display:"flex",alignItems:"center",gap:6}}
-            ,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"}))
+          ,React.createElement('div',{style:{...ST.modalInput,background:"#111",color:effectiveItem.equipType?"#aaa":"#888",display:"flex",alignItems:"center",gap:6}}
+            ,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#888",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"}))
             ,React.createElement('span',null,effectiveItem.equipType||"Not set — edit in Manage")
           )
         )
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('label',{style:ST.modalLabel},"TEST FREQ.")
           ,React.createElement('div',{style:{...ST.modalInput,background:"#111",color:"#aaa",display:"flex",alignItems:"center",gap:6}}
-            ,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#555",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"}))
+            ,React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"#888",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:11,width:18,height:11,rx:2,ry:2}),React.createElement('path',{d:"M7 11V7a5 5 0 0 1 10 0v4"}))
             ,React.createElement('span',null,(()=>{const v=effectiveItem.freq;return v==="12"?"Annual":v==="1"?"1 Month":v?v+" Months":"3 Months";})())
           )
         )
@@ -5029,7 +5018,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 
       // Visual inspection checkbox
       ,React.createElement('div',{style:{marginBottom:16}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"INSPECTION CHECK")
+        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"INSPECTION CHECK")
         ,React.createElement('button',{
           style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:item.visualCheck?"#1a3d1a":"#1a1a1a",border:`2px solid ${item.visualCheck?"#22c55e":"#333"}`,borderRadius:12,cursor:"pointer",color:"#eee",textAlign:"left",width:"100%"},
           onClick:toggleVisual}
@@ -5038,14 +5027,14 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
           )
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.visualCheck?"#4ade80":"#aaa"}},"Visual Inspection")
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Check for physical damage, cord condition, plug integrity")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Check for physical damage, cord condition, plug integrity")
           )
         )
       )
 
       // Result
       ,React.createElement('div',{style:{marginBottom:14}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
+        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
         ,!canPass&&React.createElement('div',{style:{background:"#1e1e00",border:"1px solid #f59e0b44",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#f59e0b"}},"⚠ Visual inspection must be ticked before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
@@ -5053,7 +5042,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
             const active=(item.status||TAT_STATUS.UNTESTED)===s;
             const blocked=s===TAT_STATUS.PASS&&!canPass;
             return React.createElement('button',{key:s,
-              style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:blocked?"not-allowed":"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:blocked?"#333":"#555",opacity:blocked?0.4:1},
+              style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:blocked?"not-allowed":"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:blocked?"#333": "#888",opacity:blocked?0.4:1},
               onClick:()=>setStatus(s)},sm2.label);
           })
         )
@@ -5069,7 +5058,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       ,nextDue&&React.createElement('div',{style:{display:"flex",alignItems:"center",background:"#111",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
         ,React.createElement('span',{style:{color:"#888",fontSize:11}},"NEXT TEST DUE:")
         ,React.createElement('span',{style:{color:TAT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},nextDue)
-        ,React.createElement('span',{style:{color:"#555",fontSize:11,marginLeft:8}},"(",item.freq==="12"?"Annual":item.freq==="1"?"1 Month":(item.freq||"3")+" Months",")")
+        ,React.createElement('span',{style:{color:"#888",fontSize:11,marginLeft:8}},"(",item.freq==="12"?"Annual":item.freq==="1"?"1 Month":(item.freq||"3")+" Months",")")
       )
 
       // Notes
@@ -5086,13 +5075,6 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
           ,React.createElement('select',{style:ST.modalInput,value:item.rectified||"",onChange:e=>onPatch({rectified:e.target.value})}
             ,React.createElement('option',{value:""},"— Select")
             ,DEFAULT_RECTIFIED.map(o=>React.createElement('option',{key:o,value:o},o))
-          )
-        )
-        ,React.createElement('div',{style:ST.modalField}
-          ,React.createElement('label',{style:ST.modalLabel},"DATE RECTIFIED")
-          ,React.createElement('div',{style:{position:"relative", marginTop:4}},
-            React.createElement('div',{style:{...ST.modalInput, textAlign:"center", cursor:"pointer", color: item.scheduledDate ? "#eee" : "#555"}}, item.scheduledDate ? fmtDate(item.scheduledDate) : "Select date…"),
-            React.createElement('input',{type:"date",value:item.scheduledDate||"",onChange:e=>onPatch({scheduledDate:e.target.value}), style:{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}})
           )
         )
         ,React.createElement('div',{style:ST.modalField}
@@ -5115,7 +5097,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
                 style: {
                   padding: "10px 14px",
                   background: (item.priority||"") === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
+                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#888",
                   border: `1px solid ${(item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
                   borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
                 },
@@ -5150,28 +5132,28 @@ function TATReportView({project,results,meta,onBack}){
   });
   return React.createElement('div',{style:ST.summaryWrap}
     ,React.createElement('div',{style:ST.summaryTitle},project.name)
-    ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
+    ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:ST.summaryMeta},"TEST & TAG REPORT",meta.auditor?` · ${meta.auditor}`:"")
     ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{fontSize:12,background:"#161616",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
     )
     ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:20}}
-      ,[["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#60a5fa"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>
+      ,[["Total",sum.total,"#94a3b8"],["Pass",sum.pass,"#60a5fa"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#94a3b8"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,c])=>
         React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px",minWidth:48}}
           ,React.createElement('div',{style:{fontSize:22,fontWeight:800,color:c}},v)
-          ,React.createElement('div',{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())
+          ,React.createElement('div',{style:{fontSize:9,color:"#999",marginTop:2}},l.toUpperCase())
         )
       )
     )
     ,React.createElement('div',{style:{marginBottom:16}}
-      ,React.createElement('div',{style:{fontSize:11,color:"#555",fontWeight:700,letterSpacing:1,marginBottom:10}},"BY AREA")
+      ,React.createElement('div',{style:{fontSize:11,color:"#888",fontWeight:700,letterSpacing:1,marginBottom:10}},"BY AREA")
       ,project.areas.map(area=>{
         const as=tatAreaSummary(results,project.id,area.id,area.items);
         const pct=as.total>0?Math.round(((as.pass+as.fail+as.na)/as.total)*100):0;
         return React.createElement('div',{key:area.id,style:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,padding:"10px 14px",marginBottom:8}}
           ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},area.name)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},as.pass+as.na," / ",as.total)
+            ,React.createElement('div',{style:{fontSize:11,color:"#888"}},as.pass+as.na," / ",as.total)
           )
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#2a2a2a",borderRadius:2,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:as.fail>0?"#ef4444":pct===100?"#22c55e":TAT_COLOR}})
@@ -5340,7 +5322,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   };
 
   return React.createElement('div',{style:ST.listWrap}
-    ,React.createElement('div',{style:{...ST.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name)
+    ,React.createElement('div',{style:{...ST.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name)
     ,React.createElement('div',{style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:14}}
       ,editingProject
         ?React.createElement(React.Fragment,null
@@ -5354,9 +5336,9 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
           ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>setEditingProject(true)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
     )
-    ,React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment")
-    ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
-    ,project.areas.length===0&&React.createElement('div',{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet.")
+    ,React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:12}},"Manage locations, panels and equipment")
+    ,React.createElement('div',{style:{fontSize:11,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
+    ,project.areas.length===0&&React.createElement('div',{style:{color:"#888",fontSize:13,marginBottom:12}},"No areas yet.")
     ,project.areas.map(area=>
       React.createElement('div',{key:area.id,style:{border:`1px solid ${expandedArea===area.id?"#60a5fa88":"#60a5fa33"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
         // Area header row
@@ -5369,10 +5351,10 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             ,React.createElement('button',{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);setEditingItem(null);}}
               ,React.createElement('span',{style:{fontSize:16,color:expandedArea===area.id?"#c084fc":"#aaa",flexShrink:0}},expandedArea===area.id?"▾":"▸")
               ,React.createElement('span',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
-              ,React.createElement('span',{style:{fontSize:11,color:"#555",marginLeft:4,flexShrink:0,whiteSpace:"nowrap"}},(area.items||[]).length," items")
+              ,React.createElement('span',{style:{fontSize:11,color:"#888",marginLeft:4,flexShrink:0,whiteSpace:"nowrap"}},(area.items||[]).length," items")
             )
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
-              ,React.createElement('span',{style:{fontSize:10,color:"#555",whiteSpace:"nowrap"}},"Default:")
+              ,React.createElement('span',{style:{fontSize:10,color:"#888",whiteSpace:"nowrap"}},"Default:")
               ,React.createElement('select',{
                 style:{background:"#111",border:"1px solid #333",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
                 value:area.defaultFreq||(tatDefaults||{}).freq||"3",
@@ -5401,28 +5383,28 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                 return React.createElement('div',{key:itemId,style:{background:"#1e1e1e",border:"1px solid #60a5fa55",borderRadius:8,padding:"10px",width:"100%",boxSizing:"border-box"}}
                   ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}
                     ,React.createElement('span',{style:{fontSize:12,color:TAT_COLOR,fontWeight:700}},"Edit Item")
-                    ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingItem(null)},"×")
+                    ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingItem(null)},"×")
                   )
                   ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:6}}
                     ,React.createElement('div',{style:{flex:"0 0 70px"}}
-                      ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"TAG #")
+                      ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"TAG #")
                       ,React.createElement('input',{style:{...ST.smallInput,width:"100%"},value:editTag,onChange:e=>setEditTag(e.target.value)})
                     )
                     ,React.createElement('div',{style:{flex:1}}
-                      ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"NAME")
+                      ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"NAME")
                       ,React.createElement('input',{style:{...ST.smallInput,width:"100%"},value:editName,onChange:e=>setEditName(e.target.value)})
                     )
                   )
                   ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
                     ,React.createElement('div',{style:{flex:1}}
-                      ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"EQUIPMENT TYPE")
+                      ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"EQUIPMENT TYPE")
                       ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:editEquip,onChange:e=>setEditEquip(e.target.value)}
                         ,React.createElement('option',{value:""},"— Optional")
                         ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
                       )
                     )
                     ,React.createElement('div',{style:{flex:1}}
-                      ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"TEST FREQUENCY")
+                      ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"TEST FREQUENCY")
                       ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:editFreq,onChange:e=>setEditFreq(e.target.value)}
                         ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
                       )
@@ -5439,22 +5421,22 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:"1px solid #60a5fa33",borderRadius:8,padding:"6px 10px",flexWrap:"nowrap",minWidth:0}}
                 ,tag&&React.createElement('span',{style:{fontSize:10,color:TAT_COLOR,fontWeight:800,background:`${TAT_COLOR}22`,borderRadius:4,padding:"1px 6px",flexShrink:0}},tag)
                 ,React.createElement('span',{style:{fontSize:12,color:"#ccc",fontWeight:600,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},itemLabel)
-                ,React.createElement('span',{style:{fontSize:10,color:"#64748b",flexShrink:0,whiteSpace:"nowrap"}},freqLabel)
+                ,React.createElement('span',{style:{fontSize:10,color:"#94a3b8",flexShrink:0,whiteSpace:"nowrap"}},freqLabel)
                 ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditItem(area,itemId)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
                 ,React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,itemId), label: `Delete "${itemLabel}"?`, compact: true })
               );
             })
-            ,(area.items||[]).length===0&&React.createElement('span',{style:{fontSize:12,color:"#555"}},"No items")
+            ,(area.items||[]).length===0&&React.createElement('span',{style:{fontSize:12,color:"#888"}},"No items")
           )
           ,React.createElement('div',{style:{background:"#111",border:"1px solid #60a5fa33",borderRadius:10,padding:"10px",marginBottom:8}}
-            ,React.createElement('div',{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"ADD ITEM")
+            ,React.createElement('div',{style:{fontSize:10,color:"#888",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"ADD ITEM")
             ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:6}}
               ,React.createElement('div',{style:{flex:1}}
-                ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"ASSET ID / TAG (auto)")
+                ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"ASSET ID / TAG (auto)")
                 ,React.createElement('input',{style:{...ST.smallInput,width:"100%"},placeholder:nextTag(),value:newItemTag[area.id]||"",onChange:e=>setNewItemTag(x=>({...x,[area.id]:e.target.value}))})
               )
               ,React.createElement('div',{style:{flex:2,position:"relative"}}
-                ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"APPLIANCE NAME *")
+                ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"APPLIANCE NAME *")
                 ,React.createElement('div',{style:{display:"flex",gap:0}}
                   ,React.createElement('input',{
                     style:{...ST.smallInput,flex:1,borderRadius:"8px 0 0 8px",borderRight:"none"},
@@ -5476,20 +5458,20 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                     .map(n=>React.createElement('button',{key:n,style:{display:"block",width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid #2a2a2a",color:"#eee",fontSize:13,textAlign:"left",cursor:"pointer"},onMouseDown:e=>{e.preventDefault();setNewItemName(x=>({...x,[area.id]:n}));setShowNameDrop(x=>({...x,[area.id]:false}));}}
                       ,n))
                   ,(applianceNames||TAT_DEFAULT_NAMES).filter(n=>!newItemName[area.id]||n.toLowerCase().includes((newItemName[area.id]||"").toLowerCase())).length===0&&
-                    React.createElement('div',{style:{padding:"10px 14px",color:"#555",fontSize:12}},"No matches — type to add custom")
+                    React.createElement('div',{style:{padding:"10px 14px",color:"#888",fontSize:12}},"No matches — type to add custom")
                 )
               )
             )
             ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
               ,React.createElement('div',{style:{flex:1}}
-                ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"EQUIPMENT TYPE")
+                ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"EQUIPMENT TYPE")
                 ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemEquip[area.id]||(equipOpts[0]||""),onChange:e=>setNewItemEquip(x=>({...x,[area.id]:e.target.value}))}
                   ,React.createElement('option',{value:""},"— Optional")
                   ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
                 )
               )
               ,React.createElement('div',{style:{flex:1}}
-                ,React.createElement('div',{style:{fontSize:9,color:"#555",marginBottom:3}},"TEST FREQUENCY")
+                ,React.createElement('div',{style:{fontSize:9,color:"#888",marginBottom:3}},"TEST FREQUENCY")
                 ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemFreq[area.id]||(area.defaultFreq)||((tatDefaults||{}).freq)||"3",onChange:e=>setNewItemFreq(x=>({...x,[area.id]:e.target.value}))}
                   ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
                 )
@@ -5497,7 +5479,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             )
             ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",width:"100%"},onClick:()=>addItem(area.id)},"+ Add")
           )
-          ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:4}},"BULK ADD (comma-separated appliance names)")
+          ,React.createElement('div',{style:{fontSize:10,color:"#888",marginBottom:4}},"BULK ADD (comma-separated appliance names)")
           ,React.createElement('div',{style:{display:"flex",gap:6}}
             ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Grinder, Drill, Lead 10m",value:bulkItems[area.id]||"",onChange:e=>setBulkItems(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addBulk(area.id)})
             ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addBulk(area.id)},"+ Add")
@@ -5531,7 +5513,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · Read-only")
           )
         )
         ,aItems.map(id=>{
@@ -5549,8 +5531,8 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
                 ,tag&&React.createElement('span',{style:{fontSize:9,fontWeight:800,color:TAT_COLOR,background:`${TAT_COLOR}22`,borderRadius:3,padding:"1px 5px"}},tag)
                 ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:"#eee"}},mn.replace(/^\d+\s*—\s*/,""))
               )
-              ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#555",marginTop:3}}
-                ,React.createElement('span',{style:{color:v.visualCheck?"#22c55e":"#444"}},v.visualCheck?"✓":"✕"," Visual")
+              ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#888",marginTop:3}}
+                ,React.createElement('span',{style:{color:v.visualCheck?"#22c55e":"#888"}},v.visualCheck?"✓":"✕"," Visual")
                 ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
               )
               ,v.notes&&React.createElement('div',{style:{fontSize:10,color:"#e8731a",marginTop:2}},"✎ ",v.notes)
@@ -5565,19 +5547,19 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:6}}
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:TAT_COLOR}},"Test & Tag Snapshot")
-          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+          ,React.createElement('div',{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
         ,React.createElement('button',{style:{...ST.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#60a5fa"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",unt,"#f59e0b"]].map(([l,v,c])=>
+        ,[["Pass",pass,"#60a5fa"],["Fail",fail,"#ef4444"],["N/A",na,"#94a3b8"],["Untested",unt,"#f59e0b"]].map(([l,v,c])=>
           React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
             ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
+            ,React.createElement('div',{style:{fontSize:10,color:"#999"}},l)
           )
         )
       )
-      ,React.createElement('div',{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view results")
+      ,React.createElement('div',{style:{fontSize:11,color:"#888",marginBottom:12}},"Tap an area to view results")
       ,project&&project.areas.map(area=>{
         const aItems=(area.items||[]);
         if(!aItems.length)return null;
@@ -5602,11 +5584,11 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(history.length===0)return React.createElement('div',{style:ST.listWrap},backBtn,React.createElement('div',{style:ST.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
+  if(history.length===0)return React.createElement('div',{style:ST.listWrap},backBtn,React.createElement('div',{style:ST.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#888",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement('div',{style:ST.listWrap}
     ,backBtn
     ,React.createElement('div',{style:ST.listTitle},"Test & Tag History")
-    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
+    ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
       let pass=0,fail=0,na=0,total=0;
       if(project){project.areas.forEach(a=>{(a.items||[]).forEach(id=>{total++;const v=(((snap.results||{})[a.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)pass++;else if(st===TAT_STATUS.FAIL)fail++;else if(st===TAT_STATUS.NA)na++;});});}
@@ -5618,15 +5600,15 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               ,fail>0&&React.createElement('span',{style:ST.failBadge},fail," FAIL")
             )
             ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#60a5fa"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#64748b"}},na," N/A")
+              ,React.createElement('span',{style:{fontSize:11,color:"#94a3b8"}},na," N/A")
               ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail-na," Untested")
             )
           )
-          ,React.createElement('span',{style:{...ST.arrow,color:expanded===snap.id?TAT_COLOR:"#555"}},expanded===snap.id?"▾":"›")
+          ,React.createElement('span',{style:{...ST.arrow,color:expanded===snap.id?TAT_COLOR: "#888"}},expanded===snap.id?"▾":"›")
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
@@ -5682,12 +5664,12 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
   const secTitle=t=>React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#fff",marginBottom:12}},t);
 
   return React.createElement('div',{style:{...ST.listWrap,paddingBottom:80}}
-    ,React.createElement('div',{style:{...ST.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
-    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
+    ,React.createElement('div',{style:{...ST.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
+    ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
 
     ,React.createElement('div',{style:secStyle}
       ,secTitle("APPLIANCE NAMES")
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:8}},"Tap ★ on any item to make it the default. The default is pre-filled when adding a new appliance.")
+      ,React.createElement('div',{style:{fontSize:10,color:"#888",marginBottom:8}},"Tap ★ on any item to make it the default. The default is pre-filled when adding a new appliance.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,(applianceNames||TAT_DEFAULT_NAMES).map((n,i)=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${i===0?"#f59e0b44":"#1e1e1e"}`,borderRadius:8,padding:"8px 12px"}}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#f59e0b",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
@@ -5700,11 +5682,11 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
         ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>setNewName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addName()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addName},"+ Add")
       )
-      ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetNames},"Reset to defaults")
+      ,React.createElement('button',{style:{...ST.smallBtn,color:"#888",fontSize:11},onClick:resetNames},"Reset to defaults")
     )
     ,React.createElement('div',{style:secStyle}
       ,secTitle("EQUIPMENT TYPE")
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:8}},"Tap ★ on any item to make it the default.")
+      ,React.createElement('div',{style:{fontSize:10,color:"#888",marginBottom:8}},"Tap ★ on any item to make it the default.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${i===0?"#f59e0b44":"#1e1e1e"}`,borderRadius:8,padding:"8px 12px"}}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#f59e0b",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
@@ -5717,12 +5699,12 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
         ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add equipment type…",value:newEquip,onChange:e=>setNewEquip(e.target.value),onKeyDown:e=>e.key==="Enter"&&addEquip()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addEquip},"+ Add")
       )
-      ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetEquip},"Reset to defaults")
+      ,React.createElement('button',{style:{...ST.smallBtn,color:"#888",fontSize:11},onClick:resetEquip},"Reset to defaults")
     )
 
     ,React.createElement('div',{style:secStyle}
       ,secTitle("TEST FREQUENCY")
-      ,React.createElement('div',{style:{fontSize:10,color:"#555",marginBottom:6}},"Tap ★ to set as default frequency.")
+      ,React.createElement('div',{style:{fontSize:10,color:"#888",marginBottom:6}},"Tap ★ to set as default frequency.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:{display:"flex",alignItems:"center",gap:8,background:"#1a1a1a",border:`1px solid ${(tatDefaults||{}).freq===f.value?"#f59e0b44":"#1e1e1e"}`,borderRadius:8,padding:"8px 12px"}}
           ,(tatDefaults||{}).freq===f.value&&React.createElement('span',{style:{fontSize:9,color:"#f59e0b",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
@@ -5735,7 +5717,7 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
         ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Number of months e.g. 2",type:"number",min:"1",value:newFreqMonths,onChange:e=>setNewFreqMonths(e.target.value),onKeyDown:e=>e.key==="Enter"&&addFreq()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:addFreq},"+ Add")
       )
-      ,React.createElement('button',{style:{...ST.smallBtn,color:"#555",fontSize:11},onClick:resetFreq},"Reset to defaults")
+      ,React.createElement('button',{style:{...ST.smallBtn,color:"#888",fontSize:11},onClick:resetFreq},"Reset to defaults")
     )
   );
 }
@@ -5743,8 +5725,8 @@ function TATSettingsView({equipTypes, setEquipTypes, freqOptions, setFreqOptions
 
 
 function TATNavBtn({icon,label,active,onClick,color}){
-  const c=active?(color||"#64748b"):"#333";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#64748b"}`:"2px solid transparent"}}
+  const c=active?(color||"#94a3b8"):"#888";
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#94a3b8"}`:"2px solid transparent"}}
     ,icon
     ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
   );
@@ -5758,33 +5740,33 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#161616",flexShrink:0,zIndex:10},
   topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
   appTitle:{fontSize:16,fontWeight:800,letterSpacing:1},appSub:{fontSize:10,letterSpacing:0.5},
-  backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#555",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
-  homeModuleBtn:{fontSize:11,color:"#555",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
+  backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#888",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
+  homeModuleBtn:{fontSize:11,color:"#888",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
   saveIndicator:{fontSize:11,color:"#22c55e",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#161616",borderBottom:"1px solid #1e1e1e",fontSize:12,flexWrap:"wrap",flexShrink:0},
-  bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
+  bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#888"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
   bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #3b82f6",paddingBottom:8,width:"100%",maxWidth:500},
-  brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
-  siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
+  brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#999",letterSpacing:1,marginTop:2},
+  siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#999"},
   homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
   metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",boxSizing:"border-box",overflow:"hidden"},
-  metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
+  metaLabelText:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700},
   metaInput:{background:"#1a1a1a",border:"1px solid #222",borderRadius:8,color:"#eee",padding:"12px 16px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
   duePill:{fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
   siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
   siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
-  siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
+  siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#999",marginTop:2},
   failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
-  arrow:{fontSize:22,color:"#555",lineHeight:1},
+  arrow:{fontSize:22,color:"#888",lineHeight:1},
   addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
   panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
-  panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#666",marginTop:2},
+  panelTitle:{fontSize:20,fontWeight:800,color:"#eee"},panelSub:{fontSize:12,color:"#999",marginTop:2},
   panelStats:{display:"flex",gap:10,fontSize:15,fontWeight:800},
   circuitWrap:{padding:"16px"},
-  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+  summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#999",marginTop:4,marginBottom:16},
   secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   exportBtn:{padding:"11px",background:"#161616",color:"#4ade80",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
   confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
@@ -5792,7 +5774,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   confirmNo:{padding:"7px 14px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},
   smallBtn:{padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
   smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},
-  tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#666",fontSize:12,fontWeight:600,cursor:"pointer"},
+  tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#999",fontSize:12,fontWeight:600,cursor:"pointer"},
   tabBtnActive:{background:"#1a2030",border:`1px solid ${TAT_COLOR}`,color:TAT_COLOR},
   ctaPrimary:{padding:"11px 20px",background:TAT_COLOR,color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
   ctaSecondary:{padding:"11px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
@@ -5800,7 +5782,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   modalBox:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto"},
   modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20},
   modalField:{marginBottom:14},
-  modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
+  modalLabel:{display:"block",fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5},
   modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
   modalClose:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8},
 };
@@ -5842,7 +5824,7 @@ const RESULT_COLORS = {
   PASS: "#22c55e",
   FAIL: "#ef4444",
   MONITOR: "#f59e0b",
-  UNTESTED: "#555"
+  UNTESTED: "#888"
 };
 const RESULT_BG = {
   PASS: "#14532d",
@@ -5936,7 +5918,7 @@ function exportThermoExcel(project, results, meta) {
       if (circuits.length > 0) {
         circuits.forEach(cid => {
           const cName = (board.circuitNames || {})[cid] || "";
-          const photos = getPhotos(results, area.id, board.id, cid);
+          const photos = getPhotos(results, area.id, board.id, cid).filter(p => !p.isSkip);
           if (photos.length === 0) {
             // Untested circuit — still list it
             rows.push([area.name, board.name, cName, fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
@@ -5956,7 +5938,7 @@ function exportThermoExcel(project, results, meta) {
         });
       } else {
         // No circuits — photos belong directly to board (circuitId = "__board__")
-        const photos = getPhotos(results, area.id, board.id, "__board__");
+        const photos = getPhotos(results, area.id, board.id, "__board__").filter(p => !p.isSkip);
         if (photos.length === 0) {
           rows.push([area.name, board.name, "", fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
           dataRows.push({
@@ -6358,7 +6340,7 @@ const STH = {
     alignItems: "center",
     gap: 8
   },
-  backBtn: {display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#555",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0,alignSelf:"flex-start"},
+  backBtn: {display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#888",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0,alignSelf:"flex-start"},
   appTitle: {
     fontSize: 15,
     fontWeight: 800,
@@ -6388,7 +6370,7 @@ const STH = {
   },
   bcItem: {
     fontSize: 11,
-    color: "#555",
+    color: "#888",
     cursor: "pointer"
   },
   bcSep: {
@@ -6423,7 +6405,7 @@ const STH = {
     fontSize: 9,
     fontWeight: 700,
     letterSpacing: 0.5,
-    color: "#555"
+    color: "#888"
   },
   listWrap: {
     padding: "16px"
@@ -6449,7 +6431,7 @@ const STH = {
   },
   brandSub: {
     fontSize: 11,
-    color: "#666",
+    color: "#999",
     letterSpacing: 1,
     marginTop: 2
   },
@@ -6473,7 +6455,7 @@ const STH = {
   },
   siteCardSub: {
     fontSize: 12,
-    color: "#666",
+    color: "#999",
     marginTop: 2
   },
   failBadge: {
@@ -6487,7 +6469,7 @@ const STH = {
   },
   arrow: {
     fontSize: 22,
-    color: "#555"
+    color: "#888"
   },
   addCard: {
     background: "#161616",
@@ -6498,7 +6480,7 @@ const STH = {
   },
   metaLabelText: {
     fontSize: 10,
-    color: "#666",
+    color: "#999",
     letterSpacing: 0.8,
     fontWeight: 700
   },
@@ -6624,7 +6606,7 @@ const STH = {
   },
   panelSub: {
     fontSize: 12,
-    color: "#666",
+    color: "#999",
     marginTop: 2
   },
   modalOverlay: {
@@ -6659,13 +6641,13 @@ const STH = {
   },
   modalSub: {
     fontSize: 11,
-    color: "#666",
+    color: "#999",
     marginTop: 3
   },
   modalLabel: {
     display: "block",
     fontSize: 10,
-    color: "#666",
+    color: "#999",
     letterSpacing: 0.8,
     fontWeight: 700,
     marginBottom: 5
@@ -6702,7 +6684,7 @@ const STH = {
   },
   summaryWrap: {padding:"16px"},
   summaryTitle: {fontSize:22,fontWeight:900,letterSpacing:1.5},
-  summaryMeta: {fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+  summaryMeta: {fontSize:13,color:"#999",marginTop:4,marginBottom:16},
   duePill: {fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
 };
 
@@ -6716,12 +6698,12 @@ function ThermoNavBtn({
   onClick,
   color
 }) {
-  const c = active ? color || "#64748b" : "#333";
+  const c = active ? color || "#94a3b8" : "#888";
   return /*#__PURE__*/React.createElement("button", {
     style: {
       ...STH.navBtn,
       color: c,
-      borderTop: active ? `2px solid ${color || "#64748b"}` : "2px solid transparent"
+      borderTop: active ? `2px solid ${color || "#94a3b8"}` : "2px solid transparent"
     },
     onClick: onClick
   }, icon, /*#__PURE__*/React.createElement("span", null, label));
@@ -6742,12 +6724,12 @@ function SWBAuditGate({summary, hasAuditor, onGoHome, onEnterAudit}) {
   const auditInProgress = summary.total>0 && (summary.pass+summary.fail+summary.na)>0;
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
     ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},auditInProgress?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?"#a855f7":"#555",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
+    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?"#a855f7": "#888",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
     ,auditInProgress
       ?React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}},"Tap Continue to test boards, or go Home to complete the audit.")
-      :React.createElement('div',{style:{fontSize:13,color:"#555",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
+      :React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
     ,!auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:"#a855f7",color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Go to Home to Start")
-    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?"#a855f7":"#2a2a2a",color:hasAuditor?"#fff":"#555",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
+    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?"#a855f7":"#2a2a2a",color:hasAuditor?"#fff": "#888",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
     ,auditInProgress&&React.createElement('button',{style:{padding:"12px 32px",background:"transparent",color:"#888",border:"1px solid #2a2a2a",borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Back to Home")
   );
 }
@@ -6761,7 +6743,7 @@ function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
   if(onSelectBoard) return null;
   return React.createElement('div',{style:SS.listWrap}
     ,React.createElement('div',{style:SS.listTitle},"Select Area")
-    ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure to add areas and boards.")
+    ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#888",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure to add areas and boards.")
     ,(project.areas||[]).map(area=>{
       let pass=0,fail=0,untested=0,total=0;
       (area.boards||[]).forEach(b=>{
@@ -6797,7 +6779,7 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
   const SS=swbStyles();
   return React.createElement('div',{style:SS.listWrap}
     ,React.createElement('div',{style:SS.listTitle},area.name)
-    ,(area.boards||[]).length===0&&React.createElement('div',{style:{color:"#555",fontSize:14}},"No boards in this area. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure to add boards.")
+    ,(area.boards||[]).length===0&&React.createElement('div',{style:{color:"#888",fontSize:14}},"No boards in this area. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure to add boards.")
     ,(area.boards||[]).map(b=>{
       const bs=swbBoardSummary(results,project.id,area.id,b.id);
       const isComp=swbBoardComplete(results,project.id,area.id,b.id);
@@ -6848,8 +6830,8 @@ function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
   }
   return React.createElement('div',{style:{position:"relative"}}
     ,React.createElement('button',{style:{...SS.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"},onClick:()=>setOpen(x=>!x)}
-      ,React.createElement('span',{style:{color:value?"#eee":"#555"}},value||placeholder||"Select…")
-      ,React.createElement('span',{style:{color:"#666",fontSize:12}},"▾")
+      ,React.createElement('span',{style:{color:value?"#eee": "#888"}},value||placeholder||"Select…")
+      ,React.createElement('span',{style:{color:"#999",fontSize:12}},"▾")
     )
     ,open&&React.createElement('div',{style:{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#1e1e1e",border:"1px solid #333",borderRadius:10,zIndex:300,overflow:"hidden",boxShadow:"0 8px 32px rgba(0,0,0,0.6)"}}
       ,(options||[]).map((opt,i)=>
@@ -6857,7 +6839,7 @@ function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:accentColor,fontWeight:700,marginRight:6}},"DEFAULT"),opt
         )
       )
-      ,React.createElement('button',{style:{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#64748b",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12},onClick:()=>{setOpen(false);setCustom(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Type custom value…")
+      ,React.createElement('button',{style:{display:"block",width:"100%",textAlign:"left",padding:"10px 14px",background:"transparent",color:"#94a3b8",border:"none",borderTop:"1px solid #333",cursor:"pointer",fontSize:12},onClick:()=>{setOpen(false);setCustom(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Type custom value…")
     )
   );
 }
@@ -6960,7 +6942,7 @@ function ThermoProjectListView({
     background: active ? "#1a0e00" : "#111",
     border: active ? `1px solid ${THERMO_COLOR}` : "1px solid #2a2a2a",
     borderRadius: 8,
-    color: active ? THERMO_COLOR : "#666",
+    color: active ? THERMO_COLOR : "#999",
     fontSize: 12,
     fontWeight: 600,
     cursor: "pointer"
@@ -6974,7 +6956,7 @@ function ThermoProjectListView({
     }
   }, "Sites"), projects.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "#555",
+      color: "#888",
       fontSize: 14,
       marginBottom: 16
     }
@@ -7087,7 +7069,7 @@ function ThermoProjectListView({
   }, "Import Previous Report"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
-      color: "#666",
+      color: "#999",
       marginBottom: 12
     }
   }, "Upload your existing thermographic Excel report. Columns needed: Location, Board, Circuit, Date, Pass/Fail. The full site structure, results, notes and priorities are imported. Photo numbers are not imported \u2014 enter them fresh for the new audit cycle."), !importPreview && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
@@ -7143,18 +7125,18 @@ function ThermoProjectListView({
     key: a.id,
     style: {
       fontSize: 11,
-      color: "#666",
+      color: "#999",
       marginBottom: 2
     }
   }, a.name, " - ", (a.boards || []).length, " boards")), importPreview.areas.length > 5 && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: "#555"
+      color: "#888"
     }
   }, "...and ", importPreview.areas.length - 5, " more"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: "#555",
+      color: "#888",
       marginTop: 8,
       borderTop: "1px solid #2a2a2a",
       paddingTop: 8
@@ -7230,7 +7212,7 @@ function ThermoHomeView({
   }, project.name), project.company && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
-      color: "#666"
+      color: "#999"
     }
   }, project.company), /*#__PURE__*/React.createElement("div", {
     style: STH.metaCard
@@ -7270,7 +7252,7 @@ function ThermoHomeView({
   }, "STARTING PHOTO NUMBER"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: "#555",
+      color: "#888",
       marginBottom: 4
     }
   }, "First photo number on camera today (e.g. 168). Used to auto-suggest the next number while logging."), /*#__PURE__*/React.createElement("input", {
@@ -7303,7 +7285,7 @@ function ThermoHomeView({
     }, /*#__PURE__*/React.createElement("div", {
       style: {display: "flex", justifyContent: "space-between", marginBottom: 8}
     }, /*#__PURE__*/React.createElement("div", {style: {fontSize: 13, fontWeight: 700, color: "#eee"}}, "Overall Progress"),
-      /*#__PURE__*/React.createElement("div", {style: {fontSize: 12, color: "#555"}}, passCount, " / ", total, " pass")
+      /*#__PURE__*/React.createElement("div", {style: {fontSize: 12, color: "#888"}}, passCount, " / ", total, " pass")
     ), /*#__PURE__*/React.createElement("div", {
       style: {width: "100%", height: 8, background: "#2a2a2a", borderRadius: 4, overflow: "hidden", marginBottom: 10}
     }, /*#__PURE__*/React.createElement("div", {
@@ -7317,7 +7299,7 @@ function ThermoHomeView({
       passCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#22c55e"}}, passCount, " Pass"),
       monitorCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#f59e0b", fontWeight: 800}}, monitorCount, " Monitor"),
       failCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#f87171", fontWeight: 800}}, failCount, " FAIL"),
-      /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#555"}}, total, " total")
+      /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#888"}}, total, " total")
     ));
   })(), /*#__PURE__*/React.createElement("button", {
     style: {
@@ -7325,7 +7307,7 @@ function ThermoHomeView({
       maxWidth: 500,
       padding: "16px",
       background: hasAuditor ? THERMO_COLOR : "#1a1a1a",
-      color: hasAuditor ? "#fff" : "#555",
+      color: hasAuditor ? "#fff" : "#888",
       border: `2px solid ${hasAuditor ? THERMO_COLOR : "#2a2a2a"}`,
       borderRadius: 16,
       fontSize: 16,
@@ -7381,7 +7363,7 @@ function ThermoHomeView({
     style: {
       background: "transparent",
       border: "none",
-      color: "#555",
+      color: "#888",
       fontSize: 12,
       cursor: "pointer",
       textDecoration: "underline"
@@ -7404,7 +7386,7 @@ function ThermoAreaListView({
     style: STH.listTitle
   }, "Select Location"), project.areas.length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "#555",
+      color: "#888",
       fontSize: 14
     }
   }, "No locations yet \u2014 go to \u2699 Structure to add areas and boards."), project.areas.map(area => {
@@ -7457,7 +7439,7 @@ function ThermoBoardListView({
     style: STH.listTitle
   }, area.name), (area.boards || []).length === 0 && /*#__PURE__*/React.createElement("div", {
     style: {
-      color: "#555",
+      color: "#888",
       fontSize: 14
     }
   }, "No boards in this area \u2014 go to \u2699 Structure to add boards."), (area.boards || []).map(board => {
@@ -7582,7 +7564,7 @@ function ThermoCircuitView({
     }, row.id === "__board__" ? board.name : row.name), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
-        color: "#555",
+        color: "#888",
         marginTop: 2
       }
     }, photos.length === 0 ? "No photos logged" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
@@ -7618,14 +7600,14 @@ function ThermoEditableDropdown({options,value,onChange,placeholder}){
     ,React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #333",borderRadius:8,color:"#aaa",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
   );}
   return React.createElement("div",{style:{position:"relative"}}
-    ,React.createElement("button",{style:{...STH.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee":"#555"},onClick:()=>setOpen(o=>!o)}
+    ,React.createElement("button",{style:{...STH.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee": "#888"},onClick:()=>setOpen(o=>!o)}
       ,React.createElement("span",null,value||placeholder||"Select…")
-      ,React.createElement("span",{style:{color:"#555",fontSize:12}},open?"▴":"▾")
+      ,React.createElement("span",{style:{color:"#888",fontSize:12}},open?"▴":"▾")
     )
     ,open&&React.createElement("div",{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}}
       ,options.map(o=>React.createElement("div",{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?"#f97316":"#ccc",background:o===value?"#1a1a0a":"transparent",borderBottom:"1px solid #2a2a2a"},
         onClick:()=>{onChange(o);setOpen(false);}},o))
-      ,React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Type custom…")
+      ,React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#888",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'}))," Type custom…")
     )
   );
 }
@@ -7672,7 +7654,7 @@ function PhotoPage({
   };
   const makeFlirName = localPhotosLength => {
     const num = nextFlirNum(localPhotosLength);
-    return num !== "" ? `FLIR${String(num).padStart(4, "0")}` : "";
+    return num !== "" ? String(num).padStart(4, "0") : "";
   };
   const blankForm = localPhotosLength => ({
     id: uid(),
@@ -7708,13 +7690,30 @@ function PhotoPage({
     setForm(blankForm(updated.length));
   };
   const deletePhoto = idx => {
-    const updated = photosRef.current.filter((_, i) => i !== idx);
+    let updated = photosRef.current.filter((_, i) => i !== idx);
+    updated = updated.map((p, i) => {
+      if (i >= idx && /^\d+$/.test(p.flirFile)) {
+        const dec = parseInt(p.flirFile) - 1;
+        return { ...p, flirFile: String(dec).padStart(p.flirFile.length, "0") };
+      }
+      return p;
+    });
     setPhotos(updated);
     onPatchPhotos(updated);
     if (editingIdx === idx) {
       setEditingIdx(null);
       setForm(blankForm(updated.length));
+    } else if (editingIdx !== null && editingIdx > idx) {
+      setEditingIdx(editingIdx - 1);
     }
+  };
+  const addSkip = () => {
+    const num = makeFlirName(photosRef.current.length);
+    if (!num) return;
+    const updated = [...photosRef.current, { id: uid(), flirFile: num, isSkip: true }];
+    setPhotos(updated);
+    onPatchPhotos(updated);
+    setForm(blankForm(updated.length));
   };
   const startEdit = idx => {
     setForm({
@@ -7744,7 +7743,7 @@ function PhotoPage({
   }, circuitId === "__board__" ? board.name : circuitName), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
-      color: "#666",
+      color: "#999",
       marginTop: 2
     }
   }, board.name, " \xB7 ", area.name)), photos.length > 0 && /*#__PURE__*/React.createElement("div", {
@@ -7753,13 +7752,39 @@ function PhotoPage({
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
-      fontSize: 10,
-      color: "#666",
-      letterSpacing: 0.8,
-      fontWeight: 700,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
       marginBottom: 8
     }
-  }, "LOGGED PHOTOS"), photos.map((photo, idx) => {
+  },
+    React.createElement("div", {
+      style: { fontSize: 10, color: "#999", letterSpacing: 0.8, fontWeight: 700 }
+    }, "LOGGED PHOTOS"),
+    React.createElement("div", {
+      style: { fontSize: 11, color: "#888" }
+    }, "Last: ", React.createElement("span", { style: { color: THERMO_COLOR, fontWeight: 700 } },
+      photos[photos.length - 1].flirFile || "—"
+    ))
+  ), photos.map((photo, idx) => {
+    if (photo.isSkip) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: photo.id || idx,
+        style: {
+          background: "#161616",
+          border: "2px dashed #444",
+          borderRadius: 12,
+          padding: "10px 14px",
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, fontWeight: 700, color: "#999" }
+      }, photo.flirFile, " — Skipped"),
+        React.createElement(DeleteButton, { onDelete: () => deletePhoto(idx) })
+      );
+    }
     const rc = RESULT_COLORS[photo.result] || "#555";
     const isBeingEdited = editingIdx === idx;
     return /*#__PURE__*/React.createElement("div", {
@@ -7824,7 +7849,7 @@ function PhotoPage({
     }, "\u270E ", photo.notes), photo.rectified && /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
-        color: "#64748b",
+        color: "#94a3b8",
         marginTop: 2
       }
     }, "\uD83D\uDD27 ", photo.rectified)), /*#__PURE__*/React.createElement("div", {
@@ -7861,7 +7886,21 @@ function PhotoPage({
       color: THERMO_COLOR,
       letterSpacing: 0.5
     }
-  }, isEditing ? "✎ EDIT PHOTO" : "➕ ADD PHOTO")), /*#__PURE__*/React.createElement("div", {
+  }, isEditing ? "✎ EDIT PHOTO" : "➕ ADD PHOTO")), !isEditing && /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      padding: "10px",
+      marginBottom: 12,
+      background: "transparent",
+      color: "#888",
+      border: "1px dashed #444",
+      borderRadius: 10,
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer"
+    },
+    onClick: addSkip
+  }, "↷ Skip Number ", makeFlirName(photosRef.current.length)), /*#__PURE__*/React.createElement("div", {
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
@@ -7893,7 +7932,7 @@ function PhotoPage({
       flex: 1,
       padding: "14px 4px",
       background: form.result === r ? RESULT_BG[r] : "#1a1a1a",
-      color: form.result === r ? RESULT_COLORS[r] : "#555",
+      color: form.result === r ? RESULT_COLORS[r] : "#888",
       border: `2px solid ${form.result === r ? RESULT_COLORS[r] : "#2a2a2a"}`,
       borderRadius: 10,
       fontSize: 14,
@@ -7910,7 +7949,7 @@ function PhotoPage({
     style: STH.modalLabel
   }, "TEMPERATURE \xB0C ", /*#__PURE__*/React.createElement("span", {
     style: {
-      color: "#444",
+      color: "#888",
       fontWeight: 400
     }
   }, "(optional)")), /*#__PURE__*/React.createElement("input", {
@@ -7929,7 +7968,7 @@ function PhotoPage({
     style: STH.modalLabel
   }, "NOTES / RECOMMENDATIONS ", /*#__PURE__*/React.createElement("span", {
     style: {
-      color: "#444",
+      color: "#888",
       fontWeight: 400
     }
   }, "(optional)")), /*#__PURE__*/React.createElement("input", {
@@ -7957,17 +7996,6 @@ function PhotoPage({
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
-  }, "DATE RECTIFIED"), /*#__PURE__*/React.createElement("div", {style:{position:"relative", marginTop:4}},
-    /*#__PURE__*/React.createElement("div", {style:{...STH.modalInput, textAlign:"center", cursor:"pointer", color: form.rectifiedDate ? "#eee" : "#555"}}, form.rectifiedDate ? fmtDate(form.rectifiedDate) : "Select date…"),
-    /*#__PURE__*/React.createElement("input", {
-      type: "date", value: form.rectifiedDate||"",
-      onChange: e => setForm(f => ({...f, rectifiedDate: e.target.value})),
-      style: {position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}
-    })
-  )), /*#__PURE__*/React.createElement("div", {
-    style: STH.modalField
-  }, /*#__PURE__*/React.createElement("label", {
-    style: STH.modalLabel
   }, "DEFECT ID"), /*#__PURE__*/React.createElement("input", {
     style: STH.modalInput, value: form.defectId, placeholder: "e.g. DEF-001",
     onChange: e => setForm(f => ({...f, defectId: e.target.value}))
@@ -7991,7 +8019,7 @@ function PhotoPage({
     style: {
       padding:"10px 14px",
       background: form.priority===p ? p ? PRIORITY_BG[p] : "#1a2535" : "#1a1a1a",
-      color: form.priority===p ? p ? PRIORITY_COLORS[p] : "#64748b" : "#444",
+      color: form.priority===p ? p ? PRIORITY_COLORS[p] : "#94a3b8" : "#888",
       border: `1px solid ${form.priority===p ? p ? PRIORITY_COLORS[p] : "#334155" : "#2a2a2a"}`,
       borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
     },
@@ -8007,7 +8035,7 @@ function PhotoPage({
       flex: 1,
       padding: "18px",
       background: form.flirFile.trim() ? THERMO_COLOR : "#2a2a2a",
-      color: form.flirFile.trim() ? "#fff" : "#555",
+      color: form.flirFile.trim() ? "#fff" : "#888",
       border: "none",
       borderRadius: 14,
       fontSize: 16,
@@ -8045,7 +8073,7 @@ function ThermoReportView({
       const cids = hasC ? board.circuits : ["__board__"];
       cids.forEach(cid => {
         const cName = hasC ? (board.circuitNames || {})[cid] || cid : "";
-        const photos = getPhotos(results, area.id, board.id, cid);
+        const photos = getPhotos(results, area.id, board.id, cid).filter(p => !p.isSkip);
         photos.forEach(p => rows.push({
           area: area.name,
           board: board.name,
@@ -8062,7 +8090,7 @@ function ThermoReportView({
     style: STH.summaryWrap
   }, /*#__PURE__*/React.createElement("div", {
     style: STH.summaryTitle
-  }, project.name), project.company && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}}, project.company), /*#__PURE__*/React.createElement("div", {
+  }, project.name), project.company && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#999",marginTop:2,marginBottom:4}}, project.company), /*#__PURE__*/React.createElement("div", {
     style: STH.summaryMeta
   }, "THERMOGRAPHIC REPORT", meta.auditor ? ` · ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{...STH.duePill,borderColor:`${THERMO_COLOR}55`,color:THERMO_COLOR,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):fmtDate(addYearsISO(meta.testDate,1))))), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8091,14 +8119,14 @@ function ThermoReportView({
   }, v), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 9,
-      color: "#666",
+      color: "#999",
       marginTop: 2
     }
   }, l.toUpperCase())))),
   React.createElement("div",{style:{marginBottom:20}},
     React.createElement("div",{style:{fontSize:12,fontWeight:700,color:THERMO_COLOR,letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY"),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
-      React.createElement("div",{style:{fontSize:11,color:"#555",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
+      React.createElement("div",{style:{fontSize:11,color:"#888",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
       (area.boards||[]).map(board=>{
         const bRows=rows.filter(r=>r.area===area.name&&r.board===board.name);
         const bFail=bRows.filter(r=>r.photo.result==="FAIL").length;
@@ -8109,7 +8137,7 @@ function ThermoReportView({
           bPass>0&&React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},bPass," P"),
           bFail>0&&React.createElement("span",{style:{fontSize:11,color:"#ef4444",fontWeight:800}},bFail," F"),
           bMon>0&&React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},bMon," M"),
-          bRows.length===0&&React.createElement("span",{style:{fontSize:11,color:"#555"}},"No photos")
+          bRows.length===0&&React.createElement("span",{style:{fontSize:11,color:"#888"}},"No photos")
         );
       })
     ))
@@ -8296,7 +8324,7 @@ function ThermoManageView({
       padding: "16px"
     }
   }, /*#__PURE__*/React.createElement("div", {
-    style: {...STH.listTitle, color: "#64748b"}
+    style: {...STH.listTitle, color: "#94a3b8"}
   }, /*#__PURE__*/React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},/*#__PURE__*/React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),/*#__PURE__*/React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage: ", project.name),
   /*#__PURE__*/React.createElement("div", {style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:14}},
     editingProject
@@ -8315,14 +8343,14 @@ function ThermoManageView({
       : /*#__PURE__*/React.createElement("div", {style:{display:"flex",justifyContent:"space-between",alignItems:"center"}},
           /*#__PURE__*/React.createElement("div",null,
             /*#__PURE__*/React.createElement("div",{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name),
-            project.company&&/*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
+            project.company&&/*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#999",marginTop:2}},project.company)
           ),
           /*#__PURE__*/React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
   ),
-  /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment"),
-  /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS"),
-  project.areas.length===0 && /*#__PURE__*/React.createElement("div",{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet."),
+  /*#__PURE__*/React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:12}},"Manage locations, panels and equipment"),
+  /*#__PURE__*/React.createElement("div",{style:{fontSize:11,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS"),
+  project.areas.length===0 && /*#__PURE__*/React.createElement("div",{style:{color:"#888",fontSize:13,marginBottom:12}},"No areas yet."),
   project.areas.map(area => /*#__PURE__*/React.createElement("div", {
     key: area.id,
     style: {
@@ -8382,7 +8410,7 @@ function ThermoManageView({
   }, area.name), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11,
-      color: "#555",
+      color: "#888",
       flexShrink: 0,
       whiteSpace: "nowrap"
     }
@@ -8448,7 +8476,7 @@ function ThermoManageView({
   }, board.name), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 11,
-      color: "#555",
+      color: "#888",
       flexShrink: 0,
       whiteSpace: "nowrap"
     }
@@ -8462,7 +8490,7 @@ function ThermoManageView({
   }, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 10,
-      color: "#555",
+      color: "#888",
       fontWeight: 700,
       letterSpacing: 0.8,
       marginBottom: 6
@@ -8513,7 +8541,7 @@ function ThermoManageView({
   }), (board.circuits || []).length === 0 && /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: 12,
-      color: "#444"
+      color: "#888"
     }
   }, "No circuits \u2014 photos will be logged at board level")), /*#__PURE__*/React.createElement("div", {
     style: {
@@ -8682,12 +8710,12 @@ function ThermoHistoryView({
       }, circName), /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
-          color: "#555"
+          color: "#888"
         }
       }, board?.name, " \xB7 ", fmtDate(snap.testDate), " \xB7 Read-only")), /*#__PURE__*/React.createElement("span", {
         style: {
           fontSize: 11,
-          color: "#555",
+          color: "#888",
           background: "#1a1a1a",
           borderRadius: 6,
           padding: "3px 8px",
@@ -8695,7 +8723,7 @@ function ThermoHistoryView({
         }
       }, photos.length, " photo", photos.length !== 1 ? "s" : "")), photos.length === 0 && /*#__PURE__*/React.createElement("div", {
         style: {
-          color: "#555",
+          color: "#888",
           fontSize: 13
         }
       }, "No photos logged for this circuit."), photos.map((photo, idx) => {
@@ -8755,7 +8783,7 @@ function ThermoHistoryView({
         }, "\u270E ", photo.notes), photo.rectified && /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
-            color: "#64748b",
+            color: "#94a3b8",
             marginTop: 2
           }
         }, "\uD83D\uDD27 ", photo.rectified));
@@ -8790,7 +8818,7 @@ function ThermoHistoryView({
       }, board?.name), /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
-          color: "#555"
+          color: "#888"
         }
       }, area?.name, " \xB7 Read-only"))), rows.map(row => {
         const photos = ((snapResults[viewArea] || {})[viewBoard] || {})[row.id] || [];
@@ -8820,7 +8848,7 @@ function ThermoHistoryView({
         }, row.name), /*#__PURE__*/React.createElement("div", {
           style: {
             fontSize: 11,
-            color: "#555",
+            color: "#888",
             marginTop: 2
           }
         }, photos.length === 0 ? "No photos" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
@@ -8865,7 +8893,7 @@ function ThermoHistoryView({
       }, area?.name), /*#__PURE__*/React.createElement("div", {
         style: {
           fontSize: 11,
-          color: "#555"
+          color: "#888"
         }
       }, fmtDate(snap.testDate), " \xB7 Read-only"))), (area?.boards || []).map(board => {
         const count = snapBoardPhotos(viewArea, board);
@@ -8923,7 +8951,7 @@ function ThermoHistoryView({
     }, "Thermographic Audit"), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
-        color: "#555"
+        color: "#888"
       }
     }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor", " \xB7 Read-only")), /*#__PURE__*/React.createElement("button", {
       style: {
@@ -8958,13 +8986,13 @@ function ThermoHistoryView({
     }, v), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 10,
-        color: "#666",
+        color: "#999",
         marginTop: 2
       }
     }, l.toUpperCase())))), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
-        color: "#555",
+        color: "#888",
         marginBottom: 12
       }
     }, "Tap a location to view photos"), (project?.areas || []).map(area => {
@@ -9008,7 +9036,7 @@ function ThermoHistoryView({
     style: {
       padding: "40px 16px",
       textAlign: "center",
-      color: "#555"
+      color: "#888"
     }
   }, /*#__PURE__*/React.createElement("div", {
     style: {
@@ -9030,7 +9058,7 @@ function ThermoHistoryView({
   }, "Audit History"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 12,
-      color: "#555",
+      color: "#888",
       marginBottom: 16
     }
   }, history.length, " saved audit", history.length !== 1 ? "s" : ""), history.map(snap => {
@@ -9082,7 +9110,7 @@ function ThermoHistoryView({
     }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor"), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
-        color: "#555",
+        color: "#888",
         marginTop: 2
       }
     }, "Archived ", fmtDateTime(snap.archivedAt)), totalPhotos > 0 && /*#__PURE__*/React.createElement("div", {
@@ -9110,7 +9138,7 @@ function ThermoHistoryView({
     }, monitorPhotos, " Monitor"))), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 22,
-        color: isExpanded ? THERMO_COLOR : "#555"
+        color: isExpanded ? THERMO_COLOR : "#888"
       }
     }, isExpanded ? "▾" : "›")), isExpanded && /*#__PURE__*/React.createElement("div", {
       style: {
@@ -9171,13 +9199,13 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
     {key:"rectified",label:"RECTIFIED / SCHEDULED",color:"#f59e0b",desc:"Actions available when rectifying a defect"},
   ];
   return React.createElement("div",{style:{padding:"16px",paddingBottom:100}}
-    ,React.createElement("div",{style:{...STH.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
-    ,React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
+    ,React.createElement("div",{style:{...STH.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
+    ,React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
     ,sections.map(({key,label,color,desc})=>{
       const newVal=newVals[key]||"";
       return React.createElement("div",{key,style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:14}}
         ,React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#fff",letterSpacing:0.8,marginBottom:2}},label)
-        ,React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:10}},desc)
+        ,React.createElement("div",{style:{fontSize:11,color:"#888",marginBottom:10}},desc)
         ,React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}
           ,items(key).map((item,i)=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#111",border:`1px solid ${i===0?"#f59e0b44":"#1e1e1e"}`,borderRadius:7,padding:"7px 10px"}}
             ,i===0&&React.createElement("span",{style:{fontSize:9,color:"#f59e0b",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
@@ -9185,7 +9213,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
             ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:"#f59e0b",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
             ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
           ))
-          ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
+          ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#888",padding:"6px 0"}},"No options — add one below")
         )
         ,React.createElement("div",{style:{display:"flex",gap:8,marginBottom:8}}
           ,React.createElement("input",{style:{flex:1,background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none"},
@@ -9194,7 +9222,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
         )
-        ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>resetItem(key)},"Reset to defaults")
+        ,React.createElement("button",{style:{background:"transparent",border:"none",color:"#888",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>resetItem(key)},"Reset to defaults")
       );
     })
   );
@@ -9371,7 +9399,8 @@ function ThermoApp({
     } else if (view === "audit" && activeAreaId) {
       setActiveAreaId(null);
     } else if (view === "audit" && auditEntered) {
-      setAuditEntered(false);
+      const photoCount = project ? sitePhotoCount(allResults[activeProject] || {}, project) : 0;
+      setAuditEntered(photoCount > 0);
       goHome();
     } else if (view === "audit") {
       goHome();
@@ -9394,7 +9423,7 @@ function ThermoApp({
   const isAudit = view === "audit" || view === "area" || view === "board" || view === "circuit";
   return /*#__PURE__*/React.createElement("div", {
     style: STH.root
-  }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`), React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #181818',background:'#0d0d0d',flexShrink:0}},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}},view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack},React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")),React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"Thermographic"),React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")),onGoHome&&React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules"))),React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #f97316, transparent 70%)',opacity:0.5}})), /*#__PURE__*/React.createElement("main", {
+  }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`), React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #181818',background:'#0d0d0d',flexShrink:0}},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}},view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack},React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Back")),React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"Thermographic"),React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")),onGoHome&&React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules"))),React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #f97316, transparent 70%)',opacity:0.5}})), /*#__PURE__*/React.createElement("main", {
     style: STH.main
   }, view === "projects" && /*#__PURE__*/React.createElement(ThermoProjectListView, {
     projects: projects,
@@ -9561,7 +9590,7 @@ function ThermoApp({
     label: "Home",
     active: view === "home",
     onClick: goHome,
-    color: "#64748b"
+    color: "#94a3b8"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_AUDIT,
     label: "Audit",
@@ -9573,31 +9602,31 @@ function ThermoApp({
       setActiveCircuitName("");
       setView("audit");
     },
-    color: "#64748b"
+    color: "#94a3b8"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_REPORT,
     label: "Report",
     active: view === "report",
     onClick: () => setView("report"),
-    color: "#64748b"
+    color: "#94a3b8"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_HISTORY,
     label: "History",
     active: view === "history",
     onClick: () => setView("history"),
-    color: "#64748b"
+    color: "#94a3b8"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_MANAGE,
     label: "Manage",
     active: view === "manage",
     onClick: () => setView("manage"),
-    color: "#64748b"
+    color: "#94a3b8"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_DROPDOWNS,
     label: "Dropdowns",
     active: view === "dropdowns",
     onClick: () => setView("dropdowns"),
-    color: "#64748b"
+    color: "#94a3b8"
   })));
 }
 // ═════════════════════════════════════════════════════════════════════════
@@ -9695,7 +9724,7 @@ function AppRoot() {
         , React.createElement('div', {style:{width:"100%",maxWidth:180,height:1,background:"rgba(232,115,26,0.35)",margin:"14px auto 0"}})
       )
 
-      , React.createElement('div', {style:{fontSize:10,color:"#444",fontWeight:700,letterSpacing:2,marginBottom:12,textAlign:"center",textTransform:"uppercase"}}, "Select Module")
+      , React.createElement('div', {style:{fontSize:10,color:"#888",fontWeight:700,letterSpacing:2,marginBottom:12,textAlign:"center",textTransform:"uppercase"}}, "Select Module")
 
       // 2-column module grid
       , React.createElement('div', {style:{
@@ -9719,7 +9748,7 @@ function AppRoot() {
           React.createElement('div',{style:{position:"absolute",top:0,left:0,width:80,height:80,background:`radial-gradient(circle at top left, ${m.color}0d, transparent 70%)`,pointerEvents:"none"}}),
           React.createElement('div',{style:{width:40,height:40,borderRadius:10,background:`${m.color}1a`,display:"flex",alignItems:"center",justifyContent:"center",color:m.color,marginBottom:10}},m.icon),
           React.createElement('div',{style:{fontFamily:"'Barlow Condensed','DM Sans',sans-serif",fontSize:13,fontWeight:700,textTransform:"uppercase",color:m.color,marginBottom:3,lineHeight:1.1}},m.name),
-          React.createElement('div',{style:{fontSize:11,color:"#555",lineHeight:1.3}},m.desc)
+          React.createElement('div',{style:{fontSize:11,color:"#888",lineHeight:1.3}},m.desc)
         ))
       )
 
@@ -9778,10 +9807,10 @@ const SWB_GUIDANCE = {
 
 const SWB_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const SWB_SM = {
-  untested:{ label:"—",    bg:"#2a2a2a", fg:"#666",    border:"#333" },
+  untested:{ label:"—",    bg:"#2a2a2a", fg:"#999",    border:"#333" },
   pass:    { label:"PASS", bg:"#1a3d1a", fg:"#4ade80", border:"#22c55e" },
   fail:    { label:"FAIL", bg:"#3d1a1a", fg:"#f87171", border:"#ef4444" },
-  na:      { label:"N/A",  bg:"#1e2535", fg:"#64748b", border:"#334155" },
+  na:      { label:"N/A",  bg:"#1e2535", fg:"#94a3b8", border:"#334155" },
 };
 const SWB_RISK_COLORS = { L:"#22c55e", M:"#f59e0b", H:"#ef4444", U:"#c0392b" };
 const SWB_RISK_LABELS = { L:"Low", M:"Medium", H:"High", U:"Urgent" };
@@ -9842,7 +9871,7 @@ function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="numbe
 
 function exportSWBExcel(project, allResults, meta) {
   const wb=XLSX.utils.book_new();const ws={};const merges=[];
-  const n=7;const cols="ABCDEFG".split("");
+  const n=6;const cols="ABCDEF".split("");
   let r=0;
   const pid=project.id;const results=allResults[pid]||{};
   const sName=project.name||"Site";
@@ -9859,10 +9888,10 @@ function exportSWBExcel(project, allResults, meta) {
   swbXC2(ws,"A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
   for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
   swbXC2(ws,"A2",coLine,subSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
-  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt); swbXC2(ws,"G3","",metaSt);
-  merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:6}}); r=3;
+  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt);
+  merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:5}}); r=3;
   for(let c=0;c<n;c++) swbXC2(ws,cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
-  ["Item","Pass / Fail","Defect ID","Comments","Risk","Responsibility / Action","Priority"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
+  ["Item","Pass / Fail","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
   let di=0;
   (project.areas||[]).forEach(area=>{
     (area.boards||[]).forEach(board=>{
@@ -9881,7 +9910,6 @@ function exportSWBExcel(project, allResults, meta) {
         swbXC2(ws,cols[3]+(r+1),item.comment||"",rs);
         swbXC2(ws,cols[4]+(r+1),item.risk||"",cSt("center"));
         swbXC2(ws,cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
-        swbXC2(ws,cols[6]+(r+1),item.priority||"",cSt("center"));
         r++; di++;
       });
       swbXC2(ws,cols[0]+(r+1),"← Insert board photos here",phoSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
@@ -9889,7 +9917,7 @@ function exportSWBExcel(project, allResults, meta) {
   });
   ws["!merges"]=merges;
   ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:n-1}});
-  ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:42},{wch:8},{wch:30},{wch:10}];
+  ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:42},{wch:8},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,"Switchboard Audit");
   const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname=`SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
@@ -10058,19 +10086,19 @@ function SWBApp({ onGoHome }) {
             if(view==="item"){setActiveItemKey(null);setView("board");}
             else if(view==="board"){setActiveBoardId(null);setView("audit");}
             else if(view==="audit"&&!auditEntered){goHome();}
-            else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);goHome();}
+            else if(view==="audit"&&auditEntered&&!activeAreaId){const s=project?swbSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
             else if(["manage","report","history","dropdowns"].includes(view))goHome();
             else goProjects();
           }}
-            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
-            ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")
+            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
+            ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Back")
           )
           ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"Switchboard")
-          ,React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
+          ,React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
         )
         ,React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
-          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
-          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules")
+          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
+          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules")
         )
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #a855f7, transparent 70%)',opacity:0.5}})
@@ -10079,7 +10107,7 @@ function SWBApp({ onGoHome }) {
       ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
-      ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#555",fontSize:14}},"Select a site from the Project Select screen.")
+      ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#888",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&auditEntered&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
       ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onBack:()=>{setActiveBoardId(null);setView("audit");}})
@@ -10090,12 +10118,12 @@ function SWBApp({ onGoHome }) {
       ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onBack:()=>setView("home")})
     )
     ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",                                  onClick:goHome,                                                                                     color:"#64748b"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:["audit","board","item"].includes(view),         onClick:()=>{setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#64748b"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",                                 onClick:()=>setView("report"),                                                                     color:"#64748b"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history",                                onClick:()=>setView("history"),                                                                    color:"#64748b"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",                                 onClick:()=>setView("manage"),                                                                     color:"#64748b"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",                              onClick:()=>setView("dropdowns"),                                                                  color:"#64748b"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",                                  onClick:goHome,                                                                                     color:"#94a3b8"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:["audit","board","item"].includes(view),         onClick:()=>{setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#94a3b8"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",                                 onClick:()=>setView("report"),                                                                     color:"#94a3b8"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history",                                onClick:()=>setView("history"),                                                                    color:"#94a3b8"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",                                 onClick:()=>setView("manage"),                                                                     color:"#94a3b8"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",                              onClick:()=>setView("dropdowns"),                                                                  color:"#94a3b8"})
     )
   );
 }
@@ -10133,7 +10161,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 
   return React.createElement('div',{style:SS.listWrap}
     ,React.createElement('div',{style:{...SS.listTitle,marginTop:24}},"Sites")
-    ,projects.length===0&&!showAdd&&React.createElement('div',{style:{color:"#555",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel.")
+    ,projects.length===0&&!showAdd&&React.createElement('div',{style:{color:"#888",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel.")
 
     ,projects.map(proj=>{
       const cb=swbSiteCompletedBoards(allResults,proj);
@@ -10180,7 +10208,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         )
         ,tab==="import"&&React.createElement(React.Fragment,null
           ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#eee",marginBottom:4}},"Import from Excel")
-          ,React.createElement('div',{style:{fontSize:12,color:"#666",marginBottom:12}},"Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Area | Board / Panel Name"))
+          ,React.createElement('div',{style:{fontSize:12,color:"#999",marginBottom:12}},"Columns needed: ",React.createElement('strong',{style:{color:"#aaa"}},"Area | Board / Panel Name"))
           ,!importPreview&&React.createElement(React.Fragment,null
             ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls",style:{display:"none"},onChange:handleFile})
             ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#a855f7",width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel File"))
@@ -10191,8 +10219,8 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:{background:"#160e20",border:"1px solid #a855f744",borderRadius:10,padding:"12px",marginBottom:12}}
               ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",marginBottom:8}},"✓ Preview")
               ,React.createElement('div',{style:{fontSize:12,color:"#aaa",marginBottom:4}},importPreview.areas.length," areas — ",importPreview.areas.reduce((s,a)=>s+(a.boards||[]).length,0)," boards")
-              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#666",marginBottom:2}},a.name," — ",(a.boards||[]).length," boards"))
-              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#555"}},"…and ",importPreview.areas.length-4," more")
+              ,importPreview.areas.slice(0,4).map(a=>React.createElement('div',{key:a.id,style:{fontSize:11,color:"#999",marginBottom:2}},a.name," — ",(a.boards||[]).length," boards"))
+              ,importPreview.areas.length>4&&React.createElement('div',{style:{fontSize:11,color:"#888"}},"…and ",importPreview.areas.length-4," more")
             )
             ,[["SITE NAME","text",importName,setImportName,"Site name"],["COMPANY (optional)","text",importCo,setImportCo,"Company name"],["ABN (optional)","text",importAbn,setImportAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",importLic,setImportLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>
               React.createElement('div',{key:lbl,style:{marginBottom:8}}
@@ -10243,7 +10271,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #a855f733",borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#555"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#888"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#2a2a2a",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#ef4444":pct===100?"#22c55e":"#a855f7"}})
@@ -10252,10 +10280,10 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
         ,React.createElement('span',{style:{fontSize:11,color:"#a855f7"}},summary.pass," Pass")
         ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#f87171",fontWeight:800}},summary.fail," FAIL")
         ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},summary.untested," untested")
-        ,React.createElement('span',{style:{fontSize:11,color:"#555"}},summary.total," total")
+        ,React.createElement('span',{style:{fontSize:11,color:"#888"}},summary.total," total")
       )
     )
-    ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#a855f7":"#1a1a1a",color:hasAuditor?"#fff":"#555",border:`2px solid ${hasAuditor?"#a855f7":"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
+    ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#a855f7":"#1a1a1a",color:hasAuditor?"#fff": "#888",border:`2px solid ${hasAuditor?"#a855f7":"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(SWBCompleteAuditBtn,{onComplete:onCompleteAudit})
@@ -10284,12 +10312,12 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#eee"}},board.name)
-          ,React.createElement('div',{style:{fontSize:12,color:"#555",marginTop:2}},area.name)
+          ,React.createElement('div',{style:{fontSize:12,color:"#888",marginTop:2}},area.name)
         )
         ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#22c55e",background:"#0e1e0e",border:"1px solid #22c55e44",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-        ,[["PASS",bs.pass,"#22c55e"],["FAIL",bs.fail,"#ef4444"],["N/A",bs.na,"#64748b"],["—",bs.untested,"#f59e0b"]].map(([l,v,c])=>
+        ,[["PASS",bs.pass,"#22c55e"],["FAIL",bs.fail,"#ef4444"],["N/A",bs.na,"#94a3b8"],["—",bs.untested,"#f59e0b"]].map(([l,v,c])=>
           React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l)
         )
       )
@@ -10300,7 +10328,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack
             ,React.createElement('button',{style:SS.confirmYes,onClick:()=>{onResetBoard();setConfirmReset(false);}},"Yes")
             ,React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
           )
-          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#555",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")
+          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")
       )
     )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
@@ -10317,7 +10345,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack
             ,hasDetail&&React.createElement('div',{style:{fontSize:10,color:"#a855f7",marginTop:2}},"✎ has notes")
           )
           ,item.risk&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:SWB_RISK_COLORS[item.risk],flexShrink:0}},item.risk)
-          ,React.createElement('span',{style:{fontSize:14,color:"#444",flexShrink:0}},">")
+          ,React.createElement('span',{style:{fontSize:14,color:"#888",flexShrink:0}},">")
         );
       })
     )
@@ -10338,19 +10366,18 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
   const [rectified,   setRectified]   = React.useState(item.rectified||"");
   const [rectDate,    setRectDate]    = React.useState(item.rectifiedDate||"");
   const [resp,        setResp]        = React.useState(item.responsibility||"");
-  const [priority,    setPriority]    = React.useState(item.priority||"");
   const SS=swbStyles();const sm=SWB_SM[status];const isFail=status===SWB_STATUS.FAIL;
   const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
 
-  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk:isFail?risk:"",rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:"",priority:isFail?priority:""});onClose();};
+  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk:isFail?risk:"",rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:""});onClose();};
 
   return React.createElement('div',{style:{padding:"16px",background:"#111",minHeight:"100%"}}
       ,onClose&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:onClose},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#eee"}},label)
-          ,React.createElement('div',{style:{fontSize:12,color:"#555",marginTop:3}},board.name," · ",area.name)
+          ,React.createElement('div',{style:{fontSize:12,color:"#888",marginTop:3}},board.name," · ",area.name)
         )
         ,React.createElement('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},sm.label)
       )
@@ -10369,11 +10396,11 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
       )
       // Result buttons
       ,React.createElement('div',{style:{marginBottom:14}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
+        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[SWB_STATUS.PASS,SWB_STATUS.FAIL,SWB_STATUS.NA,SWB_STATUS.UNTESTED].map(s=>{
             const sm2=SWB_SM[s];const active=status===s;
-            return React.createElement('button',{key:s,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:"#555",boxShadow:active?`0 0 8px ${sm2.border}66`:"none"},onClick:()=>setStatusL(s)},sm2.label);
+            return React.createElement('button',{key:s,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:"#888",boxShadow:active?`0 0 8px ${sm2.border}66`:"none"},onClick:()=>setStatusL(s)},sm2.label);
           })
         )
       )
@@ -10399,37 +10426,12 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
           ,React.createElement(SWBEditableDropdown,{options:rectOptions,value:rectified,onChange:v=>setRectified(v),placeholder:"Select or type…",color:"#f59e0b"})
         )
         ,React.createElement('div',{style:SS.modalField}
-          ,React.createElement('label',{style:SS.modalLabel},"DATE RECTIFIED")
-          ,React.createElement('div',{style:{position:"relative", marginTop:4}},
-            React.createElement('div',{style:{...SS.modalInput, textAlign:"center", cursor:"pointer", color: rectDate ? "#eee" : "#555"}}, rectDate ? fmtDate(rectDate) : "Select date…"),
-            React.createElement('input',{type:"date",value:rectDate||"",onChange:e=>setRectDate(e.target.value), style:{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}})
-          )
-        )
-        ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"DEFECT ID")
           ,React.createElement('input',{style:SS.modalInput,type:"text",placeholder:"e.g. 37",value:defectId,onChange:e=>setDefectId(e.target.value)})
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RESPONSIBILITY")
           ,React.createElement(SWBEditableDropdown,{options:respOptions,value:resp,onChange:v=>setResp(v),placeholder:"Select or type…",color:"#c084fc"})
-        )
-        ,React.createElement('div',{style:SS.modalField}
-          ,React.createElement('label',{style:SS.modalLabel},"PRIORITY")
-          ,React.createElement('div', {style: {display:"flex", gap:8, flexWrap:"wrap"}},
-            ["", ...PRIORITY_OPTIONS].map(p =>
-              React.createElement('button', {
-                key: p || "none",
-                style: {
-                  padding: "10px 14px",
-                  background: priority === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-                  color: priority === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
-                  border: `1px solid ${priority === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
-                  borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
-                },
-                onClick: () => setPriority(p)
-              }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None")
-            )
-          )
         )
       )
       ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:4,background:"#a855f7",color:"#fff"},onClick:doSave},"Save")
@@ -10451,23 +10453,23 @@ function SWBReportView({project,results,meta,onExport,onBack}) {
   }));
   return React.createElement('div',{style:SS.summaryWrap}
     ,React.createElement('div',{style:SS.summaryTitle},project.name)
-    ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company)
+    ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:2,marginBottom:4}},project.company)
     ,React.createElement('div',{style:SS.summaryMeta},"SWITCHBOARD AUDIT REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
     ,testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{...SS.duePill,borderColor:"#a855f755",color:"#a855f7",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):swbAddYear(testDate)))
     )
     ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}}
-      ,[["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>
+      ,[["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#94a3b8"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>
         React.createElement('div',{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}}
           ,React.createElement('div',{style:{fontSize:22,fontWeight:800,color:c}},v)
-          ,React.createElement('div',{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())
+          ,React.createElement('div',{style:{fontSize:9,color:"#999",marginTop:2}},l.toUpperCase())
         )
       )
     )
     ,React.createElement('div',{style:{marginBottom:20}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY")
       ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{marginBottom:12}}
-        ,React.createElement('div',{style:{fontSize:11,color:"#555",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase())
+        ,React.createElement('div',{style:{fontSize:11,color:"#888",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase())
         ,(area.boards||[]).map(board=>{
           const bs=swbBoardSummary(results,project.id,area.id,board.id);
           const isComp=swbBoardComplete(results,project.id,area.id,board.id);
@@ -10475,7 +10477,7 @@ function SWBReportView({project,results,meta,onExport,onBack}) {
             ,React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600,color:"#eee"}},board.name)
             ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},bs.pass," P")
             ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#ef4444",fontWeight:800}},bs.fail," F")
-            ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#64748b"}},bs.na," N/A")
+            ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#94a3b8"}},bs.na," N/A")
             ,bs.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},bs.untested," U")
             ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#22c55e",fontWeight:800,fontSize:12}},"✓")
           );
@@ -10524,7 +10526,7 @@ function SWBManageView({project,onUpdateProject,onBack}) {
   const saveArea=aid=>{const n=editAreaName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,name:n}:a)});setEditingAreaId(null);};
   const saveBoard=(aid,bid)=>{const n=editBoardName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).map(b=>b.id===bid?{...b,name:n}:b)}:a)});setEditingBoard(null);};
   return React.createElement('div',{style:SS.listWrap}
-    ,React.createElement('div',{style:{...SS.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name)
+    ,React.createElement('div',{style:{...SS.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name)
     ,editingProject
       ?React.createElement('div',{style:{...SS.addCard,marginBottom:16,border:"1px solid #60a5fa33"}}
         ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#a855f7",marginBottom:10}},"SITE DETAILS")
@@ -10537,13 +10539,13 @@ function SWBManageView({project,onUpdateProject,onBack}) {
       :React.createElement('div',{style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
-          ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
+          ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#999",marginTop:2}},project.company)
         )
         ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
       )
-    ,React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment")
-    ,React.createElement('div',{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
-    ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet.")
+    ,React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:12}},"Manage locations, panels and equipment")
+    ,React.createElement('div',{style:{fontSize:11,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS")
+    ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#888",fontSize:13,marginBottom:12}},"No areas yet.")
     ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{background:"#161616",border:`1px solid ${expandedArea===area.id?"#60a5fa88":"#60a5fa33"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",flexWrap:"nowrap",gap:8,minWidth:0}}
         ,editingAreaId===area.id
@@ -10553,11 +10555,11 @@ function SWBManageView({project,onUpdateProject,onBack}) {
             ,React.createElement('button',{style:{padding:"6px 10px",background:"transparent",color:"#aaa",border:"1px solid #333",borderRadius:7,fontSize:12,cursor:"pointer"},onClick:()=>setEditingAreaId(null)},"Cancel")
           )
           :React.createElement(React.Fragment,null
-            ,React.createElement('div',{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},(area.boards||[]).length," boards"))
+            ,React.createElement('div',{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement('div',{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},(area.boards||[]).length," boards"))
             ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"nowrap",flexShrink:0}}
               ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:e=>{e.stopPropagation();setEditAreaName(area.name);setEditingAreaId(area.id);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#60a5fa',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})))
               ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
-              ,React.createElement('span',{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"▲":"▼")
+              ,React.createElement('span',{style:{fontSize:16,color:"#888",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"▲":"▼")
             )
           )
       )
@@ -10575,7 +10577,7 @@ function SWBManageView({project,onUpdateProject,onBack}) {
                 ,React.createElement(DeleteButton, { onDelete: ()=>delBoard(area.id,b.id), label: "Delete board?", compact: true })
               )
         ))
-        ,(area.boards||[]).length===0&&React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:8}},"No boards yet.")
+        ,(area.boards||[]).length===0&&React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:8}},"No boards yet.")
         ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:8}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:"New board name (e.g. MCC 1)",value:newBoardName[area.id]||"",onChange:e=>setNewBoardName(x=>({...x,[area.id]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addBoard(area.id);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addBoard(area.id)},"+ Add")
@@ -10607,7 +10609,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
+            ,React.createElement('div',{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · Read-only")
           )
         )
         ,area&&(area.boards||[]).map(board=>{
@@ -10632,19 +10634,19 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:6}}
         ,React.createElement('div',{style:{flex:1}}
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#a855f7"}},"Switchboard Audit Snapshot")
-          ,React.createElement('div',{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+          ,React.createElement('div',{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
         ,React.createElement('button',{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#64748b"],["Untested",unt,"#f59e0b"]].map(([l,v,col])=>
+        ,[["Pass",pass,"#22c55e"],["Fail",fail,"#ef4444"],["N/A",na,"#94a3b8"],["Untested",unt,"#f59e0b"]].map(([l,v,col])=>
           React.createElement('div',{key:l,style:{background:"#1a1a1a",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
             ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:col}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#666"}},l)
+            ,React.createElement('div',{style:{fontSize:10,color:"#999"}},l)
           )
         )
       )
-      ,React.createElement('div',{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view results")
+      ,React.createElement('div',{style:{fontSize:11,color:"#888",marginBottom:12}},"Tap an area to view results")
       ,project&&(project.areas||[]).map(area=>{
         let aFail=0,aTotal=0;
         (area.boards||[]).forEach(board=>{
@@ -10670,11 +10672,11 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(!history||history.length===0) return React.createElement('div',{style:SS.listWrap},backBtn,React.createElement('div',{style:SS.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
+  if(!history||history.length===0) return React.createElement('div',{style:SS.listWrap},backBtn,React.createElement('div',{style:SS.listTitle},"Audit History"),React.createElement('div',{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement('div',{style:{color:"#888",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement('div',{style:SS.listWrap}
     ,backBtn
     ,React.createElement('div',{style:SS.listTitle},"History")
-    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
+    ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
       let pass=0,fail=0,na=0,total=0;
       if(project){(project.areas||[]).forEach(area=>(area.boards||[]).forEach(board=>{SWB_CHECKLIST.forEach(({key})=>{total++;const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];const st=(v&&v.status)||SWB_STATUS.UNTESTED;if(st===SWB_STATUS.PASS)pass++;else if(st===SWB_STATUS.FAIL)fail++;else if(st===SWB_STATUS.NA)na++;});}))}
@@ -10686,15 +10688,15 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
             )
             ,React.createElement('div',{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#22c55e"}},pass," Pass")
               ,React.createElement('span',{style:{fontSize:11,color:"#ef4444"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#64748b"}},na," N/A")
+              ,React.createElement('span',{style:{fontSize:11,color:"#94a3b8"}},na," N/A")
               ,React.createElement('span',{style:{fontSize:11,color:"#f59e0b"}},total-pass-fail-na," Untested")
             )
           )
-          ,React.createElement('span',{style:{...SS.arrow,color:expanded===snap.id?"#a855f7":"#555"}},expanded===snap.id?"▾":"›")
+          ,React.createElement('span',{style:{...SS.arrow,color:expanded===snap.id?"#a855f7": "#888"}},expanded===snap.id?"▾":"›")
         )
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
@@ -10738,8 +10740,8 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
   ];
 
   return React.createElement('div',{style:SS.listWrap}
-    ,React.createElement('div',{style:{...SS.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
-    ,React.createElement('div',{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
+    ,React.createElement('div',{style:{...SS.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
+    ,React.createElement('div',{style:{fontSize:12,color:"#888",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
     ,LISTS.map(({key,label,defaults,color,desc})=>{
       const items=(dropdowns&&dropdowns[key])||defaults;
       const newVal=newVals[key]||"";
@@ -10747,9 +10749,9 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
         ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#fff"}},label)
-            ,React.createElement('div',{style:{fontSize:11,color:"#555",marginTop:2}},desc)
+            ,React.createElement('div',{style:{fontSize:11,color:"#888",marginTop:2}},desc)
           )
-          ,React.createElement('button',{style:{...SS.smallBtn,fontSize:10,color:"#555",borderColor:"#333",flexShrink:0},onClick:()=>resetKey(key,defaults)},"Reset")
+          ,React.createElement('button',{style:{...SS.smallBtn,fontSize:10,color:"#888",borderColor:"#333",flexShrink:0},onClick:()=>resetKey(key,defaults)},"Reset")
         )
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:220,overflowY:"auto"}}
           ,items.map((item,i)=>{
@@ -10761,7 +10763,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
               ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#ef4444",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
             );
           })
-          ,items.length===0&&React.createElement('div',{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options — add one below")
+          ,items.length===0&&React.createElement('div',{style:{fontSize:12,color:"#888",padding:"6px 0"}},"No options — add one below")
         )
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
@@ -10777,8 +10779,8 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
 // SHARED COMPONENTS & STYLES
 // ─────────────────────────────────────────────────────────────────────────
 function SWBNavBtn({icon,label,active,onClick,color}) {
-  const c=active?(color||"#64748b"):"#333";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#64748b"}`:"2px solid transparent"}}
+  const c=active?(color||"#94a3b8"):"#888";
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#94a3b8"}`:"2px solid transparent"}}
     ,icon
     ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
   );
@@ -10789,45 +10791,45 @@ function swbStyles() {
     topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#161616",flexShrink:0,zIndex:10},
     topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
     appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#a855f7"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
-    backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#555",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
+    backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#888",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#161616",borderBottom:"1px solid #1e1e1e",fontSize:12,flexWrap:"wrap",flexShrink:0},
-    bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#444"},
+    bcItem:{color:"#888",cursor:"pointer"},bcSep:{color:"#888"},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
     bottomNav:{display:"flex",background:"#161616",borderTop:"1px solid #222",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #161616"},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     brandBlock:{textAlign:"center",borderBottom:"2px solid #a855f7",paddingBottom:8,width:"100%",maxWidth:500},
-    brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
-    siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
+    brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#999",letterSpacing:1,marginTop:2},
+    siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#999"},
     metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",boxSizing:"border-box",overflow:"hidden"},
-    metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
+    metaLabelText:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700},
     metaInput:{background:"#1a1a1a",border:"1px solid #222",borderRadius:8,color:"#eee",padding:"12px 16px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
     listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
     siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
-    siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
+    siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#999",marginTop:2},
     failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
     untestedBadge:{fontSize:11,fontWeight:700,color:"#fbbf24",background:"#2a1e00",borderRadius:6,padding:"3px 8px"},
-    arrow:{fontSize:22,color:"#555",lineHeight:1},
+    arrow:{fontSize:22,color:"#888",lineHeight:1},
     addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
-    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#999",marginTop:4,marginBottom:16},
     smallInput:{background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},
     modalOverlay:{position:"absolute",inset:0,background:"rgba(0,0,0,0.88)",zIndex:200,display:"flex",alignItems:"flex-end",justifyContent:"center"},
     modalBox:{background:"#1a1a1a",border:"1px solid #333",borderRadius:"20px 20px 0 0",padding:"24px 20px 32px",width:"100%",maxWidth:620,maxHeight:"92vh",overflowY:"auto"},
     modalHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20},
-    modalTitle:{fontSize:18,fontWeight:800,color:"#eee"},modalSub:{fontSize:12,color:"#666",marginTop:3},
+    modalTitle:{fontSize:18,fontWeight:800,color:"#eee"},modalSub:{fontSize:12,color:"#999",marginTop:3},
     modalField:{marginBottom:14},
-    modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
+    modalLabel:{display:"block",fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5},
     modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
     ctaPrimary:{padding:"11px 20px",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
     ctaSecondary:{padding:"11px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
     secondaryBtn:{padding:"11px",background:"#161616",color:"#aaa",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
     exportBtn:{padding:"11px",background:"#161616",border:"1px solid #2a2a2a",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"},
-    tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#666",fontSize:12,fontWeight:600,cursor:"pointer"},
+    tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#999",fontSize:12,fontWeight:600,cursor:"pointer"},
     tabBtnActive:{background:"#1e1e1e",border:"1px solid #a855f7",color:"#a855f7"},
     confirmYes:{padding:"7px 14px",background:"#3d1a1a",color:"#f87171",border:"1px solid #ef4444",borderRadius:8,fontSize:13,cursor:"pointer"},
     confirmNo: {padding:"7px 14px",background:"#1a1a1a",color:"#aaa", border:"1px solid #333",  borderRadius:8,fontSize:13,cursor:"pointer"},
     confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
-    resetBtn:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},
+    resetBtn:{background:"transparent",border:"none",color:"#888",fontSize:12,cursor:"pointer",textDecoration:"underline"},
     smallBtn:  {padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
     duePill:   {fontSize:12,background:"#161616",border:"1px solid",borderRadius:8,padding:"5px 10px"},
   };
@@ -10852,7 +10854,7 @@ const IRT_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair
 const IRT_TEST_VOLTAGES = ["250V","500V","1000V"];
 const IRT_PHASE_EARTH  = [{key:"L1E",label:"L1\u2013E"},{key:"L2E",label:"L2\u2013E"},{key:"L3E",label:"L3\u2013E"},{key:"NE",label:"N\u2013E"}];
 const IRT_PHASE_PHASE  = [{key:"L1L2",label:"L1\u2013L2"},{key:"L1L3",label:"L1\u2013L3"},{key:"L2L3",label:"L2\u2013L3"},{key:"L1N",label:"L1\u2013N"},{key:"L2N",label:"L2\u2013N"},{key:"L3N",label:"L3\u2013N"}];
-const IRT_SM={untested:{label:"\u2014",bg:"#2a2a2a",fg:"#666",border:"#333"},pass:{label:"PASS",bg:"#1a3d1a",fg:"#4ade80",border:"#22c55e"},fail:{label:"FAIL",bg:"#3d1a1a",fg:"#f87171",border:"#ef4444"},na:{label:"N/A",bg:"#1e2535",fg:"#64748b",border:"#334155"}};
+const IRT_SM={untested:{label:"\u2014",bg:"#2a2a2a",fg:"#999",border:"#333"},pass:{label:"PASS",bg:"#1a3d1a",fg:"#4ade80",border:"#22c55e"},fail:{label:"FAIL",bg:"#3d1a1a",fg:"#f87171",border:"#ef4444"},na:{label:"N/A",bg:"#1e2535",fg:"#94a3b8",border:"#334155"}};
 function irtUid(){return Math.random().toString(36).slice(2,9);}
 function irtSlug(s){return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,22)+"-"+irtUid();}
 function irtAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
@@ -10865,27 +10867,27 @@ function irtStyles(){
     root:{display:"flex",flexDirection:"column",flex:1,background:"#111",color:"#eee",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",height:"100%",overflow:"hidden"},
     topbar:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"max(env(safe-area-inset-top,12px),12px) 16px 10px",flexShrink:0,background:"#111",borderBottom:"2px solid #3b82f633",zIndex:10},
     topbarLeft:{display:"flex",alignItems:"center",gap:10},topbarRight:{display:"flex",alignItems:"center",gap:8},
-    backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#555",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
+    backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#888",background:"#141414",border:"1px solid rgba(255,255,255,0.08)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     appTitle:{fontSize:15,fontWeight:800,color:"#eee",letterSpacing:0.5},appSub:{fontSize:11,letterSpacing:0.3},
     main:{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"},
     bottomNav:{display:"flex",background:"#0d0d0d",borderTop:"1px solid #1a1a1a",flexShrink:0},
     brandBlock:{textAlign:"center",borderBottom:`2px solid ${IRT_COLOR}`,paddingBottom:8,width:"100%",maxWidth:500},
-    brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#666",letterSpacing:1,marginTop:2},
-    siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#666"},
+    brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#999",letterSpacing:1,marginTop:2},
+    siteTitle:{fontSize:20,fontWeight:800,color:"#eee"},siteSub:{fontSize:12,color:"#999"},
     listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#eee",marginBottom:16},
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
     siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
-    siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#666",marginTop:2},
+    siteCardName:{fontSize:16,fontWeight:700,color:"#eee"},siteCardSub:{fontSize:12,color:"#999",marginTop:2},
     failBadge:{fontSize:11,fontWeight:800,color:"#f87171",background:"#3d1a1a",borderRadius:6,padding:"3px 8px",border:"1px solid #ef4444"},
-    arrow:{fontSize:22,color:"#555",lineHeight:1},
+    arrow:{fontSize:22,color:"#888",lineHeight:1},
     addCard:{background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",marginBottom:10},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     metaCard:{width:"100%",maxWidth:500,background:"#161616",border:"1px solid #2a2a2a",borderRadius:14,padding:"16px",boxSizing:"border-box",overflow:"hidden"},
-    metaLabelText:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700},
+    metaLabelText:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700},
     metaInput:{background:"#1a1a1a",border:"1px solid #222",borderRadius:8,color:"#eee",padding:"12px 16px",fontSize:13,outline:"none",width:"100%",boxSizing:"border-box"},
-    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#777",marginTop:4,marginBottom:16},
+    summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#999",marginTop:4,marginBottom:16},
     modalField:{marginBottom:14},
-    modalLabel:{display:"block",fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:5},
+    modalLabel:{display:"block",fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:5},
     modalInput:{width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
     ctaPrimary:{padding:"11px 20px",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
     ctaSecondary:{padding:"11px 20px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
@@ -10893,13 +10895,13 @@ function irtStyles(){
     confirmYes:{padding:"7px 14px",background:"#3d1a1a",color:"#f87171",border:"1px solid #ef4444",borderRadius:8,fontSize:13,cursor:"pointer"},
     confirmNo:{padding:"7px 14px",background:"#1a1a1a",color:"#aaa",border:"1px solid #333",borderRadius:8,fontSize:13,cursor:"pointer"},
     confirmRow:{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"},
-    resetBtn:{background:"transparent",border:"none",color:"#555",fontSize:12,cursor:"pointer",textDecoration:"underline"},
+    resetBtn:{background:"transparent",border:"none",color:"#888",fontSize:12,cursor:"pointer",textDecoration:"underline"},
     smallBtn:{padding:"5px 10px",background:"transparent",border:"1px solid #333",borderRadius:6,fontSize:12,cursor:"pointer",fontWeight:600,flexShrink:0,color:"#aaa"},
-    tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#666",fontSize:12,fontWeight:600,cursor:"pointer"},
+    tabBtn:{flex:1,padding:"9px",background:"#111",border:"1px solid #2a2a2a",borderRadius:8,color:"#999",fontSize:12,fontWeight:600,cursor:"pointer"},
   };
 }
 
-function IRTNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#64748b"):"#333";return React.createElement("button",{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px",background:"transparent",border:"none",cursor:"pointer",gap:3,color:c,borderTop:active?`2px solid ${color||"#64748b"}`:"2px solid transparent"},onClick},icon,React.createElement("span",{style:{fontSize:9,fontWeight:active?700:400,letterSpacing:0.5}},label));}
+function IRTNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#94a3b8"):"#888";return React.createElement("button",{style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"10px 4px",background:"transparent",border:"none",cursor:"pointer",gap:3,color:c,borderTop:active?`2px solid ${color||"#94a3b8"}`:"2px solid transparent"},onClick},icon,React.createElement("span",{style:{fontSize:9,fontWeight:active?700:400,letterSpacing:0.5}},label));}
 
 function IRTEditableDropdown({options,value,onChange,placeholder,color}){
   const[open,setOpen]=React.useState(false);const[custom,setCustom]=React.useState(false);const[typed,setTyped]=React.useState(value||"");
@@ -10908,10 +10910,10 @@ function IRTEditableDropdown({options,value,onChange,placeholder,color}){
   const mi={width:"100%",background:"#111",border:"1px solid #333",borderRadius:8,color:"#eee",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"};
   if(custom)return React.createElement("div",{style:{display:"flex",gap:8}},React.createElement("input",{style:{...mi,flex:1},value:typed,placeholder,onChange:e=>{setTyped(e.target.value);onChange(e.target.value);}}),React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #333",borderRadius:8,color:"#aaa",cursor:"pointer",fontSize:11},onClick:()=>{setCustom(false);setTyped("");}},"\u25be List"));
   return React.createElement("div",{style:{position:"relative"}},
-    React.createElement("button",{style:{...mi,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee":"#555"},onClick:()=>setOpen(o=>!o)},React.createElement("span",null,value||placeholder||"Select\u2026"),React.createElement("span",{style:{color:"#555",fontSize:12}},open?"\u25b4":"\u25be")),
+    React.createElement("button",{style:{...mi,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#eee": "#888"},onClick:()=>setOpen(o=>!o)},React.createElement("span",null,value||placeholder||"Select\u2026"),React.createElement("span",{style:{color:"#888",fontSize:12}},open?"\u25b4":"\u25be")),
     open&&React.createElement("div",{style:{position:"absolute",zIndex:300,width:"100%",background:"#1e1e1e",border:"1px solid #333",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}},
       options.map(o=>React.createElement("div",{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?(color||IRT_COLOR):"#ccc",background:o===value?IRT_COLOR_DIM:"transparent",borderBottom:"1px solid #2a2a2a"},onClick:()=>{onChange(o);setOpen(false);}},o)),
-      React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#555",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},"\u270f Type custom\u2026")
+      React.createElement("div",{style:{padding:"8px 12px",fontSize:12,color:"#888",cursor:"pointer",borderTop:"1px solid #2a2a2a"},onClick:()=>{setCustom(true);setOpen(false);}},"\u270f Type custom\u2026")
     )
   );
 }
@@ -11010,7 +11012,7 @@ function IRTMotorInfoModal({onClose}){
       React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"20px 20px 14px",borderBottom:"1px solid #2a2a2a",flexShrink:0}},
         React.createElement("div",null,
           React.createElement("div",{style:{fontSize:17,fontWeight:800,color:"#60a5fa"}},"\u2139\ufe0f Motor IR Testing Guide"),
-          React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},"Simplified field method")
+          React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:2}},"Simplified field method")
         ),
         React.createElement("button",{style:{padding:"8px 14px",background:"transparent",border:"1px solid #333",borderRadius:8,color:"#aaa",fontSize:13,fontWeight:700,cursor:"pointer",flexShrink:0},onClick:onClose},"\u2715 Close")
       ),
@@ -11066,7 +11068,7 @@ function irtFormatMeg(raw){
 function IRTMegInput({value,onChange,label}){
   const handleBlur=e=>{const formatted=irtFormatMeg(e.target.value);if(formatted!==e.target.value)onChange(formatted);};
   return React.createElement("div",null,
-    React.createElement("div",{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.5,marginBottom:3,textAlign:"center"}},label),
+    React.createElement("div",{style:{fontSize:10,color:"#888",fontWeight:700,letterSpacing:0.5,marginBottom:3,textAlign:"center"}},label),
     React.createElement("div",{style:{position:"relative"}},
       React.createElement("input",{style:{background:"#111",border:`1px solid ${value&&value.trim()?"#3b82f644":"#2a2a2a"}`,borderRadius:8,color:"#60a5fa",padding:"8px 26px 8px 8px",fontSize:14,fontWeight:700,outline:"none",width:"100%",boxSizing:"border-box",textAlign:"center",fontFamily:"'DM Mono','Courier New',monospace"},inputMode:"decimal",value:value||"",placeholder:"\u2014",onChange:e=>onChange(e.target.value),onBlur:handleBlur}),
       React.createElement("span",{style:{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#3b82f688",fontWeight:700,pointerEvents:"none"}},"M\u03a9")
@@ -11090,13 +11092,13 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
   const respOptions=(dropdowns&&dropdowns.responsibility)||IRT_DEFAULT_RESPONSIBILITY;
   const doSave=()=>{const toSave={...form,status:effectiveSt};onPatch(area.id,panel.id,itemId,toSave);onBack();};
   if(!warnDismissed)return React.createElement("div",{style:{padding:"16px"}},
-    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:16}},React.createElement("div",null,React.createElement("div",{style:{fontSize:18,fontWeight:800,color:"#eee"}},itemName),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:1}},panel.name," \u00b7 ",area.name))),
+    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:16}},React.createElement("div",null,React.createElement("div",{style:{fontSize:18,fontWeight:800,color:"#eee"}},itemName),React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:1}},panel.name," \u00b7 ",area.name))),
     React.createElement(IRTWarningBanner,{onDismiss:onDismissWarn})
   );
   return React.createElement("div",{style:{padding:"16px 16px 40px"}},
     // Header
     React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:16}},
-      React.createElement("div",null,React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"#eee"}},itemName),React.createElement("div",{style:{fontSize:12,color:"#555",marginTop:3}},panel.name," \u00b7 ",area.name)),
+      React.createElement("div",null,React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"#eee"}},itemName),React.createElement("div",{style:{fontSize:12,color:"#888",marginTop:3}},panel.name," \u00b7 ",area.name)),
       React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
         React.createElement("button",{style:{padding:"6px 12px",background:IRT_COLOR_DIM,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:8,color:"#60a5fa",fontSize:11,fontWeight:700,cursor:"pointer"},onClick:()=>onShowGuide&&onShowGuide()},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('line',{x1:12,y1:8,x2:12,y2:12}),React.createElement('line',{x1:12,y1:16,x2:12.01,y2:16}))," Guide"),
         React.createElement("div",{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},sm.label)
@@ -11111,32 +11113,32 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     ),
     // Test voltage
     React.createElement("div",{style:{marginBottom:14}},
-      React.createElement("div",{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"TEST VOLTAGE"),
+      React.createElement("div",{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"TEST VOLTAGE"),
       React.createElement("div",{style:{display:"flex",gap:8}},
-        IRT_TEST_VOLTAGES.map(v=>React.createElement("button",{key:v,style:{flex:1,padding:"10px 0",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer",background:form.testVoltage===v?"#1a2d4a":IRT_COLOR_DIM,border:`2px solid ${form.testVoltage===v?IRT_COLOR:IRT_COLOR_BORDER}`,color:form.testVoltage===v?"#60a5fa":"#555"},onClick:()=>pf({testVoltage:v})},v))
+        IRT_TEST_VOLTAGES.map(v=>React.createElement("button",{key:v,style:{flex:1,padding:"10px 0",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer",background:form.testVoltage===v?"#1a2d4a":IRT_COLOR_DIM,border:`2px solid ${form.testVoltage===v?IRT_COLOR:IRT_COLOR_BORDER}`,color:form.testVoltage===v?"#60a5fa": "#888"},onClick:()=>pf({testVoltage:v})},v))
       ),
-      React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:5}},"Min pass: ",React.createElement("span",{style:{color:"#60a5fa",fontWeight:700}},"\u22651 M\u03a9")," (AS/NZS 3000) \u00b7 Healthy: \u2265100 M\u03a9")
+      React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:5}},"Min pass: ",React.createElement("span",{style:{color:"#60a5fa",fontWeight:700}},"\u22651 M\u03a9")," (AS/NZS 3000) \u00b7 Healthy: \u2265100 M\u03a9")
     ),
     // Phase-to-Earth — 2×2 grid, all with MΩ symbol
     React.createElement("div",{style:{marginBottom:12}},
       React.createElement("div",{style:{fontSize:10,color:"#60a5fa",fontWeight:700,letterSpacing:0.8,marginBottom:8,display:"flex",alignItems:"center",gap:6}},
-        "PHASE / NEUTRAL TO EARTH",React.createElement("span",{style:{fontSize:10,color:"#2a4a6a",background:"#1a2a3a",borderRadius:4,padding:"2px 6px"}},"required")
+        "PHASE / NEUTRAL TO EARTH",React.createElement("span",{style:{fontSize:10,color:"#60a5fa",background:"#1a2a3a",borderRadius:4,padding:"2px 6px"}},"required")
       ),
       React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
         IRT_PHASE_EARTH.map(p=>React.createElement(IRTMegInput,{key:p.key,label:p.label,value:(form.readings||{})[p.key]||"",onChange:v=>setReading(p.key,v)}))
       )
     ),
     // Phase-to-phase toggle
-    React.createElement("button",{style:{width:"100%",padding:"10px 14px",background:"#111",border:`1px solid ${showPP?IRT_COLOR_BORDER:"#2a2a2a"}`,borderRadius:10,color:showPP?"#60a5fa":"#555",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:showPP?8:14},onClick:()=>setShowPP(x=>!x)},
+    React.createElement("button",{style:{width:"100%",padding:"10px 14px",background:"#111",border:`1px solid ${showPP?IRT_COLOR_BORDER:"#2a2a2a"}`,borderRadius:10,color:showPP?"#60a5fa": "#888",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:showPP?8:14},onClick:()=>setShowPP(x=>!x)},
       React.createElement("span",null,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'#e8731a',stroke:'none',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z'}))," PHASE-TO-PHASE / PHASE-TO-NEUTRAL"),React.createElement("span",{style:{fontSize:11}},showPP?"\u25be hide":"\u25b8 show")
     ),
     showPP&&React.createElement("div",{style:{background:"#1a1000",border:"1px solid #f59e0b44",borderRadius:8,padding:"8px 12px",fontSize:11,color:"#f59e0b",marginBottom:8,lineHeight:1.6}},"\u26a0 De-energise and discharge before phase-to-phase tests. Capacitive charge can remain after phase-to-earth tests."),
     showPP&&React.createElement("div",{style:{marginBottom:14}},React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},IRT_PHASE_PHASE.map(p=>React.createElement(IRTMegInput,{key:p.key,label:p.label,value:(form.readings||{})[p.key]||"",onChange:v=>setReading(p.key,v)})))),
     // Result buttons — matches SWBItemPage
     React.createElement("div",{style:{marginBottom:14}},
-      React.createElement("div",{style:{fontSize:10,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT",autoSt!=="untested"&&React.createElement("span",{style:{color:"#555",fontWeight:400,marginLeft:6}},"(auto-detected \u00b7 tap to override)")),
+      React.createElement("div",{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT",autoSt!=="untested"&&React.createElement("span",{style:{color:"#888",fontWeight:400,marginLeft:6}},"(auto-detected \u00b7 tap to override)")),
       React.createElement("div",{style:{display:"flex",gap:8}},
-        [["pass","PASS"],["fail","FAIL"],["na","N/A"],["untested","\u2014"]].map(([s,lbl])=>{const sm2=IRT_SM[s];const active=form.status===s||(form.status==="untested"&&s===autoSt&&s!=="untested");return React.createElement("button",{key:s,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:"#555",boxShadow:active?`0 0 8px ${sm2.border}66`:"none"},onClick:()=>pf({status:s})},lbl);})
+        [["pass","PASS"],["fail","FAIL"],["na","N/A"],["untested","\u2014"]].map(([s,lbl])=>{const sm2=IRT_SM[s];const active=form.status===s||(form.status==="untested"&&s===autoSt&&s!=="untested");return React.createElement("button",{key:s,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm2.border:"#333"}`,background:active?sm2.bg:"#1a1a1a",color:active?sm2.fg:"#888",boxShadow:active?`0 0 8px ${sm2.border}66`:"none"},onClick:()=>pf({status:s})},lbl);})
       )
     ),
     // Comments
@@ -11148,10 +11150,6 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     isFail&&React.createElement("div",{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}},
       React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#ef4444",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION"),React.createElement(IRTEditableDropdown,{options:rectOptions,value:form.rectified||"",onChange:v=>pf({rectified:v}),placeholder:"Select or type\u2026",color:"#f59e0b"})),
-      React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DATE RECTIFIED"),React.createElement('div',{style:{position:"relative", marginTop:4}},
-        React.createElement('div',{style:{...SS.modalInput, textAlign:"center", cursor:"pointer", color: form.scheduledDate ? "#eee" : "#555"}}, form.scheduledDate ? fmtDate(form.scheduledDate) : "Select date…"),
-        React.createElement("input",{type:"date",value:form.scheduledDate||"",onChange:e=>pf({scheduledDate:e.target.value}), style:{position:"absolute", top:0, left:0, width:"100%", height:"100%", opacity:0, cursor:"pointer"}})
-      )),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DEFECT ID"),React.createElement("input",{style:SS.modalInput,type:"text",placeholder:"e.g. 61",value:form.defectId||"",onChange:e=>pf({defectId:e.target.value})})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RESPONSIBILITY"),React.createElement(IRTEditableDropdown,{options:respOptions,value:form.responsibility||"",onChange:v=>pf({responsibility:v}),placeholder:"Select or type\u2026",color:"#c084fc"})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"PRIORITY"),React.createElement('div', {style: {display:"flex", gap:8, flexWrap:"wrap"}},
@@ -11161,7 +11159,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
             style: {
               padding: "10px 14px",
               background: (form.priority||"") === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-              color: (form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
+              color: (form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#888",
               border: `1px solid ${(form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
               borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
             },
@@ -11178,8 +11176,8 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
 function IRTItemListView({panel,area,project,results,onSelect,onBack}){
   const SS=irtStyles();
   return React.createElement("div",{style:SS.listWrap},
-    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:1}},area.name," \u00b7 ",project.name))),
-    (panel.items||[]).length===0&&React.createElement("div",{style:{color:"#555",fontSize:13,padding:"24px 0",textAlign:"center"}},"No items \u2014 add in \u2699 Structure"),
+    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:1}},area.name," \u00b7 ",project.name))),
+    (panel.items||[]).length===0&&React.createElement("div",{style:{color:"#888",fontSize:13,padding:"24px 0",textAlign:"center"}},"No items \u2014 add in \u2699 Structure"),
     (panel.items||[]).map(itemId=>{
       const name=(panel.itemNames||{})[itemId]||itemId;const d=irtGetItem(results,project.id,area.id,panel.id,itemId);
       const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;const sm=IRT_SM[eff]||IRT_SM.untested;
@@ -11188,7 +11186,7 @@ function IRTItemListView({panel,area,project,results,onSelect,onBack}){
         React.createElement("div",{style:{width:52,flexShrink:0,padding:"6px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:11,fontWeight:800,textAlign:"center"}},sm.label),
         React.createElement("div",{style:{flex:1,minWidth:0,marginLeft:10}},
           React.createElement("div",{style:{fontSize:14,fontWeight:600,color:"#eee"}},name),
-          hasR&&React.createElement("div",{style:{fontSize:10,color:"#555",marginTop:2,fontFamily:"monospace"}},IRT_PHASE_EARTH.filter(p=>r[p.key]).map(p=>`${p.label}: ${r[p.key]} M\u03a9`).join("  \u00b7  ")),
+          hasR&&React.createElement("div",{style:{fontSize:10,color:"#888",marginTop:2,fontFamily:"monospace"}},IRT_PHASE_EARTH.filter(p=>r[p.key]).map(p=>`${p.label}: ${r[p.key]} M\u03a9`).join("  \u00b7  ")),
           d.testVoltage&&React.createElement("span",{style:{fontSize:10,color:IRT_COLOR,background:IRT_COLOR_DIM,borderRadius:4,padding:"1px 6px",marginTop:3,display:"inline-block"}},d.testVoltage)
         ),
         React.createElement("span",{style:SS.arrow},"\u203a")
@@ -11200,8 +11198,8 @@ function IRTItemListView({panel,area,project,results,onSelect,onBack}){
 function IRTPanelListView({area,project,results,onSelect,onBack}){
   const SS=irtStyles();
   return React.createElement("div",{style:SS.listWrap},
-    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:1}},project.name))),
-    (area.panels||[]).length===0&&React.createElement("div",{style:{color:"#555",fontSize:13,textAlign:"center",padding:"24px 0"}},"No panels \u2014 add in \u2699 Structure"),
+    React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:1}},project.name))),
+    (area.panels||[]).length===0&&React.createElement("div",{style:{color:"#888",fontSize:13,textAlign:"center",padding:"24px 0"}},"No panels \u2014 add in \u2699 Structure"),
     (area.panels||[]).map(panel=>{
       let pass=0,fail=0,unt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else unt++;});
       const hasFail=fail>0;
@@ -11217,7 +11215,7 @@ function IRTAreaListView({project,results,onSelect}){
   const SS=irtStyles();
   return React.createElement("div",{style:SS.listWrap},
     React.createElement("div",{style:SS.listTitle},"Select Location"),
-    (project.areas||[]).length===0&&React.createElement("div",{style:{color:"#555",fontSize:14}},"No locations \u2014 go to \u2699 Structure to add areas."),
+    (project.areas||[]).length===0&&React.createElement("div",{style:{color:"#888",fontSize:14}},"No locations \u2014 go to \u2699 Structure to add areas."),
     (project.areas||[]).map(area=>{
       let pass=0,fail=0,total=0;(area.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,area.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;}));const hasFail=fail>0;
       return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(hasFail?{background:"#1e1010",border:"1px solid #ef444455"}:{})},onClick:()=>onSelect(area.id)},
@@ -11244,16 +11242,16 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       React.createElement("div",{style:{marginTop:8}},React.createElement("div",{style:SS.metaLabelText},"NEXT TEST DUE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement("input",{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
     ),
     React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#161616",border:`1px solid ${IRT_COLOR}33`,borderRadius:14,padding:"14px"}},
-      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress"),React.createElement("div",{style:{fontSize:12,color:"#555"}},summary.pass," / ",summary.total," tested")),
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#eee"}},"Overall Progress"),React.createElement("div",{style:{fontSize:12,color:"#888"}},summary.pass," / ",summary.total," tested")),
       React.createElement("div",{style:{width:"100%",height:8,background:"#2a2a2a",borderRadius:4,overflow:"hidden",marginBottom:10}},React.createElement("div",{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#ef4444":pct===100?"#22c55e":IRT_COLOR}})),
       React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
         React.createElement("span",{style:{fontSize:11,color:"#60a5fa"}},summary.pass," Pass"),
         summary.fail>0&&React.createElement("span",{style:{fontSize:11,color:"#f87171",fontWeight:800}},summary.fail," FAIL"),
         summary.untested>0&&React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},summary.untested," untested"),
-        React.createElement("span",{style:{fontSize:11,color:"#555"}},summary.total," total")
+        React.createElement("span",{style:{fontSize:11,color:"#888"}},summary.total," total")
       )
     ),
-    React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#1a1a1a",color:hasAuditor?"#fff":"#555",border:`2px solid ${hasAuditor?IRT_COLOR:"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Start / Continue Audit"),
+    React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#1a1a1a",color:hasAuditor?"#fff": "#888",border:`2px solid ${hasAuditor?IRT_COLOR:"#2a2a2a"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Start / Continue Audit"),
     auditEntered===true&&React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#131315",border:"1px solid #3A3A3A",borderRadius:12,padding:"10px 14px"}},
       React.createElement("div",{style:{fontSize:10,color:"#8A8A8A",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT"),
       React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit})
@@ -11287,7 +11285,7 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";onAddProject({id:irtSlug(sName),name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportError("");};
   return React.createElement("div",{style:SS.listWrap},
     React.createElement("div",{style:{...SS.listTitle,marginTop:24}},"Sites"),
-    projects.length===0&&!showAdd&&React.createElement("div",{style:{color:"#555",fontSize:14,marginBottom:16}},"No sites yet \u2014 add one or import from Excel."),
+    projects.length===0&&!showAdd&&React.createElement("div",{style:{color:"#888",fontSize:14,marginBottom:16}},"No sites yet \u2014 add one or import from Excel."),
 
     projects.map(proj=>{
       const s=irtSiteSummary(allResults,proj);
@@ -11312,7 +11310,7 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       ),
       tab==="import"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#eee",marginBottom:4}},"Import from Excel"),
-        React.createElement("div",{style:{fontSize:12,color:"#666",marginBottom:12}},"Columns needed: ",React.createElement("strong",{style:{color:"#aaa"}},"Location | Panel / DB | Equipment / Item")),
+        React.createElement("div",{style:{fontSize:12,color:"#999",marginBottom:12}},"Columns needed: ",React.createElement("strong",{style:{color:"#aaa"}},"Location | Panel / DB | Equipment / Item")),
         !importPreview&&React.createElement(React.Fragment,null,
           React.createElement("input",{ref:fileRef,type:"file",accept:".xlsx,.xls",style:{display:"none"},onChange:handleFile}),
           React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing\u2026":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel File")),
@@ -11323,8 +11321,8 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
           React.createElement("div",{style:{background:"#0d1e30",border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:10,padding:"12px",marginBottom:12}},
             React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#60a5fa",marginBottom:8}},"\u2713 Preview"),
             React.createElement("div",{style:{fontSize:12,color:"#aaa",marginBottom:4}},(importPreview.areas||[]).length," areas \u2014 ",(importPreview.areas||[]).reduce((s,a)=>(a.panels||[]).reduce((ss,p)=>ss+(p.items||[]).length,s),0)," items"),
-            (importPreview.areas||[]).slice(0,3).map(a=>React.createElement("div",{key:a.id,style:{fontSize:11,color:"#666",marginBottom:2}},a.name," \u2014 ",(a.panels||[]).length," panels")),
-            (importPreview.areas||[]).length>3&&React.createElement("div",{style:{fontSize:11,color:"#555"}},"\u2026and ",(importPreview.areas||[]).length-3," more")
+            (importPreview.areas||[]).slice(0,3).map(a=>React.createElement("div",{key:a.id,style:{fontSize:11,color:"#999",marginBottom:2}},a.name," \u2014 ",(a.panels||[]).length," panels")),
+            (importPreview.areas||[]).length>3&&React.createElement("div",{style:{fontSize:11,color:"#888"}},"\u2026and ",(importPreview.areas||[]).length-3," more")
           ),
           [["SITE NAME","text",importName,setImportName,"Site name"],["COMPANY (optional)","text",importCo,setImportCo,"Company name"],["ABN (optional)","text",importAbn,setImportAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",importLic,setImportLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))),
           React.createElement("div",{style:{display:"flex",gap:8}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:confirmImport},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
@@ -11370,7 +11368,7 @@ function IRTManageView({project,onUpdateProject,onBack}){
   const delItem=(areaId,panelId,itemId)=>upd((project.areas||[]).map(a=>a.id!==areaId?a:{...a,panels:(a.panels||[]).map(p=>p.id!==panelId?p:{...p,items:(p.items||[]).filter(i=>i!==itemId),itemNames:Object.fromEntries(Object.entries(p.itemNames||{}).filter(([k])=>k!==itemId))})}));
   // No global dismiss \u2014 confirm states cleared by Keep/action buttons only
   return React.createElement("div",{style:SS.listWrap},
-    React.createElement("div",{style:{...SS.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name),
+    React.createElement("div",{style:{...SS.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage: ", project.name),
     React.createElement("div",{style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"12px 14px",marginBottom:14}}
       ,editingProject
         ?React.createElement(React.Fragment,null
@@ -11385,14 +11383,14 @@ function IRTManageView({project,onUpdateProject,onBack}){
         :React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
           ,React.createElement("div",null
             ,React.createElement("div",{style:{fontSize:15,fontWeight:800,color:"#eee"}},project.name)
-            ,project.company&&React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2}},project.company)
+            ,project.company&&React.createElement("div",{style:{fontSize:12,color:"#999",marginTop:2}},project.company)
           )
           ,React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#60a5fa"},onClick:()=>{setProjName(project.name);setProjCo(project.company||"");setProjAbn(project.abn||"");setProjLic(project.licence||"");setEditingProject(true);}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
         )
     ),
-    React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:12}},"Manage locations, panels and equipment"),
-    React.createElement("div",{style:{fontSize:11,color:"#666",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS"),
-    (project.areas||[]).length===0 && React.createElement("div",{style:{color:"#555",fontSize:13,marginBottom:12}},"No areas yet."),
+    React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:12}},"Manage locations, panels and equipment"),
+    React.createElement("div",{style:{fontSize:11,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:10}},"AREAS / LOCATIONS"),
+    (project.areas||[]).length===0 && React.createElement("div",{style:{color:"#888",fontSize:13,marginBottom:12}},"No areas yet."),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{background:"#161616",border:`1px solid ${expandedArea===area.id?"#60a5fa88":"#60a5fa33"}`,borderRadius:12,marginBottom:10,overflow:"hidden"}},
       React.createElement("div",{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",flexWrap:"nowrap",gap:8,minWidth:0}},
         editingArea===area.id?React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,width:"100%",boxSizing:"border-box"}}
@@ -11400,11 +11398,11 @@ function IRTManageView({project,onUpdateProject,onBack}){
           ,React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e55",flexShrink:0,whiteSpace:"nowrap"},onClick:()=>saveAreaName(area.id)},"Save")
           ,React.createElement("button",{style:{...SS.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>setEditingArea(null)},"Cancel")
         ):React.createElement(React.Fragment,null
-        ,React.createElement("div",{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},(area.panels||[]).length," panels")),
+        ,React.createElement("div",{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},React.createElement("div",{style:{fontWeight:700,color:"#eee",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name),React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:2}},(area.panels||[]).length," panels")),
         React.createElement("div",{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"nowrap",flexShrink:0}},
           React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
           React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" }),
-          React.createElement("span",{style:{fontSize:16,color:"#555",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"\u25b2":"\u25bc")
+          React.createElement("span",{style:{fontSize:16,color:"#888",cursor:"pointer"},onClick:()=>{setExpandedArea(expandedArea===area.id?null:area.id);}},expandedArea===area.id?"\u25b2":"\u25bc")
         )
         )
       ),
@@ -11419,14 +11417,14 @@ function IRTManageView({project,onUpdateProject,onBack}){
             ,React.createElement("button",{style:{flex:1,display:"flex",alignItems:"center",gap:8,background:"transparent",border:"none",cursor:"pointer",color:"inherit",textAlign:"left",padding:0,minWidth:0,overflow:"hidden"},onClick:()=>{setExpandedPanel(expandedPanel===panel.id?null:panel.id);}},
               React.createElement("span",{style:{fontSize:14,color:expandedPanel===panel.id?IRT_COLOR:"#aaa",flexShrink:0}},expandedPanel===panel.id?"\u25be":"\u25b8"),
               React.createElement("span",{style:{fontWeight:700,color:"#eee",fontSize:13,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},panel.name),
-              React.createElement("span",{style:{fontSize:11,color:"#555",flexShrink:0,whiteSpace:"nowrap"}},(panel.items||[]).length," items")
+              React.createElement("span",{style:{fontSize:11,color:"#888",flexShrink:0,whiteSpace:"nowrap"}},(panel.items||[]).length," items")
             ),
             React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditPanel(panel)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),
             React.createElement(DeleteButton, { onDelete: ()=>delPanel(area.id,panel.id), label: "Delete panel?" })
             )
           ),
           expandedPanel===panel.id&&React.createElement("div",{style:{padding:"8px 12px 12px"}},
-            React.createElement("div",{style:{fontSize:10,color:"#555",fontWeight:700,letterSpacing:0.8,marginBottom:6}},"ITEMS (motors / cables / CBs)"),
+            React.createElement("div",{style:{fontSize:10,color:"#888",fontWeight:700,letterSpacing:0.8,marginBottom:6}},"ITEMS (motors / cables / CBs)"),
             React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:8}},
               (panel.items||[]).map(itemId=>{const name=(panel.itemNames||{})[itemId]||itemId;
                 const isEditingI=editingItem&&editingItem.aid===area.id&&editingItem.pid===panel.id&&editingItem.itemId===itemId;
@@ -11438,7 +11436,7 @@ function IRTManageView({project,onUpdateProject,onBack}){
                   );
                 }
                 return React.createElement("div",{key:itemId,style:{display:"flex",alignItems:"center",gap:6,background:"#1e1e1e",border:"1px solid #60a5fa33",borderRadius:8,padding:"6px 10px",flexWrap:"nowrap",minWidth:0}},React.createElement("span",{style:{fontSize:12,color:"#ccc",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},name),React.createElement("button",{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#60a5fa",cursor:"pointer",flexShrink:0},onClick:()=>startEditItem(area.id,panel.id,itemId,name)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#60a5fa",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}))),React.createElement(DeleteButton, { onDelete: ()=>delItem(area.id,panel.id,itemId), label: `Delete "${name}"?`, compact: true }));}),
-              (panel.items||[]).length===0&&React.createElement("span",{style:{fontSize:12,color:"#444"}},"No items yet")
+              (panel.items||[]).length===0&&React.createElement("span",{style:{fontSize:12,color:"#888"}},"No items yet")
             ),
             React.createElement("div",{style:{display:"flex",gap:6}},React.createElement("input",{style:{...SS.smallBtn,flex:1,textAlign:"left",padding:"8px 10px",borderRadius:8,background:"#111",color:"#eee"},placeholder:"Add motor / cable / CB name\u2026",value:newItem[`${area.id}-${panel.id}`]||"",onChange:e=>setNewItem(x=>({...x,[`${area.id}-${panel.id}`]:e.target.value})),onKeyDown:e=>e.key==="Enter"&&addItem(area.id,panel.id)}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(area.id,panel.id)},"+ Add"))
           )
@@ -11459,19 +11457,19 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
   const setDefault=(key,val)=>setDropdowns(d=>({...d,[key]:[val,...(d[key]||[]).filter(x=>x!==val)]}));
   const LISTS=[{key:"rectified",label:"RECTIFIED / SCHEDULED",defaults:IRT_DEFAULT_RECTIFIED,color:"#f59e0b",desc:"Options shown in Rectified / Scheduled Action on FAIL items"},{key:"responsibility",label:"RESPONSIBILITY",defaults:IRT_DEFAULT_RESPONSIBILITY,color:"#c084fc",desc:"Options shown in the Responsibility dropdown on FAIL items"}];
   return React.createElement("div",{style:SS.listWrap},
-    React.createElement("div",{style:{...SS.listTitle,color:"#64748b"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns"),
-    React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:16}},"Tap \u2605 on any item to make it the default. The default is pre-selected when opening a circuit test form."),
+    React.createElement("div",{style:{...SS.listTitle,color:"#94a3b8"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns"),
+    React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:16}},"Tap \u2605 on any item to make it the default. The default is pre-selected when opening a circuit test form."),
     LISTS.map(({key,label,defaults,color,desc})=>{
       const items=(dropdowns[key]||[]);const newVal=newVals[key]||"";
       return React.createElement("div",{key,style:{background:"#161616",border:"1px solid #60a5fa33",borderRadius:12,padding:"14px",marginBottom:12}},
         React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}},
           React.createElement("div",null,
             React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#fff",letterSpacing:0.8,marginBottom:4}},label),
-            React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:10}},desc)
+            React.createElement("div",{style:{fontSize:11,color:"#888",marginBottom:10}},desc)
           ),
-          React.createElement("button",{style:{background:"transparent",border:"none",color:"#444",fontSize:11,cursor:"pointer",textDecoration:"underline"},onClick:()=>resetKey(key,defaults)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset")
+          React.createElement("button",{style:{background:"transparent",border:"none",color:"#888",fontSize:11,cursor:"pointer",textDecoration:"underline"},onClick:()=>resetKey(key,defaults)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset")
         ),
-        items.length===0?React.createElement("div",{style:{fontSize:12,color:"#444",padding:"6px 0"}},"No options \u2014 add one below"):
+        items.length===0?React.createElement("div",{style:{fontSize:12,color:"#888",padding:"6px 0"}},"No options \u2014 add one below"):
         React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}},
           items.map((item,i)=>{
             const isDefault=i===0;
@@ -11501,18 +11499,18 @@ function IRTReportView({project,results,meta,onBack}){
   const PC={U:"#ef4444",H:"#f97316",M:"#f59e0b",L:"#22c55e"};const PL={U:"Urgent",H:"High",M:"Medium",L:"Low"};
   return React.createElement("div",{style:SS.summaryWrap},
     React.createElement("div",{style:SS.summaryTitle},project.name),
-    project.company&&React.createElement("div",{style:{fontSize:12,color:"#666",marginTop:2,marginBottom:4}},project.company),
+    project.company&&React.createElement("div",{style:{fontSize:12,color:"#999",marginTop:2,marginBottom:4}},project.company),
     React.createElement("div",{style:SS.summaryMeta},"INSULATION RESISTANCE TEST REPORT"+(meta.auditor?` \u00b7 ${meta.auditor}`:"")),
     testDate&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}},
       React.createElement("div",{style:{fontSize:12,background:"#161616",border:`1px solid ${IRT_COLOR}55`,color:IRT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," \u2192 next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):irtAddYear(testDate)))
     ),
     React.createElement("div",{style:{display:"flex",gap:8,marginBottom:20,flexWrap:"wrap"}},
-      [["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#64748b"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>React.createElement("div",{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}},React.createElement("div",{style:{fontSize:22,fontWeight:800,color:c}},v),React.createElement("div",{style:{fontSize:9,color:"#666",marginTop:2}},l.toUpperCase())))
+      [["Total",summary.total,"#94a3b8"],["Pass",summary.pass,"#22c55e"],["Fail",summary.fail,"#ef4444"],["N/A",summary.na,"#94a3b8"],["Untested",summary.untested,"#f59e0b"]].map(([l,v,c])=>React.createElement("div",{key:l,style:{flex:1,textAlign:"center",background:"#1a1a1a",borderRadius:10,border:`1px solid ${c}33`,padding:"10px 4px"}},React.createElement("div",{style:{fontSize:22,fontWeight:800,color:c}},v),React.createElement("div",{style:{fontSize:9,color:"#999",marginTop:2}},l.toUpperCase())))
     ),
     React.createElement("div",{style:{marginBottom:20}},
       React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#60a5fa",letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY"),
       (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
-        React.createElement("div",{style:{fontSize:11,color:"#555",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
+        React.createElement("div",{style:{fontSize:11,color:"#888",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
         (area.panels||[]).map(panel=>{
           let pPass=0,pFail=0,pUnt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pPass++;else if(s==="fail")pFail++;else pUnt++;});
           return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#161616",border:`1px solid ${pFail>0?"#ef444433":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#eee"}},panel.name),React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},pPass," P"),pFail>0&&React.createElement("span",{style:{fontSize:11,color:"#ef4444",fontWeight:800}},pFail," F"),pUnt>0&&React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},pUnt," U"));
@@ -11556,7 +11554,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           React.createElement("div",{style:{width:52,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0,background:sm.bg,border:`1px solid ${sm.border}`,borderRadius:5,padding:"2px 0"}},sm.label),
           React.createElement("div",{style:{flex:1,fontSize:13,color:"#ccc",fontWeight:600}},name),
           d.priority&&React.createElement("span",{style:{fontSize:10,fontWeight:800,color:PC[d.priority]||"#aaa",background:`${PC[d.priority]||"#aaa"}22`,borderRadius:4,padding:"2px 5px"}},d.priority),
-          d.testVoltage&&React.createElement("span",{style:{fontSize:10,color:"#555"}},d.testVoltage)
+          d.testVoltage&&React.createElement("span",{style:{fontSize:10,color:"#888"}},d.testVoltage)
         ),
         hasR&&React.createElement("div",{style:{display:"flex",flexWrap:"wrap",gap:6}},
           IRT_PHASE_EARTH.filter(p=>r[p.key]).map(p=>React.createElement("span",{key:p.key,style:{fontSize:11,color:"#60a5fa",background:"#1a2a3a",borderRadius:5,padding:"2px 7px",fontFamily:"monospace"}},p.label,": ",r[p.key]," MΩ")),
@@ -11579,7 +11577,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},
           React.createElement("div",null,
             React.createElement("div",{style:{fontSize:16,fontWeight:800,color:"#eee"}},panel&&panel.name),
-            React.createElement("div",{style:{fontSize:11,color:"#555"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
+            React.createElement("div",{style:{fontSize:11,color:"#888"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
           )
         ),
         (panel&&panel.items||[]).map(itemId=>ItemRow(itemId,panel,area))
@@ -11593,7 +11591,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},
           React.createElement("div",null,
             React.createElement("div",{style:{fontSize:16,fontWeight:800,color:"#eee"}},area&&area.name),
-            React.createElement("div",{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," · Read-only")
+            React.createElement("div",{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," · Read-only")
           )
         ),
         area&&(area.panels||[]).map(panel=>{
@@ -11619,19 +11617,19 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},
         React.createElement("div",{style:{flex:1}},
           React.createElement("div",{style:{fontSize:15,fontWeight:800,color:IRT_COLOR}},"IR Test Snapshot"),
-          React.createElement("div",{style:{fontSize:11,color:"#555"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 Read-only")
+          React.createElement("div",{style:{fontSize:11,color:"#888"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 Read-only")
         ),
         React.createElement("button",{style:{...SS.smallBtn,color:"#4ade80",borderColor:"#22c55e44"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       ),
       React.createElement("div",{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}},
-        [["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#64748b"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,col])=>
+        [["Pass",sum.pass,"#22c55e"],["Fail",sum.fail,"#ef4444"],["N/A",sum.na,"#94a3b8"],["Untested",sum.untested,"#f59e0b"]].map(([l,v,col])=>
           React.createElement("div",{key:l,style:{background:"#1a1a1a",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}},
             React.createElement("div",{style:{fontSize:18,fontWeight:800,color:col}},v),
-            React.createElement("div",{style:{fontSize:10,color:"#666"}},l)
+            React.createElement("div",{style:{fontSize:10,color:"#999"}},l)
           )
         )
       ),
-      React.createElement("div",{style:{fontSize:11,color:"#555",marginBottom:12}},"Tap an area to view results"),
+      React.createElement("div",{style:{fontSize:11,color:"#888",marginBottom:12}},"Tap an area to view results"),
       project&&(project.areas||[]).map(area=>{
         let aFail=0,aTotal=0;
         (area.panels||[]).forEach(panel=>(panel.items||[]).forEach(id=>{
@@ -11657,17 +11655,17 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   }
 
   const backBtn=null;
-  if(!history||history.length===0)return React.createElement("div",{style:SS.listWrap},backBtn,React.createElement("div",{style:SS.listTitle},"Audit History"),React.createElement("div",{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement("div",{style:{color:"#555",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
+  if(!history||history.length===0)return React.createElement("div",{style:SS.listWrap},backBtn,React.createElement("div",{style:SS.listTitle},"Audit History"),React.createElement("div",{style:{fontSize:32,marginBottom:12,textAlign:"center"}},"📋"),React.createElement("div",{style:{color:"#888",fontSize:14}},"No archived audits yet. After completing a test, tap complete active audit on the project home screen to save here."));
   return React.createElement("div",{style:SS.listWrap},
     backBtn,
     React.createElement("div",{style:SS.listTitle},"History"),
-    React.createElement("div",{style:{fontSize:12,color:"#555",marginBottom:16}},history.length," saved audit",history.length!==1?"s":""),
+    React.createElement("div",{style:{fontSize:12,color:"#888",marginBottom:16}},history.length," saved audit",history.length!==1?"s":""),
     history.map(snap=>{
       const sum=irtSiteSummary(snap.results&&project?{[project.id]:snap.results}:{},project||{areas:[],id:""});
       return React.createElement("div",{key:snap.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#60a5fa"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#555",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#ef4444"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#64748b"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},sum.untested," Untested"))),
-          React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#60a5fa":"#555"}},expanded===snap.id?"\u25be":"\u203a")
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#60a5fa"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#888"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#888",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#22c55e"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#ef4444"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#94a3b8"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#f59e0b"}},sum.untested," Untested"))),
+          React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#60a5fa": "#888"}},expanded===snap.id?"\u25be":"\u203a")
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #2a2a2a"}},
           React.createElement("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
@@ -11687,12 +11685,12 @@ function IRTAuditGate({summary, hasAuditor, onGoHome, onEnterAudit}) {
   const auditInProgress = summary.total>0 && (summary.pass+summary.fail+summary.na)>0;
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
     ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},auditInProgress?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?IRT_COLOR:"#555",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
+    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?IRT_COLOR: "#888",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
     ,auditInProgress
       ?React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}},"Tap Continue to test boards, or go Home to complete the audit.")
-      :React.createElement('div',{style:{fontSize:13,color:"#555",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
+      :React.createElement('div',{style:{fontSize:13,color:"#888",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
     ,!auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:IRT_COLOR,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Go to Home to Start")
-    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?IRT_COLOR:"#2a2a2a",color:hasAuditor?"#fff":"#555",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
+    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?IRT_COLOR:"#2a2a2a",color:hasAuditor?"#fff": "#888",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
     ,auditInProgress&&React.createElement('button',{style:{padding:"12px 32px",background:"transparent",color:"#888",border:"1px solid #2a2a2a",borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Back to Home")
   );
 }
@@ -11743,19 +11741,19 @@ function IRTApp({onGoHome}){
             else if(view==="panel"){setActivePanelId(null);setView("area");}
             else if(view==="area"){setActiveAreaId(null);setView("audit");}
             else if(view==="audit"&&!auditEntered)goHome();
-            else if(view==="audit"&&auditEntered){setAuditEntered(false);goHome();}
+            else if(view==="audit"&&auditEntered){const s=project?irtSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
             else if(["report","manage","history","dropdowns"].includes(view))goHome();
             else goProjects();
           }},
-            React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),
-            React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Back")
+            React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),
+            React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Back")
           ),
           React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#eeeeee',lineHeight:1.1,marginTop:6}},"IR Testing"),
-          React.createElement('div',{style:{fontSize:12,color:'#444',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
+          React.createElement('div',{style:{fontSize:12,color:'#888',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
         ),
         React.createElement('div',{style:{border:'1px solid rgba(255,255,255,0.08)',borderRadius:'10px',padding:'8px 12px',background:'#141414',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},
-          React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#555",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),
-          React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#555'}},"Modules")
+          React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#888",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),
+          React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#888'}},"Modules")
         )
       ),
       React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #60a5fa, transparent 70%)',opacity:0.5}})
@@ -11778,12 +11776,12 @@ function IRTApp({onGoHome}){
     showGuide&&React.createElement(IRTMotorInfoModal,{onClose:()=>setShowGuide(false)}),
     // Bottom nav — matches SWBApp exactly
     view!=="projects"&&React.createElement("nav",{style:SS.bottomNav},
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     onClick:goHome,                                                                           color:"#64748b"}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#64748b",onClick:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#64748b",onClick:()=>setView("report")}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#64748b",onClick:()=>setView("history")}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#64748b",onClick:()=>setView("manage")}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#64748b",onClick:()=>setView("dropdowns")})
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     onClick:goHome,                                                                           color:"#94a3b8"}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#94a3b8",onClick:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#94a3b8",onClick:()=>setView("report")}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#94a3b8",onClick:()=>setView("history")}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#94a3b8",onClick:()=>setView("manage")}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#94a3b8",onClick:()=>setView("dropdowns")})
     )
   );
 }

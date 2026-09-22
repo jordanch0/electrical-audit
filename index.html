@@ -25,13 +25,16 @@
       height: 100%;
       overflow: hidden;
     }
-    /* Use position fixed so layout never depends on parent height chain */
+    /* Use position fixed so layout never depends on parent height chain.
+       top/height track window.visualViewport (see script below) so the app's
+       bottom nav stays pinned to the true visible bottom edge instead of
+       floating above the iOS keyboard when it opens. */
     #root {
       position: fixed;
-      top: 0;
+      top: var(--vv-top, 0px);
       left: 0;
       right: 0;
-      bottom: 0;
+      height: var(--vv-height, 100%);
       display: flex;
       flex-direction: column;
       background: #111;
@@ -74,6 +77,30 @@
   <div id="root"></div>
 
   <script>
+    // Keep #root sized/positioned to the true visible viewport (window.visualViewport)
+    // rather than the layout viewport. On iOS Safari the layout viewport does not
+    // shrink when the keyboard opens, so a `position:fixed; bottom:0` element can
+    // end up floating above the keyboard instead of below the fold. Tying #root's
+    // top/height to visualViewport keeps the bottom nav pinned to the real bottom.
+    (function () {
+      function syncViewport() {
+        var vv = window.visualViewport;
+        var root = document.documentElement;
+        if (vv) {
+          root.style.setProperty('--vv-height', vv.height + 'px');
+          root.style.setProperty('--vv-top', vv.offsetTop + 'px');
+        } else {
+          root.style.setProperty('--vv-height', window.innerHeight + 'px');
+          root.style.setProperty('--vv-top', '0px');
+        }
+      }
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncViewport);
+        window.visualViewport.addEventListener('scroll', syncViewport);
+      }
+      window.addEventListener('resize', syncViewport);
+      syncViewport();
+    })();
     function showErr(t, m) {
       document.body.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;padding:30px;font-family:sans-serif;background:#111;color:#eee;overflow:auto"><h2 style="color:#e8731a">' + t + '</h2><pre style="color:#f87171;white-space:pre-wrap;font-size:13px">' + m + '</pre></div>';
     }
