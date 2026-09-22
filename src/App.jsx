@@ -9856,7 +9856,19 @@ function swbAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);
 // ─── Data helpers ─────────────────────────────────────────────────────────
 function swbGetItem(results, projectId, areaId, boardId, itemKey) {
   return ((((results[projectId]||{})[areaId]||{})[boardId])||{})[itemKey]
-    || { status:SWB_STATUS.UNTESTED, defectId:"", comment:"", risk:"", rectified:"", responsibility:"", priority:"", photos:[] };
+    || { status:SWB_STATUS.UNTESTED, defectId:"", comment:"", risk:"", rectified:"", responsibility:"", priority:"" };
+}
+// Board-level photos live under a reserved "_photos" key, sibling to the per-item keys in the
+// same board results object. Also picks up any stray item.photos left by an earlier item-level
+// build, so nothing captured before this rework is silently dropped.
+function swbGetBoardPhotos(results, projectId, areaId, boardId) {
+  const bd=((results[projectId]||{})[areaId]||{})[boardId]||{};
+  let photos=bd._photos||[];
+  SWB_CHECKLIST.forEach(({key})=>{
+    const item=bd[key];
+    if(item&&item.photos&&item.photos.length) photos=[...photos,...item.photos];
+  });
+  return photos;
 }
 function swbGetStatus(results, projectId, areaId, boardId, itemKey) {
   return swbGetItem(results, projectId, areaId, boardId, itemKey).status || SWB_STATUS.UNTESTED;
@@ -9952,9 +9964,8 @@ async function exportSWBExcel(project, allResults, meta) {
     (area.boards||[]).forEach(board=>{
       const bl=`${area.name}  ›  ${board.name}`;
       setCell(cols[0]+(r+1),bl,bhdSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",bhdSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
-      const boardPhotoItems=[];
       SWB_CHECKLIST.forEach(({key,label})=>{
-        const item=((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:"",photos:[]};
+        const item=((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
         const st=item.status||SWB_STATUS.UNTESTED;
         const pfLabel=st===SWB_STATUS.PASS?"Pass":st===SWB_STATUS.FAIL?"Fail":st===SWB_STATUS.NA?"N/A":"Untested";
         const rs=swbXRS(di,item.risk||"");
@@ -9967,26 +9978,30 @@ async function exportSWBExcel(project, allResults, meta) {
         setCell(cols[4]+(r+1),item.risk||"",cSt("center"));
         setCell(cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
         r++; di++;
-        if(item.photos&&item.photos.length) boardPhotoItems.push({label,photos:item.photos});
       });
-      if(boardPhotoItems.length){
+      const bd=(results[area.id]||{})[board.id]||{};
+      let boardPhotos=bd._photos||[];
+      SWB_CHECKLIST.forEach(({key})=>{const it=bd[key];if(it&&it.photos&&it.photos.length)boardPhotos=[...boardPhotos,...it.photos];});
+      if(boardPhotos.length){
         setCell(cols[0]+(r+1),"Photos",phoHdrSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
-        boardPhotoItems.forEach(({label,photos})=>{
-          setCell(cols[0]+(r+1),`📷 ${label}`,phoSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
-          photos.forEach(p=>{
-            const imgRow=r;
-            for(let c=0;c<n;c++) setCell(cols[c]+(imgRow+1),"",spcSt);
-            ws.getRow(imgRow+1).height=82;
+        const perRow=3; // photos side by side, 2 board-columns wide each, wrapping every 3
+        const photoRows=Math.ceil(boardPhotos.length/perRow);
+        for(let row=0;row<photoRows;row++){
+          const imgRow=r;
+          for(let c=0;c<n;c++) setCell(cols[c]+(imgRow+1),"",spcSt);
+          ws.getRow(imgRow+1).height=82;
+          for(let col=0;col<perRow;col++){
+            const p=boardPhotos[row*perRow+col];
+            if(!p) continue;
             const m=/^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
-            if(m){
-              let ext=m[1]==="jpg"?"jpeg":m[1];
-              if(!["jpeg","png","gif"].includes(ext)) ext="jpeg";
-              const imgId=wb.addImage({base64:p.dataUrl,extension:ext});
-              ws.addImage(imgId,{tl:{col:0.15,row:imgRow+0.08},ext:{width:150,height:105},editAs:"oneCell"});
-            }
-            r++;
-          });
-        });
+            if(!m) continue;
+            let ext=m[1]==="jpg"?"jpeg":m[1];
+            if(!["jpeg","png","gif"].includes(ext)) ext="jpeg";
+            const imgId=wb.addImage({base64:p.dataUrl,extension:ext});
+            ws.addImage(imgId,{tl:{col:col*2+0.15,row:imgRow+0.08},ext:{width:150,height:105},editAs:"oneCell"});
+          }
+          r++;
+        }
       } else {
         setCell(cols[0]+(r+1),"— No photos captured for this board —",phoSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
       }
@@ -10126,14 +10141,19 @@ function SWBApp({ onGoHome }) {
 
   const patchItem=(areaId,boardId,itemKey,patch)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
-    const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:"",photos:[]};
+    const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,[itemKey]:{...old,...patch}}}}};
+  });
+
+  const patchBoardPhotos=(areaId,boardId,photos)=>setAllResults(prev=>{
+    const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
+    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,_photos:photos}}}};
   });
 
   const resetBoard=(areaId,boardId)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};
     const cleared={};
-    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:"",photos:[]};});
+    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
   });
 
@@ -10186,7 +10206,7 @@ function SWBApp({ onGoHome }) {
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#888",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&auditEntered&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
-      ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onBack:()=>{setActiveBoardId(null);setView("audit");}})
+      ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
       ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onExport:()=>exportSWBExcel(project,allResults,meta),onBack:()=>setView("home")})
       ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
@@ -10376,11 +10396,27 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
 // ─────────────────────────────────────────────────────────────────────────
 // BOARD VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack}) {
+function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatchPhotos,onBack}) {
   const SS=swbStyles();
   const bs=swbBoardSummary(results,project.id,area.id,board.id);
   const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
   const [confirmReset,setConfirmReset]=React.useState(false);
+  const [photos,setPhotosL]=React.useState(swbGetBoardPhotos(results,project.id,area.id,board.id));
+  const photoInputRef=React.useRef();
+  const addPhotos=async e=>{
+    const files=Array.from(e.target.files||[]);
+    e.target.value="";
+    if(!files.length) return;
+    const added=await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
+    const updated=[...photos,...added];
+    setPhotosL(updated);
+    onPatchPhotos(updated);
+  };
+  const removePhoto=id=>{
+    const updated=photos.filter(p=>p.id!==id);
+    setPhotosL(updated);
+    onPatchPhotos(updated);
+  };
 
   return React.createElement('div',{style:{padding:"16px",position:"relative"}}
     ,onBack&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:onBack},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
@@ -10407,6 +10443,16 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack
           :React.createElement('button',{style:{background:"transparent",border:"none",color:"#888",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")
       )
     )
+    ,React.createElement('div',{style:{marginBottom:16}}
+      ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"BOARD PHOTOS")
+      ,photos.map(p=>React.createElement('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:8,marginBottom:8}}
+        ,React.createElement('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #333"}})
+        ,React.createElement('div',{style:{flex:1,minWidth:0}})
+        ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+      ))
+      ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+      ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#a855f7",border:"1px dashed #a855f766",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
+    )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
       ,SWB_CHECKLIST.map(({key,label})=>{
         const item=swbGetItem(results,project.id,area.id,board.id,key);
@@ -10418,10 +10464,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onBack
           ,React.createElement('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:11,fontWeight:800,textAlign:"center"}},sm.label)
           ,React.createElement('div',{style:{flex:1,minWidth:0}}
             ,React.createElement('div',{style:{fontSize:14,fontWeight:600,color:"#eee"}},label)
-            ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:2}}
-              ,hasDetail&&React.createElement('span',{style:{fontSize:10,color:"#a855f7"}},"✎ has notes")
-              ,item.photos&&item.photos.length>0&&React.createElement('span',{style:{fontSize:10,color:"#a855f7"}},"📷 ",item.photos.length)
-            )
+            ,hasDetail&&React.createElement('div',{style:{fontSize:10,color:"#a855f7",marginTop:2}},"✎ has notes")
           )
           ,item.risk&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:SWB_RISK_COLORS[item.risk],flexShrink:0}},item.risk)
           ,React.createElement('span',{style:{fontSize:14,color:"#888",flexShrink:0}},">")
@@ -10445,22 +10488,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
   const [rectified,   setRectified]   = React.useState(item.rectified||"");
   const [rectDate,    setRectDate]    = React.useState(item.rectifiedDate||"");
   const [resp,        setResp]        = React.useState(item.responsibility||"");
-  const [photos,      setPhotosL]     = React.useState(item.photos||[]);
-  const photoInputRef = React.useRef();
-  const addPhotos = async e => {
-    const files = Array.from(e.target.files||[]);
-    e.target.value = "";
-    if(!files.length) return;
-    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    const updated=[...photos,...added];
-    setPhotosL(updated);
-    onPatch(itemKey,{photos:updated});
-  };
-  const removePhoto = id => {
-    const updated=photos.filter(p=>p.id!==id);
-    setPhotosL(updated);
-    onPatch(itemKey,{photos:updated});
-  };
   const SS=swbStyles();const sm=SWB_SM[status];const isFail=status===SWB_STATUS.FAIL;
   const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
@@ -10502,17 +10529,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
       ,React.createElement('div',{style:SS.modalField}
         ,React.createElement('label',{style:SS.modalLabel},"COMMENTS")
         ,React.createElement('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:comment,placeholder:"Observations, recommendations…",onChange:e=>setComment(e.target.value)})
-      )
-      // Photos
-      ,React.createElement('div',{style:{marginBottom:14}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#999",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
-        ,photos.map(p=>React.createElement('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#1a1a1a",border:"1px solid #2a2a2a",borderRadius:10,padding:8,marginBottom:8}}
-          ,React.createElement('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #333"}})
-          ,React.createElement('div',{style:{flex:1,minWidth:0}})
-          ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
-        ))
-        ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
-        ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#a855f7",border:"1px dashed #a855f766",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
       )
       // Fail-only section — red panel, same as RCD push
       ,isFail&&React.createElement('div',{style:{background:"#1e0a0a",border:"1px solid #ef444433",borderRadius:10,padding:"12px",marginBottom:4}}
