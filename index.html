@@ -25,21 +25,27 @@
       height: 100%;
       overflow: hidden;
     }
-    /* Use position fixed so layout never depends on parent height chain.
-       top/height track window.visualViewport (see script below) so the app's
-       bottom nav stays pinned to the true visible bottom edge instead of
-       floating above the iOS keyboard when it opens. */
+    /* Use position fixed so layout never depends on parent height chain */
     #root {
       position: fixed;
-      top: var(--vv-top, 0px);
+      top: 0;
       left: 0;
       right: 0;
-      height: var(--vv-height, 100%);
+      bottom: 0;
       display: flex;
       flex-direction: column;
       background: #111;
       overflow: hidden;
       padding-top: var(--sat, env(safe-area-inset-top, 0px));
+    }
+    /* On iOS the layout viewport does not shrink when the on-screen keyboard
+       opens; --kb-inset (see script below) tracks how much of the bottom is
+       covered by the keyboard. Applying it as margin only to the bottom nav
+       (not #root) shrinks the flex:1 main content area by that amount and
+       lifts just the tab bar to sit above the keyboard, while the header and
+       everything else stay put. */
+    #root nav {
+      margin-bottom: var(--kb-inset, 0px);
     }
     #loading {
       position: fixed;
@@ -77,29 +83,29 @@
   <div id="root"></div>
 
   <script>
-    // Keep #root sized/positioned to the true visible viewport (window.visualViewport)
-    // rather than the layout viewport. On iOS Safari the layout viewport does not
-    // shrink when the keyboard opens, so a `position:fixed; bottom:0` element can
-    // end up floating above the keyboard instead of below the fold. Tying #root's
-    // top/height to visualViewport keeps the bottom nav pinned to the real bottom.
+    // Track how much of the bottom of the screen the on-screen keyboard covers
+    // (window.visualViewport shrinks and offsets on iOS when the keyboard opens,
+    // while the layout viewport used for `position:fixed` elements does not).
+    // Exposed as --kb-inset and applied only to the bottom nav bar's margin, so
+    // only the tab bar moves — the rest of the layout (including #root itself
+    // and any top nav) stays fixed in place.
     (function () {
-      function syncViewport() {
+      function syncKeyboardInset() {
         var vv = window.visualViewport;
         var root = document.documentElement;
         if (vv) {
-          root.style.setProperty('--vv-height', vv.height + 'px');
-          root.style.setProperty('--vv-top', vv.offsetTop + 'px');
+          var inset = window.innerHeight - vv.height - vv.offsetTop;
+          root.style.setProperty('--kb-inset', Math.max(0, Math.round(inset)) + 'px');
         } else {
-          root.style.setProperty('--vv-height', window.innerHeight + 'px');
-          root.style.setProperty('--vv-top', '0px');
+          root.style.setProperty('--kb-inset', '0px');
         }
       }
       if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', syncViewport);
-        window.visualViewport.addEventListener('scroll', syncViewport);
+        window.visualViewport.addEventListener('resize', syncKeyboardInset);
+        window.visualViewport.addEventListener('scroll', syncKeyboardInset);
       }
-      window.addEventListener('resize', syncViewport);
-      syncViewport();
+      window.addEventListener('resize', syncKeyboardInset);
+      syncKeyboardInset();
     })();
     function showErr(t, m) {
       document.body.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;padding:30px;font-family:sans-serif;background:#111;color:#eee;overflow:auto"><h2 style="color:#e8731a">' + t + '</h2><pre style="color:#f87171;white-space:pre-wrap;font-size:13px">' + m + '</pre></div>';
