@@ -10086,7 +10086,7 @@ function SWBApp({ onGoHome }) {
             if(view==="item"){setActiveItemKey(null);setView("board");}
             else if(view==="board"){setActiveBoardId(null);setView("audit");}
             else if(view==="audit"&&!auditEntered){goHome();}
-            else if(view==="audit"&&auditEntered&&!activeAreaId){setAuditEntered(false);goHome();}
+            else if(view==="audit"&&auditEntered&&!activeAreaId){const s=project?swbSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
             else if(["manage","report","history","dropdowns"].includes(view))goHome();
             else goProjects();
           }}
