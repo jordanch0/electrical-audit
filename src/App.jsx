@@ -9809,7 +9809,7 @@ function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="numbe
 
 function exportSWBExcel(project, allResults, meta) {
   const wb=XLSX.utils.book_new();const ws={};const merges=[];
-  const n=7;const cols="ABCDEFG".split("");
+  const n=6;const cols="ABCDEF".split("");
   let r=0;
   const pid=project.id;const results=allResults[pid]||{};
   const sName=project.name||"Site";
@@ -9826,10 +9826,10 @@ function exportSWBExcel(project, allResults, meta) {
   swbXC2(ws,"A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
   for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"1","",swbXCS("FF1A1A2E")); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
   swbXC2(ws,"A2",coLine,subSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+"2","",swbXCS("FF1A1A2E")); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
-  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt); swbXC2(ws,"G3","",metaSt);
-  merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:6}}); r=3;
+  swbXC2(ws,"A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); swbXC2(ws,"B3","",metaSt); swbXC2(ws,"C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); swbXC2(ws,"D3","",metaSt); swbXC2(ws,"E3",`Next Annual Audit Due: ${nextDue}`,metaSt); swbXC2(ws,"F3","",metaSt);
+  merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:5}}); r=3;
   for(let c=0;c<n;c++) swbXC2(ws,cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
-  ["Item","Pass / Fail","Defect ID","Comments","Risk","Responsibility / Action","Priority"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
+  ["Item","Pass / Fail","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((h,i)=>swbXC2(ws,cols[i]+"5",h,hdrSt)); r=5;
   let di=0;
   (project.areas||[]).forEach(area=>{
     (area.boards||[]).forEach(board=>{
@@ -9848,7 +9848,6 @@ function exportSWBExcel(project, allResults, meta) {
         swbXC2(ws,cols[3]+(r+1),item.comment||"",rs);
         swbXC2(ws,cols[4]+(r+1),item.risk||"",cSt("center"));
         swbXC2(ws,cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
-        swbXC2(ws,cols[6]+(r+1),item.priority||"",cSt("center"));
         r++; di++;
       });
       swbXC2(ws,cols[0]+(r+1),"← Insert board photos here",phoSt); for(let c=1;c<n;c++) swbXC2(ws,cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
@@ -9856,7 +9855,7 @@ function exportSWBExcel(project, allResults, meta) {
   });
   ws["!merges"]=merges;
   ws["!ref"]=XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:n-1}});
-  ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:42},{wch:8},{wch:30},{wch:10}];
+  ws["!cols"]=[{wch:28},{wch:12},{wch:12},{wch:42},{wch:8},{wch:30}];
   XLSX.utils.book_append_sheet(wb,ws,"Switchboard Audit");
   const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname=`SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
@@ -10305,12 +10304,11 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
   const [rectified,   setRectified]   = React.useState(item.rectified||"");
   const [rectDate,    setRectDate]    = React.useState(item.rectifiedDate||"");
   const [resp,        setResp]        = React.useState(item.responsibility||"");
-  const [priority,    setPriority]    = React.useState(item.priority||"");
   const SS=swbStyles();const sm=SWB_SM[status];const isFail=status===SWB_STATUS.FAIL;
   const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
 
-  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk:isFail?risk:"",rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:"",priority:isFail?priority:""});onClose();};
+  const doSave=()=>{const isFail=status===SWB_STATUS.FAIL;onPatch(itemKey,{status,defectId:isFail?defectId:"",comment,risk:isFail?risk:"",rectified:isFail?rectified:"",rectifiedDate:isFail?rectDate:"",responsibility:isFail?resp:""});onClose();};
 
   return React.createElement('div',{style:{padding:"16px",background:"#111",minHeight:"100%"}}
       ,onClose&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#aaa"},onClick:onClose},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
@@ -10372,24 +10370,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RESPONSIBILITY")
           ,React.createElement(SWBEditableDropdown,{options:respOptions,value:resp,onChange:v=>setResp(v),placeholder:"Select or type…",color:"#c084fc"})
-        )
-        ,React.createElement('div',{style:SS.modalField}
-          ,React.createElement('label',{style:SS.modalLabel},"PRIORITY")
-          ,React.createElement('div', {style: {display:"flex", gap:8, flexWrap:"wrap"}},
-            ["", ...PRIORITY_OPTIONS].map(p =>
-              React.createElement('button', {
-                key: p || "none",
-                style: {
-                  padding: "10px 14px",
-                  background: priority === p ? (p ? PRIORITY_BG[p] : "#1a2535") : "#1a1a1a",
-                  color: priority === p ? (p ? PRIORITY_COLORS[p] : "#64748b") : "#444",
-                  border: `1px solid ${priority === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#2a2a2a"}`,
-                  borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
-                },
-                onClick: () => setPriority(p)
-              }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None")
-            )
-          )
         )
       )
       ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:4,background:"#a855f7",color:"#fff"},onClick:doSave},"Save")
