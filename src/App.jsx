@@ -5917,7 +5917,7 @@ function exportThermoExcel(project, results, meta) {
       if (circuits.length > 0) {
         circuits.forEach(cid => {
           const cName = (board.circuitNames || {})[cid] || "";
-          const photos = getPhotos(results, area.id, board.id, cid);
+          const photos = getPhotos(results, area.id, board.id, cid).filter(p => !p.isSkip);
           if (photos.length === 0) {
             // Untested circuit — still list it
             rows.push([area.name, board.name, cName, fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
@@ -5937,7 +5937,7 @@ function exportThermoExcel(project, results, meta) {
         });
       } else {
         // No circuits — photos belong directly to board (circuitId = "__board__")
-        const photos = getPhotos(results, area.id, board.id, "__board__");
+        const photos = getPhotos(results, area.id, board.id, "__board__").filter(p => !p.isSkip);
         if (photos.length === 0) {
           rows.push([area.name, board.name, "", fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
           dataRows.push({
@@ -7706,6 +7706,14 @@ function PhotoPage({
       setEditingIdx(editingIdx - 1);
     }
   };
+  const addSkip = () => {
+    const num = makeFlirName(photosRef.current.length);
+    if (!num) return;
+    const updated = [...photosRef.current, { id: uid(), flirFile: num, isSkip: true }];
+    setPhotos(updated);
+    onPatchPhotos(updated);
+    setForm(blankForm(updated.length));
+  };
   const startEdit = idx => {
     setForm({
       ...photosRef.current[idx]
@@ -7756,6 +7764,26 @@ function PhotoPage({
       photos[photos.length - 1].flirFile || "—"
     ))
   ), photos.map((photo, idx) => {
+    if (photo.isSkip) {
+      return /*#__PURE__*/React.createElement("div", {
+        key: photo.id || idx,
+        style: {
+          background: "#161616",
+          border: "2px dashed #444",
+          borderRadius: 12,
+          padding: "10px 14px",
+          marginBottom: 8,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 10
+        }
+      }, /*#__PURE__*/React.createElement("div", {
+        style: { fontSize: 13, fontWeight: 700, color: "#777" }
+      }, photo.flirFile, " — Skipped"),
+        React.createElement(DeleteButton, { onDelete: () => deletePhoto(idx) })
+      );
+    }
     const rc = RESULT_COLORS[photo.result] || "#555";
     const isBeingEdited = editingIdx === idx;
     return /*#__PURE__*/React.createElement("div", {
@@ -7857,7 +7885,21 @@ function PhotoPage({
       color: THERMO_COLOR,
       letterSpacing: 0.5
     }
-  }, isEditing ? "✎ EDIT PHOTO" : "➕ ADD PHOTO")), /*#__PURE__*/React.createElement("div", {
+  }, isEditing ? "✎ EDIT PHOTO" : "➕ ADD PHOTO")), !isEditing && /*#__PURE__*/React.createElement("button", {
+    style: {
+      width: "100%",
+      padding: "10px",
+      marginBottom: 12,
+      background: "transparent",
+      color: "#888",
+      border: "1px dashed #444",
+      borderRadius: 10,
+      fontSize: 12,
+      fontWeight: 700,
+      cursor: "pointer"
+    },
+    onClick: addSkip
+  }, "↷ Skip Number ", makeFlirName(photosRef.current.length)), /*#__PURE__*/React.createElement("div", {
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
@@ -8030,7 +8072,7 @@ function ThermoReportView({
       const cids = hasC ? board.circuits : ["__board__"];
       cids.forEach(cid => {
         const cName = hasC ? (board.circuitNames || {})[cid] || cid : "";
-        const photos = getPhotos(results, area.id, board.id, cid);
+        const photos = getPhotos(results, area.id, board.id, cid).filter(p => !p.isSkip);
         photos.forEach(p => rows.push({
           area: area.name,
           board: board.name,
