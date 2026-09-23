@@ -22,6 +22,37 @@ const addMonths = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setM
 const addYears  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setFullYear(x.getFullYear()+n); return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return ""; } };
 const cycleS = s => s===STATUS.UNTESTED?STATUS.PASS:s===STATUS.PASS?STATUS.FAIL:s===STATUS.FAIL?STATUS.NA:STATUS.UNTESTED;
 const slugify = s => s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,20)+"-"+uid();
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+// Large exports (photo-heavy archived audits especially) can exceed the size WebKit
+// reliably supports for `<a href="data:...">` clicks — on iOS Safari this fails silently
+// (no error, no share sheet) rather than throwing. A Blob object-URL has no such ceiling.
+function base64ToBlob(base64, mimeType) {
+  const byteChars = atob(base64);
+  const bytes = new Uint8Array(byteChars.length);
+  for (let i=0; i<byteChars.length; i++) bytes[i] = byteChars.charCodeAt(i);
+  return new Blob([bytes], { type: mimeType });
+}
+// Delivers a generated export/template file to the user, and — unlike the old
+// inline "postMessage or data-URI anchor click" snippets this replaces — never fails
+// silently: any error is logged and surfaced to the user via alert().
+function deliverExportFile(base64, filename, mimeType=XLSX_MIME) {
+  try {
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile) {
+      window.webkit.messageHandlers.shareFile.postMessage({ base64, filename, mimeType });
+      return;
+    }
+    const url = URL.createObjectURL(base64ToBlob(base64, mimeType));
+    const link = document.createElement('a');
+    link.href = url; link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 30000);
+  } catch (err) {
+    console.error('Export delivery failed:', err);
+    alert(`Export failed: ${(err && err.message) || 'unknown error'}. Please try again.`);
+  }
+}
 // Downscale + JPEG-compress a captured photo before it goes into localStorage / an Excel export.
 function resizeImageToDataUrl(file, maxDim=1280, quality=0.72) {
   return new Promise((resolve, reject) => {
@@ -467,21 +498,8 @@ let wbOut;
     alert("Export requires internet connection to load the XLSX library.\nPlease connect to WiFi and try again.");
     return;
   }
-const dataUri = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbOut}`;
 const filename = `${project.name.replace(/\s+/g,"_")}_RCD_${isInject?"Injection":"Push"}_${testDate||"export"}.xlsx`;
-// Send to native iOS share sheet (saves to Files app, AirDrop, etc.)
-  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile) {
-    window.webkit.messageHandlers.shareFile.postMessage({
-      base64: wbOut,
-      filename: filename,
-      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    });
-  } else {
-    // Fallback for non-native (browser preview etc)
-    var link=document.createElement('a');
-    link.href=dataUri; link.download=filename;
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-  }
+deliverExportFile(wbOut, filename);
 }
 // ─────────────────────────────────────────────────────────────────────────
 // TEMPLATE DOWNLOAD — gives user a sample import spreadsheet
@@ -521,9 +539,7 @@ ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}},{s:{r:3,c:0},
 XLSX.utils.book_append_sheet(wb,ws,"RCD Import");
 const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
 const fname="RCD_Import_Template.xlsx";
-if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-  window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-}else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+deliverExportFile(tOut, fname);
 }
 // ─────────────────────────────────────────────────────────────────────────
 // SHARED DELETE BUTTON — two-step inline confirmation for all destructive actions
@@ -2271,9 +2287,7 @@ function exportIELExcel(project, results, meta) {
   XLSX.utils.book_append_sheet(wb,ws,"Isolators EStops Lanyards");
   const filename=`IEL_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
   const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true,bookSST:false});
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }else{const link=document.createElement("a");link.href=`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbOut}`;link.download=filename;document.body.appendChild(link);link.click();document.body.removeChild(link);}
+  deliverExportFile(wbOut, filename);
 }
 
 // Import — same format as export
@@ -2399,9 +2413,7 @@ function downloadIELTemplate(){
   XLSX.utils.book_append_sheet(wb,ws,"IEL Import");
   const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname="IEL_Import_Template.xlsx";
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+  deliverExportFile(tOut, fname);
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -4435,11 +4447,7 @@ function exportTATExcel(project, results, meta) {
   XLSX.utils.book_append_sheet(wb,ws,"Test & Tag");
   const filename=`TAT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
   const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true,bookSST:false});
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }else{
-    const link=document.createElement("a");link.href=`data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbOut}`;link.download=filename;document.body.appendChild(link);link.click();document.body.removeChild(link);
-  }
+  deliverExportFile(wbOut, filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -4549,9 +4557,7 @@ function downloadTATTemplate(){
   XLSX.utils.book_append_sheet(wb,ws,"T&T Import");
   const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname="TAT_Import_Template.xlsx";
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:tOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  }else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+tOut;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+  deliverExportFile(tOut, fname);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -6087,20 +6093,7 @@ function exportThermoExcel(project, results, meta) {
     type: "base64",
     cellStyles: false
   });
-  if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile) {
-    window.webkit.messageHandlers.shareFile.postMessage({
-      base64: wbOut,
-      filename,
-      mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    });
-  } else {
-    const link = document.createElement("a");
-    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${wbOut}`;
-    link.download = filename;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  }
+  deliverExportFile(wbOut, filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -6320,14 +6313,7 @@ function downloadThermoTemplate() {
   XLSX.utils.book_append_sheet(wb, ws, "Thermo Import");
   const out = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
   const fname = "Thermo_Import_Template.xlsx";
-  if (window.webkit?.messageHandlers?.shareFile) {
-    window.webkit.messageHandlers.shareFile.postMessage({ base64: out, filename: fname, mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  } else {
-    const link = document.createElement("a");
-    link.href = `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${out}`;
-    link.download = fname;
-    document.body.appendChild(link); link.click(); document.body.removeChild(link);
-  }
+  deliverExportFile(out, fname);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -10012,11 +9998,7 @@ async function exportSWBExcel(project, allResults, meta) {
   const buf=await wb.xlsx.writeBuffer();
   const wbOut=swbArrayBufferToBase64(buf);
   const fname=`SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  } else {
-    const a=document.createElement("a"); a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+wbOut; a.download=fname; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  }
+  deliverExportFile(wbOut, fname);
 }
 
 // ─── Excel import ─────────────────────────────────────────────────────────
@@ -10031,29 +10013,55 @@ function parseSWBExcel(data) {
       const parts=String(rows[1][0]).split(/\s*\|\s*/);
       parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});
     }
-    // ── Find header row with "area" or "board" ────────────────────────
+    const CHECKLIST_LABELS=new Set(SWB_CHECKLIST.map(({label})=>label.toLowerCase()));
+    const STATUS_WORDS=new Set(["pass","fail","n/a","na","untested"]);
+    const areaMap={};
+    // ── Template format: header row with BOTH an Area column and a Board/Panel column ──
     let hi=-1;
     for(let i=0;i<Math.min(rows.length,10);i++){
       if(rows[i].some(c=>String(c).length>60)) continue;
-      const r=rows[i].map(c=>String(c).toLowerCase());
-      if(r.some(c=>c==="area"||c==="board"||c==="board / panel name")){hi=i;break;}
+      const r=rows[i].map(c=>String(c).toLowerCase().trim());
+      const hasArea=r.some(c=>c.includes("area"));
+      const hasBoard=r.some(c=>c.includes("board")||c.includes("panel"));
+      if(hasArea&&hasBoard){hi=i;break;}
     }
-    if(hi<0) hi=4;
-    const header=rows[hi].map(c=>String(c).toLowerCase().trim());
-    const aC=Math.max(0,header.findIndex(h=>h.includes("area")));
-    const bC=header.findIndex(h=>h.includes("board")||h.includes("panel")||h.includes("name"));
-    const pc=bC<0?aC+1:bC;
-    const areaMap={};
-    for(let i=hi+1;i<rows.length;i++){
-      const row=rows[i];
-      const aRaw=String(row[aC]||"").trim();
-      const bRaw=String(row[pc]||"").trim();
-      if(!aRaw&&!bRaw) continue;
-      const aKey=aRaw||"General";
-      if(!areaMap[aKey]) areaMap[aKey]=new Set();
-      if(bRaw) areaMap[aKey].add(bRaw);
+    if(hi>=0){
+      const header=rows[hi].map(c=>String(c).toLowerCase().trim());
+      const aC=header.findIndex(h=>h.includes("area"));
+      const bC=header.findIndex(h=>h.includes("board")||h.includes("panel"));
+      for(let i=hi+1;i<rows.length;i++){
+        const row=rows[i];
+        const aRaw=String(row[aC]||"").trim();
+        const bRaw=String(row[bC]||"").trim();
+        if(!aRaw&&!bRaw) continue;
+        const aKey=aRaw||"General";
+        if(!areaMap[aKey]) areaMap[aKey]=new Set();
+        if(bRaw) areaMap[aKey].add(bRaw);
+      }
+    } else {
+      // ── No template header found — this may be a previously EXPORTED SWB report
+      // being re-imported. That format has merged "Area › Board" title rows followed
+      // by one row per checklist test item (label + Pass/Fail/etc). Only the merged
+      // title rows define areas/boards — item rows must never become boards.
+      for(let i=0;i<rows.length;i++){
+        const row=rows[i];
+        const first=String(row[0]||"").trim();
+        if(!first) continue;
+        const m=/^(.+?)\s*[›>]\s*(.+)$/.exec(first);
+        if(!m) continue;
+        const restEmpty=row.slice(1).every(c=>String(c||"").trim()==="");
+        if(!restEmpty) continue; // a real data row, not a merged title row
+        const aKey=m[1].trim(), bKey=m[2].trim();
+        if(CHECKLIST_LABELS.has(bKey.toLowerCase())||STATUS_WORDS.has(bKey.toLowerCase())) continue;
+        if(!areaMap[aKey]) areaMap[aKey]=new Set();
+        areaMap[aKey].add(bKey);
+      }
     }
-    const areas=Object.entries(areaMap).map(([aName,boards])=>({id:swbSlug(aName),name:aName,boards:[...boards].map(b=>({id:swbSlug(b),name:b}))}));
+    // Safety net regardless of format — a checklist item label or status word is never a board
+    Object.keys(areaMap).forEach(aKey=>{
+      areaMap[aKey]=new Set([...areaMap[aKey]].filter(b=>!CHECKLIST_LABELS.has(b.toLowerCase())&&!STATUS_WORDS.has(b.toLowerCase())));
+    });
+    const areas=Object.entries(areaMap).filter(([,boards])=>boards.size>0).map(([aName,boards])=>({id:swbSlug(aName),name:aName,boards:[...boards].map(b=>({id:swbSlug(b),name:b}))}));
     return {areas,siteName,siteId:swbSlug(siteName||"imported"),company,abn,licence};
   } catch(e){ return null; }
 }
@@ -10090,11 +10098,7 @@ function downloadSWBTemplate() {
   XLSX.utils.book_append_sheet(wb,ws,"SWB Import");
   const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname="SWB_Import_Template.xlsx";
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){
-    window.webkit.messageHandlers.shareFile.postMessage({base64:wbOut,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-  } else {
-    const a=document.createElement("a"); a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+wbOut; a.download=fname; document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  }
+  deliverExportFile(wbOut, fname);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -11096,8 +11100,7 @@ function downloadIRTTemplate(){
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"IRT Import");
   const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
   const fname="IRT_Import_Template.xlsx";
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){window.webkit.messageHandlers.shareFile.postMessage({base64:out,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});}
-  else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+out;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+  deliverExportFile(out, fname);
 }
 
 // ─── Excel export ─────────────────────────────────────────────────────────
@@ -11121,8 +11124,7 @@ function exportIRTExcel(project,results,meta){
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"IR Test");
   const fname=`IR_Test_${sName.replace(/\s+/g,"_")}_${meta.testDate||"export"}.xlsx`;
   const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
-  if(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.shareFile){window.webkit.messageHandlers.shareFile.postMessage({base64:out,filename:fname,mimeType:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});}
-  else{const a=document.createElement("a");a.href="data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,"+out;a.download=fname;document.body.appendChild(a);a.click();document.body.removeChild(a);}
+  deliverExportFile(out, fname);
 }
 
 // ─── Motor info modal ─────────────────────────────────────────────────────
@@ -12337,4 +12339,5 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
   - Applied to: RCD (push + inject), IEL, TAT, Thermo, SWB, IRT
 */
 
+export { parseSWBExcel };
 export default AppRoot;
