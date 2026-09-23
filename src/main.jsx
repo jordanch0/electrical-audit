@@ -17,9 +17,9 @@ function UpdateToast() {
   return React.createElement('div', {
     style: {
       position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 99999,
-      background: '#1a1a1a', border: '1px solid #333', borderRadius: 12,
+      background: '#ffffff', border: '1px solid #d4d4d8', borderRadius: 12,
       padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10,
-      boxShadow: '0 4px 20px rgba(0,0,0,0.4)', color: '#eee',
+      boxShadow: '0 4px 20px rgba(0,0,0,0.15)', color: '#18181b',
       fontFamily: 'sans-serif', fontSize: 13,
     },
   },
@@ -27,14 +27,14 @@ function UpdateToast() {
     React.createElement('button', {
       onClick: () => updateServiceWorker(true),
       style: {
-        background: '#e8731a', color: '#fff', border: 'none', borderRadius: 8,
+        background: '#a3530f', color: '#fff', border: 'none', borderRadius: 8,
         padding: '8px 14px', fontWeight: 700, fontSize: 13, cursor: 'pointer', flexShrink: 0,
       },
     }, 'Refresh'),
     React.createElement('button', {
       onClick: () => setNeedRefresh(false),
       style: {
-        background: 'transparent', color: '#888', border: 'none',
+        background: 'transparent', color: '#52525b', border: 'none',
         fontSize: 13, cursor: 'pointer', flexShrink: 0,
       },
     }, 'Later')
@@ -51,7 +51,7 @@ try {
 } catch (e) {
   document.body.style.overflow = 'auto'
   document.body.innerHTML =
-    '<div style="color:#ff6b6b;padding:30px;font-family:sans-serif;background:#111;min-height:100vh">' +
-    '<h2 style="color:#e8731a">Mount Error</h2><b>' + e.message + '</b><br><br>' +
-    '<pre style="font-size:10px;color:#888;white-space:pre-wrap">' + e.stack + '</pre></div>'
+    '<div style="color:#991b1b;padding:30px;font-family:sans-serif;background:#f4f4f5;min-height:100vh">' +
+    '<h2 style="color:#a3530f">Mount Error</h2><b>' + e.message + '</b><br><br>' +
+    '<pre style="font-size:10px;color:#52525b;white-space:pre-wrap">' + e.stack + '</pre></div>'
 }
