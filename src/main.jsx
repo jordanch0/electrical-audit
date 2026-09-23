@@ -17,7 +17,7 @@ function UpdateToast() {
   return React.createElement('div', {
     style: {
       position: 'fixed', left: 12, right: 12, bottom: 12, zIndex: 99999,
-      background: '#ffffff', border: '1px solid #d4d4d8', borderRadius: 12,
+      background: '#f7f6f3', border: '1px solid #d4d4d8', borderRadius: 12,
       padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10,
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)', color: '#18181b',
       fontFamily: 'sans-serif', fontSize: 13,
@@ -51,7 +51,7 @@ try {
 } catch (e) {
   document.body.style.overflow = 'auto'
   document.body.innerHTML =
-    '<div style="color:#991b1b;padding:30px;font-family:sans-serif;background:#f4f4f5;min-height:100vh">' +
+    '<div style="color:#991b1b;padding:30px;font-family:sans-serif;background:#e8e6e2;min-height:100vh">' +
     '<h2 style="color:#a3530f">Mount Error</h2><b>' + e.message + '</b><br><br>' +
     '<pre style="font-size:10px;color:#52525b;white-space:pre-wrap">' + e.stack + '</pre></div>'
 }
