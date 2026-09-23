@@ -568,7 +568,7 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
       onClick: open,
       style: {
         border: '1px solid rgba(239,68,68,0.35)',
-        color: 'rgba(239,68,68,0.7)',
+        color: '#991b1b',
         background: 'transparent',
         borderRadius: '6px',
         padding: '4px 8px',
@@ -667,6 +667,8 @@ const [saveFlash,     setSaveFlash]    = React.useState(false);
 const [detailInfo,    setDetailInfo]   = React.useState(null);
 const [viewSnap,      setViewSnap]     = React.useState(null);
 const [viewArea,      setViewArea]     = React.useState(null);
+const rcdMainRef = React.useRef(null);
+React.useLayoutEffect(()=>{ if(detailInfo&&rcdMainRef.current) rcdMainRef.current.scrollTop=0; },[detailInfo]);
 React.useEffect(()=>{
 // Safety: force loaded=true after 3s even if storage fails
 var safetyTimer=setTimeout(()=>setLoaded(true),3000);
@@ -778,7 +780,7 @@ else goProjects();
   )
   ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #a3530f, transparent 70%)',opacity:0.5}})
 )
-, React.createElement('main', { style: S.main,}
+, React.createElement('main', { style: S.main, ref: rcdMainRef,}
 , view==="projects"&&React.createElement(ProjectListView, { projects: projects, allResults: allResults, dropdowns: dropdowns,
 onSelect: id=>{const proj=projects.find(p=>p.id===id);const pushSum=summariseProject(allResults,proj,"push");const injectSum=summariseProject(allResults,proj,"inject");const hasProgress=(pushSum.total>0&&(pushSum.pass+pushSum.fail+pushSum.na)>0)||(injectSum.total>0&&(injectSum.pass+injectSum.fail+injectSum.na)>0);setAuditEntered(hasProgress);setActiveProject(id);setView("home");},
 onAddProject: p=>setProjects(prev=>[...prev,p]),
@@ -2462,6 +2464,9 @@ function IELApp({ onGoHome }) {
     if(!detailInfo&&mainElRef.current&&savedScrollRef.current>0){
       mainElRef.current.scrollTop=savedScrollRef.current;
     }
+  },[detailInfo]);
+  React.useLayoutEffect(()=>{
+    if(detailInfo&&mainElRef.current) mainElRef.current.scrollTop=0;
   },[detailInfo]);
 
   const project  = projects.find(p=>p.id===activeProject);
@@ -4578,6 +4583,8 @@ function TATApp({ onGoHome }) {
   const [view,         setView]        = React.useState("projects"); // projects|home|audit|panel|manage|report|history
   const [activeAreaId, setActiveAreaId]=React.useState(null);
   const [detailItemId, setDetailItemId]=React.useState(null);
+  const tatMainRef = React.useRef(null);
+  React.useLayoutEffect(()=>{ if(detailItemId&&tatMainRef.current) tatMainRef.current.scrollTop=0; },[detailItemId]);
   const [auditEntered, setAuditEntered]=React.useState(false);
   const [viewSnap,     setViewSnap]    =React.useState(null);
   const [viewArea,     setViewArea]    =React.useState(null);
@@ -4664,7 +4671,7 @@ function TATApp({ onGoHome }) {
 
     // Breadcrumb
     // Main
-    ,React.createElement('main',{style:ST.main}
+    ,React.createElement('main',{style:ST.main,ref:tatMainRef}
       ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);const s=tatSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);},
         onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},
         onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
@@ -9268,6 +9275,8 @@ function ThermoApp({
   const [activeAreaId, setActiveAreaId] = React.useState(null);
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeCircuitId, setActiveCircuitId] = React.useState(null); // id of circuit open in photo page
+  const thermoMainRef = React.useRef(null);
+  React.useLayoutEffect(()=>{ if(view==="circuit"&&thermoMainRef.current) thermoMainRef.current.scrollTop=0; },[view,activeCircuitId]);
   const [activeCircuitName, setActiveCircuitName] = React.useState("");
   const [thermoDropdowns, setThermoDropdowns] = React.useState({responsibility:[...RESPONSIBILITY_OPTIONS],rectified:[...RECTIFIED_OPTIONS]});
 
@@ -9444,7 +9453,7 @@ function ThermoApp({
   return /*#__PURE__*/React.createElement("div", {
     style: STH.root
   }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } } * { box-sizing: border-box; }`), React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #f0eeea',background:'#f0eeea',flexShrink:0}},React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}},view !== "projects" && React.createElement('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:handleBack},React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Back")),React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Thermographic"),React.createElement('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")),onGoHome&&React.createElement('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1})),React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Modules"))),React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #c2410c, transparent 70%)',opacity:0.5}})), /*#__PURE__*/React.createElement("main", {
-    style: STH.main
+    style: STH.main, ref: thermoMainRef
   }, view === "projects" && /*#__PURE__*/React.createElement(ThermoProjectListView, {
     projects: projects,
     allResults: allResults,
@@ -9726,7 +9735,7 @@ function AppRoot() {
       , React.createElement('div', {style:{textAlign:"center",marginBottom:20,padding:"0 24px"}}
         , React.createElement('div', {style:{
             display:"inline-flex",alignItems:"center",gap:5,
-            background:"rgba(232,115,26,0.1)",
+            background:"#fdecdc",
             border:"1px solid rgba(232,115,26,0.25)",
             borderRadius:999,
             padding:"4px 10px",
@@ -10118,6 +10127,8 @@ function SWBApp({ onGoHome }) {
   const [activeAreaId,  setActiveAreaId]  = React.useState(null);
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeItemKey, setActiveItemKey] = React.useState(null);
+  const swbMainRef = React.useRef(null);
+  React.useLayoutEffect(()=>{ if(view==="item"&&swbMainRef.current) swbMainRef.current.scrollTop=0; },[view,activeItemKey]);
   const [auditEntered,  setAuditEntered]  = React.useState(false);
   const [swbDropdowns,  setSwbDropdowns]  = React.useState({responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED});
 
@@ -10203,7 +10214,7 @@ function SWBApp({ onGoHome }) {
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #7e22ce, transparent 70%)',opacity:0.5}})
     )
-    ,React.createElement('div',{style:SS.main}
+    ,React.createElement('div',{style:SS.main,ref:swbMainRef}
       ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
@@ -11827,6 +11838,8 @@ function IRTApp({onGoHome}){
   const [auditEntered,setAuditEntered]=React.useState(false);
   const [viewSnap,setViewSnap]=React.useState(null);const [viewArea,setViewArea]=React.useState(null);const [viewPanel,setViewPanel]=React.useState(null);
   const [activeAreaId,setActiveAreaId]=React.useState(null);const [activePanelId,setActivePanelId]=React.useState(null);const [activeItemId,setActiveItemId]=React.useState(null);const [activeItemName,setActiveItemName]=React.useState("");
+  const irtMainRef = React.useRef(null);
+  React.useLayoutEffect(()=>{ if(view==="item"&&irtMainRef.current) irtMainRef.current.scrollTop=0; },[view,activeItemId]);
   const [irtWarnDismissed,setIrtWarnDismissed]=React.useState(false);
   const [showGuide,setShowGuide]=React.useState(false);
   React.useEffect(()=>{(async()=>{try{const[p,r,m,h,dd]=await Promise.all([load(K_IRT_PROJECTS,[]),load(K_IRT_RESULTS,{}),load(K_IRT_META,{}),load(K_IRT_HISTORY,[]),load(K_IRT_DROPDOWNS,{responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setIrtDropdowns(dd);}finally{setLoaded(true);}})();},[]);
@@ -11883,7 +11896,7 @@ function IRTApp({onGoHome}){
       React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #1d4ed8, transparent 70%)',opacity:0.5}})
     ),
     // Main
-    React.createElement("div",{style:SS.main},
+    React.createElement("div",{style:SS.main,ref:irtMainRef},
       view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
       view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));setAuditEntered(false);},auditEntered}),
       view==="audit"&&project&&!auditEntered&&React.createElement(IRTAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);}}),
