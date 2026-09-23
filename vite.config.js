@@ -38,6 +38,11 @@ export default defineConfig({
   server: {
     host: true,
   },
+  test: {
+    environment: 'jsdom',
+    setupFiles: ['./src/test/setup.js'],
+    globals: false,
+  },
   build: {
     outDir: 'dist',
     rollupOptions: {
