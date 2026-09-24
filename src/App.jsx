@@ -10862,11 +10862,15 @@ function SWBContinueBtn({onConfirm,styleObj}) {
 // ─────────────────────────────────────────────────────────────────────────
 // DROPDOWNS SETTINGS VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
+function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDefault=true, reserved=[]}) {
   const [newVals, setNewVals] = React.useState({});
+  const [notice, setNotice] = React.useState({});
   const SS = swbStyles();
   const addItem = (key, val) => {
     if(!val.trim()) return;
+    const hit = reserved.find(r=>r.toLowerCase()===val.trim().toLowerCase());
+    if(hit){ setNotice(n=>({...n,[key]:`${hit} is already built in`})); return; }
+    setNotice(n=>({...n,[key]:""}));
     setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));
     setNewVals(v=>({...v,[key]:""}));
   };
@@ -10877,14 +10881,14 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
     setDropdowns(d=>({...d,[key]:[val,...items.filter(x=>x!==val)]}));
   };
 
-  const LISTS = [
+  const LISTS = lists || [
     { key:"rectified",      label:"RECTIFIED / SCHEDULED", defaults:SWB_DEFAULT_RECTIFIED,      color:"#92400e", desc:"Options shown in Rectified / Scheduled Action dropdown on FAIL items" },
     { key:"responsibility", label:"RESPONSIBILITY",         defaults:SWB_DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Options shown in the Responsibility dropdown on FAIL items" },
   ];
 
   return React.createElement('div',{style:SS.listWrap}
     ,React.createElement('div',{style:{...SS.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
-    ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
+    ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},hint || "Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
     ,LISTS.map(({key,label,defaults,color,desc})=>{
       const items=(dropdowns&&dropdowns[key])||defaults;
       const newVal=newVals[key]||"";
@@ -10898,19 +10902,20 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack}) {
         )
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:220,overflowY:"auto"}}
           ,items.map((item,i)=>{
-            const isDefault=i===0;
+            const isFirst=i===0;const isDefault=showDefault&&isFirst;
             return React.createElement('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
-              ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
-              ,React.createElement('button',{style:{background:"transparent",border:"none",color:"#dc2626",cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 0 0 4px"},onClick:()=>removeItem(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
+              ,!isFirst&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:showDefault?"Set as default":"Move to top",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
+              ,React.createElement(DeleteButton,{onDelete:()=>removeItem(key,item),label:"Delete?"})
             );
           })
           ,items.length===0&&React.createElement('div',{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options — add one below")
         )
-        ,React.createElement('div',{style:{display:"flex",gap:8}}
-          ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
+        ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+          ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#dc2626"}},notice[key])
         )
       );
     })
@@ -10991,10 +10996,19 @@ const K_ELT_PROJECTS   = "elt-projects-v1";
 const K_ELT_RESULTS    = "elt-results-v1";
 const K_ELT_META       = "elt-meta-v1";
 const K_ELT_HISTORY    = "elt-history-v1";
-const ELT_TYPES        = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)","Other"];
+const K_ELT_DROPDOWNS  = "elt-dropdowns-v1";
+// Editable option lists. "Other" is not stored: ELTSelectOther always appends it as the last option.
+const ELT_DEFAULT_TYPES        = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)"];
 const ELT_MAINTAINED   = ["Maintained","Non-Maintained"];
-const ELT_FAIL_REASONS = ["Lamp Failure","Battery Failure","No Power","Damaged/Broken","Switch Failure","Other"];
-const ELT_ACTIONS      = ["Given to Site Contact","Repaired On-Site","Scheduled for Repair","Other"];
+const ELT_DEFAULT_FAIL_REASONS = ["Lamp Failure","Battery Failure","No Power","Damaged/Broken","Switch Failure"];
+const ELT_DEFAULT_ACTIONS      = ["Given to Site Contact","Repaired On-Site","Scheduled for Repair"];
+const ELT_DEFAULT_DROPDOWNS = {types:ELT_DEFAULT_TYPES, failReasons:ELT_DEFAULT_FAIL_REASONS, actions:ELT_DEFAULT_ACTIONS};
+const ELT_DROPDOWN_LISTS = [
+  {key:"types",       label:"TYPE",           defaults:ELT_DEFAULT_TYPES,        desc:"Options in the Type dropdown when adding or editing a fitting"},
+  {key:"failReasons", label:"FAILURE REASON", defaults:ELT_DEFAULT_FAIL_REASONS, desc:"Options in the Failure Reason dropdown on FAIL fittings"},
+  {key:"actions",     label:"ACTION TAKEN",   defaults:ELT_DEFAULT_ACTIONS,      desc:"Options in the Action Taken dropdown on FAIL fittings"},
+];
+const ELT_DROPDOWN_HINT = "These lists feed the ELT dropdowns. \"Other\" (with a free-text box) is always available and is not listed here. Tap ★ to move an option to the top.";
 const ELT_CHECKS       = [
   {key:"visual",    label:"Visual Inspection"},
   {key:"discharge", label:"90-Minute Discharge Test"},
@@ -11121,10 +11135,12 @@ async function exportELTExcel(project, allResults, meta) {
 
 function ELTSelectOther({options, value, other, onChange, placeholder}) {
   const SS = swbStyles();
+  const opts = [...options];
+  if (value && value !== "Other" && !opts.includes(value)) opts.push(value); // option removed after it was used: keep it visible
   return eltEl('div',null
     ,eltEl('select',{style:{...SS.modalInput,cursor:"pointer"},value:value||"",onChange:e=>onChange(e.target.value,other||"")}
       ,eltEl('option',{value:""},placeholder||"— Select")
-      ,options.map(o=>eltEl('option',{key:o,value:o},o))
+      ,[...opts,"Other"].map(o=>eltEl('option',{key:o,value:o},o))
     )
     ,value==="Other"&&eltEl('input',{style:{...SS.modalInput,marginTop:6},type:"text",value:other||"",placeholder:"Specify…",onChange:e=>onChange("Other",e.target.value)})
   );
@@ -11150,12 +11166,13 @@ function ELTApp({ onGoHome }) {
   const [viewSnap,      setViewSnap]      = React.useState(null);
   const [view,          setView]          = React.useState("projects");
   const [activeAssetId, setActiveAssetId] = React.useState(null);
+  const [eltDropdowns, setEltDropdowns] = React.useState(ELT_DEFAULT_DROPDOWNS);
   const eltMainRef = React.useRef(null);
   React.useLayoutEffect(()=>{ if(eltMainRef.current) eltMainRef.current.scrollTop=0; },[view,activeAssetId]);
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h]=await Promise.all([load(K_ELT_PROJECTS,[]),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),load(K_ELT_HISTORY,[])]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);}
+      try{const [p,r,m,h,dd]=await Promise.all([load(K_ELT_PROJECTS,[]),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),load(K_ELT_HISTORY,[]),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...dd});}
       finally{setLoaded(true);}
     })();
   },[]);
@@ -11163,6 +11180,7 @@ function ELTApp({ onGoHome }) {
   React.useEffect(()=>{ if(loaded) save(K_ELT_RESULTS,allResults); },[allResults,loaded]);
   React.useEffect(()=>{ if(loaded) save(K_ELT_META,allMeta); },[allMeta,loaded]);
   React.useEffect(()=>{ if(loaded) save(K_ELT_HISTORY,history); },[history,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_ELT_DROPDOWNS,eltDropdowns); },[eltDropdowns,loaded]);
 
   const project = projects.find(p=>p.id===activeProject);
   const _m = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10)};
@@ -11192,7 +11210,7 @@ function ELTApp({ onGoHome }) {
     if(viewSnap){setViewSnap(null);return;}
     if(view==="asset") setView("audit");
     else if(view==="audit") goHome();
-    else if(["manage","report","history"].includes(view)) goHome();
+    else if(["manage","report","history","dropdowns"].includes(view)) goHome();
     else goProjects();
   };
 
@@ -11218,9 +11236,10 @@ function ELTApp({ onGoHome }) {
       ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
-      ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
+      ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
-      ,view==="manage"&&project&&eltEl(ELTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:false,reserved:["Other"]})
       ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
@@ -11229,6 +11248,7 @@ function ELTApp({ onGoHome }) {
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_REPORT, label:"Report", active:view==="report",                 onClick:()=>{setViewSnap(null);setView("report");},  color:ELT_COLOR})
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_HISTORY,label:"History",active:view==="history",                onClick:()=>{setViewSnap(null);setView("history");}, color:ELT_COLOR})
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_MANAGE, label:"Manage", active:view==="manage",                 onClick:()=>{setViewSnap(null);setView("manage");},  color:ELT_COLOR})
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns", onClick:()=>{setViewSnap(null);setView("dropdowns");}, color:ELT_COLOR})
     )
   );
 }
@@ -11353,7 +11373,7 @@ function ELTAuditView({project, results, meta, summary, onOpen}) {
   );
 }
 
-function ELTAssetPage({project, asset, res, meta, onPatch, onClose}) {
+function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) {
   const SS = swbStyles();
   const [r,setR] = React.useState(res);
   const set = patch=>setR(prev=>({...prev,...patch}));
@@ -11407,11 +11427,11 @@ function ELTAssetPage({project, asset, res, meta, onPatch, onClose}) {
       ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"FAILURE REASON")
-        ,eltEl(ELTSelectOther,{options:ELT_FAIL_REASONS,value:r.failReason,other:r.failReasonOther,onChange:(v,o)=>set({failReason:v,failReasonOther:o})})
+        ,eltEl(ELTSelectOther,{options:dropdowns.failReasons,value:r.failReason,other:r.failReasonOther,onChange:(v,o)=>set({failReason:v,failReasonOther:o})})
       )
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"ACTION TAKEN")
-        ,eltEl(ELTSelectOther,{options:ELT_ACTIONS,value:r.action,other:r.actionOther,onChange:(v,o)=>set({action:v,actionOther:o})})
+        ,eltEl(ELTSelectOther,{options:dropdowns.actions,value:r.action,other:r.actionOther,onChange:(v,o)=>set({action:v,actionOther:o})})
       )
     )
     ,eltEl('div',{style:SS.modalField}
@@ -11464,7 +11484,7 @@ function ELTReportView({project, results, meta, summary}) {
   );
 }
 
-function ELTAssetForm({initial, defaultLocation, submitLabel, onSave, onCancel}) {
+function ELTAssetForm({initial, typeOptions, defaultLocation, submitLabel, onSave, onCancel}) {
   const SS = swbStyles();
   const [f,setF] = React.useState({assetId:"",location:defaultLocation||"",assetLocation:"",type:"",typeOther:"",maintained:"",fitting:"",...initial});
   const set = patch=>setF(prev=>({...prev,...patch}));
@@ -11478,7 +11498,7 @@ function ELTAssetForm({initial, defaultLocation, submitLabel, onSave, onCancel})
     ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
     ,eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"TYPE")
-      ,eltEl('div',{style:{marginTop:4}},eltEl(ELTSelectOther,{options:ELT_TYPES,value:f.type,other:f.typeOther,onChange:(v,o)=>set({type:v,typeOther:o})}))
+      ,eltEl('div',{style:{marginTop:4}},eltEl(ELTSelectOther,{options:typeOptions,value:f.type,other:f.typeOther,onChange:(v,o)=>set({type:v,typeOther:o})}))
     )
     ,eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"MAINTAINED / NON-MAINTAINED")
@@ -11495,7 +11515,7 @@ function ELTAssetForm({initial, defaultLocation, submitLabel, onSave, onCancel})
   );
 }
 
-function ELTManageView({project, onUpdateProject}) {
+function ELTManageView({project, dropdowns, onUpdateProject}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
@@ -11527,7 +11547,7 @@ function ELTManageView({project, onUpdateProject}) {
     ,eltEl('div',{style:{fontSize:11,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:10}},`FITTINGS (${assets.length})`)
     ,assets.length===0&&!adding&&eltEl('div',{style:{color:"#52525b",fontSize:13,marginBottom:12}},"No fittings yet.")
     ,assets.map(a=>editingId===a.id
-      ?eltEl(ELTAssetForm,{key:a.id,initial:a,submitLabel:"Save",onSave:f=>{upd({...project,assets:assets.map(x=>x.id===a.id?{...x,...f}:x)});setEditingId(null);},onCancel:()=>setEditingId(null)})
+      ?eltEl(ELTAssetForm,{key:a.id,typeOptions:dropdowns.types,initial:a,submitLabel:"Save",onSave:f=>{upd({...project,assets:assets.map(x=>x.id===a.id?{...x,...f}:x)});setEditingId(null);},onCancel:()=>setEditingId(null)})
       :eltEl('div',{key:a.id,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,marginBottom:6,minWidth:0}}
         ,eltEl('div',{style:{flex:1,minWidth:0}}
           ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.assetLocation)
@@ -11537,7 +11557,7 @@ function ELTManageView({project, onUpdateProject}) {
         ,eltEl(DeleteButton,{onDelete:()=>upd({...project,assets:assets.filter(x=>x.id!==a.id)}),label:"Delete fitting?",compact:true})
       ))
     ,adding
-      ?eltEl(ELTAssetForm,{key:seedKey,initial:seed,defaultLocation:project.name,submitLabel:"+ Add Fitting",onSave:f=>{upd({...project,assets:[...assets,{...f,id:uid()}]});setSeed({location:f.location,type:f.type,typeOther:f.typeOther,maintained:f.maintained,fitting:f.fitting});setSeedKey(k=>k+1);},onCancel:()=>setAdding(false)})
+      ?eltEl(ELTAssetForm,{key:seedKey,typeOptions:dropdowns.types,initial:seed,defaultLocation:project.name,submitLabel:"+ Add Fitting",onSave:f=>{upd({...project,assets:[...assets,{...f,id:uid()}]});setSeed({location:f.location,type:f.type,typeOther:f.typeOther,maintained:f.maintained,fitting:f.fitting});setSeedKey(k=>k+1);},onCancel:()=>setAdding(false)})
       :eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginTop:8},onClick:()=>{setEditingId(null);setAdding(true);}},"+ Add Fitting")
   );
 }
