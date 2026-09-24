@@ -128,7 +128,7 @@ describe('TAT fail panel', () => {
     await user.click(await screen.findByText('Site T', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
     expect(await screen.findByText('RESPONSIBILITY')).toBeInTheDocument();
-    expect(screen.getByText('RECTIFIED / SCHEDULED')).toBeInTheDocument();
+    expect(screen.getAllByText('RECTIFIED / SCHEDULED ACTION').length).toBeGreaterThan(0); // list title on the Dropdowns tab
   });
 });
 

@@ -140,7 +140,7 @@ describe('ELT Dropdowns tab', () => {
     await user.click(screen.getByText('SWITCHBOARD'));
     await user.click(await screen.findByText('Site S', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
-    expect(screen.getByText('RECTIFIED / SCHEDULED')).toBeInTheDocument();
+    expect(screen.getByText('RECTIFIED / SCHEDULED ACTION')).toBeInTheDocument();
     expect(screen.getByText('RESPONSIBILITY')).toBeInTheDocument();
     expect(screen.getAllByText(/★ DEFAULT/).length).toBe(2);
     expect(screen.getByText(/Tap ★ on any item to make it the default/)).toBeInTheDocument();

@@ -395,9 +395,11 @@ const label    = mode==="inject" ? "Injection Test" : "Push Test";
 const isInject = mode === "inject";
 const headers = isInject
 ? ["Area","Panel / Asset Name","Device Type","Amp Rating","Date","Injection Test Result + (ms)","Injection Test Result - (ms)","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority\n(L,M,H,U)","Next Test Required"]
-: ["Area","Panel / Asset Name","Device Type","Amp Rating","Date Tested","Pass / Fail","Notes / Comments","Next Test Required"];
+: ["Area","Panel / Asset Name","Device Type","Amp Rating","Date Tested","Pass / Fail","Rectified / Scheduled","Defect ID","Responsibility","Notes / Comments","Priority\n(L,M,H,U)","Next Test Required"];
 const n = headers.length;
 const colLetters = "ABCDEFGHIJKLMNO".slice(0,n).split("");
+// Defect details (Defect ID, Responsibility, Priority, Rectified / Scheduled) are only exported for FAIL rows, so data
+// retained from an earlier FAIL never shows up on a PASS / N/A / untested row.
 const rows = [];
 rows.push([`${project.name}  –  RCD & ELR Test  (${label})`, ...Array(n-1).fill("")]);
 const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
@@ -422,10 +424,11 @@ dataRows.push({ area:area.name, panelCircuit:`${panel.name} ${circuit}`, pf, inj
 if (isInject) {
 rows.push([area.name,`${panel.name} ${circuit}`,cbType,ampRating,fmtDate(testDate),
 inj.resultPos||"",inj.resultNeg||"",pf,
-inj.rectified||"",inj.scheduledDate?fmtDate(inj.scheduledDate):"",
-inj.defectId||"",inj.responsibility||"",inj.comment||"",inj.priority||"",nextDue]);
+pf==="Fail"?(inj.rectified||""):"",pf==="Fail"&&inj.scheduledDate?fmtDate(inj.scheduledDate):"",
+pf==="Fail"?(inj.defectId||""):"",pf==="Fail"?(inj.responsibility||""):"",inj.comment||"",pf==="Fail"?(inj.priority||""):"",nextDue]);
 } else {
-rows.push([area.name,`${panel.name} ${circuit}`,cbType,ampRating,fmtDate(testDate),pf,push.comment||"",nextDue]);
+rows.push([area.name,`${panel.name} ${circuit}`,cbType,ampRating,fmtDate(testDate),pf,
+pf==="Fail"?(push.rectified||""):"",pf==="Fail"?(push.defectId||""):"",pf==="Fail"?(push.responsibility||""):"",push.comment||"",pf==="Fail"?(push.priority||""):"",nextDue]);
 }
 })));
 rows.push(Array(n).fill(""));
@@ -433,7 +436,7 @@ rows.push([`Notes: ${_optionalChain([meta, 'optionalAccess', _17 => _17.notes])|
 const ws = XLSX.utils.aoa_to_sheet(rows);
 ws["!cols"] = isInject
 ? [{wch:20},{wch:24},{wch:14},{wch:9},{wch:11},{wch:16},{wch:16},{wch:10},{wch:20},{wch:14},{wch:10},{wch:16},{wch:34},{wch:12},{wch:16}]
-: [{wch:20},{wch:26},{wch:14},{wch:9},{wch:13},{wch:10},{wch:42},{wch:16}];
+: [{wch:20},{wch:26},{wch:14},{wch:9},{wch:13},{wch:10},{wch:20},{wch:10},{wch:16},{wch:34},{wch:12},{wch:16}];
 ws["!rows"] = [{hpt:32},{hpt:16},{hpt:16},{hpt:6},{hpt:40}];
 ws["!merges"] = [
 {s:{r:0,c:0},e:{r:0,c:n-1}},
@@ -470,7 +473,7 @@ const fails = [];
 project.areas.forEach(a => a.panels.forEach(p => p.circuits.forEach(c => {
 const d  = getCircuitData(results, project.id, a.id, p.id, c);
 const st = isInject?(_nullishCoalesce(_optionalChain([d, 'access', _30 => _30.inject, 'optionalAccess', _31 => _31.status]), () => (STATUS.UNTESTED))):(_nullishCoalesce(_optionalChain([d, 'access', _32 => _32.push, 'optionalAccess', _33 => _33.status]), () => (STATUS.UNTESTED)));
-const pri= isInject?(_optionalChain([d, 'access', _34 => _34.inject, 'optionalAccess', _35 => _35.priority])||""):"";
+const pri= isInject?(_optionalChain([d, 'access', _34 => _34.inject, 'optionalAccess', _35 => _35.priority])||""):((d.push&&d.push.priority)||"");
 if (st===STATUS.FAIL) fails.push([a.name,p.name,c,isInject?(_optionalChain([d, 'access', _36 => _36.inject, 'optionalAccess', _37 => _37.comment])||""):(_optionalChain([d, 'access', _38 => _38.push, 'optionalAccess', _39 => _39.comment])||""),pri]);
 })));
 const sumRows=[
@@ -648,6 +651,18 @@ function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?
 // ★ defaults: the first option of the Rectified / Responsibility lists is the default. Fail panels used to only *show* it,
 // so nothing was stored and reports/exports came out blank. failFill stores it on a record as soon as it is FAIL
 // (never overwrites a value); useFailDefaults does the same when a fail panel opens for an item that is already FAIL.
+// Exports only include defect details (Defect ID, Responsibility, Priority, Rectified / Scheduled, Risk) for items that are
+// FAIL. The data is retained on the item when it leaves FAIL (never deleted), so it is blanked here at export time and
+// a PASS / N/A / untested row can never show leftover defect data.
+const DEFECT_KEYS = ['rectified', 'scheduledDate', 'rectifiedDate', 'defectId', 'responsibility', 'priority', 'risk'];
+function defectGate(item, show) {
+  if (show || !item) return item;
+  const out = { ...item };
+  DEFECT_KEYS.forEach(k => { if (k in out) out[k] = ''; });
+  return out;
+}
+const defectGateByStatus = item => defectGate(item, item && item.status === 'fail');
+
 function failFill(rec, rectList, respList) {
   if (!rec || rec.status !== 'fail') return rec;
   const out = { ...rec };
@@ -1361,7 +1376,7 @@ const LISTS = [
 { key:"cbType",         label:"CB / RCD TYPE",        defaults:DEFAULT_CB_TYPE,        color:"#1d4ed8", desc:"Available in both monthly push test and annual injection test forms" },
 { key:"ampRating",      label:"AMP RATING",           defaults:DEFAULT_AMP_RATING,     color:"#14532d", desc:"Available in both monthly push test and annual injection test forms" },
 { key:"responsibility", label:"RESPONSIBILITY",        defaults:DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Used in annual injection test form" },
-{ key:"rectified",      label:"RECTIFIED / SCHEDULED",defaults:DEFAULT_RECTIFIED,      color:"#92400e", desc:"Used in annual injection test form" },
+{ key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION",defaults:DEFAULT_RECTIFIED,      color:"#92400e", desc:"Used in annual injection test form" },
 ];
 return (
 React.createElement('div', { style: S.listWrap,}
@@ -2062,7 +2077,7 @@ const pushFails=[];const injectFails=[];
 project.areas.forEach(a=>a.panels.forEach(p=>p.circuits.forEach(c=>{
   const d=getCircuitData(results,project.id,a.id,p.id,c);
   if((_nullishCoalesce(_optionalChain([d,'access',_173=>_173.push,'optionalAccess',_174=>_174.status]),()=>(STATUS.UNTESTED)))===STATUS.FAIL)
-    pushFails.push({area:a.name,panel:p.name,circuit:c,comment:_optionalChain([d,'access',_175=>_175.push,'optionalAccess',_176=>_176.comment])||""});
+    pushFails.push({area:a.name,panel:p.name,circuit:c,defectId:(d.push||{}).defectId||"",responsibility:(d.push||{}).responsibility||"",rectified:(d.push||{}).rectified||"",priority:(d.push||{}).priority||"",comment:_optionalChain([d,'access',_175=>_175.push,'optionalAccess',_176=>_176.comment])||""});
   if((_nullishCoalesce(_optionalChain([d,'access',_=>_.inject,'optionalAccess',_=>_.status]),()=>(STATUS.UNTESTED)))===STATUS.FAIL)
     injectFails.push({area:a.name,panel:p.name,circuit:c,responsibility:(d.inject||{}).responsibility||"",rectified:(d.inject||{}).rectified||"",priority:(d.inject||{}).priority||"",defectId:_optionalChain([d,'access',_=>_.inject,'optionalAccess',_=>_.defectId])||"",comment:_optionalChain([d,'access',_=>_.inject,'optionalAccess',_=>_.comment])||""});
 })));
@@ -2080,7 +2095,7 @@ return(React.createElement('div',{style:S.summaryWrap}
       ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:0})
     )
   ))
-  ,React.createElement(ReportFailedItems,{accent:"#a3530f",items:[...pushFails.map(f=>({title:f.circuit,tag:{text:"Push",color:"#a3530f"},path:`${f.area} › ${f.panel}`,comment:f.comment})),...injectFails.map(f=>({title:f.circuit,tag:{text:"Injection",color:"#1d4ed8"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))]})
+  ,React.createElement(ReportFailedItems,{accent:"#a3530f",items:[...pushFails.map(f=>({title:f.circuit,tag:{text:"Push",color:"#a3530f"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified})),...injectFails.map(f=>({title:f.circuit,tag:{text:"Injection",color:"#1d4ed8"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))]})
   ,(pushSum.fail===0&&injectSum.fail===0)&&React.createElement(ReportNoDefects)
   ,null
 ));
@@ -2312,7 +2327,7 @@ function exportIELExcel(project, results, meta) {
       if(!catPanel||!catPanel.circuits.length)return;
       catPanel.circuits.forEach(itemId=>{
         const machineName=(catPanel.machineNames||{})[itemId]||itemId;
-        const item=(((results[area.id]||{})[catKey])||{})[itemId]||{status:IEL_STATUS.UNTESTED,mechCheck:false,circuitIso:false,lanyardCond:false,notes:"",priority:"",rectified:"",lastTested:""};
+        const item=defectGateByStatus((((results[area.id]||{})[catKey])||{})[itemId]||{status:IEL_STATUS.UNTESTED,mechCheck:false,circuitIso:false,lanyardCond:false,notes:"",priority:"",rectified:"",lastTested:""});
         const st=item.status||IEL_STATUS.UNTESTED;
         const pf=st===IEL_STATUS.PASS?"Pass":st===IEL_STATUS.FAIL?"Fail":st===IEL_STATUS.NA?"N/A":"Untested";
         const dueDate=item.lastTested?addMonths(item.lastTested,3):"";
@@ -2681,7 +2696,7 @@ function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
 function IELDropdownsView({dropdowns,setDropdowns,onBack}){
   const sections=[
     {key:"responsibility",label:"RESPONSIBILITY",color:"#047857",desc:"Options shown when logging a failed item",defaults:IEL_DEFAULT_RESPONSIBILITY},
-    {key:"rectified",    label:"RECTIFIED / SCHEDULED",color:"#92400e",desc:"Actions available when rectifying a defect",defaults:IEL_DEFAULT_RECTIFIED},
+    {key:"rectified",    label:"RECTIFIED / SCHEDULED ACTION",color:"#92400e",desc:"Actions available when rectifying a defect",defaults:IEL_DEFAULT_RECTIFIED},
   ];
   return React.createElement('div',{style:{padding:"16px",paddingBottom:100}}
     ,React.createElement('div',{style:{...SI.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
@@ -4316,7 +4331,7 @@ const K_TAT_DROPDOWNS = "tat-dropdowns-v1"; // Responsibility + Rectified/Schedu
 const TAT_DEFAULT_DROPDOWNS = {responsibility:[...DEFAULT_RESPONSIBILITY], rectified:[...DEFAULT_RECTIFIED]};
 const TAT_DEFECT_LISTS = [
   {key:"responsibility",label:"RESPONSIBILITY",desc:"Options shown when logging a failed item",defaults:DEFAULT_RESPONSIBILITY},
-  {key:"rectified",label:"RECTIFIED / SCHEDULED",desc:"Actions available when rectifying a defect",defaults:DEFAULT_RECTIFIED},
+  {key:"rectified",label:"RECTIFIED / SCHEDULED ACTION",desc:"Actions available when rectifying a defect",defaults:DEFAULT_RECTIFIED},
 ];
 const TAT_FACTORY_DEFAULTS = {equipType:"Power Tool", freq:"3"};
 const TAT_DEFAULT_FREQS = [
@@ -4459,7 +4474,7 @@ function exportTATExcel(project, results, meta) {
   project.areas.forEach(area=>{
     (area.items||[]).forEach(itemId=>{
       // results is pre-stripped of projectId — lookup directly by areaId
-      const item=((results[area.id]||{})[itemId])||{status:TAT_STATUS.UNTESTED,visualCheck:false,equipType:"",freq:"3",lastTested:"",notes:"",priority:""};
+      const item=defectGateByStatus(((results[area.id]||{})[itemId])||{status:TAT_STATUS.UNTESTED,visualCheck:false,equipType:"",freq:"3",lastTested:"",notes:"",priority:""});
       // Pull tag, name, equipType, freq from area metadata as source of truth
       const areaTag=(area.itemTags||{})[itemId]||item.tag||"";
       const rawName=(area.itemNames||{})[itemId]||"";
@@ -6000,7 +6015,7 @@ function exportThermoExcel(project, results, meta) {
               priority: ""
             });
           } else {
-            photos.forEach(photo => {
+            photos.forEach(photo0 => { const photo = defectGate(photo0, photo0.result === "FAIL" || photo0.result === "MONITOR");
               rows.push([area.name, board.name, cName, fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.rectified || "", photo.rectifiedDate ? fmtDate(photo.rectifiedDate) : "", photo.defectId || "", photo.responsibility || "", photo.notes || "", photo.priority || ""]);
               dataRows.push({
                 result: photo.result || "UNTESTED",
@@ -6019,7 +6034,7 @@ function exportThermoExcel(project, results, meta) {
             priority: ""
           });
         } else {
-          photos.forEach(photo => {
+          photos.forEach(photo0 => { const photo = defectGate(photo0, photo0.result === "FAIL" || photo0.result === "MONITOR");
             rows.push([area.name, board.name, "", fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.rectified || "", photo.rectifiedDate ? fmtDate(photo.rectifiedDate) : "", photo.defectId || "", photo.responsibility || "", photo.notes || "", photo.priority || ""]);
             dataRows.push({
               result: photo.result || "UNTESTED",
@@ -9125,7 +9140,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
   };
   const sections=[
     {key:"responsibility",label:"RESPONSIBILITY",color:"#c2410c",desc:"Options shown when logging a failed or monitor item"},
-    {key:"rectified",label:"RECTIFIED / SCHEDULED",color:"#92400e",desc:"Actions available when rectifying a defect"},
+    {key:"rectified",label:"RECTIFIED / SCHEDULED ACTION",color:"#92400e",desc:"Actions available when rectifying a defect"},
   ];
   return React.createElement("div",{style:{padding:"16px",paddingBottom:100}}
     ,React.createElement("div",{style:{...STH.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
@@ -9868,7 +9883,7 @@ async function exportSWBExcel(project, allResults, meta) {
       const bl=`${area.name}  ›  ${board.name}`;
       setCell(cols[0]+(r+1),bl,bhdSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",bhdSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
       SWB_CHECKLIST.forEach(({key,label})=>{
-        const item=((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
+        const item=defectGateByStatus(((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""});
         const st=item.status||SWB_STATUS.UNTESTED;
         const pfLabel=st===SWB_STATUS.PASS?"Pass":st===SWB_STATUS.FAIL?"Fail":st===SWB_STATUS.NA?"N/A":"Untested";
         const rs=swbXRS(di,item.risk||"");
@@ -10762,7 +10777,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
   };
 
   const LISTS = lists || [
-    { key:"rectified",      label:"RECTIFIED / SCHEDULED", defaults:SWB_DEFAULT_RECTIFIED,      color:"#92400e", desc:"Options shown in Rectified / Scheduled Action dropdown on FAIL items" },
+    { key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION", defaults:SWB_DEFAULT_RECTIFIED,      color:"#92400e", desc:"Options shown in Rectified / Scheduled Action dropdown on FAIL items" },
     { key:"responsibility", label:"RESPONSIBILITY",         defaults:SWB_DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Options shown in the Responsibility dropdown on FAIL items" },
   ];
 
@@ -11356,7 +11371,7 @@ function ELTReportView({project, results, meta, summary}) {
     ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,eltEl('div',{style:{...SS.duePill,borderColor:ELT_COLOR_BORDER,color:ELT_COLOR,padding:"7px 12px"}},eltEl('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('rect',{x:3,y:4,width:18,height:18,rx:2}),eltEl('line',{x1:16,y1:2,x2:16,y2:6}),eltEl('line',{x1:8,y1:2,x2:8,y2:6}),eltEl('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
-    ,eltEl(ReportStatTiles,{rows:[["Total",summary.assets,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["N/A",0,"#334155"],["Untested",Math.max(0,summary.assets-summary.total),"#92400e"]]})
+    ,eltEl(ReportStatTiles,{rows:[["Total",summary.assets,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["Untested",Math.max(0,summary.assets-summary.total),"#92400e"]]})
     ,eltEl(ReportFailedItems,{accent:ELT_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -11669,8 +11684,9 @@ function exportIRTExcel(project,results,meta){
   rows.push(["Location","Panel / DB","Equipment / Circuit","Test Date","Test Voltage","L1-E (M\u03a9)","L2-E (M\u03a9)","L3-E (M\u03a9)","N-E (M\u03a9)","L1-L2 (M\u03a9)","L1-L3 (M\u03a9)","L2-L3 (M\u03a9)","L1-N (M\u03a9)","L2-N (M\u03a9)","L3-N (M\u03a9)","Pass / Fail","Rectified / Scheduled","Date Rectified","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)"]);
   (project.areas||[]).forEach(area=>(area.panels||[]).forEach(panel=>(panel.items||[]).forEach(itemId=>{
     const name=(panel.itemNames||{})[itemId]||itemId;
-    const d=irtGetItem(results,project.id,area.id,panel.id,itemId);const r=d.readings||{};
-    const eff=d.status==="untested"?irtAutoStatus(r):d.status;
+    const d0=irtGetItem(results,project.id,area.id,panel.id,itemId);const r=d0.readings||{};
+    const eff=d0.status==="untested"?irtAutoStatus(r):d0.status;
+    const d=defectGate(d0,eff==="fail"); // defect details only for FAIL (auto-detected or manual)
     rows.push([area.name,panel.name,name,td,d.testVoltage||"500V",r.L1E||"",r.L2E||"",r.L3E||"",r.NE||"",r.L1L2||"",r.L1L3||"",r.L2L3||"",r.L1N||"",r.L2N||"",r.L3N||"",eff.toUpperCase(),d.rectified||"",d.scheduledDate?fmtDate(d.scheduledDate):"",d.defectId||"",d.responsibility||"",d.notes||"",d.priority||""]);
   })));
   const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:20},{wch:18},{wch:26},{wch:12},{wch:12},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:12},{wch:20},{wch:16},{wch:10},{wch:16},{wch:36},{wch:14}];
@@ -12133,7 +12149,7 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
   const removeItem=(key,val)=>setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
   const resetKey=(key,def)=>setDropdowns(d=>({...d,[key]:def}));
   const setDefault=(key,val)=>setDropdowns(d=>({...d,[key]:[val,...(d[key]||[]).filter(x=>x!==val)]}));
-  const LISTS=[{key:"rectified",label:"RECTIFIED / SCHEDULED",defaults:IRT_DEFAULT_RECTIFIED,color:"#92400e",desc:"Options shown in Rectified / Scheduled Action on FAIL items"},{key:"responsibility",label:"RESPONSIBILITY",defaults:IRT_DEFAULT_RESPONSIBILITY,color:"#6b21a8",desc:"Options shown in the Responsibility dropdown on FAIL items"}];
+  const LISTS=[{key:"rectified",label:"RECTIFIED / SCHEDULED ACTION",defaults:IRT_DEFAULT_RECTIFIED,color:"#92400e",desc:"Options shown in Rectified / Scheduled Action on FAIL items"},{key:"responsibility",label:"RESPONSIBILITY",defaults:IRT_DEFAULT_RESPONSIBILITY,color:"#6b21a8",desc:"Options shown in the Responsibility dropdown on FAIL items"}];
   return React.createElement("div",{style:SS.listWrap},
     React.createElement("div",{style:{...SS.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns"),
     React.createElement("div",{style:{fontSize:12,color:"#52525b",marginBottom:16}},"Tap \u2605 on any item to make it the default. The default is pre-selected when opening a circuit test form."),
@@ -12883,5 +12899,5 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
   - Applied to: RCD (push + inject), IEL, TAT, Thermo, SWB, IRT
 */
 
-export { parseSWBExcel, exportSWBExcel, exportELTExcel, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
+export { parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

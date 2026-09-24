@@ -111,6 +111,17 @@ describe('empty states and module-specific report details', () => {
     expect(screen.queryByText('No fittings tested yet.')).not.toBeInTheDocument();
   });
 
+  it('RCD push rows show their Defect ID / Responsibility / Rectified action, like injection rows', async () => {
+    const user = userEvent.setup();
+    SEEDS.RCD.seed();
+    S('rcd-results-v6', { r: { a: { p: { CB1: { push: { status: 'fail', comment: 'Trips late', ...DEFECT }, inject: {} } } } } });
+    await openReport(user, SEEDS.RCD.card, SEEDS.RCD.site);
+    expect(await screen.findByText('Push')).toBeInTheDocument();
+    expect(screen.getByText('Defect ID: 74')).toBeInTheDocument();
+    expect(screen.getByText(/Site Electrician/)).toBeInTheDocument();
+    expect(screen.getByText('Removed from Service')).toBeInTheDocument();
+  });
+
   it('TAT PASS tile is green like every other module', async () => {
     const user = userEvent.setup();
     SEEDS.TAT.seed();
@@ -126,7 +137,8 @@ describe('empty states and module-specific report details', () => {
     expect(await screen.findByText(/EMERGENCY LIGHTING REPORT/)).toBeInTheDocument();
     expect(screen.getByText('FITTING REGISTER')).toBeInTheDocument();
     expect(screen.getByRole('table')).toBeInTheDocument();
-    for (const l of ['TOTAL', 'PASS', 'FAIL', 'N/A', 'UNTESTED']) expect(screen.getAllByText(l).length).toBeGreaterThan(0);
+    for (const l of ['TOTAL', 'PASS', 'FAIL', 'UNTESTED']) expect(screen.getAllByText(l).length).toBeGreaterThan(0);
+    expect(screen.queryByText('N/A')).not.toBeInTheDocument(); // ELT has no N/A result, so no always-zero tile
     expect(screen.getByText(/Failed: 90-Minute Discharge Test/)).toBeInTheDocument();
   });
 
