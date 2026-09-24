@@ -298,6 +298,14 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 
 ---
 
+### Other shared standards (design-consistency batch)
+
+- **Reset buttons** ("Reset" / "Reset to defaults" on any Dropdowns list) must go through the shared `ConfirmReset` wrapper — resetting silently discards customised options. **Dropdown option deletes** use `DeleteButton` with `compact: true`. `ConfirmReset`, `DeleteButton` and the Calendar event card all share `activeDeleteSetter`, so only one prompt is ever open. Covered by `src/reset-confirm.test.jsx` and `src/calendar-delete.test.jsx`.
+- **Fail-only panel** ("⚠ FAIL — DEFECT DETAILS"): same red panel in every module; label `RECTIFIED / SCHEDULED ACTION`; Defect ID placeholder `e.g. 74`; the panel sits **before** the notes/comments box; Rectified and Responsibility use the editable dropdown fed by the module's customisable lists (TAT has `tat-dropdowns-v1`); defect data is **retained** when an item leaves FAIL (never cleared on save). The ★ default (first list option) is *stored* when an item becomes FAIL (`failFill` / `useFailDefaults`), not just displayed. Thermo's MONITOR result has its own amber "⚠ MONITOR — DETAILS" panel and is not treated as a failure.
+- **Report tab**: build it from `ReportStatTiles`, `ReportFailedItems` ("Failed Items": title, path, Defect ID, notes, → Responsibility, Rectified/Scheduled Action) and `ReportNoDefects` ("✓ No defects recorded"). Failed Items lists only items whose status is FAIL (retained defect data on a PASS item must never list it). No Export button on the Report tab — export lives in History. Each module keeps its own subtitle ("RCD AUDIT REPORT", …).
+
+---
+
 ## Known Bugs
 
 > Add bugs here before starting a Claude Code session. Format: module · symptom · suspected cause.

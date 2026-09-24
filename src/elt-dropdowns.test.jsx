@@ -104,6 +104,15 @@ describe('ELT Dropdowns tab', () => {
     await waitFor(() => expect(ls('elt-dropdowns-v1').failReasons[0]).toBe('Switch Failure'));
     // one Reset button per list, in on-screen order: Type, Failure Reason, Action Taken
     await user.click(screen.getAllByRole('button', { name: 'Reset' })[1]);
+    // Reset now asks first: nothing is discarded until the prompt is confirmed, and Keep cancels it
+    const prompt = await screen.findByText('Reset list to defaults?');
+    expect(ls('elt-dropdowns-v1').failReasons[0]).toBe('Switch Failure');
+    await user.click(within(prompt.parentElement).getByRole('button', { name: 'Keep' }));
+    expect(screen.queryByText('Reset list to defaults?')).not.toBeInTheDocument();
+    expect(ls('elt-dropdowns-v1').failReasons[0]).toBe('Switch Failure');
+    await user.click(screen.getAllByRole('button', { name: 'Reset' })[1]);
+    const prompt2 = await screen.findByText('Reset list to defaults?');
+    await user.click(within(prompt2.parentElement).getByRole('button', { name: 'Reset' }));
     await waitFor(() => expect(ls('elt-dropdowns-v1').failReasons).toEqual(['Lamp Failure', 'Battery Failure', 'No Power', 'Damaged/Broken', 'Switch Failure']));
   });
 
