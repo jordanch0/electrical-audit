@@ -11,7 +11,7 @@ The app is built with **React + JSX**, bundled by **Vite**. Source lives in `src
 
 **Version:** v11 (shown in AppRoot footer)
 **Brand colour:** `#e8731a` (SparkCheck orange)
-**Dark theme throughout:** background `#111`, surface `#161616`
+**Light theme throughout:** background `#e8e6e2`, surface `#f7f6f3` (the earlier dark `#111`/`#161616` theme is gone)
 
 ---
 
@@ -174,7 +174,8 @@ Auto-detects company/ABN/licence from row 2, header row from first 15 rows.
 - **Single file** — all components remain in `src/App.jsx`; do not split into separate files unless explicitly asked
 - **Functional components only** — React hooks (`useState`, `useEffect`, `useCallback`, `useRef`, `useMemo`)
 - **Inline styles everywhere** — no CSS classes, no stylesheets. All styling via `style={{...}}` objects
-- **Dark theme constants**: bg `#111`, surface `#161616`, border `#222`, text `#eee`, muted `#888`
+- **Light theme constants**: bg `#e8e6e2`, surface `#f7f6f3`, border `#e4e4e7`, text `#18181b`, muted `#52525b`
+- **Bottom nav**: every module uses the same bar (bg `#f7f6f3`, 1px `#e4e4e7` top border, 34px bottom padding) and the active tab is always slate `#334155` — never the module accent
 - **Section dividers**: `// ─────────────────────────────────────────────────────────────────────────`
 - **Australian locale**: dates DD/MM/YYYY, currency $AUD implied, standards references to AS/NZS
 - **Default export**: `App.jsx` ends with `export default AppRoot`

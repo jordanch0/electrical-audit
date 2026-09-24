@@ -35,7 +35,7 @@ describe('ELT complete-audit / history round trip', () => {
     const user = userEvent.setup();
     await openElt(user);
 
-    await user.click(await screen.findByRole('button', { name: /Complete Audit & Archive/ }));
+    await user.click(await screen.findByRole('button', { name: /Complete Emergency Lighting Audit/ }));
     await user.click(screen.getByRole('button', { name: /Yes, Complete/ }));
 
     await waitFor(() => expect(ls('elt-history-v1')).toHaveLength(1));

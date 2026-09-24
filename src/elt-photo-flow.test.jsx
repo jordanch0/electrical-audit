@@ -62,7 +62,7 @@ describe('ELT photo -> export through the real UI', () => {
     });
 
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
-    await user.click(await screen.findByRole('button', { name: /Complete Audit & Archive/ }));
+    await user.click(await screen.findByRole('button', { name: /Complete Emergency Lighting Audit/ }));
     await user.click(screen.getByRole('button', { name: /Yes, Complete/ }));
     await user.click(screen.getByRole('button', { name: /History/ }));
     await user.click(await screen.findByText('Emergency Lighting Audit'));
@@ -89,12 +89,12 @@ describe('ELT photo -> export through the real UI', () => {
     render(<AppRoot />);
     await user.click(screen.getByText('EMERGENCY LIGHTING'));
     await user.click(await screen.findByText('Site A', { selector: 'div' }));
-    expect(screen.queryByRole('button', { name: /Complete Audit & Archive/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Complete Emergency Lighting Audit/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('SE Door'));
     await addPhoto(user);
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
-    expect(await screen.findByRole('button', { name: /Complete Audit & Archive/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /Complete Emergency Lighting Audit/ })).toBeInTheDocument();
   });
 });
