@@ -9690,6 +9690,7 @@ function AppRoot() {
   if (module === "thermo") return React.createElement(ThermoApp, {onGoHome: ()=>setModule(null)});
   if (module === "swb") return React.createElement(SWBApp, {onGoHome: ()=>setModule(null)});
   if (module === "irt") return React.createElement(IRTApp, {onGoHome: ()=>setModule(null)});
+  if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
 
   const modules = [
     {key:"cal",color:"#4338ca",name:"TEST CALENDAR",desc:"Due dates & reminders",onClick:()=>setModule("cal"),
@@ -9706,6 +9707,8 @@ function AppRoot() {
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12}))},
     {key:"irt",color:"#1d4ed8",name:"IR TESTING",desc:"Insulation resistance",onClick:()=>setModule("irt"),
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:"M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"}))},
+    {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"AS 2293.2 test register",onClick:()=>setModule("elt"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M9 18h6M10 22h4"}),React.createElement('path',{d:"M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"}))},
   ];
 
   return React.createElement('div', {
@@ -9898,6 +9901,9 @@ function swbSiteCompletedBoards(results, project) {
 }
 
 // ─── Excel export ─────────────────────────────────────────────────────────
+// Photo box shared by the SWB and ELT exports: exact 4:3 (phone photos are 4:3) and the row is
+// taller than the image + its top offset, so nothing spills into the next row.
+const EXPORT_PHOTO_W_PX = 140, EXPORT_PHOTO_H_PX = 105, EXPORT_PHOTO_ROW_PT = 90;
 const SWB_XC = {
   white:"FFFFFFFF",black:"FF000000",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",mutedGrey:"FF888888",
   priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
@@ -9907,7 +9913,7 @@ function swbXB(s,c){return{style:s||"thin",color:{rgb:c||SWB_XC.midGrey}};}
 function swbXAB(){const b=swbXB();return{top:b,bottom:b,left:b,right:b};}
 function swbXCS(fill,font,align,borders){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...(font||{})},alignment:{vertical:"center",...(align||{})},border:borders||{}};}
 function swbXPC(p){if(p==="U")return{bg:SWB_XC.priorityU_bg,font:SWB_XC.priorityU_font,bold:true};if(p==="H")return{bg:SWB_XC.priorityH_bg,font:SWB_XC.priorityH_font,bold:false};if(p==="M")return{bg:SWB_XC.priorityM_bg,font:SWB_XC.priorityM_font,bold:false};if(p==="L")return{bg:SWB_XC.priorityL_bg,font:SWB_XC.priorityL_font,bold:false};return null;}
-function swbXRS(ri,risk){if(risk){const pc=swbXPC(risk);if(pc)return swbXCS(pc.bg,{sz:10,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},{bottom:swbXB("hair")});}const bg=ri%2===0?SWB_XC.white:SWB_XC.lightGrey;return swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},{bottom:swbXB("hair")});}
+function swbXRS(ri,risk){if(risk){const pc=swbXPC(risk);if(pc)return swbXCS(pc.bg,{sz:10,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},swbXAB());}const bg=ri%2===0?SWB_XC.white:SWB_XC.lightGrey;return swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());}
 function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="number"?"n":"s",s:st};}
 // Applies a swbXCS/swbXRS-shaped style object (SheetJS rgb convention) onto an ExcelJS cell (argb convention).
 function swbApplyXlStyle(cell,st){
@@ -9965,7 +9971,7 @@ async function exportSWBExcel(project, allResults, meta) {
         const pfLabel=st===SWB_STATUS.PASS?"Pass":st===SWB_STATUS.FAIL?"Fail":st===SWB_STATUS.NA?"N/A":"Untested";
         const rs=swbXRS(di,item.risk||"");
         const bg=rs.fill.fgColor.rgb; const fc=rs.font.color; const bd=rs.font.bold;
-        const cSt=(h)=>swbXCS(bg,{sz:10,color:fc,bold:bd},{wrapText:true,horizontal:h||"left"},{bottom:swbXB("hair")});
+        const cSt=(h)=>swbXCS(bg,{sz:10,color:fc,bold:bd},{wrapText:true,horizontal:h||"left"},swbXAB());
         setCell(cols[0]+(r+1),label,rs);
         setCell(cols[1]+(r+1),pfLabel,cSt("center"));
         setCell(cols[2]+(r+1),item.defectId||"",rs);
@@ -9984,7 +9990,7 @@ async function exportSWBExcel(project, allResults, meta) {
         for(let row=0;row<photoRows;row++){
           const imgRow=r;
           for(let c=0;c<n;c++) setCell(cols[c]+(imgRow+1),"",spcSt);
-          ws.getRow(imgRow+1).height=82;
+          ws.getRow(imgRow+1).height=EXPORT_PHOTO_ROW_PT;
           for(let col=0;col<perRow;col++){
             const p=boardPhotos[row*perRow+col];
             if(!p) continue;
@@ -9993,7 +9999,7 @@ async function exportSWBExcel(project, allResults, meta) {
             let ext=m[1]==="jpg"?"jpeg":m[1];
             if(!["jpeg","png","gif"].includes(ext)) ext="jpeg";
             const imgId=wb.addImage({base64:p.dataUrl,extension:ext});
-            ws.addImage(imgId,{tl:{col:col*2+0.15,row:imgRow+0.08},ext:{width:150,height:105},editAs:"oneCell"});
+            ws.addImage(imgId,{tl:{col:col*2+0.15,row:imgRow+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
           }
           r++;
         }
@@ -10973,6 +10979,628 @@ function swbStyles() {
 }
 
 
+
+// ═════════════════════════════════════════════════════════════════════════
+// ELT MODULE — Emergency Lighting Testing (AS 2293.2:2019)
+// Structure: Site → flat list of assets (fittings). Export is a single flat register table.
+// ═════════════════════════════════════════════════════════════════════════
+const ELT_COLOR        = "#0f766e";
+const ELT_COLOR_DIM    = "#ccfbf1";
+const ELT_COLOR_BORDER = "#5eead4";
+const K_ELT_PROJECTS   = "elt-projects-v1";
+const K_ELT_RESULTS    = "elt-results-v1";
+const K_ELT_META       = "elt-meta-v1";
+const K_ELT_HISTORY    = "elt-history-v1";
+const ELT_TYPES        = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)","Other"];
+const ELT_MAINTAINED   = ["Maintained","Non-Maintained"];
+const ELT_FAIL_REASONS = ["Lamp Failure","Battery Failure","No Power","Damaged/Broken","Switch Failure","Other"];
+const ELT_ACTIONS      = ["Given to Site Contact","Repaired On-Site","Scheduled for Repair","Other"];
+const ELT_CHECKS       = [
+  {key:"visual",    label:"Visual Inspection"},
+  {key:"discharge", label:"90-Minute Discharge Test"},
+  {key:"switching", label:"Automatic Switching Test"},
+  {key:"charging",  label:"Charging Circuit Test"},
+];
+const ELT_COLUMNS = ["Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Next Test Due","Notes"];
+const eltEl = React.createElement;
+
+function eltGetRes(results, pid, aid) {
+  const r = results && results[pid] && results[pid][aid];
+  return {visual:"",discharge:"",switching:"",charging:"",failReason:"",failReasonOther:"",action:"",actionOther:"",notes:"",photos:[],...(r||{})};
+}
+// PASS only when all 4 sub-checks pass; FAIL as soon as any fails; otherwise not yet tested.
+function eltOverall(r) {
+  const v = ELT_CHECKS.map(c=>r[c.key]);
+  if (v.includes(STATUS.FAIL)) return STATUS.FAIL;
+  if (v.every(x=>x===STATUS.PASS)) return STATUS.PASS;
+  return STATUS.UNTESTED;
+}
+const eltOtherText = (v, o) => v==="Other" ? ((o||"").trim()||"Other") : (v||"");
+// Failure Reason + Action Taken + Notes combined into one string — export time only.
+function eltExportNotes(r) {
+  const notes = (r.notes||"").trim();
+  if (eltOverall(r)!==STATUS.FAIL) return notes;
+  const reason = eltOtherText(r.failReason, r.failReasonOther);
+  const action = eltOtherText(r.action, r.actionOther);
+  const head = reason && action ? `${reason} — ${action}` : (reason||action);
+  return head ? (notes ? `${head}. ${notes}` : head) : notes;
+}
+const eltTypeLabel = a => a.type==="Other" ? ((a.typeOther||"").trim()||"Other") : (a.type||"");
+const eltPF = v => v===STATUS.PASS?"Pass":v===STATUS.FAIL?"Fail":"";
+function eltSummary(project, results) {
+  let total=0, pass=0, fail=0;
+  (project.assets||[]).forEach(a=>{
+    const o = eltOverall(eltGetRes(results, project.id, a.id));
+    if (o===STATUS.PASS) {pass++;total++;} else if (o===STATUS.FAIL) {fail++;total++;}
+  });
+  return {total, pass, fail, assets:(project.assets||[]).length};
+}
+// One entry per tested asset (untested assets are excluded), cells in ELT_COLUMNS order.
+function eltRegisterRows(project, allResults, meta) {
+  const results = allResults||{};
+  return (project.assets||[]).map(a=>{
+    const r = eltGetRes(results, project.id, a.id);
+    return {asset:a, res:r, overall:eltOverall(r)};
+  }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:r,overall})=>{
+    const date = (meta&&meta.testDate) || "";
+    const nextDue = (meta&&meta.nextTestDate) || "";
+    return {asset:a, res:r, overall, cells:[
+      a.location||project.name||"", a.assetLocation||"", a.assetId||"", eltTypeLabel(a), a.maintained||"", a.fitting||"",
+      date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(r[c.key])), eltPF(overall), nextDue?fmtDate(nextDue):"", eltExportNotes(r),
+    ]};
+  });
+}
+
+async function exportELTExcel(project, allResults, meta) {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Emergency Lighting");
+  const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
+  const cols = "ABCDEFGHIJKLMN".split(""); const n = cols.length;
+  const merges = [];
+  const sName = project.name||"Site";
+  const testDate = (meta&&meta.testDate)||"";
+  const nextDue = (meta&&meta.nextTestDate)||"";
+  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
+  // Rows 1–5 are deliberately unstyled (no fill/font/border set), with the same merges and row
+  // heights as the real IEL/RCD/TAT/Thermo exports: title, company line, meta line, 6pt spacer, headings.
+  setCell('A1',`${sName} — Emergency Lighting Test`);
+  setCell('A2',coLine);
+  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
+  merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
+  ELT_COLUMNS.forEach((t,i)=>setCell(cols[i]+'5',t));
+  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1).height = h;});
+  const rows = eltRegisterRows(project, allResults, meta);
+  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  rows.forEach((row,i)=>{
+    const r = 6+i;
+    const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());
+    const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
+    row.cells.forEach((v,ci)=>{
+      let st = base;
+      if (ci>=6 && ci<=10 || ci===12) st = ctr;
+      if (ci>=7 && ci<=10 && v==="Fail") st = failSt;
+      if (ci===11) st = v==="Fail" ? failSt : passSt;
+      setCell(cols[ci]+r,v,st);
+    });
+  });
+  merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
+  [22,18,14,26,16,26,12,12,14,14,14,10,12,44].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+
+  const withPhotos = rows.filter(x=>(x.res.photos||[]).length>0);
+  if (withPhotos.length) {
+    const ps = wb.addWorksheet("Photos");
+    const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
+    ["Location","Asset Location","Asset ID","Photo"].forEach((t,i)=>pc("ABCD"[i]+"1",t));
+    let pr = 2;
+    withPhotos.forEach(({asset:a,res:r})=>{
+      r.photos.forEach(p=>{
+        const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
+        pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
+        ps.getRow(pr).height = EXPORT_PHOTO_ROW_PT;
+        const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+        if (m) {
+          let ext = m[1]==="jpg"?"jpeg":m[1];
+          if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
+          const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+          ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+        }
+        pr++;
+      });
+    });
+    [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
+  }
+  const buf = await wb.xlsx.writeBuffer();
+  deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+}
+
+function ELTSelectOther({options, value, other, onChange, placeholder}) {
+  const SS = swbStyles();
+  return eltEl('div',null
+    ,eltEl('select',{style:{...SS.modalInput,cursor:"pointer"},value:value||"",onChange:e=>onChange(e.target.value,other||"")}
+      ,eltEl('option',{value:""},placeholder||"— Select")
+      ,options.map(o=>eltEl('option',{key:o,value:o},o))
+    )
+    ,value==="Other"&&eltEl('input',{style:{...SS.modalInput,marginTop:6},type:"text",value:other||"",placeholder:"Specify…",onChange:e=>onChange("Other",e.target.value)})
+  );
+}
+function ELTStatusChip({status}) {
+  const sm = SM[status];
+  return eltEl('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:11,fontWeight:800,textAlign:"center"}},sm.label);
+}
+function ELTBackBtn({onClick}) {
+  const SS = swbStyles();
+  return eltEl('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}}
+    ,eltEl('button',{style:{...SS.smallBtn,color:"#6e6a66"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('polyline',{points:'15 18 9 12 15 6'}))," Back")
+  );
+}
+
+function ELTApp({ onGoHome }) {
+  const [projects,      setProjects]      = React.useState([]);
+  const [allResults,    setAllResults]    = React.useState({});
+  const [allMeta,       setAllMeta]       = React.useState({});
+  const [history,       setHistory]       = React.useState([]);
+  const [loaded,        setLoaded]        = React.useState(false);
+  const [activeProject, setActiveProject] = React.useState(null);
+  const [viewSnap,      setViewSnap]      = React.useState(null);
+  const [view,          setView]          = React.useState("projects");
+  const [activeAssetId, setActiveAssetId] = React.useState(null);
+  const eltMainRef = React.useRef(null);
+  React.useLayoutEffect(()=>{ if(eltMainRef.current) eltMainRef.current.scrollTop=0; },[view,activeAssetId]);
+
+  React.useEffect(()=>{
+    (async()=>{
+      try{const [p,r,m,h]=await Promise.all([load(K_ELT_PROJECTS,[]),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),load(K_ELT_HISTORY,[])]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);}
+      finally{setLoaded(true);}
+    })();
+  },[]);
+  React.useEffect(()=>{ if(loaded) save(K_ELT_PROJECTS,projects); },[projects,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_ELT_RESULTS,allResults); },[allResults,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_ELT_META,allMeta); },[allMeta,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_ELT_HISTORY,history); },[history,loaded]);
+
+  const project = projects.find(p=>p.id===activeProject);
+  const _m = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10)};
+  const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,6)};
+  const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const asset = project&&(project.assets||[]).find(a=>a.id===activeAssetId);
+
+  const patchAsset = (assetId,patch)=>setAllResults(prev=>{
+    const site = prev[activeProject]||{};
+    return {...prev,[activeProject]:{...site,[assetId]:{...eltGetRes(prev,activeProject,assetId),...patch}}};
+  });
+  const archiveAudit = ()=>{
+    const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),assets:JSON.parse(JSON.stringify((project&&project.assets)||[])),meta:{...meta}};
+    setHistory(prev=>[snap,...prev].slice(0,100));
+  };
+  const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
+  const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
+  const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
+  const today = ()=>new Date().toISOString().slice(0,10);
+
+  if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
+
+  const SS = swbStyles();
+  const summary = project?eltSummary(project,allResults[project.id]?allResults:{}):{total:0,pass:0,fail:0,assets:0};
+  const goBack = ()=>{
+    if(viewSnap){setViewSnap(null);return;}
+    if(view==="asset") setView("audit");
+    else if(view==="audit") goHome();
+    else if(["manage","report","history"].includes(view)) goHome();
+    else goProjects();
+  };
+
+  return eltEl('div',{style:SS.root}
+    ,eltEl('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #f0eeea',background:'#f0eeea',flexShrink:0}}
+      ,eltEl('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
+        ,eltEl('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
+          ,view!=="projects"&&eltEl('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:goBack}
+            ,eltEl('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},eltEl('polyline',{points:"15 18 9 12 15 6"}))
+            ,eltEl('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Back")
+          )
+          ,eltEl('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Emergency Lighting")
+          ,eltEl('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},(project&&project.name)||"")
+        )
+        ,eltEl('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
+          ,eltEl('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},eltEl('rect',{x:3,y:3,width:7,height:7,rx:1}),eltEl('rect',{x:14,y:3,width:7,height:7,rx:1}),eltEl('rect',{x:3,y:14,width:7,height:7,rx:1}),eltEl('rect',{x:14,y:14,width:7,height:7,rx:1}))
+          ,eltEl('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Modules")
+        )
+      )
+      ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
+    )
+    ,eltEl('div',{style:SS.main,ref:eltMainRef}
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
+      ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
+      ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
+      ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
+      ,view==="manage"&&project&&eltEl(ELTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+    )
+    ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_HOME,   label:"Home",   active:view==="home",                   onClick:goHome,                    color:ELT_COLOR})
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_AUDIT,  label:"Audit",  active:["audit","asset"].includes(view),onClick:goAudit,                   color:ELT_COLOR})
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_REPORT, label:"Report", active:view==="report",                 onClick:()=>{setViewSnap(null);setView("report");},  color:ELT_COLOR})
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_HISTORY,label:"History",active:view==="history",                onClick:()=>{setViewSnap(null);setView("history");}, color:ELT_COLOR})
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_MANAGE, label:"Manage", active:view==="manage",                 onClick:()=>{setViewSnap(null);setView("manage");},  color:ELT_COLOR})
+    )
+  );
+}
+
+function ELTSiteFields({vals, setVals}) {
+  const SS = swbStyles();
+  return [["SITE NAME","name","Site name"],["COMPANY (optional)","company","Company name"],["ABN (optional)","abn","e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","licence","e.g. 123456C"]].map(([lbl,k,ph])=>
+    eltEl('div',{key:k,style:{marginBottom:8}}
+      ,eltEl('div',{style:SS.metaLabelText},lbl)
+      ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:vals[k]||"",placeholder:ph,onChange:e=>setVals({...vals,[k]:e.target.value})})
+    )
+  );
+}
+
+function ELTProjectListView({projects, allResults, onSelect, onAddProject, onDeleteProject}) {
+  const SS = swbStyles();
+  const [showAdd,setShowAdd] = React.useState(false);
+  const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{...SS.listTitle,marginTop:24}},"Sites")
+    ,projects.length===0&&!showAdd&&eltEl('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one to start testing.")
+    ,projects.map(proj=>{
+      const s = eltSummary(proj,allResults);
+      return eltEl('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
+        ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
+          ,eltEl('div',{style:{flex:1}}
+            ,eltEl('div',{style:SS.siteCardName},proj.name)
+            ,eltEl('div',{style:SS.siteCardSub},`${s.assets} fittings · ${s.total} tested`)
+          )
+          ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
+            ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            ,eltEl('span',{style:SS.arrow},"›")
+          )
+        )
+        ,eltEl('div',{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}}
+          ,eltEl(DeleteButton,{onDelete:()=>onDeleteProject(proj.id),label:"Remove site?"})
+        )
+      );
+    })
+    ,showAdd
+      ?eltEl('div',{style:SS.addCard}
+        ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
+        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+          ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});setVals({name:"",company:"",abn:"",licence:""});setShowAdd(false);}},"Add Site")
+          ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
+        )
+      )
+      :eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add Site")
+  );
+}
+
+function ELTHomeView({project, meta, setMeta, summary, onStartAudit, onCompleteAudit, onReset}) {
+  const SS = swbStyles();
+  const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
+  const hasAssets = summary.assets>0;
+  const dateBox = (val,ph)=>eltEl('div',{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},val?fmtDate(val):ph);
+  const overlay = (val,onChange,onBlur)=>eltEl('input',{type:"date",value:val||"",onChange:e=>onChange(e.target.value),onBlur,style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}});
+  return eltEl('div',{style:SS.homeWrap}
+    ,eltEl('div',{style:SS.siteTitle},project.name)
+    ,eltEl('div',{style:SS.siteSub},[project.company,project.abn&&`ABN ${project.abn}`,project.licence&&`Lic ${project.licence}`].filter(Boolean).join(" · "))
+    ,eltEl('div',{style:SS.metaCard}
+      ,eltEl('div',{style:{marginBottom:10}}
+        ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
+        ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
+        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+      )
+      ,eltEl('div',null
+        ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED (default for all fittings)")
+        ,eltEl('div',{style:{position:"relative",marginTop:4}},dateBox(meta.testDate,"Select date…"),overlay(meta.testDate,nd=>{const autoPrev=meta.testDate?addMonthsISO(meta.testDate,6):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addMonthsISO(nd,6)}:{})});}))
+      )
+      ,eltEl('div',{style:{marginTop:8}}
+        ,eltEl('div',{style:SS.metaLabelText},"NEXT TEST DUE (default for all fittings)")
+        ,eltEl('div',{style:{position:"relative",marginTop:4}},dateBox(meta.nextTestDate,"Not set"),overlay(meta.nextTestDate,v=>setMeta({nextTestDate:v})))
+      )
+    )
+    ,eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:14,padding:"14px",boxSizing:"border-box"}}
+      ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
+        ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Progress")
+        ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},summary.total," / ",summary.assets," fittings tested")
+      )
+      ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+        ,eltEl('span',{style:{fontSize:11,color:ELT_COLOR}},summary.pass," Pass")
+        ,summary.fail>0&&eltEl('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
+      )
+    )
+    ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No fittings yet — add them in the Manage tab.")
+    ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit()},"Start / Continue Testing")
+    ,summary.total>0&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
+      ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
+      ,eltEl(CompleteAuditBtn,{color:ELT_COLOR,label:"Complete Audit & Archive",onComplete:onCompleteAudit})
+    )
+    ,eltEl(DeleteButton,{onDelete:onReset,label:"Reset all results?"})
+  );
+}
+
+function ELTAuditView({project, results, meta, summary, onOpen}) {
+  const SS = swbStyles();
+  const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
+  const assets = project.assets||[];
+  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
+      ,[["TESTED",summary.total,"#334155"],["PASS",summary.pass,"#16a34a"],["FAIL",summary.fail,"#dc2626"],["FITTINGS",summary.assets,"#92400e"]].map(([l,v,c])=>
+        eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
+    )
+    ,assets.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add them in the Manage tab.")
+    ,eltEl('div',{style:{display:"flex",flexDirection:"column",gap:6}}
+      ,assets.map(a=>{
+        const r = eltGetRes(results,project.id,a.id); const o = eltOverall(r); const sm = SM[o];
+        const sub = [a.location,eltTypeLabel(a),a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · ");
+        return eltEl('button',{key:a.id,style:{display:"flex",alignItems:"center",gap:12,background:"#f7f6f3",border:`1px solid ${o===STATUS.UNTESTED?"#e4e4e7":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:()=>onOpen(a.id)}
+          ,eltEl(ELTStatusChip,{status:o})
+          ,eltEl('div',{style:{flex:1,minWidth:0}}
+            ,eltEl('div',{style:{fontSize:14,fontWeight:600,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.assetLocation||"Unnamed fitting")
+            ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},sub)
+          )
+          ,eltEl('span',{style:{fontSize:14,color:"#52525b",flexShrink:0}},">")
+        );
+      })
+    )
+  );
+}
+
+function ELTAssetPage({project, asset, res, meta, onPatch, onClose}) {
+  const SS = swbStyles();
+  const [r,setR] = React.useState(res);
+  const set = patch=>setR(prev=>({...prev,...patch}));
+  const overall = eltOverall(r); const sm = SM[overall]; const isFail = overall===STATUS.FAIL;
+  const photoRef = React.useRef();
+  const rRef = React.useRef(r); rRef.current = r;
+  const setPhotos = photos=>{set({photos});onPatch({photos});};
+  const addPhotos = async e=>{
+    const files = Array.from(e.target.files||[]); e.target.value="";
+    if(!files.length) return;
+    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
+    setPhotos([...(rRef.current.photos||[]),...added]);
+  };
+  const removePhoto = id=>setPhotos((r.photos||[]).filter(p=>p.id!==id));
+  const sub = [asset.location,eltTypeLabel(asset),asset.maintained,asset.assetId&&`#${asset.assetId}`].filter(Boolean).join(" · ");
+  return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
+    ,eltEl(ELTBackBtn,{onClick:onClose})
+    ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:10}}
+      ,eltEl('div',{style:{minWidth:0}}
+        ,eltEl('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},asset.assetLocation||"Unnamed fitting")
+        ,eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:3}},sub)
+        ,asset.fitting&&eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:1}},asset.fitting)
+      )
+      ,eltEl('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800,flexShrink:0}},sm.label)
+    )
+    ,eltEl('div',{style:{margin:"14px 0 16px"}}
+      ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
+      ,(r.photos||[]).map(p=>eltEl('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
+        ,eltEl('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,eltEl('div',{style:{flex:1,minWidth:0}})
+        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+      ))
+      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+      ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:ELT_COLOR,border:`1px dashed ${ELT_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
+    )
+    ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"TESTS")
+    ,ELT_CHECKS.map(({key,label})=>
+      eltEl('div',{key,style:{display:"flex",alignItems:"center",gap:10,background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:12,padding:"10px 12px",marginBottom:6}}
+        ,eltEl('div',{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},label)
+        ,[STATUS.PASS,STATUS.FAIL].map(s=>{
+          const s2 = SM[s]; const active = r[key]===s;
+          return eltEl('button',{key:s,style:{width:64,padding:"9px 0",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?s2.border:"#d4d4d8"}`,background:active?s2.bg:"#f7f6f3",color:active?s2.fg:"#52525b"},onClick:()=>set({[key]:active?"":s})},s2.label);
+        })
+      )
+    )
+    ,eltEl('div',{style:{...SS.modalField,marginTop:10}}
+      ,eltEl('label',{style:SS.modalLabel},"OVERALL RESULT (AUTOMATIC)")
+      ,eltEl('div',{style:{...SS.modalInput,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,fontWeight:800}},overall===STATUS.UNTESTED?"Awaiting all 4 test results":sm.label)
+    )
+    ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:14}}
+      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"FAILURE REASON")
+        ,eltEl(ELTSelectOther,{options:ELT_FAIL_REASONS,value:r.failReason,other:r.failReasonOther,onChange:(v,o)=>set({failReason:v,failReasonOther:o})})
+      )
+      ,eltEl('div',{style:{...SS.modalField,marginBottom:0}}
+        ,eltEl('label',{style:SS.modalLabel},"ACTION TAKEN")
+        ,eltEl(ELTSelectOther,{options:ELT_ACTIONS,value:r.action,other:r.actionOther,onChange:(v,o)=>set({action:v,actionOther:o})})
+      )
+    )
+    ,eltEl('div',{style:SS.modalField}
+      ,eltEl('label',{style:SS.modalLabel},"NOTES")
+      ,eltEl('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:r.notes||"",placeholder:"Observations, comments…",onChange:e=>set({notes:e.target.value})})
+    )
+    ,meta.nextTestDate&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
+      ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
+      ,eltEl('span',{style:{color:ELT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},fmtDate(meta.nextTestDate))
+    )
+    ,eltEl('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",background:ELT_COLOR,color:"#fff"},onClick:()=>{onPatch(r);onClose();}},"Save")
+  );
+}
+
+function ELTSummaryPills({total, pass, fail}) {
+  return eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+    ,[["Total Items Tested",total,"#334155"],["Items Passed",pass,"#16a34a"],["Items Failed",fail,"#dc2626"]].map(([l,v,c])=>
+      eltEl('div',{key:l,style:{flex:1,minWidth:90,background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}
+        ,eltEl('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
+        ,eltEl('div',{style:{fontSize:10,color:"#6e6a66"}},l)
+      ))
+  );
+}
+
+function ELTReportView({project, results, meta, summary}) {
+  const SS = swbStyles();
+  const rows = eltRegisterRows(project,results,meta);
+  const th = {padding:"6px 8px",fontSize:10,fontWeight:800,color:"#18181b",background:"#f0eeea",border:"1px solid #d4d4d8",whiteSpace:"nowrap",textAlign:"left"};
+  const td = {padding:"6px 8px",fontSize:11,color:"#3f3f46",border:"1px solid #e4e4e7",verticalAlign:"top"};
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:12}}
+      ,eltEl('div',{style:{flex:1}}
+        ,eltEl('div',{style:{fontSize:16,fontWeight:800,color:"#18181b"}},"Emergency Lighting Register")
+        ,eltEl('div',{style:{fontSize:11,color:"#52525b"}},meta.auditor||"No auditor"," · ",meta.testDate?fmtDate(meta.testDate):"No date"," · Next due ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
+      )
+    )
+    ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:summary.total,pass:summary.pass,fail:summary.fail}))
+    ,rows.length===0
+      ?eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings tested yet.")
+      :eltEl('div',{style:{overflowX:"auto",WebkitOverflowScrolling:"touch"}}
+        ,eltEl('table',{style:{borderCollapse:"collapse",minWidth:900}}
+          ,eltEl('thead',null,eltEl('tr',null,ELT_COLUMNS.map(c=>eltEl('th',{key:c,style:th},c))))
+          ,eltEl('tbody',null,rows.map(row=>eltEl('tr',{key:row.asset.id},row.cells.map((v,i)=>{
+            const isPF = v==="Pass"||v==="Fail";
+            const pf = i>=7&&i<=11&&isPF ? {color:v==="Pass"?"#14532d":"#991b1b",fontWeight:800,background:v==="Pass"?"#dcfce7":"#fee2e2"} : {};
+            return eltEl('td',{key:i,style:{...td,...pf}},v);
+          }))))
+        )
+      )
+  );
+}
+
+function ELTAssetForm({initial, defaultLocation, submitLabel, onSave, onCancel}) {
+  const SS = swbStyles();
+  const [f,setF] = React.useState({assetId:"",location:defaultLocation||"",assetLocation:"",type:"",typeOther:"",maintained:"",fitting:"",...initial});
+  const set = patch=>setF(prev=>({...prev,...patch}));
+  const field = (lbl,k,ph)=>eltEl('div',{style:{marginBottom:8}}
+    ,eltEl('div',{style:SS.metaLabelText},lbl)
+    ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:f[k]||"",placeholder:ph,onChange:e=>set({[k]:e.target.value})})
+  );
+  return eltEl('div',{style:{...SS.addCard,border:`1px solid ${ELT_COLOR_BORDER}`}}
+    ,field("LOCATION (SITE)","location","e.g. Hearse Road Firestone")
+    ,field("ASSET LOCATION","assetLocation","e.g. SE Door")
+    ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
+    ,eltEl('div',{style:{marginBottom:8}}
+      ,eltEl('div',{style:SS.metaLabelText},"TYPE")
+      ,eltEl('div',{style:{marginTop:4}},eltEl(ELTSelectOther,{options:ELT_TYPES,value:f.type,other:f.typeOther,onChange:(v,o)=>set({type:v,typeOther:o})}))
+    )
+    ,eltEl('div',{style:{marginBottom:8}}
+      ,eltEl('div',{style:SS.metaLabelText},"MAINTAINED / NON-MAINTAINED")
+      ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}},ELT_MAINTAINED.map(m=>{
+        const active = f.maintained===m;
+        return eltEl('button',{key:m,type:"button",style:{...SS.tabBtn,...(active?{border:`1px solid ${ELT_COLOR}`,color:ELT_COLOR,background:ELT_COLOR_DIM}:{})},onClick:()=>set({maintained:active?"":m})},m);
+      }))
+    )
+    ,field("FITTING TYPE / MANUFACTURER","fitting","e.g. Clevertronics 24m")
+    ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+      ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!(f.assetLocation||"").trim())return;onSave({...f,assetLocation:f.assetLocation.trim(),location:(f.location||"").trim(),assetId:(f.assetId||"").trim(),fitting:(f.fitting||"").trim()});}},submitLabel)
+      ,eltEl('button',{style:SS.ctaSecondary,onClick:onCancel},"Cancel")
+    )
+  );
+}
+
+function ELTManageView({project, onUpdateProject}) {
+  const SS = swbStyles();
+  const [editingProject,setEditingProject] = React.useState(false);
+  const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
+  const [adding,setAdding] = React.useState(false);
+  const [seed,setSeed] = React.useState({});
+  const [seedKey,setSeedKey] = React.useState(0);
+  const [editingId,setEditingId] = React.useState(null);
+  const assets = project.assets||[];
+  const upd = u=>onUpdateProject(u);
+  const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Manage: ",project.name)
+    ,editingProject
+      ?eltEl('div',{style:{...SS.addCard,marginBottom:16,border:`1px solid ${ELT_COLOR_BORDER}`}}
+        ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:ELT_COLOR,marginBottom:10}},"SITE DETAILS")
+        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+          ,eltEl('button',{style:{padding:"9px 14px",background:ELT_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});setEditingProject(false);}},"Save")
+          ,eltEl('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
+        )
+      )
+      :eltEl('div',{style:{background:"#f7f6f3",border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:12,padding:"12px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}
+        ,eltEl('div',null
+          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:"#18181b"}},project.name)
+          ,project.company&&eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginTop:2}},project.company)
+        )
+        ,editBtn(()=>{setVals({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});setEditingProject(true);})
+      )
+    ,eltEl('div',{style:{fontSize:11,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:10}},`FITTINGS (${assets.length})`)
+    ,assets.length===0&&!adding&&eltEl('div',{style:{color:"#52525b",fontSize:13,marginBottom:12}},"No fittings yet.")
+    ,assets.map(a=>editingId===a.id
+      ?eltEl(ELTAssetForm,{key:a.id,initial:a,submitLabel:"Save",onSave:f=>{upd({...project,assets:assets.map(x=>x.id===a.id?{...x,...f}:x)});setEditingId(null);},onCancel:()=>setEditingId(null)})
+      :eltEl('div',{key:a.id,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,marginBottom:6,minWidth:0}}
+        ,eltEl('div',{style:{flex:1,minWidth:0}}
+          ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.assetLocation)
+          ,eltEl('div',{style:{fontSize:11,color:"#52525b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},[a.location,eltTypeLabel(a),a.maintained,a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · "))
+        )
+        ,editBtn(()=>{setAdding(false);setEditingId(a.id);})
+        ,eltEl(DeleteButton,{onDelete:()=>upd({...project,assets:assets.filter(x=>x.id!==a.id)}),label:"Delete fitting?",compact:true})
+      ))
+    ,adding
+      ?eltEl(ELTAssetForm,{key:seedKey,initial:seed,defaultLocation:project.name,submitLabel:"+ Add Fitting",onSave:f=>{upd({...project,assets:[...assets,{...f,id:uid()}]});setSeed({location:f.location,type:f.type,typeOther:f.typeOther,maintained:f.maintained,fitting:f.fitting});setSeedKey(k=>k+1);},onCancel:()=>setAdding(false)})
+      :eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginTop:8},onClick:()=>{setEditingId(null);setAdding(true);}},"+ Add Fitting")
+  );
+}
+
+function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
+  const SS = swbStyles();
+  const [expanded,setExpanded] = React.useState(null);
+  const snapStats = snap=>eltSummary({id:project.id,assets:snap.assets||project.assets||[]},{[project.id]:snap.results||{}});
+  if(viewSnap){
+    const snap = viewSnap; const s = snapStats(snap);
+    const rows = eltRegisterRows({...project,assets:snap.assets||project.assets||[]},{[project.id]:snap.results||{}},snap.meta||{});
+    return eltEl('div',{style:SS.listWrap}
+      ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}}
+        ,eltEl('div',{style:{flex:1}}
+          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:ELT_COLOR}},"Emergency Lighting Snapshot")
+          ,eltEl('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+        )
+        ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
+      )
+      ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail}))
+      ,rows.map(row=>{
+        const sm = SM[row.overall];
+        return eltEl('div',{key:row.asset.id,style:{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}}
+          ,eltEl('div',{style:{width:48,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0}},sm.label)
+          ,eltEl('div',{style:{flex:1,minWidth:0}}
+            ,eltEl('div',{style:{fontSize:13,color:"#3f3f46"}},row.asset.assetLocation)
+            ,row.cells[13]&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},row.cells[13])
+          )
+        );
+      })
+    );
+  }
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Audit History")
+    ,history.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No archived audits yet. Use “Complete Audit & Archive” on the Home tab.")
+    ,history.map(snap=>{
+      const s = snapStats(snap);
+      return eltEl('div',{key:snap.id,style:{...SS.siteCard,flexDirection:"column",padding:0,marginBottom:10,overflow:"hidden"}}
+        ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
+          ,eltEl('div',{style:{flex:1}}
+            ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
+              ,eltEl('span',{style:{fontSize:13,fontWeight:800,color:ELT_COLOR}},"Emergency Lighting Audit")
+              ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            )
+            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
+            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
+              ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.total," tested")
+              ,eltEl('span',{style:{fontSize:11,color:"#16a34a"}},s.pass," Pass")
+              ,eltEl('span',{style:{fontSize:11,color:"#dc2626"}},s.fail," Fail")
+            )
+          )
+          ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?ELT_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
+        )
+        ,expanded===snap.id&&eltEl('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
+          ,eltEl('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
+            ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},"View Results")
+            ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b"},onClick:()=>onExportSnap(snap)},"Export")
+            ,eltEl(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn,color:ELT_COLOR})
+            ,eltEl(DeleteButton,{onDelete:()=>onDelete(snap.id)})
+          )
+        )
+      );
+    })
+  );
+}
 
 // ═════════════════════════════════════════════════════════════════════════
 // IRT MODULE — Insulation Resistance Testing
@@ -12352,5 +12980,5 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
   - Applied to: RCD (push + inject), IEL, TAT, Thermo, SWB, IRT
 */
 
-export { parseSWBExcel };
+export { parseSWBExcel, exportSWBExcel, exportELTExcel, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;
