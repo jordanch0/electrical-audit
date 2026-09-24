@@ -11403,13 +11403,13 @@ function ELTAssetPage({project, asset, res, meta, onPatch, onClose}) {
       ,eltEl('label',{style:SS.modalLabel},"OVERALL RESULT (AUTOMATIC)")
       ,eltEl('div',{style:{...SS.modalInput,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,fontWeight:800}},overall===STATUS.UNTESTED?"Awaiting all 4 test results":sm.label)
     )
-    ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:14}}
+    ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
       ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"FAILURE REASON")
         ,eltEl(ELTSelectOther,{options:ELT_FAIL_REASONS,value:r.failReason,other:r.failReasonOther,onChange:(v,o)=>set({failReason:v,failReasonOther:o})})
       )
-      ,eltEl('div',{style:{...SS.modalField,marginBottom:0}}
+      ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"ACTION TAKEN")
         ,eltEl(ELTSelectOther,{options:ELT_ACTIONS,value:r.action,other:r.actionOther,onChange:(v,o)=>set({action:v,actionOther:o})})
       )
