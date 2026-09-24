@@ -10915,7 +10915,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
         ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
-          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#dc2626"}},notice[key])
+          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#dc2626"},ref:el=>{if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});}},notice[key])
         )
       );
     })
