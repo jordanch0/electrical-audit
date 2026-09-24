@@ -11090,7 +11090,9 @@ async function exportELTExcel(project, allResults, meta) {
   merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
   [22,18,14,26,16,26,12,12,14,14,14,10,12,44].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
 
-  const withPhotos = rows.filter(x=>(x.res.photos||[]).length>0);
+  // Photos are exported for every fitting that has any, whether or not it is fully tested
+  // (the register itself only lists tested fittings).
+  const withPhotos = (project.assets||[]).map(a=>({asset:a,res:eltGetRes(allResults||{},project.id,a.id)})).filter(x=>(x.res.photos||[]).length>0);
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
     const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
@@ -11185,6 +11187,7 @@ function ELTApp({ onGoHome }) {
 
   const SS = swbStyles();
   const summary = project?eltSummary(project,allResults[project.id]?allResults:{}):{total:0,pass:0,fail:0,assets:0};
+  const hasResults = !!project && (project.assets||[]).some(a=>{const r=eltGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||ELT_CHECKS.some(c=>r[c.key]);});
   const goBack = ()=>{
     if(viewSnap){setViewSnap(null);return;}
     if(view==="asset") setView("audit");
@@ -11213,7 +11216,7 @@ function ELTApp({ onGoHome }) {
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
       ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
+      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
@@ -11278,7 +11281,7 @@ function ELTProjectListView({projects, allResults, onSelect, onAddProject, onDel
   );
 }
 
-function ELTHomeView({project, meta, setMeta, summary, onStartAudit, onCompleteAudit, onReset}) {
+function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit, onCompleteAudit, onReset}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   const hasAssets = summary.assets>0;
@@ -11314,7 +11317,7 @@ function ELTHomeView({project, meta, setMeta, summary, onStartAudit, onCompleteA
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No fittings yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit()},"Start / Continue Testing")
-    ,summary.total>0&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
+    ,hasResults&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,eltEl(CompleteAuditBtn,{color:ELT_COLOR,label:"Complete Audit & Archive",onComplete:onCompleteAudit})
     )

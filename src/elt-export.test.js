@@ -144,10 +144,15 @@ describe('ELT Photos sheet', () => {
     expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting']);
   });
 
-  it('ignores photos on untested fittings (not in register)', async () => {
-    const res = { p1: { a4: { photos:[{id:'x',dataUrl:PNG}] } } };
+  it('exports photos of untested/partly tested fittings (labelled), while keeping them out of the register', async () => {
+    const res = { p1: { a4: { photos:[{id:'x',dataUrl:PNG}] }, a3: { visual:'pass', photos:[{id:'y',dataUrl:PNG}] } } };
     const wb = await runExport(project, res, meta);
-    expect(wb.getWorksheet('Photos')).toBeUndefined();
+    const ps = wb.getWorksheet('Photos');
+    expect(ps).toBeTruthy();
+    expect(ps.getImages()).toHaveLength(2);
+    expect([2,3].map(r => text(ps.getCell(r,2))).sort()).toEqual(['Store Room','Workshop']);
+    const reg = wb.getWorksheet('Emergency Lighting');
+    expect(reg.getCell('A6').value == null || text(reg.getCell('A6')) === '').toBe(true); // no register rows
   });
 });
 
