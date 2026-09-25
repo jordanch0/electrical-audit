@@ -13584,7 +13584,114 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
   );
 }
 
-// Export is added in Stage 3; until then History's Export button is a no-op stub replaced by exportWelderExcel.
+// ── Welder Excel export (ExcelJS) ────────────────────────────────────────────────────────────────
+// Register sheet (all welders, the 13 client columns) + one sheet per welder in the client's checklist layout.
+// Rows 1–5 of the register are the plain header block used by the other modules (no fill/font/border); everything below has
+// full-grid borders. Defect fields are gated on the derived overall result. Photos are embedded on each welder's own sheet.
+function welderSheetName(a, used) {
+  const base = (welderTitle(a)||"Welder").replace(/[\[\]:*?\/\\]/g,"-").trim().slice(0,28) || "Welder";
+  let name = base, n = 2;
+  while (used.has(name.toLowerCase()) || name.toLowerCase()==="register") { name = base.slice(0,26)+" ("+n+")"; n++; }
+  used.add(name.toLowerCase());
+  return name;
+}
+async function exportWelderExcel(project, allResults, meta) {
+  const wb = new ExcelJS.Workbook();
+  const sName = project.name||"Site";
+  const testDate = (meta&&meta.testDate)||"";
+  const nextDue = (meta&&meta.nextTestDate)||"";
+  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
+  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
+  const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
+  const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
+  const rows = welderRegisterRows(project, allResults, meta);
+
+  // ── Register ──
+  const ws = wb.addWorksheet("Register");
+  const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
+  const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
+  setCell('A1',`${sName} — Welder (VRD) Test`);
+  setCell('A2',coLine);
+  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
+  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
+    .forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
+  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+'5',t));
+  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1).height = h;});
+  rows.forEach((row,i)=>{
+    const r = 6+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
+    row.cells.forEach((v,ci)=>{
+      let st = base;
+      if ([1,4,5,7,8,11,12].includes(ci)) st = ctr;
+      if (ci===5) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
+      setCell(cols[ci]+r,v,st);
+    });
+  });
+  [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+
+  // ── One sheet per welder ──
+  const used = new Set();
+  rows.forEach(row=>{
+    const a = row.asset; const raw = row.res; const sum = row.summary; const r = defectGate(raw, row.overall==="fail");
+    const sh = wb.addWorksheet(welderSheetName(a, used));
+    const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
+    const date = raw.date || (meta&&meta.testDate) || "";
+    put('A1',"VRD Welder Inspection & Audit Checklist");
+    put('A2',`${sName}  |  ${coLine}`);
+    put('A3',`Location: ${a.location||""}`); put('C3',`Asset ID: ${a.assetId||""}`);
+    put('A4',`Brand: ${a.brand||""}`);       put('C4',`Model: ${a.model||""}`);
+    put('A5',`Serial Number: ${a.serial||""}`); put('C5',`Date Tested: ${date?fmtDate(date):""}`);
+    put('A6',`Prepared By: ${raw.preparedBy||(meta&&meta.auditor)||""}`); put('C6',`Test Instruments: ${raw.instruments||(meta&&meta.instruments)||""}`);
+    [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr,c1,rr,c2));
+    sh.getRow(1).height = 24;
+    // Audit summary
+    let rr = 8;
+    put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
+    const overallSt = row.overall==="pass"?passSt:row.overall==="fail"?failSt:naSt;
+    [["Total Items",String(sum.total)],["Pass",String(sum.pass)],["Fail",String(sum.fail)],["N/A",String(sum.na)],["Score",welderScoreLabel(sum.score)],["Actions Required",String(sum.actions)],["Overall",welderOverallLabel(row.overall)]]
+      .forEach(([l,v],i)=>{ put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,l==="Overall"?overallSt:cellSt(SWB_XC.white,{horizontal:"center"})); rr++; });
+    // Checklist
+    rr++;
+    ["Item","Test / Pass Criteria","Result","Measured Value / Notes","Corrective Action Required"].forEach((t,i)=>put("ABCDE"[i]+rr,t,headSt)); rr++;
+    WELDER_CHECKLIST.forEach(({key,label,criteria},idx)=>{
+      const it = welderItem(raw,key); const bg = idx%2===0?SWB_XC.white:SWB_XC.lightGrey;
+      const resTxt = it.result==="pass"?"Pass":it.result==="fail"?"Fail":it.result==="na"?"N/A":"";
+      put('A'+rr,`${idx+1}. ${label}`,cellSt(bg)); put('B'+rr,criteria,cellSt(bg));
+      put('C'+rr,resTxt,it.result==="pass"?passSt:it.result==="fail"?failSt:it.result==="na"?naSt:cellSt(bg,{horizontal:"center"}));
+      put('D'+rr,it.value||"",cellSt(bg)); put('E'+rr,it.action||"",cellSt(bg)); rr++;
+    });
+    // Defect details (FAIL welders only) then comments
+    rr++;
+    if (row.overall==="fail") {
+      [["Rectified / Scheduled",r.rectified],["Date Rectified / Scheduled",r.rectifiedDate?fmtDate(r.rectifiedDate):""],["Defect ID",r.defectId],["Responsibility",r.responsibility],["Priority",r.priority?`${r.priority} — ${PRIORITY_LABELS[r.priority]||""}`:""]]
+        .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+      rr++;
+    }
+    put('A'+rr,"Auditor Comments / Overall Notes",headSt); put('B'+rr,(raw.notes||"").trim(),cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5);
+    sh.getRow(rr).height = 48; rr++;
+    // Photos
+    (raw.photos||[]).forEach((p,pi)=>{
+      rr++;
+      put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
+      sh.getRow(rr).height = EXPORT_PHOTO_ROW_PT;
+      const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+      if (m) {
+        let ext = m[1]==="jpg"?"jpeg":m[1];
+        if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
+        const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+      }
+    });
+    [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
+  });
+  const buf = await wb.xlsx.writeBuffer();
+  deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+}
+
 function WelderApp({ onGoHome }) {
   const [projects,      setProjects]      = React.useState([]);
   const [allResults,    setAllResults]    = React.useState({});
@@ -13647,7 +13754,7 @@ function WelderApp({ onGoHome }) {
     else goProjects();
   };
   const exportSnap = snap=>{
-    if(typeof exportWelderExcel==="function") exportWelderExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{});
+    exportWelderExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{});
   };
   const navBtn = (icon,label,active,onClick)=>eltEl(SWBNavBtn,{icon,label,active,onClick,color:"#334155"});
 
@@ -13690,6 +13797,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;
