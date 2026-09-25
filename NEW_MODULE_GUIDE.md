@@ -321,7 +321,7 @@ Run `npm test` and `npm run build` after every change. Vitest + jsdom, driving t
 | **IEL** | Three fixed categories (E-Stops, Lanyards, Isolators) as `panels` named by category key | Product structure |
 | **Calendar** | Not an audit module: 3-tab nav (Upcoming / Calendar / Add Event), own delete confirm with a "delete series" option — **but** it shares `activeDeleteSetter`; no project storage | Scheduling, not testing |
 | **Older modules** | Home "Reset all results" uses an inline confirm row instead of `DeleteButton`; module-local copies of the editable dropdown / style objects (`SI`, `ST`, `SS`, `STH`); TAT's site delete leaves meta/history behind; RCD/IEL read an "audit entered" flag straight from `localStorage` | Legacy — **new modules use the shared pieces**; unifying is a future pass |
-| **Manual/Import toggle** | TAT slate tint, RCD white, Thermo amber with no icons | Pending consistency pass (CLAUDE.md → Planned Features); ELT/IEL/IRT/SWB style is the target |
+| **Manual/Import toggle** | (resolved 2026-09-25) | TAT, RCD and Thermo now match ELT/IEL/IRT/SWB: pencil/download icons, accent border + text, accent tint on the active tab. No longer an exception. |
 | **TAT** date | Item page shows next-test-due as ISO `2026-12-23` | Known unfixed bug, not a standard |
 
 _Keep this guide current: when a standard changes, change it here in the same commit._

@@ -333,11 +333,6 @@ RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp and AppRoot. Since then: the C
 `DeleteButton` / `ConfirmReset`. Verified in the real browser on 2026-09-25 for ELT and Welder: site delete, welder/fitting delete,
 Manage delete, dropdown option delete, list Reset, Home "Reset all results?" and photo delete all need a second step and Keep leaves
 data untouched. See the addendum block in App.jsx. New modules: follow NEW_MODULE_GUIDE.md section 5.
-[ ] TAT / RCD / THERMO · Manual-Import toggle styling · ELT, IEL, IRT and SWB use pencil/download icons with an
-    accent border, accent text and an accent tint on the active tab. Still to bring in line (a separate consistency pass,
-    deliberately not done with the ELT import): TAT uses a slate active tint, RCD a plain white one, and Thermo has no
-    icons and an amber active state.
-
 [ ] ALL MODULES · Delete Consistency Audit · Standardise every destructive action across the entire
     app to use the shared DeleteButton component defined in the Design System section above.
 

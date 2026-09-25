@@ -2171,7 +2171,7 @@ resetBtn:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cur
 ctaPrimary:{padding:"11px 20px",background:"#a3530f",color:"#fff",border:"none",borderRadius:10,fontSize:14,fontWeight:800,cursor:"pointer"},
 ctaSecondary:{padding:"11px 20px",background:"#f7f6f3",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:10,fontSize:13,fontWeight:600,cursor:"pointer"},
 tabBtn:{flex:1,padding:"9px",background:"#e8e6e2",border:"1px solid #e4e4e7",borderRadius:8,color:"#6e6a66",fontSize:12,fontWeight:600,cursor:"pointer"},
-tabBtnActive:{background:"#f7f6f3",border:"1px solid #a3530f",color:"#a3530f"},
+tabBtnActive:{background:"#fdebd9",border:"1px solid #a3530f",color:"#a3530f"},
 listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
 siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
 siteCardFail:{background:"#fee2e2",borderColor:"#fca5a5"},siteCardDone:{background:"#dcfce7",borderColor:"#86efac"},
@@ -4879,8 +4879,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,showAdd
       ?React.createElement('div',{style:ST.addCard}
         ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:14}}
-          ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="manual"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#f1f5f9"}:{})},onClick:()=>setTab("manual")},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual Entry")
-          ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="import"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#f1f5f9"}:{})},onClick:()=>setTab("import")},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Import Excel")
+          ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="manual"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#dbeafe"}:{})},onClick:()=>setTab("manual")},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual Entry")
+          ,React.createElement('button',{style:{...ST.tabBtn,...(tab==="import"?{...ST.tabBtnActive,borderColor:TAT_COLOR,color:TAT_COLOR,background:"#dbeafe"}:{})},onClick:()=>setTab("import")},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Import Excel")
         )
         ,tab==="manual"&&React.createElement(React.Fragment,null
           ,React.createElement('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
@@ -6981,7 +6981,7 @@ function ThermoProjectListView({
   const tabStyle = active => ({
     flex: 1,
     padding: "9px",
-    background: active ? "#fef3c7" : "#e8e6e2",
+    background: active ? "#ffedd5" : "#e8e6e2",
     border: active ? `1px solid ${THERMO_COLOR}` : "1px solid #e4e4e7",
     borderRadius: 8,
     color: active ? THERMO_COLOR : "#6e6a66",
@@ -7063,10 +7063,10 @@ function ThermoProjectListView({
   }, /*#__PURE__*/React.createElement("button", {
     style: tabStyle(tab === "manual"),
     onClick: () => setTab("manual")
-  }, "Manual Entry"), /*#__PURE__*/React.createElement("button", {
+  }, React.createElement("svg", {viewBox:"0 0 24 24",width:15,height:15,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",style:{flexShrink:0,display:"inline",verticalAlign:"middle"}}, React.createElement("path",{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}), React.createElement("path",{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Manual Entry"), /*#__PURE__*/React.createElement("button", {
     style: tabStyle(tab === "import"),
     onClick: () => setTab("import")
-  }, "Import Excel")), tab === "manual" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
+  }, React.createElement("svg", {viewBox:"0 0 24 24",width:15,height:15,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",style:{flexShrink:0,display:"inline",verticalAlign:"middle"}}, React.createElement("path",{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"}), React.createElement("polyline",{points:"7 10 12 15 17 10"}), React.createElement("line",{x1:12,y1:15,x2:12,y2:3})), " Import Excel")), tab === "manual" && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 14,
       fontWeight: 800,
