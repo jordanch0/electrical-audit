@@ -79,6 +79,8 @@ Do not change this pattern. There are known security vulnerabilities in the xlsx
 | `"elt"` | `ELTApp` | ~10977 | `#0f766e` teal | Emergency Lighting Testing (AS 2293.2:2019) — flat asset register, 4 Pass/Fail sub-checks per fitting, single-table Excel export |
 | `"welder"` | `WelderApp` | ~11800 | `#be185d` rose | Welder (VRD) Testing — flat welder register, fixed 12-item checklist per welder (Pass/Fail/N/A + measured value + corrective action), derived per-welder Overall/Score/Actions, Summary Register table on the Report tab, per-welder Excel export from History (ExcelJS). Overall = Untested until all 12 items answered; import deferred |
 
+**Date maths rule (app-wide):** ISO `YYYY-MM-DD` strings parse as UTC midnight, so month/year additions must use `setUTCMonth`/`setUTCFullYear` (`addMonthsISO`, `addYearsISO`, `addTATMonths`). Local `setMonth` + `toISOString()` lost a day across daylight saving (13/07 + 3 months gave 12/10 in Sydney). `swbAddYear`/`irtAddYear` are correct in Australian timezones (local set + local format) and are covered by `src/date-helpers-dst.test.js`.
+
 ### Common Module Pattern
 Every module follows the same internal structure:
 1. **ProjectListView** — list of saved projects, import from Excel, create manually

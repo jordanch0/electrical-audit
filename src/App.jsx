@@ -4379,7 +4379,7 @@ function addTATMonths(dateStr, months) {
   if(!dateStr) return "";
   try {
     const d = new Date(dateStr);
-    d.setMonth(d.getMonth() + parseInt(months));
+    d.setUTCMonth(d.getUTCMonth() + parseInt(months)); // UTC: local setMonth lost a day across daylight saving
     return d.toISOString().slice(0,10);
   } catch(_) { return ""; }
 }
@@ -13797,6 +13797,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;
