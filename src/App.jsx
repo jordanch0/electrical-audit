@@ -18,8 +18,10 @@ const uid = () => Math.random().toString(36).slice(2,9);
 const nw = (n, singular, plural) => `${n} ${n === 1 ? singular : (plural || singular + "s")}`;
 const fmtDate = d => { if(!d) return ""; try { return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return d; } };
 const fmtDateTime = d => { if(!d) return ""; try { return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(_) { return d; } };
-const addMonthsISO = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setMonth(x.getMonth()+n); return x.toISOString().slice(0,10); } catch(_) { return ""; } };
-const addYearsISO  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setFullYear(x.getFullYear()+n); return x.toISOString().slice(0,10); } catch(_) { return ""; } };
+// ISO-date maths must run in UTC: new Date("YYYY-MM-DD") is UTC midnight, so adding months in LOCAL time and reading the result
+// back with toISOString() lost a day whenever the addition crossed a daylight-saving change (Sydney: 24/09 + 3 months = 23/12).
+const addMonthsISO = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setUTCMonth(x.getUTCMonth()+n); return x.toISOString().slice(0,10); } catch(_) { return ""; } };
+const addYearsISO  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setUTCFullYear(x.getUTCFullYear()+n); return x.toISOString().slice(0,10); } catch(_) { return ""; } };
 const addMonths = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setMonth(x.getMonth()+n); return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return ""; } };
 const addYears  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setFullYear(x.getFullYear()+n); return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return ""; } };
 const cycleS = s => s===STATUS.UNTESTED?STATUS.PASS:s===STATUS.PASS?STATUS.FAIL:s===STATUS.FAIL?STATUS.NA:STATUS.UNTESTED;
@@ -13067,5 +13069,94 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
   - Applied to: RCD (push + inject), IEL, TAT, Thermo, SWB, IRT
 */
 
-export { parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
+// ═════════════════════════════════════════════════════════════════════════
+// WELDER (VRD) MODULE — welder / voltage-reduction-device compliance checks
+// Structure: Site → flat list of welders (assets). Each welder has a fixed 12-item checklist; every item always shows
+// Result (Pass / Fail / N/A), Measured Value / Notes and Corrective Action Required. Per-asset overall result, score and
+// summary are DERIVED (never stored). The Summary Register is a table on the Report tab, derived from the welder entries.
+// ═════════════════════════════════════════════════════════════════════════
+const WELDER_COLOR        = "#be185d";
+const WELDER_COLOR_DIM    = "#fce7f3";
+const WELDER_COLOR_BORDER = "#f9a8d4";
+const K_WELDER_PROJECTS  = "welder-projects-v1";
+const K_WELDER_RESULTS   = "welder-results-v1";
+const K_WELDER_META      = "welder-meta-v1";
+const K_WELDER_HISTORY   = "welder-history-v1";
+const K_WELDER_DROPDOWNS = "welder-dropdowns-v1";
+const WELDER_INTERVAL_MONTHS = 3; // default test interval (editable per site via Next Test Due)
+// The 12 checklist items, in the client's order. `criteria` is static reference text (the "Test / Pass Criteria" column)
+// shown beside each item and written to the export — it is not user-editable.
+const WELDER_CHECKLIST = [
+  { key:"visual",      label:"Visual Inspection",                                                          criteria:"General visual condition — casing, labels, cooling vents, controls free of damage" },
+  { key:"clamp",       label:"Clamp connection and braid condition",                                       criteria:"Earth clamp connection secure; braid intact, no fraying or damage" },
+  { key:"leads",       label:"Flexible Leads",                                                             criteria:"Welding leads / cables free of cuts, damage, exposed conductors" },
+  { key:"ir_input",    label:"Insulation resistance — Input circuit to Welding circuit",                   criteria:"Min insulation resistance 5 MΩ" },
+  { key:"ir_exposed",  label:"Insulation resistance — All circuits to Exposed conductive parts",           criteria:"Min insulation resistance 2.5 MΩ" },
+  { key:"ir_above_elv",label:"Insulation resistance — Welding circuit to auxiliary circuit ABOVE ELV",     criteria:"Min insulation resistance 10 MΩ" },
+  { key:"ir_below_elv",label:"Insulation resistance — Welding circuit to auxiliary circuit BELOW ELV",     criteria:"Min insulation resistance 1 MΩ" },
+  { key:"ir_separate", label:"Insulation resistance — Separate welding circuit to separate welding circuit", criteria:"Min insulation resistance 1 MΩ" },
+  { key:"ocv_ac",      label:"HRD — Maximum Open-Circuit Voltage (a.c. output)",                           criteria:"Volts rms a.c. output ≤ 35 V" },
+  { key:"ocv_dc",      label:"HRD — Maximum Open-Circuit Voltage (d.c. output)",                           criteria:"≤ 35 Volts d.c. output or 35 volts peak" },
+  { key:"vrd_res",     label:"HRD — VRD Switching Resistance",                                             criteria:"200 Ohms maximum" },
+  { key:"vrd_speed",   label:"VRD Speed of Operation",                                                     criteria:"≤ 0.5 s for d.c. output / ≤ 0.3 s for a.c. output" },
+];
+const WELDER_DEFAULT_RESPONSIBILITY = [...DEFAULT_RESPONSIBILITY];
+const WELDER_DEFAULT_RECTIFIED      = [...DEFAULT_RECTIFIED];
+const WELDER_DEFAULT_DROPDOWNS = { responsibility: WELDER_DEFAULT_RESPONSIBILITY, rectified: WELDER_DEFAULT_RECTIFIED };
+const WELDER_DROPDOWN_LISTS = [
+  { key:"responsibility", label:"RESPONSIBILITY",               defaults:WELDER_DEFAULT_RESPONSIBILITY, desc:"Options shown when logging a failed welder" },
+  { key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION",  defaults:WELDER_DEFAULT_RECTIFIED,      desc:"Actions available when rectifying a defect" },
+];
+// The register columns, in the client's order (the first page of the sample report).
+const WELDER_COLUMNS = ["Location","Asset ID","Welder (Machine)","Serial Number","Date Tested","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)","Next Test Due"];
+
+function welderGetRes(results, pid, aid) {
+  const r = results && results[pid] && results[pid][aid];
+  return { date:"", preparedBy:"", instruments:"", items:{}, notes:"", photos:[], rectified:"", rectifiedDate:"", defectId:"", responsibility:"", priority:"", ...(r||{}) };
+}
+const welderItem = (r, key) => ({ result:"", value:"", action:"", ...(((r||{}).items||{})[key]||{}) });
+// Overall rule (exact): any item blank/unset -> "untested". All 12 answered (Pass / Fail / N/A in any mix): any Fail -> "fail",
+// otherwise "pass". N/A counts as answered and never blocks a PASS. Score = Pass / (Pass + Fail) x 100, N/A excluded (null when
+// nothing is scored). Actions Required = FAIL items that have a Corrective Action written.
+function welderSummary(r) {
+  let pass=0, fail=0, na=0, actions=0;
+  WELDER_CHECKLIST.forEach(({key}) => {
+    const it = welderItem(r, key);
+    if (it.result === "pass") pass++;
+    else if (it.result === "fail") { fail++; if ((it.action||"").trim()) actions++; }
+    else if (it.result === "na") na++;
+  });
+  const total = WELDER_CHECKLIST.length, untested = total - pass - fail - na;
+  const scored = pass + fail;
+  return { total, pass, fail, na, untested, actions, score: scored>0 ? Math.round((pass/scored)*1000)/10 : null,
+    overall: untested>0 ? "untested" : fail>0 ? "fail" : "pass" };
+}
+const welderOverall = r => welderSummary(r).overall;
+const welderScoreLabel = sc => sc==null ? "—" : sc.toFixed(1)+"%";
+const welderMachine = a => [a.brand, a.model].map(x=>(x||"").trim()).filter(Boolean).join(" ");
+const welderPF = o => o==="pass"?"Pass":o==="fail"?"Fail":"";
+// Site summary for the project list / Home / Report tiles (asset-level: Total, Pass, Fail, Untested).
+function welderSiteSummary(project, results) {
+  let pass=0, fail=0, untested=0;
+  (project.assets||[]).forEach(a => { const o = welderOverall(welderGetRes(results, project.id, a.id)); if (o==="pass") pass++; else if (o==="fail") fail++; else untested++; });
+  return { total:(project.assets||[]).length, pass, fail, untested, tested: pass+fail };
+}
+// One row per welder (ALL welders, tested or not), cells in WELDER_COLUMNS order. Defect details are only written for FAIL rows.
+function welderRegisterRows(project, allResults, meta) {
+  return (project.assets||[]).map(a => {
+    const raw = welderGetRes(allResults||{}, project.id, a.id);
+    const sum = welderSummary(raw);
+    const r = defectGate(raw, sum.overall==="fail");
+    const tested = sum.overall!=="untested";
+    const date = tested ? (raw.date || (meta&&meta.testDate) || "") : "";
+    const nextDue = tested ? ((meta&&meta.nextTestDate) || (date ? addMonthsISO(date, WELDER_INTERVAL_MONTHS) : "")) : "";
+    return { asset:a, res:raw, summary:sum, overall:sum.overall, cells:[
+      a.location||project.name||"", a.assetId||"", welderMachine(a), a.serial||"", date?fmtDate(date):"", welderPF(sum.overall),
+      r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.defectId||"", r.responsibility||"", (raw.notes||"").trim(), r.priority||"", nextDue?fmtDate(nextDue):"",
+    ]};
+  });
+}
+
+export { addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+  parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

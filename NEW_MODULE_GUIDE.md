@@ -116,6 +116,16 @@ Reference: **SWB item page** (`SWBItemPage`) and **ELT** (`ELTAssetPage`). Parit
   (`{options, value, onChange, placeholder, color, colorBg}`; TAT reuses it with its own accent). Options come from the module's
   `dropdowns` state with the module's defaults as fallback. Give the module's Dropdowns tab the matching lists (section 7).
   Deliberate exception: ELT — see the exceptions list.
+- [ ] **Asset-level derived FAIL (Welder, ELT).** When the FAIL is a property of the whole asset (Welder: all 12 items answered and any Fail;
+  ELT: any sub-check failed), put ONE panel on the asset page, not one per item. Compute the trigger from a derived summary function
+  (never store it), pass that boolean to `useFailDefaults`, and gate reports/exports with `defectGate(res, overall==="fail")`.
+  Defect data stays on the asset record and is retained when the asset leaves FAIL.
+- [ ] **Always-visible per-item fields (Welder).** Where the client form shows Result, Measured Value/Notes and Corrective Action for every
+  item regardless of result, render all three on every item card. This is NOT a fail-only panel; do not hide them behind FAIL.
+- [ ] **Static per-item criteria text (Welder).** Reference wording (e.g. "Min insulation resistance 5 MΩ") lives in the checklist
+  constant, is shown on the item card and written to the export, and is not user-editable or stored per result.
+- [ ] **Shared date helpers must use UTC.** `addMonthsISO` / `addYearsISO` parse `YYYY-MM-DD` as UTC; do month/year maths with `setUTC*`
+  (fixed with the Welder module: local `setMonth` lost a day across daylight saving). Any new next-due default must use them.
 - [ ] Live-patch modules (RCD, IEL, TAT) save on every change; form-based modules (SWB, IRT, Thermo, ELT) save on "Save".
   Either is fine — pick the reference's pattern and stay consistent inside the module.
 
