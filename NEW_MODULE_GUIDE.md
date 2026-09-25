@@ -83,7 +83,7 @@ Reference: **`ELTApp`** shell and nav; `SWBNavBtn`/`NavBtn`.
   Manual/Import toggle — **not** the nav.
 - [ ] **Registering a module** (all of these, in one change):
   1. `AppRoot`: add `if (module === "<key>") return React.createElement(<Mod>App, {onGoHome: ()=>setModule(null)});`
-  2. `AppRoot` card list: `{key, color, name, desc, onClick, icon}` (same shape as the others; icon = 18px line svg).
+  2. `AppRoot` `modules` array (the 2-column home grid — Calendar is NOT in it; it is the fixed bottom pill): `{key, color, name, desc, onClick, icon}` (same shape as the others). Icon = `mIcon(...)` with the `P`/`R`/`C` helpers: 24px viewBox, stroke 2, round caps, no fill, so it matches the set. Keep `desc` to one short line (~30 chars) so the two columns stay even.
   3. A `<MOD>_COLOR` constant (+ `_DIM`/`_BORDER` tints if the accent is used for tints).
   4. **Calendar**: add an entry to `CAL_TYPES` (label, colour, icon, period) **and** add `K_<MOD>_PROJECTS` to the site-list
      `Promise.all` in `CalendarApp` (ELT was missing from both — a real bug).

@@ -65,7 +65,7 @@ Do not change this pattern. There are known security vulnerabilities in the xlsx
 
 ## Module Map
 
-`AppRoot` is the home screen (near end of `App.jsx`). It renders module cards and routes to each module via a `module` state string. Each module is self-contained with its own state, views, and storage keys.
+`AppRoot` is the home screen (near end of `App.jsx`). It renders one card per audit module (8 in a 2-column grid: RCD, IEL, TAT, Thermo, SWB, IRT, ELT, Welder) and routes to each via a `module` state string. **Calendar is not a grid card** — it is opened from a fixed pill (`data-testid="calendar-pill"`, aria-label "Open Test Calendar") pinned bottom-centre of the home screen only, positioned with `env(safe-area-inset-bottom)`. The header block pads with `env(safe-area-inset-top)` (never a fixed pixel offset) so it clears the iPhone notch / Dynamic Island. Each module is self-contained with its own state, views, and storage keys.
 
 | Module Key | Function Name | Approx. Line | Colour | Purpose |
 |---|---|---|---|---|
