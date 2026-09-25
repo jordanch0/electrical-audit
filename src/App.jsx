@@ -3689,6 +3689,7 @@ const CAL_TYPES = [
   { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12})), period:"Variable"   },
   { key:"irt",         label:"IR Testing",             color:"#1d4ed8", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), period:"Variable"   },
   { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M9 18h6M10 22h4'}),React.createElement('path',{d:'M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z'})), period:"6-Monthly"  },
+  { key:"welder",      label:"Welder (VRD) Test",      color:"#be185d", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'})), period:"3-Monthly"  },
   { key:"other",       label:"Other / Custom",        color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
 ];
 
@@ -3866,7 +3867,7 @@ function CalendarApp({ onGoHome }) {
   React.useEffect(()=>{
     (async()=>{
       try{
-        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs, swbProjs, irtProjs, eltProjs] = await Promise.all([
+        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs, swbProjs, irtProjs, eltProjs, welderProjs] = await Promise.all([
           load(K_CAL_EVENTS,[]),
           load(K_PROJECTS,[]),
           load(K_IEL_PROJECTS,[]),
@@ -3875,12 +3876,13 @@ function CalendarApp({ onGoHome }) {
           load(K_SWB_PROJECTS,[]),
           load(K_IRT_PROJECTS,[]),
           load(K_ELT_PROJECTS,[]),
+          load(K_WELDER_PROJECTS,[]),
         ]);
         setEvents(ev);
         // Merge site names from all modules, deduplicate by name
         const names = new Set();
         const combined = [];
-        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[]), ...(swbProjs||[]), ...(irtProjs||[]), ...(eltProjs||[])].forEach(p=>{
+        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[]), ...(swbProjs||[]), ...(irtProjs||[]), ...(eltProjs||[]), ...(welderProjs||[])].forEach(p=>{
           if(p&&p.name&&!names.has(p.name)){ names.add(p.name); combined.push(p.name); }
         });
         setAllSites(combined);
@@ -9610,6 +9612,7 @@ function AppRoot() {
   if (module === "swb") return React.createElement(SWBApp, {onGoHome: ()=>setModule(null)});
   if (module === "irt") return React.createElement(IRTApp, {onGoHome: ()=>setModule(null)});
   if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
+  if (module === "welder") return React.createElement(WelderApp, {onGoHome: ()=>setModule(null)});
 
   const modules = [
     {key:"cal",color:"#4338ca",name:"TEST CALENDAR",desc:"Due dates & reminders",onClick:()=>setModule("cal"),
@@ -9628,6 +9631,8 @@ function AppRoot() {
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:"M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"}))},
     {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"AS 2293.2 test register",onClick:()=>setModule("elt"),
       icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M9 18h6M10 22h4"}),React.createElement('path',{d:"M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"}))},
+    {key:"welder",color:"#be185d",name:"WELDER (VRD)",desc:"Voltage reduction device checks",onClick:()=>setModule("welder"),
+      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"}))},
   ];
 
   return React.createElement('div', {
@@ -13155,6 +13160,534 @@ function welderRegisterRows(project, allResults, meta) {
       r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.defectId||"", r.responsibility||"", (raw.notes||"").trim(), r.priority||"", nextDue?fmtDate(nextDue):"",
     ]};
   });
+}
+
+
+// ── Welder UI ────────────────────────────────────────────────────────────────────────────────────
+const welderOverallLabel = o => o==="pass" ? "PASS" : o==="fail" ? "FAIL" : "UNTESTED";
+const welderSM = o => o==="untested" ? SM[STATUS.UNTESTED] : SM[o];
+const welderTitle = a => a.assetId || welderMachine(a) || "Unnamed welder";
+const welderSub = a => [a.location, a.assetId&&welderMachine(a) ? welderMachine(a) : "", a.serial&&`S/N ${a.serial}`].filter(Boolean).join(" · ");
+function WelderStatusChip({overall}) {
+  const sm = welderSM(overall);
+  return eltEl('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:overall==="untested"?11:11,fontWeight:800,textAlign:"center"}},overall==="untested"?"—":sm.label);
+}
+const welderMetaDefaults = m => ({auditor:"",testDate:new Date().toISOString().slice(0,10),instruments:"",...(m||{})});
+
+function WelderProjectListView({projects, allResults, onSelect, onAddProject, onDeleteProject}) {
+  const SS = swbStyles();
+  const [showAdd,setShowAdd] = React.useState(false);
+  const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const closeAdd = ()=>{setShowAdd(false);setVals({name:"",company:"",abn:"",licence:""});};
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{...SS.listTitle,marginTop:24}},"Sites")
+    ,projects.length===0&&!showAdd&&eltEl('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one below.")
+    ,projects.map(proj=>{
+      const s = welderSiteSummary(proj,allResults);
+      return eltEl('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
+        ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
+          ,eltEl('div',{style:{flex:1}}
+            ,eltEl('div',{style:SS.siteCardName},proj.name)
+            ,eltEl('div',{style:SS.siteCardSub},`${nw(s.total,"welder")} · ${s.tested} tested`)
+          )
+          ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
+            ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            ,eltEl('span',{style:SS.arrow},"›")
+          )
+        )
+        ,eltEl('div',{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}}
+          ,eltEl(DeleteButton,{onDelete:()=>onDeleteProject(proj.id),label:"Remove site?"})
+        )
+      );
+    })
+    ,showAdd
+      ?eltEl('div',{style:SS.addCard}
+        ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
+        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+          ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});closeAdd();}},"Add Site")
+          ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
+        )
+      )
+      :eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add Site")
+  );
+}
+
+function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAudit, onCompleteAudit, onReset}) {
+  const SS = swbStyles();
+  const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
+  const hasAssets = summary.total>0;
+  const dateBox = (val,ph)=>eltEl('div',{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},val?fmtDate(val):ph);
+  const overlay = (val,onChange)=>eltEl('input',{type:"date",value:val||"",onChange:e=>onChange(e.target.value),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}});
+  const ready = hasAuditor&&hasAssets;
+  return eltEl('div',{style:SS.homeWrap}
+    ,eltEl('div',{style:SS.siteTitle},project.name)
+    ,eltEl('div',{style:SS.siteSub},[project.company,project.abn&&`ABN ${project.abn}`,project.licence&&`Lic ${project.licence}`].filter(Boolean).join(" · "))
+    ,eltEl('div',{style:SS.metaCard}
+      ,eltEl('div',{style:{marginBottom:10}}
+        ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
+        ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
+        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+      )
+      ,eltEl('div',null
+        ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED (default for all welders)")
+        ,eltEl('div',{style:{position:"relative",marginTop:4}},dateBox(meta.testDate,"Select date…"),overlay(meta.testDate,nd=>{const autoPrev=meta.testDate?addMonthsISO(meta.testDate,WELDER_INTERVAL_MONTHS):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addMonthsISO(nd,WELDER_INTERVAL_MONTHS)}:{})});}))
+      )
+      ,eltEl('div',{style:{marginTop:8}}
+        ,eltEl('div',{style:SS.metaLabelText},"NEXT TEST DUE (default for all welders)")
+        ,eltEl('div',{style:{position:"relative",marginTop:4}},dateBox(meta.nextTestDate,"Not set"),overlay(meta.nextTestDate,v=>setMeta({nextTestDate:v})))
+      )
+      ,eltEl('div',{style:{marginTop:8}}
+        ,eltEl('div',{style:SS.metaLabelText},"TEST INSTRUMENTS (default for all welders)")
+        ,eltEl('input',{style:{...SS.metaInput,marginTop:4},value:meta.instruments||"",placeholder:"e.g. Fluke 1587 (S/N …), cal. due …",onChange:e=>setMeta({instruments:e.target.value})})
+      )
+    )
+    ,eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:14,padding:"14px",boxSizing:"border-box"}}
+      ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
+        ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Progress")
+        ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},summary.tested," / ",nw(summary.total,"welder")," tested")
+      )
+      ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+        ,eltEl('span',{style:{fontSize:11,color:WELDER_COLOR}},summary.pass," Pass")
+        ,summary.fail>0&&eltEl('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
+      )
+    )
+    ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No welders yet — add them in the Manage tab.")
+    ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:ready?WELDER_COLOR:"#f7f6f3",color:ready?"#fff":"#52525b",border:`2px solid ${ready?WELDER_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:ready?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>ready&&onStartAudit()},"Start / Continue Audit")
+    ,hasResults&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
+      ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
+      ,eltEl(CompleteAuditBtn,{color:WELDER_COLOR,label:"Complete Welder Audit",onComplete:onCompleteAudit})
+    )
+    ,eltEl(DeleteButton,{onDelete:onReset,label:"Reset all results?"})
+  );
+}
+
+function WelderAuditView({project, results, meta, onOpen}) {
+  const SS = swbStyles();
+  const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
+  const assets = project.assets||[];
+  const s = welderSiteSummary(project,results);
+  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
+      ,[["TESTED",s.tested,"#334155"],["PASS",s.pass,"#16a34a"],["FAIL",s.fail,"#dc2626"],[s.total===1?"WELDER":"WELDERS",s.total,"#92400e"]].map(([l,v,c])=>
+        eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
+    )
+    ,assets.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add them in the Manage tab.")
+    ,eltEl('div',{style:{display:"flex",flexDirection:"column",gap:6}}
+      ,assets.map(a=>{
+        const o = welderOverall(welderGetRes(results,project.id,a.id)); const sm = welderSM(o);
+        return eltEl('button',{key:a.id,style:{display:"flex",alignItems:"center",gap:12,background:"#f7f6f3",border:`1px solid ${o==="untested"?"#e4e4e7":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:()=>onOpen(a.id)}
+          ,eltEl(WelderStatusChip,{overall:o})
+          ,eltEl('div',{style:{flex:1,minWidth:0}}
+            ,eltEl('div',{style:{fontSize:14,fontWeight:600,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderTitle(a))
+            ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderSub(a))
+          )
+          ,eltEl('span',{style:{fontSize:14,color:"#52525b",flexShrink:0}},">")
+        );
+      })
+    )
+  );
+}
+
+function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) {
+  const SS = swbStyles();
+  const [r,setR] = React.useState(res);
+  const rRef = React.useRef(r); rRef.current = r;
+  const set = patch=>{ setR(prev=>({...prev,...patch})); onPatch(patch); };
+  const sum = welderSummary(r); const overall = sum.overall; const sm = welderSM(overall); const isFail = overall==="fail";
+  const rectOpts = (dropdowns&&dropdowns.rectified)||WELDER_DEFAULT_RECTIFIED;
+  const respOpts = (dropdowns&&dropdowns.responsibility)||WELDER_DEFAULT_RESPONSIBILITY;
+  // ★ defaults are stored when the asset becomes FAIL (derived at asset level)
+  useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
+  const patchItem = (key,patch)=>{ const items = {...(rRef.current.items||{}),[key]:{...welderItem(rRef.current,key),...patch}}; set({items}); };
+  const photoRef = React.useRef();
+  const setPhotos = photos=>set({photos});
+  const addPhotos = async e=>{
+    const files = Array.from(e.target.files||[]); e.target.value="";
+    if(!files.length) return;
+    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
+    setPhotos([...(rRef.current.photos||[]),...added]);
+  };
+  const removePhoto = id=>setPhotos((rRef.current.photos||[]).filter(p=>p.id!==id));
+  const ro = (lbl,val)=>eltEl('div',{key:lbl,style:{minWidth:0}}
+    ,eltEl('div',{style:{fontSize:9,color:"#6e6a66",letterSpacing:0.8,fontWeight:700}},lbl)
+    ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
+  const nextDue = meta.nextTestDate;
+  const box = (l,v,c)=>eltEl('div',{key:l,style:{flex:1,minWidth:56,textAlign:"center",background:"#f7f6f3",borderRadius:8,border:`1px solid ${c}33`,padding:"6px 2px"}}
+    ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:c}},v),eltEl('div',{style:{fontSize:9,color:"#6e6a66",fontWeight:700}},l));
+  return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
+    ,eltEl(ELTBackBtn,{onClick:onClose})
+    ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:10}}
+      ,eltEl('div',{style:{minWidth:0}}
+        ,eltEl('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},welderTitle(asset))
+        ,eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:3}},"VRD Welder Inspection & Audit Checklist")
+      )
+      ,eltEl('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800,flexShrink:0}},welderOverallLabel(overall))
+    )
+    // identity — edited in Manage, read-only here
+    ,eltEl('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 12px",marginBottom:12}}
+      ,ro("LOCATION",asset.location),ro("ASSET ID",asset.assetId),ro("BRAND",asset.brand),ro("MODEL",asset.model),ro("SERIAL NUMBER",asset.serial)
+    )
+    // per-audit fields, prefilled from Home and overridable
+    ,eltEl('div',{style:SS.modalField}
+      ,eltEl('label',{style:SS.modalLabel},"DATE TESTED")
+      ,eltEl('input',{style:SS.modalInput,type:"date",value:r.date||meta.testDate||"",onChange:e=>set({date:e.target.value})})
+    )
+    ,eltEl('div',{style:SS.modalField}
+      ,eltEl('label',{style:SS.modalLabel},"PREPARED BY")
+      ,eltEl('input',{style:SS.modalInput,type:"text",value:r.preparedBy||meta.auditor||"",onChange:e=>set({preparedBy:e.target.value})})
+    )
+    ,eltEl('div',{style:SS.modalField}
+      ,eltEl('label',{style:SS.modalLabel},"TEST INSTRUMENTS")
+      ,eltEl('input',{style:SS.modalInput,type:"text",value:r.instruments||meta.instruments||"",placeholder:"Instrument make / model / serial",onChange:e=>set({instruments:e.target.value})})
+    )
+    // live Audit Summary
+    ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"4px 0 8px"}},"AUDIT SUMMARY")
+    ,eltEl('div',{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}
+      ,box("TOTAL",sum.total,"#334155"),box("PASS",sum.pass,"#16a34a"),box("FAIL",sum.fail,"#dc2626"),box("N/A",sum.na,"#64748b"),box("SCORE",welderScoreLabel(sum.score),"#334155"),box("ACTIONS",sum.actions,"#92400e")
+    )
+    ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginBottom:14}},overall==="untested"?`Overall: Untested — ${nw(sum.untested,"item")} still to answer`:`Overall: ${welderOverallLabel(overall)}`)
+    // checklist
+    ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"CHECKLIST")
+    ,WELDER_CHECKLIST.map(({key,label,criteria},idx)=>{
+      const it = welderItem(r,key);
+      return eltEl('div',{key,style:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:12,padding:"10px 12px",marginBottom:8}}
+        ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},(idx+1)+". "+label)
+        ,eltEl('div',{style:{fontSize:11,color:"#52525b",margin:"2px 0 8px"}},criteria)
+        ,eltEl('div',{style:{display:"flex",gap:6,marginBottom:8}}
+          ,[["pass",STATUS.PASS],["fail",STATUS.FAIL],["na",STATUS.NA]].map(([v,s])=>{
+            const s2 = SM[s]; const active = it.result===v;
+            return eltEl('button',{key:v,type:"button",style:{flex:1,padding:"9px 0",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?s2.border:"#d4d4d8"}`,background:active?s2.bg:"#f7f6f3",color:active?s2.fg:"#52525b"},onClick:()=>patchItem(key,{result:active?"":v})},s2.label);
+          })
+        )
+        ,eltEl('input',{style:{...SS.modalInput,marginBottom:6},type:"text",value:it.value||"",placeholder:"Measured value / notes",onChange:e=>patchItem(key,{value:e.target.value})})
+        ,eltEl('input',{style:SS.modalInput,type:"text",value:it.action||"",placeholder:"Corrective action required",onChange:e=>patchItem(key,{action:e.target.value})})
+      );
+    })
+    // asset-level derived FAIL panel (before the comments box)
+    ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
+      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
+        ,eltEl(IELEditableDropdown,{options:rectOpts,value:r.rectified||rectOpts[0]||"",onChange:v=>set({rectified:v}),placeholder:"Select or type…"})
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"DEFECT ID")
+        ,eltEl('input',{style:SS.modalInput,type:"text",placeholder:"e.g. 74",value:r.defectId||"",onChange:e=>set({defectId:e.target.value})})
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"RESPONSIBILITY")
+        ,eltEl(IELEditableDropdown,{options:respOpts,value:r.responsibility||"",onChange:v=>set({responsibility:v}),placeholder:"Select or type…"})
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"PRIORITY")
+        ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
+        )
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"DATE RECTIFIED / SCHEDULED")
+        ,eltEl('input',{style:SS.modalInput,type:"date",value:r.rectifiedDate||"",onChange:e=>set({rectifiedDate:e.target.value})})
+      )
+    )
+    ,eltEl('div',{style:SS.modalField}
+      ,eltEl('label',{style:SS.modalLabel},"AUDITOR COMMENTS / OVERALL NOTES")
+      ,eltEl('textarea',{style:{...SS.modalInput,minHeight:72,resize:"vertical",fontFamily:"inherit"},value:r.notes||"",placeholder:"Observations, comments, recommendations…",onChange:e=>set({notes:e.target.value})})
+    )
+    ,eltEl('div',{style:{margin:"6px 0 16px"}}
+      ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
+      ,(r.photos||[]).map(p=>eltEl('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
+        ,eltEl('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,eltEl('div',{style:{flex:1,minWidth:0}})
+        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+      ))
+      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
+      ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:WELDER_COLOR,border:`1px dashed ${WELDER_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
+    )
+    ,nextDue&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
+      ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
+      ,eltEl('span',{style:{color:WELDER_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},fmtDate(nextDue))
+    )
+  );
+}
+
+function WelderReportView({project, results, meta}) {
+  const SS = swbStyles();
+  const rows = welderRegisterRows(project,results,meta);
+  const s = welderSiteSummary(project,results);
+  const th = {padding:"6px 8px",fontSize:10,fontWeight:800,color:"#18181b",background:"#f0eeea",border:"1px solid #d4d4d8",whiteSpace:"nowrap",textAlign:"left"};
+  const td = {padding:"6px 8px",fontSize:11,color:"#3f3f46",border:"1px solid #e4e4e7",verticalAlign:"top"};
+  const fails = rows.filter(x=>x.overall==="fail").map(({asset:a,res:raw,summary:sm})=>{
+    const r = defectGate(raw,true);
+    return {
+      title: welderTitle(a), path: welderSub(a), comment: (raw.notes||"").trim(), defectId: r.defectId,
+      lines: [`Failed: ${WELDER_CHECKLIST.filter(c=>welderItem(raw,c.key).result==="fail").map(c=>c.label).join(", ")}`],
+      badge: reportPriorityBadge(r.priority), responsibility: r.responsibility, rectified: r.rectified,
+    };
+  });
+  return eltEl('div',{style:SS.summaryWrap}
+    ,eltEl('div',{style:SS.summaryTitle},project.name)
+    ,project.company&&eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginTop:2,marginBottom:4}},project.company)
+    ,eltEl('div',{style:SS.summaryMeta},"WELDER (VRD) TEST REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
+    ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
+      ,eltEl('div',{style:{...SS.duePill,borderColor:WELDER_COLOR_BORDER,color:WELDER_COLOR,padding:"7px 12px"}},"Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
+    )
+    ,eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]})
+    ,eltEl(ReportFailedItems,{accent:WELDER_COLOR,items:fails})
+    ,fails.length===0&&eltEl(ReportNoDefects)
+    ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
+      ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:WELDER_COLOR,letterSpacing:0.8,marginBottom:8}},"WELDER REGISTER")
+      ,eltEl('div',{style:{overflowX:"auto",WebkitOverflowScrolling:"touch"}}
+        ,eltEl('table',{style:{borderCollapse:"collapse",minWidth:1100}}
+          ,eltEl('thead',null,eltEl('tr',null,WELDER_COLUMNS.map(c=>eltEl('th',{key:c,style:th},c))))
+          ,eltEl('tbody',null,rows.map(row=>eltEl('tr',{key:row.asset.id},row.cells.map((v,i)=>{
+            const pf = i===5&&(v==="Pass"||v==="Fail") ? {color:v==="Pass"?"#14532d":"#991b1b",fontWeight:800,background:v==="Pass"?"#dcfce7":"#fee2e2"} : {};
+            return eltEl('td',{key:i,style:{...td,...pf}},v);
+          }))))
+        )
+      )
+    )
+  );
+}
+
+function WelderAssetForm({initial, defaultLocation, submitLabel, onSave, onCancel}) {
+  const SS = swbStyles();
+  const [f,setF] = React.useState({location:defaultLocation||"",assetId:"",brand:"",model:"",serial:"",...initial});
+  const set = patch=>setF(prev=>({...prev,...patch}));
+  const field = (lbl,k,ph)=>eltEl('div',{style:{marginBottom:8}}
+    ,eltEl('div',{style:SS.metaLabelText},lbl)
+    ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:f[k]||"",placeholder:ph,onChange:e=>set({[k]:e.target.value})})
+  );
+  const trim = o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,typeof v==="string"?v.trim():v]));
+  return eltEl('div',{style:{...SS.addCard,border:`1px solid ${WELDER_COLOR_BORDER}`}}
+    ,field("LOCATION","location","e.g. ONR Workshop")
+    ,field("ASSET ID","assetId","e.g. W001")
+    ,field("BRAND","brand","e.g. Kemppi")
+    ,field("MODEL","model","e.g. MinarcMig Evo 200")
+    ,field("SERIAL NUMBER","serial","Serial number — “N/A” if none")
+    ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+      ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{const t=trim(f);if(!t.assetId&&!t.brand&&!t.model)return;onSave(t);}},submitLabel)
+      ,eltEl('button',{style:SS.ctaSecondary,onClick:onCancel},"Cancel")
+    )
+  );
+}
+
+function WelderManageView({project, onUpdateProject}) {
+  const SS = swbStyles();
+  const [editingProject,setEditingProject] = React.useState(false);
+  const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
+  const [adding,setAdding] = React.useState(false);
+  const [seed,setSeed] = React.useState({});
+  const [seedKey,setSeedKey] = React.useState(0);
+  const [editingId,setEditingId] = React.useState(null);
+  const assets = project.assets||[];
+  const upd = u=>onUpdateProject(u);
+  const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Manage: ",project.name)
+    ,editingProject
+      ?eltEl('div',{style:{...SS.addCard,marginBottom:16,border:`1px solid ${WELDER_COLOR_BORDER}`}}
+        ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:WELDER_COLOR,marginBottom:10}},"SITE DETAILS")
+        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+          ,eltEl('button',{style:{padding:"9px 14px",background:WELDER_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});setEditingProject(false);}},"Save")
+          ,eltEl('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
+        )
+      )
+      :eltEl('div',{style:{background:"#f7f6f3",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:12,padding:"12px 14px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}}
+        ,eltEl('div',null
+          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:"#18181b"}},project.name)
+          ,project.company&&eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginTop:2}},project.company)
+        )
+        ,editBtn(()=>{setVals({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});setEditingProject(true);})
+      )
+    ,eltEl('div',{style:{fontSize:11,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:10}},`WELDERS (${assets.length})`)
+    ,assets.length===0&&!adding&&eltEl('div',{style:{color:"#52525b",fontSize:13,marginBottom:12}},"No welders yet.")
+    ,assets.map(a=>editingId===a.id
+      ?eltEl(WelderAssetForm,{key:a.id,initial:a,submitLabel:"Save",onSave:f=>{upd({...project,assets:assets.map(x=>x.id===a.id?{...x,...f}:x)});setEditingId(null);},onCancel:()=>setEditingId(null)})
+      :eltEl('div',{key:a.id,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,marginBottom:6,minWidth:0}}
+        ,eltEl('div',{style:{flex:1,minWidth:0}}
+          ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderTitle(a))
+          ,eltEl('div',{style:{fontSize:11,color:"#52525b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderSub(a))
+        )
+        ,editBtn(()=>{setAdding(false);setEditingId(a.id);})
+        ,eltEl(DeleteButton,{onDelete:()=>upd({...project,assets:assets.filter(x=>x.id!==a.id)}),label:"Delete welder?",compact:true})
+      ))
+    ,adding
+      ?eltEl(WelderAssetForm,{key:seedKey,initial:seed,defaultLocation:project.name,submitLabel:"+ Add Welder",onSave:f=>{upd({...project,assets:[...assets,{...f,id:uid()}]});setSeed({location:f.location});setSeedKey(k=>k+1);},onCancel:()=>setAdding(false)})
+      :eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginTop:8},onClick:()=>{setEditingId(null);setAdding(true);}},"+ Add Welder")
+  );
+}
+
+function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
+  const SS = swbStyles();
+  const [expanded,setExpanded] = React.useState(null);
+  const snapProject = snap=>({...project,assets:snap.assets||project.assets||[]});
+  const snapStats = snap=>welderSiteSummary(snapProject(snap),{[project.id]:snap.results||{}});
+  if(viewSnap){
+    const snap = viewSnap; const s = snapStats(snap);
+    const rows = welderRegisterRows(snapProject(snap),{[project.id]:snap.results||{}},snap.meta||{});
+    return eltEl('div',{style:SS.listWrap}
+      ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}}
+        ,eltEl('div',{style:{flex:1}}
+          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:WELDER_COLOR}},"Welder Snapshot")
+          ,eltEl('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
+        )
+        ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
+      )
+      ,eltEl('div',{style:{marginBottom:14}},eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]}))
+      ,rows.map(row=>{
+        const sm = welderSM(row.overall);
+        return eltEl('div',{key:row.asset.id,style:{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}}
+          ,eltEl('div',{style:{width:48,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0}},row.overall==="untested"?"—":sm.label)
+          ,eltEl('div',{style:{flex:1,minWidth:0}}
+            ,eltEl('div',{style:{fontSize:13,color:"#3f3f46"}},welderTitle(row.asset))
+            ,row.cells[10]&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},row.cells[10])
+          )
+        );
+      })
+    );
+  }
+  return eltEl('div',{style:SS.listWrap}
+    ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Audit History")
+    ,history.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No archived audits yet. Use “Complete Welder Audit” on the Home tab.")
+    ,history.map(snap=>{
+      const s = snapStats(snap);
+      return eltEl('div',{key:snap.id,style:{...SS.siteCard,flexDirection:"column",padding:0,marginBottom:10,overflow:"hidden"}}
+        ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
+          ,eltEl('div',{style:{flex:1}}
+            ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
+              ,eltEl('span',{style:{fontSize:13,fontWeight:800,color:WELDER_COLOR}},"Welder Audit")
+              ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            )
+            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
+            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
+              ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.tested," tested")
+              ,eltEl('span',{style:{fontSize:11,color:"#16a34a"}},s.pass," Pass")
+              ,eltEl('span',{style:{fontSize:11,color:"#dc2626"}},s.fail," Fail")
+            )
+          )
+          ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?WELDER_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
+        )
+        ,expanded===snap.id&&eltEl('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
+          ,eltEl('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
+            ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},"View Results")
+            ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b"},onClick:()=>onExportSnap(snap)},"Export")
+            ,eltEl(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn,color:WELDER_COLOR})
+            ,eltEl(DeleteButton,{onDelete:()=>onDelete(snap.id)})
+          )
+        )
+      );
+    })
+  );
+}
+
+// Export is added in Stage 3; until then History's Export button is a no-op stub replaced by exportWelderExcel.
+function WelderApp({ onGoHome }) {
+  const [projects,      setProjects]      = React.useState([]);
+  const [allResults,    setAllResults]    = React.useState({});
+  const [allMeta,       setAllMeta]       = React.useState({});
+  const [history,       setHistory]       = React.useState([]);
+  const [loaded,        setLoaded]        = React.useState(false);
+  const [activeProject, setActiveProject] = React.useState(null);
+  const [viewSnap,      setViewSnap]      = React.useState(null);
+  const [view,          setView]          = React.useState("projects");
+  const [activeAssetId, setActiveAssetId] = React.useState(null);
+  const [dropdowns, setDropdowns] = React.useState(WELDER_DEFAULT_DROPDOWNS);
+  const mainRef = React.useRef(null);
+  React.useLayoutEffect(()=>{ if(mainRef.current) mainRef.current.scrollTop=0; },[view,activeAssetId]);
+
+  React.useEffect(()=>{
+    (async()=>{
+      try{const [p,r,m,h,dd]=await Promise.all([load(K_WELDER_PROJECTS,[]),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),load(K_WELDER_HISTORY,[]),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});}
+      finally{setLoaded(true);}
+    })();
+  },[]);
+  React.useEffect(()=>{ if(loaded) save(K_WELDER_PROJECTS,projects); },[projects,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_WELDER_RESULTS,allResults); },[allResults,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_WELDER_META,allMeta); },[allMeta,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_WELDER_HISTORY,history); },[history,loaded]);
+  React.useEffect(()=>{ if(loaded) save(K_WELDER_DROPDOWNS,dropdowns); },[dropdowns,loaded]);
+
+  const project = projects.find(p=>p.id===activeProject);
+  const _m = welderMetaDefaults(allMeta[activeProject]);
+  const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,WELDER_INTERVAL_MONTHS)};
+  const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const asset = project&&(project.assets||[]).find(a=>a.id===activeAssetId);
+  const today = ()=>new Date().toISOString().slice(0,10);
+
+  const patchAsset = (assetId,patch)=>setAllResults(prev=>{
+    const site = prev[activeProject]||{};
+    return {...prev,[activeProject]:{...site,[assetId]:{...welderGetRes(prev,activeProject,assetId),...patch}}};
+  });
+  const archiveAudit = ()=>{
+    const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),assets:JSON.parse(JSON.stringify((project&&project.assets)||[])),meta:{...meta}};
+    setHistory(prev=>[snap,...prev].slice(0,100));
+  };
+  const clearSiteResults = ()=>{
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+  };
+  const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
+  const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
+  const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
+
+  if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${WELDER_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
+
+  const SS = swbStyles();
+  const summary = project?welderSiteSummary(project,allResults):{total:0,pass:0,fail:0,untested:0,tested:0};
+  const hasResults = !!project && (project.assets||[]).some(a=>{const r=welderGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||WELDER_CHECKLIST.some(c=>welderItem(r,c.key).result);});
+  const goBack = ()=>{
+    if(viewSnap){setViewSnap(null);return;}
+    if(view==="asset") setView("audit");
+    else if(view==="audit") goHome();
+    else if(["manage","report","history","dropdowns"].includes(view)) goHome();
+    else goProjects();
+  };
+  const exportSnap = snap=>{
+    if(typeof exportWelderExcel==="function") exportWelderExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{});
+  };
+  const navBtn = (icon,label,active,onClick)=>eltEl(SWBNavBtn,{icon,label,active,onClick,color:"#334155"});
+
+  return eltEl('div',{style:SS.root}
+    ,eltEl('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #f0eeea',background:'#f0eeea',flexShrink:0}}
+      ,eltEl('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
+        ,eltEl('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
+          ,view!=="projects"&&eltEl('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,alignSelf:'flex-start',marginBottom:10,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:goBack}
+            ,eltEl('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},eltEl('polyline',{points:"15 18 9 12 15 6"}))
+            ,eltEl('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Back")
+          )
+          ,eltEl('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Welder (VRD) Testing")
+          ,eltEl('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},(project&&project.name)||"")
+        )
+        ,eltEl('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
+          ,eltEl('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},eltEl('rect',{x:3,y:3,width:7,height:7,rx:1}),eltEl('rect',{x:14,y:3,width:7,height:7,rx:1}),eltEl('rect',{x:3,y:14,width:7,height:7,rx:1}),eltEl('rect',{x:14,y:14,width:7,height:7,rx:1}))
+          ,eltEl('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Modules")
+        )
+      )
+      ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${WELDER_COLOR}, transparent 70%)`,opacity:0.5}})
+    )
+    ,eltEl('div',{style:SS.main,ref:mainRef}
+      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:clearSiteResults})
+      ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
+      ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
+      ,view==="report"&&project&&eltEl(WelderReportView,{project,results:allResults,meta})
+      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns,setDropdowns,onBack:goHome,lists:WELDER_DROPDOWN_LISTS,hint:"These lists feed the Welder defect dropdowns. Tap ★ to move an option to the top.",showDefault:true})
+      ,view==="history"&&project&&eltEl(WelderHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:exportSnap,onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+    )
+    ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
+      ,navBtn(NAV_ICON_HOME,"Home",view==="home",goHome)
+      ,navBtn(NAV_ICON_AUDIT,"Audit",["audit","asset"].includes(view),goAudit)
+      ,navBtn(NAV_ICON_REPORT,"Report",view==="report",()=>{setViewSnap(null);setView("report");})
+      ,navBtn(NAV_ICON_HISTORY,"History",view==="history",()=>{setViewSnap(null);setView("history");})
+      ,navBtn(NAV_ICON_MANAGE,"Manage",view==="manage",()=>{setViewSnap(null);setView("manage");})
+      ,navBtn(NAV_ICON_DROPDOWNS,"Dropdowns",view==="dropdowns",()=>{setViewSnap(null);setView("dropdowns");})
+    )
+  );
 }
 
 export { addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,

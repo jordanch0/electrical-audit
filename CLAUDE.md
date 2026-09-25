@@ -77,6 +77,7 @@ Do not change this pattern. There are known security vulnerabilities in the xlsx
 | `"swb"` | `SWBApp` | ~10177 | `#a855f7` purple | Switchboard Audit — 11-point visual inspection checklist |
 | `"irt"` | `IRTApp` | ~11769 | `#60a5fa` blue | Insulation Resistance Testing — IR testing of cables, motors |
 | `"elt"` | `ELTApp` | ~10977 | `#0f766e` teal | Emergency Lighting Testing (AS 2293.2:2019) — flat asset register, 4 Pass/Fail sub-checks per fitting, single-table Excel export |
+| `"welder"` | `WelderApp` | ~11800 | `#be185d` rose | Welder (VRD) Testing — flat welder register, fixed 12-item checklist per welder (Pass/Fail/N/A + measured value + corrective action), derived per-welder Overall/Score/Actions, Summary Register table on the Report tab, per-welder Excel export from History (ExcelJS). Overall = Untested until all 12 items answered; import deferred |
 
 ### Common Module Pattern
 Every module follows the same internal structure:

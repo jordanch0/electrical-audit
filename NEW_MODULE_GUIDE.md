@@ -325,3 +325,8 @@ Run `npm test` and `npm run build` after every change. Vitest + jsdom, driving t
 | **TAT** date | Item page shows next-test-due as ISO `2026-12-23` | Known unfixed bug, not a standard |
 
 _Keep this guide current: when a standard changes, change it here in the same commit._
+
+### Welder (VRD) — module-specific notes
+- Overall is UNTESTED until every checklist item has any result (Pass / Fail / N/A); a Fail among blanks does not decide it. The asset-level FAIL panel, Failed Items and export defect columns therefore only appear once all items are answered.
+- Actions Required counts FAIL items with a non-empty Corrective Action only.
+- Identity fields (Location, Brand, Model, Serial, Asset ID) are edited in Manage and read-only on the welder page; per-audit fields (date, prepared by, instruments) prefill from Home and can be overridden.

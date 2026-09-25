@@ -16,6 +16,7 @@ const MODULES = [
   { name: 'Thermo',  card: 'THERMOGRAPHIC', key: 'thermo-projects-v1',  option: 'Site Manager' },
   { name: 'SWB',     card: 'SWITCHBOARD',   key: 'swb-projects-v1',     option: 'Site Manager' },
   { name: 'IRT',     card: 'IR TESTING',    key: 'irt-projects-v1',     option: 'Site Manager' },
+  { name: 'Welder',  card: 'WELDER (VRD)',  key: 'welder-projects-v1',  option: 'Site Manager' },
 ];
 
 const resetIn = el => within(el).queryAllByRole('button', { name: /^Reset( to defaults)?$/ })[0];
