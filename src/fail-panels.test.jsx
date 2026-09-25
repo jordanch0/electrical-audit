@@ -25,13 +25,13 @@ async function openSwbFail(user) {
 }
 
 describe('SWB fail panel', () => {
-  it('retains defect data when the item is saved as PASS (same as every other module)', async () => {
+  it('retains defect data when the item flips to PASS (live auto-save, same as every other module)', async () => {
     const user = userEvent.setup();
     await openSwbFail(user);
     await user.type(screen.getByPlaceholderText('e.g. 74'), '74');
     await user.click(screen.getByRole('button', { name: 'PASS' }));
     expect(screen.queryByText(FAIL_HEADING)).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(ls('swb-results-v1').s1.a1.b1.enclosure.status).toBe('pass')); // written immediately, no Save button
     const saved = ls('swb-results-v1').s1.a1.b1.enclosure;
     expect(saved.status).toBe('pass');
     expect(saved.defectId).toBe('74'); // previously cleared to ""

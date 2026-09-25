@@ -49,11 +49,11 @@ describe('ELT photo -> export through the real UI', () => {
     await user.click(await screen.findByText('SE Door'));
     await addPhoto(user);
     for (let i = 0; i < 4; i++) await user.click(screen.getAllByRole('button', { name: 'PASS' })[i]);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page
     // fitting 2: photo only, no checks at all
     await user.click(await screen.findByText('SW Roof'));
     await addPhoto(user);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page
 
     // both photos are in stored state
     await waitFor(() => {
@@ -93,7 +93,7 @@ describe('ELT photo -> export through the real UI', () => {
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('SE Door'));
     await addPhoto(user);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
     expect(await screen.findByRole('button', { name: /Complete Emergency Lighting Audit/ })).toBeInTheDocument();
   });

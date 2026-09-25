@@ -64,7 +64,6 @@ describe('ELT complete-audit / history round trip', () => {
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('SE Door'));
     await user.click(screen.getAllByRole('button', { name: 'FAIL' })[0]);
-    await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(ls('elt-results-v1').p1.a1.visual).toBe('fail'));
     expect(JSON.stringify(ls('elt-history-v2'))).toBe(snapshotBefore);
     expect(ls('elt-history-v2')[0].results.a1.visual).toBe('pass');
@@ -81,7 +80,6 @@ describe('ELT fail→pass flip keeps hidden fail fields', () => {
     expect(screen.getByText(/FAIL — DEFECT DETAILS/)).toBeInTheDocument();
     await user.click(screen.getAllByRole('button', { name: 'PASS' })[0]); // Visual Inspection back to pass
     expect(screen.queryByText(/FAIL — DEFECT DETAILS/)).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(ls('elt-results-v1').p1.a2.visual).toBe('pass'));
     const saved = ls('elt-results-v1').p1.a2;

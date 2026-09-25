@@ -10442,19 +10442,25 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
   const item=swbGetItem(results,project.id,area.id,board.id,itemKey);
   const label=(SWB_CHECKLIST.find(c=>c.key===itemKey)||{}).label||itemKey;
   const guidance=SWB_GUIDANCE[itemKey]||{pass:"",fail:""};
-  const [status,      setStatusL]     = React.useState(item.status||SWB_STATUS.UNTESTED);
-  const [defectId,    setDefectId]    = React.useState(item.defectId||"");
-  const [comment,     setComment]     = React.useState(item.comment||"");
-  const [risk,        setRisk]        = React.useState(item.risk||"");
-  const [rectified,   setRectified]   = React.useState(item.rectified||"");
-  const [rectDate,    setRectDate]    = React.useState(item.rectifiedDate||"");
-  const [resp,        setResp]        = React.useState(item.responsibility||"");
+  // Live auto-save (the app-wide standard): each setter updates the page AND writes the field straight to storage (patchItem merges).
+  const [status,      setStatusLocal]   = React.useState(item.status||SWB_STATUS.UNTESTED);
+  const [defectId,    setDefectIdLocal] = React.useState(item.defectId||"");
+  const [comment,     setCommentLocal]  = React.useState(item.comment||"");
+  const [risk,        setRiskLocal]     = React.useState(item.risk||"");
+  const [rectified,   setRectifiedLocal]= React.useState(item.rectified||"");
+  const [resp,        setRespLocal]     = React.useState(item.responsibility||"");
+  const put=patch=>onPatch(itemKey,patch);
+  const setStatusL=v=>{setStatusLocal(v);put({status:v});};
+  const setDefectId=v=>{setDefectIdLocal(v);put({defectId:v});};
+  const setComment=v=>{setCommentLocal(v);put({comment:v});};
+  const setRisk=v=>{setRiskLocal(v);put({risk:v});};
+  const setRectified=v=>{setRectifiedLocal(v);put({rectified:v});};
+  const setResp=v=>{setRespLocal(v);put({responsibility:v});};
   const SS=swbStyles();const sm=SWB_SM[status];const isFail=status===SWB_STATUS.FAIL;
   const rectOptions=(dropdowns&&dropdowns.rectified)||SWB_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||SWB_DEFAULT_RESPONSIBILITY;
   useFailDefaults(isFail,{rectified,responsibility:resp},{rectified:rectOptions[0],responsibility:respOptions[0]},p=>{if(p.rectified)setRectified(p.rectified);if(p.responsibility)setResp(p.responsibility);});
 
-  const doSave=()=>{onPatch(itemKey,{status,defectId,comment,risk,rectified,rectifiedDate:rectDate,responsibility:resp});onClose();}; // defect data is retained when the item leaves FAIL (same as every other module)
 
   return React.createElement('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
       ,onClose&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#6e6a66"},onClick:onClose},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
@@ -10518,7 +10524,7 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         ,React.createElement('label',{style:SS.modalLabel},"COMMENTS")
         ,React.createElement('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:comment,placeholder:"Observations, recommendations…",onChange:e=>setComment(e.target.value)})
       )
-      ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:4,background:"#7e22ce",color:"#fff"},onClick:doSave},"Save")
+      
   );
 }
 
@@ -11701,11 +11707,12 @@ function ELTAuditView({project, results, meta, summary, onOpen}) {
 function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) {
   const SS = swbStyles();
   const [r,setR] = React.useState(res);
-  const set = patch=>setR(prev=>({...prev,...patch}));
+  // Live auto-save (the app-wide standard): every change is written straight to storage — there is no draft and no Save button.
+  const set = patch=>{ setR(prev=>({...prev,...patch})); onPatch(patch); };
   const overall = eltOverall(r); const sm = SM[overall]; const isFail = overall===STATUS.FAIL;
   const photoRef = React.useRef();
   const rRef = React.useRef(r); rRef.current = r;
-  const setPhotos = photos=>{set({photos});onPatch({photos});};
+  const setPhotos = photos=>set({photos});
   const addPhotos = async e=>{
     const files = Array.from(e.target.files||[]); e.target.value="";
     if(!files.length) return;
@@ -11767,7 +11774,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
       ,eltEl('span',{style:{color:ELT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},fmtDate(meta.nextTestDate))
     )
-    ,eltEl('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",background:ELT_COLOR,color:"#fff"},onClick:()=>{onPatch(r);onClose();}},"Save")
+    
   );
 }
 
@@ -12196,11 +12203,15 @@ function IRTMegInput({value,onChange,label}){
 // ─── Item test page ────────────────────────────────────────────────────────
 function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnDismissed,onDismissWarn,onPatch,onBack,onShowGuide}){
   const existing=irtGetItem(results,project.id,area.id,panel.id,itemId);
-  const [form,setForm]=React.useState({...existing,readings:{...(existing.readings||{})}});
+  // Live auto-save (the app-wide standard): every change is written straight to storage. `status` is stored exactly as the user set
+  // it — "untested" means AUTO-DETECT from the readings (all IRT readers already derive it), so it is never frozen by a save.
+  const [form,setFormState]=React.useState({...existing,readings:{...(existing.readings||{})}});
+  const formRef=React.useRef(form); formRef.current=form;
+  const commit=next=>{formRef.current=next;setFormState(next);onPatch(area.id,panel.id,itemId,next);};
   const [showPP,setShowPP]=React.useState(IRT_PHASE_PHASE.some(p=>(existing.readings||{})[p.key]));
   const SS=irtStyles();
-  const pf=f=>setForm(x=>({...x,...f}));
-  const setReading=(key,val)=>setForm(x=>({...x,readings:{...x.readings,[key]:val}}));
+  const pf=f=>commit({...formRef.current,...f});
+  const setReading=(key,val)=>commit({...formRef.current,readings:{...formRef.current.readings,[key]:val}});
   const autoSt=irtAutoStatus(form.readings);
   const effectiveSt=form.status==="untested"?autoSt:form.status;
   const sm=IRT_SM[effectiveSt]||IRT_SM.untested;
@@ -12208,7 +12219,6 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
   const rectOptions=(dropdowns&&dropdowns.rectified)||IRT_DEFAULT_RECTIFIED;
   const respOptions=(dropdowns&&dropdowns.responsibility)||IRT_DEFAULT_RESPONSIBILITY;
   useFailDefaults(isFail,form,{rectified:rectOptions[0],responsibility:respOptions[0]},pf);
-  const doSave=()=>{const toSave={...form,status:effectiveSt};onPatch(area.id,panel.id,itemId,toSave);onBack();};
   if(!warnDismissed)return React.createElement("div",{style:{padding:"16px"}},
     React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:16}},React.createElement("div",null,React.createElement("div",{style:{fontSize:18,fontWeight:800,color:"#18181b"}},itemName),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:1}},panel.name," \u00b7 ",area.name))),
     React.createElement(IRTWarningBanner,{onDismiss:onDismissWarn})
@@ -12286,7 +12296,6 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
       React.createElement("label",{style:SS.modalLabel},"COMMENTS"),
       React.createElement("textarea",{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:form.notes||"",placeholder:"Observations, recommendations\u2026",onChange:e=>pf({notes:e.target.value})})
     ),
-    React.createElement("button",{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:4,background:IRT_COLOR,color:"#fff"},onClick:doSave},"Save")
   );
 }
 
@@ -12829,7 +12838,7 @@ function IRTApp({onGoHome}){
   const area=project&&(project.areas||[]).find(a=>a.id===activeAreaId)||null;
   const panel=area&&(area.panels||[]).find(p=>p.id===activePanelId)||null;
   const summary=project?irtSiteSummary(allResults,project):{total:0,pass:0,fail:0,untested:0};
-  const patchItem=(areaId,panelId,itemId,data)=>{const pid=activeProject;const next={...allResults,[pid]:{...(allResults[pid]||{}),[areaId]:{...((allResults[pid]||{})[areaId]||{}),[panelId]:{...(((allResults[pid]||{})[areaId]||{})[panelId]||{}),[itemId]:data}}}};setAllResults(next);};
+  const patchItem=(areaId,panelId,itemId,data)=>{const pid=activeProject;setAllResults(prev=>({...prev,[pid]:{...(prev[pid]||{}),[areaId]:{...((prev[pid]||{})[areaId]||{}),[panelId]:{...(((prev[pid]||{})[areaId]||{})[panelId]||{}),[itemId]:data}}}}));};
   const archiveAudit=()=>{const snap={id:irtUid(),projectId:activeProject,projectName:project?.name||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};setHistory(prev=>[snap,...prev].slice(0,100));};
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
