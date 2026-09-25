@@ -10040,33 +10040,53 @@ async function exportSWBExcel(project, allResults, meta) {
 }
 
 // ─── Excel import ─────────────────────────────────────────────────────────
+// Header rule (same as ELT / Welder — never a fuzzy "contains" match, that misread a site called "Wash Area Switchboard" as a
+// header): a row is the header only if one cell is EXACTLY "Area" and another is exactly a Board heading. Works for the Register
+// sheet of a current export (Area | Board | …), the blank template (Area | Board / Panel Name) and any older layout with those
+// two columns. Site name: strip exactly " — Switchboard / Enclosure Audit" (or "— Switchboard Audit"), never split on hyphens.
+const swbNormHeader = c => String(c==null?"":c).toLowerCase().replace(/\s*\/\s*/g," / ").replace(/\s+/g," ").trim();
+const SWB_BOARD_HEADINGS = ["board","board / panel name","board / panel","panel","panel name","board name"];
+const SWB_IMPORT_PLACEHOLDERS = { company:["companyname","sparkcheck"], abn:["12 345 678 901"], licence:["123456c"] };
 function parseSWBExcel(data) {
   try {
-    const ws=data.Sheets[data.SheetNames[0]];
-    const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
-    // ── Site name from row 0, company/ABN/licence from row 1 ──────────
+    const sheetNames = (data && data.SheetNames) || [];
+    if (!sheetNames.length) return null;
+    const sheetRows = n => XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:""});
+    // header row (exact headings) — try every sheet in order (a current export's Register is first)
+    let rows=null, hi=-1;
+    for (const n of sheetNames) {
+      const r = sheetRows(n);
+      for (let i=0;i<Math.min(r.length,10);i++) {
+        if (r[i].some(c=>String(c).length>60)) continue; // title / instruction text is never a header row
+        const norm = r[i].map(swbNormHeader);
+        if (norm.includes("area") && norm.some(c=>SWB_BOARD_HEADINGS.includes(c))) { rows=r; hi=i; break; }
+      }
+      if (rows) break;
+    }
+    const legacy = !rows;
+    if (legacy) rows = sheetRows(sheetNames[0]);
+    // ── Site name from row 0 (exact-suffix strip), company / ABN / licence from row 1 ──
     let siteName="",company="",abn="",licence="";
-    if(rows[0]&&rows[0][0]){const t=String(rows[0][0]).trim();siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+    if(rows[0]&&rows[0][0]){
+      const t=String(rows[0][0]).trim();
+      if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit\s*$/i,"").trim();
+    }
     if(rows[1]&&rows[1][0]){
-      const parts=String(rows[1][0]).split(/\s*\|\s*/);
-      parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});
+      const p=parseCompanyRow(rows[1][0]);
+      const ph=(v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,""))||list.includes(String(v).toLowerCase());
+      // older exports wrote "<company> Electrical Audit Software Pty. Ltd." — drop that fixed suffix
+      const co=String(p.company||"").replace(/\s*Electrical Audit Software Pty\.? Ltd\.?\s*$/i,"").trim();
+      company=ph(co,SWB_IMPORT_PLACEHOLDERS.company)?"":co;
+      abn=ph(p.abn,SWB_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
+      licence=ph(p.licence,SWB_IMPORT_PLACEHOLDERS.licence)?"":p.licence;
     }
     const CHECKLIST_LABELS=new Set(SWB_CHECKLIST.map(({label})=>label.toLowerCase()));
     const STATUS_WORDS=new Set(["pass","fail","n/a","na","untested"]);
     const areaMap={};
-    // ── Template format: header row with BOTH an Area column and a Board/Panel column ──
-    let hi=-1;
-    for(let i=0;i<Math.min(rows.length,10);i++){
-      if(rows[i].some(c=>String(c).length>60)) continue;
-      const r=rows[i].map(c=>String(c).toLowerCase().trim());
-      const hasArea=r.some(c=>c.includes("area"));
-      const hasBoard=r.some(c=>c.includes("board")||c.includes("panel"));
-      if(hasArea&&hasBoard){hi=i;break;}
-    }
-    if(hi>=0){
-      const header=rows[hi].map(c=>String(c).toLowerCase().trim());
-      const aC=header.findIndex(h=>h.includes("area"));
-      const bC=header.findIndex(h=>h.includes("board")||h.includes("panel"));
+    if(!legacy){
+      const header=rows[hi].map(swbNormHeader);
+      const aC=header.indexOf("area");
+      const bC=header.findIndex(h=>SWB_BOARD_HEADINGS.includes(h));
       for(let i=hi+1;i<rows.length;i++){
         const row=rows[i];
         const aRaw=String(row[aC]||"").trim();
@@ -10077,10 +10097,9 @@ function parseSWBExcel(data) {
         if(bRaw) areaMap[aKey].add(bRaw);
       }
     } else {
-      // ── No template header found — this may be a previously EXPORTED SWB report
-      // being re-imported. That format has merged "Area › Board" title rows followed
-      // by one row per checklist test item (label + Pass/Fail/etc). Only the merged
-      // title rows define areas/boards — item rows must never become boards.
+      // ── No Area / Board headings: an OLD single-sheet export being re-imported. That format has merged "Area › Board" title
+      // rows followed by one row per checklist item (label + Pass/Fail/etc). Only the merged title rows define areas/boards —
+      // item rows must never become boards.
       for(let i=0;i<rows.length;i++){
         const row=rows[i];
         const first=String(row[0]||"").trim();
