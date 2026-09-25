@@ -10903,6 +10903,74 @@ function swbStyles() {
 
 
 
+// ─────────────────────────────────────────────────────────────────────────
+// AREA GROUPING (ELT + Welder) — Site → Area → Assets, two levels (no panel / board layer).
+// The old flat shape was  site.assets:[{…, location}]  (results keyed results[siteId][assetId]).
+// The new shape is        site.areas:[{id, name, assets:[{…}]}]   — the asset's own `location` string is PROMOTED to the area
+// name and dropped from the asset (single source of truth). Results stay keyed by asset id and asset ids are preserved, so
+// nothing about results, photos or meta needs to move.
+// Migration rules (all pure functions, none mutate their input):
+//   • effective location = trimmed `location`, or the site name when blank (that is what the old export already wrote)
+//   • locations are grouped case- and whitespace-insensitively, so "Hearse Road", "hearse  road " and a blank (site named
+//     "Hearse Road") all land in ONE area — never duplicate areas with the same name
+//   • areas appear in order of first appearance; assets keep their relative order; the area name is the first-seen spelling
+//   • area ids are deterministic (`area-<slug>`, numeric suffix on slug collision) so re-running gives identical output
+//   • a site that already has `areas` is returned untouched (idempotent)
+// `loadVersioned` reads the NEW key; only if it is absent does it read the OLD key and migrate. The old key is never written
+// or deleted, so it stays a complete backup and the migration is reversible.
+const areaKey = s => String(s==null?"":s).trim().replace(/\s+/g," ").toLowerCase();
+function groupAssetsIntoAreas(assets, siteName) {
+  const list = Array.isArray(assets) ? assets : [];
+  const fallback = String(siteName==null?"":siteName).trim() || "Site";
+  const areas = [], byKey = new Map(), usedIds = new Set();
+  list.forEach(a => {
+    if (!a || typeof a !== "object") return;
+    const raw = String(a.location==null?"":a.location).trim();
+    const name = raw || fallback;
+    const key = areaKey(name);
+    let area = byKey.get(key);
+    if (!area) {
+      const slug = key.replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,30) || "area";
+      let id = "area-"+slug, n = 2;
+      while (usedIds.has(id)) id = "area-"+slug+"-"+(n++);
+      usedIds.add(id);
+      area = { id, name, assets:[] };
+      byKey.set(key, area); areas.push(area);
+    }
+    const { location, ...rest } = a;
+    area.assets.push(rest);
+  });
+  return areas;
+}
+function migrateProjectToAreas(project) {
+  if (!project || typeof project !== "object") return project;
+  if (Array.isArray(project.areas)) return project; // already migrated
+  const { assets, ...rest } = project;
+  return { ...rest, areas: groupAssetsIntoAreas(assets, project.name) };
+}
+function migrateHistoryToAreas(snap) {
+  if (!snap || typeof snap !== "object") return snap;
+  if (Array.isArray(snap.areas)) return snap;
+  const { assets, ...rest } = snap;
+  return { ...rest, areas: groupAssetsIntoAreas(assets, snap.projectName) };
+}
+const migrateProjectList = list => Array.isArray(list) ? list.map(migrateProjectToAreas) : list;
+const migrateHistoryList = list => Array.isArray(list) ? list.map(migrateHistoryToAreas) : list;
+async function loadVersioned(newKey, oldKey, fallback, migrate) {
+  const cur = await load(newKey, null);
+  if (cur !== null) return cur;
+  const old = await load(oldKey, null);
+  if (old === null) return fallback;
+  return migrate(old);
+}
+// Read path: the flat asset list in AREA ORDER (areas in order, assets in order within each), each asset annotated with its
+// area's name as `location` and its `areaId` — so summaries, reports and exports iterate areas without knowing the shape.
+function areaAssets(container) {
+  const out = [];
+  ((container && container.areas) || []).forEach(area => (area.assets||[]).forEach(a => out.push({ ...a, location: area.name, areaId: area.id })));
+  return out;
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // ELT MODULE — Emergency Lighting Testing (AS 2293.2:2019)
 // Structure: Site → flat list of assets (fittings). Export is a single flat register table.
@@ -13995,6 +14063,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;
