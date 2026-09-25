@@ -221,4 +221,28 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     await screen.findByText(/DANGER/);
     expect(container.scrollTop).toBe(0);
   });
+
+  it('ELT: opening a fitting resets the shared scroll container', async () => {
+    const user = userEvent.setup();
+    const project = {
+      id: 'site-1', name: 'ELT Site', company: '', abn: '', licence: '',
+      assets: ['Door 1', 'Door 2', 'Door 3'].map((n, i) => ({ id: 'a' + i, location: 'ELT Site', assetLocation: n, assetId: '', type: 'Emergency Exit Sign', maintained: 'Maintained', fitting: 'X' })),
+    };
+    localStorage.setItem('elt-projects-v1', JSON.stringify([project]));
+    localStorage.setItem('elt-meta-v1', JSON.stringify({ 'site-1': { auditor: 'Jordan', testDate: '2026-09-21', nextTestDate: '2027-03-21' } }));
+
+    render(<AppRoot />);
+    await user.click(await screen.findByText('EMERGENCY LIGHTING'));
+    await user.click(await screen.findByText('ELT Site', { selector: 'div' }));
+    await user.click(await screen.findByRole('button', { name: /^Audit$/ }));
+
+    const lastItem = await screen.findByText('Door 3');
+    const container = findScrollContainer(lastItem);
+    container.scrollTop = 500;
+
+    await user.click(lastItem);
+
+    await screen.findByText('Visual Inspection');
+    expect(container.scrollTop).toBe(0);
+  });
 });

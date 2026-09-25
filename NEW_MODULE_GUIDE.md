@@ -276,8 +276,12 @@ Run `npm test` and `npm run build` after every change. Vitest + jsdom, driving t
   images, so `Image`/canvas are stubbed to return the real JPEG fixtures in `src/test/jpeg-fixtures.js`).
 - [ ] Standards tests to extend when you add a module: nav order (`elt-dropdowns.test.jsx`), fail-panel parity + behaviour
   (`fail-panel-parity.test.jsx`, `fail-panels.test.jsx`), reset/delete confirm (`reset-confirm.test.jsx`), report structure
-  (`report-tab.test.jsx`), export gating (`export-defect-gating.test.js`), item-detail scroll reset (`scroll-reset.test.jsx` — every
-  module must open an item at the top).
+  (`report-tab.test.jsx`), export gating (`export-defect-gating.test.js`), and item-detail scroll reset
+  (`scroll-reset.test.jsx`). The scroll rule: the module's main scroll container (`<mod>MainRef`) is reset with
+  `React.useLayoutEffect(() => { … ref.current.scrollTop = 0 }, [view, activeItemId])` when an item opens, otherwise the detail
+  view inherits the list's scroll position. The test now covers all seven audit modules (RCD, IEL, TAT, Thermo, SWB, IRT, ELT;
+  Calendar has no item view) — **add a case for every new module**. (ELT had the fix but no test until it was checked: the new
+  case fails with the reset line removed and passes with it.)
 - [ ] A test that asserts a **safety property** (a confirm appears, defect data isn't exported, an import is rejected) must be
   checked to fail without the fix, not just pass with it.
 - [ ] **Real browser verification before calling a module done** — the Chrome extension or Playwright against the dev server
