@@ -25,7 +25,7 @@ describe('icon registry: the home cards and the Calendar share the exact same ic
 
   it('every home-screen card renders the registry icon for its module', () => {
     render(<AppRoot />);
-    const cards = { 'RCD TESTING': 'rcd', 'IEL TESTING': 'iel', 'TEST & TAG': 'tat', 'THERMOGRAPHIC': 'thermo', 'SWITCHBOARD': 'swb', 'IR TESTING': 'irt', 'EMERGENCY LIGHTING': 'elt', 'WELDER TESTING': 'welder' };
+    const cards = { 'RCD TESTING': 'rcd', 'IEL TESTING': 'iel', 'TEST & TAG': 'tat', 'THERMOGRAPHIC': 'thermo', 'SWITCHBOARD': 'swb', 'INSULATION RESISTANCE TESTING': 'irt', 'EMERGENCY LIGHTING': 'elt', 'WELDER TESTING': 'welder' };
     Object.entries(cards).forEach(([name, key]) => {
       const svg = screen.getByText(name).closest('button').querySelector('svg');
       expect(unsize(svg.outerHTML)).toBe(domOf(moduleIcon(key)));
@@ -71,7 +71,7 @@ describe('IRT header title and card descriptions', () => {
     localStorage.setItem('irt-projects-v1', JSON.stringify([{ id: 'i1', name: 'IRT Site', company: '', abn: '', licence: '', areas: [] }]));
     const user = userEvent.setup();
     render(<AppRoot />);
-    await user.click(screen.getByText('IR TESTING'));                                  // card unchanged
+    await user.click(screen.getByText('INSULATION RESISTANCE TESTING'));                                  // card unchanged
     expect(await screen.findByText('Insulation Resistance Testing')).toBeInTheDocument();   // landing (site list)
     await user.click(await screen.findByText('IRT Site'));
     expect(screen.getByText('Insulation Resistance Testing')).toBeInTheDocument();     // and inside the module
@@ -99,5 +99,29 @@ describe('Calendar month grid: every row is the same height', () => {
     const cells = [...grid.children];
     expect(cells.length).toBe(2 + 30);                                               // 2 leading placeholders + 30 days
     expect(new Set(cells.map(c => c.style.height))).toEqual(new Set(['44px']));      // was 52px placeholders vs 44px dates
+  });
+});
+
+describe('IRT header sits exactly where every other module\'s does; full name on the card and in the Calendar', () => {
+  // #root (index.html) carries padding-top: env(safe-area-inset-top). A position:fixed / inset:0 module container ignores that
+  // padding, which put IRT's header higher than the others on a notched iPhone. Every module must be an ordinary in-flow flex child.
+  const fixedAncestors = el => { const out = []; for (let n = el; n && n !== document.body; n = n.parentElement) { if ((n.style && n.style.position) === 'fixed') out.push(n); } return out; };
+  it.each([
+    ['SWITCHBOARD', 'swb-projects-v1', 'Switchboard'],
+    ['INSULATION RESISTANCE TESTING', 'irt-projects-v1', 'Insulation Resistance Testing'],
+  ])('%s: no position:fixed container between #root and the header', async (card, key, title) => {
+    localStorage.setItem(key, JSON.stringify([{ id: 's1', name: 'Site S', company: '', abn: '', licence: '', areas: [] }]));
+    const user = userEvent.setup();
+    render(<AppRoot />);
+    await user.click(screen.getByText(card));
+    const heading = await screen.findByText(title);
+    expect(fixedAncestors(heading)).toEqual([]);
+  });
+
+  it('the home card and the Calendar event type both carry the full name (no "IR Testing" left as a module label)', () => {
+    render(<AppRoot />);
+    expect(screen.getByText('INSULATION RESISTANCE TESTING')).toBeInTheDocument();
+    expect(screen.queryByText('IR TESTING')).not.toBeInTheDocument();
+    expect(CAL_TYPES.find(t => t.key === 'irt').label).toBe('Insulation Resistance Testing');
   });
 });

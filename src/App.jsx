@@ -3712,7 +3712,7 @@ const CAL_TYPES = [
   { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:moduleIcon("tat",15), period:"Variable"   },
   { key:"thermo",      label:"Thermographic Testing",  color:"#c2410c", icon:moduleIcon("thermo",15), period:"Variable"   },
   { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:moduleIcon("swb",15), period:"Variable"   },
-  { key:"irt",         label:"IR Testing",             color:"#1d4ed8", icon:moduleIcon("irt",15), period:"Variable"   },
+  { key:"irt",         label:"Insulation Resistance Testing",             color:"#1d4ed8", icon:moduleIcon("irt",15), period:"Variable"   },
   { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:moduleIcon("elt",15), period:"6-Monthly"  },
   { key:"welder",      label:"Welder Test",      color:"#be185d", icon:moduleIcon("welder",15), period:"3-Monthly"  },
   { key:"other",       label:"Other / Custom",        color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
@@ -9651,7 +9651,7 @@ function AppRoot() {
       icon:moduleIcon("thermo")},
     {key:"swb",color:"#7e22ce",name:"SWITCHBOARD",desc:"11-point switchboard inspection",onClick:()=>setModule("swb"),
       icon:moduleIcon("swb")},
-    {key:"irt",color:"#1d4ed8",name:"IR TESTING",desc:"Cable and motor insulation tests",onClick:()=>setModule("irt"),
+    {key:"irt",color:"#1d4ed8",name:"INSULATION RESISTANCE TESTING",desc:"Cable and motor insulation tests",onClick:()=>setModule("irt"),
       icon:moduleIcon("irt")},
     {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"Emergency lighting checks",onClick:()=>setModule("elt"),
       icon:moduleIcon("elt")},
@@ -12019,12 +12019,12 @@ function irtSiteSummary(results,project){let total=0,pass=0,fail=0,na=0,untested
 
 function irtStyles(){
   return{
-    root:{display:"flex",flexDirection:"column",flex:1,background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",height:"100%",overflow:"hidden"},
+    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
     topbar:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"max(env(safe-area-inset-top,12px),12px) 16px 10px",flexShrink:0,background:"#e8e6e2",borderBottom:"2px solid #93c5fd",zIndex:10},
     topbarLeft:{display:"flex",alignItems:"center",gap:10},topbarRight:{display:"flex",alignItems:"center",gap:8},
     backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     appTitle:{fontSize:15,fontWeight:800,color:"#18181b",letterSpacing:0.5},appSub:{fontSize:11,letterSpacing:0.3},
-    main:{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"},
+    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
     bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
     brandBlock:{textAlign:"center",borderBottom:`2px solid ${IRT_COLOR}`,paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -12875,7 +12875,7 @@ function IRTApp({onGoHome}){
   const isAudit=["audit","area","panel","item"].includes(view);
   const SS=irtStyles();
   if(!loaded)return React.createElement("div",{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement("div",{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${IRT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
-  return React.createElement("div",{style:{...SS.root,position:"fixed",inset:0}},
+  return React.createElement("div",{style:SS.root},
     // Top bar
     React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #f0eeea',background:'#f0eeea',flexShrink:0}},
       React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}},

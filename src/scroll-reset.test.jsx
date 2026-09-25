@@ -205,7 +205,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     localStorage.setItem('irt-projects-v1', JSON.stringify([project]));
 
     render(<AppRoot />);
-    await user.click(await screen.findByText('IR TESTING'));
+    await user.click(await screen.findByText('INSULATION RESISTANCE TESTING'));
     await user.click(await screen.findByText('IRT Site'));
     await user.type(await screen.findByPlaceholderText('Enter name to begin audit…'), 'Jordan');
     await user.click(await screen.findByText(/Start \/ Continue Audit/));

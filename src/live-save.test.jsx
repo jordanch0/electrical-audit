@@ -70,7 +70,7 @@ describe('IRT item page: live auto-save with auto status that is never frozen', 
   async function open(user) {
     seed();
     render(<AppRoot />);
-    await user.click(await screen.findByText('IR TESTING'));
+    await user.click(await screen.findByText('INSULATION RESISTANCE TESTING'));
     await user.click(await screen.findByText('IRT Site'));
     await user.type(await screen.findByPlaceholderText('Enter name to begin audit…'), 'Jordan');
     await user.click(await screen.findByText(/Start \/ Continue Audit/));

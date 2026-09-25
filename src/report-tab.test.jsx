@@ -39,7 +39,7 @@ const SEEDS = {
     S('swb-meta-v1', meta('s'));
     S('swb-results-v1', { s: { a: { b: { ventilation: { status: 'fail', ...DEFECT, risk: 'H', comment: 'Blocked' } } } } });
   } },
-  IRT: { card: 'IR TESTING', site: 'Site N', seed: () => {
+  IRT: { card: 'INSULATION RESISTANCE TESTING', site: 'Site N', seed: () => {
     S('irt-projects-v1', [{ ...base('n', 'Site N'), areas: [{ id: 'a', name: 'Pump House', panels: [{ id: 'p', name: 'MCC1', items: ['x'], itemNames: { x: 'Motor 2' } }] }] }]);
     S('irt-meta-v1', meta('n'));
     S('irt-results-v1', { n: { a: { p: { x: { status: 'fail', testVoltage: '500V', readings: { L1E: '<1' }, notes: 'Low IR', ...DEFECT } } } } });

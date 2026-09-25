@@ -15,7 +15,7 @@ const MODULES = [
   { name: 'TAT',     card: 'TEST & TAG',    key: 'tat-projects-v1',     option: 'Drill' },
   { name: 'Thermo',  card: 'THERMOGRAPHIC', key: 'thermo-projects-v1',  option: 'Site Manager' },
   { name: 'SWB',     card: 'SWITCHBOARD',   key: 'swb-projects-v1',     option: 'Site Manager' },
-  { name: 'IRT',     card: 'IR TESTING',    key: 'irt-projects-v1',     option: 'Site Manager' },
+  { name: 'IRT',     card: 'INSULATION RESISTANCE TESTING',    key: 'irt-projects-v1',     option: 'Site Manager' },
   { name: 'Welder',  card: 'WELDER TESTING',  key: 'welder-projects-v1',  option: 'Site Manager' },
 ];
 
