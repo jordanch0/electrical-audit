@@ -317,7 +317,7 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add bugs here before starting a Claude Code session. Format: module · symptom · suspected cause.
 
 ```
-[ ] Intermittent test failure: one failure seen in a 145-test run, not reproduced in 5 reruns, name not captured — if it recurs, capture the test name before investigating.
+[x] FIXED 2026-09-25 — intermittent test failure identified: `src/welder-export.test.jsx` > "Welder photo -> export through the real UI" > "photos on a fully tested welder and on an untested welder reach their own sheets intact" hit vitest's default 5000ms timeout when the whole suite ran in parallel (it drives ~30 UI clicks plus an ExcelJS build; passes alone in ~3s, and the full suite passed with --testTimeout=30000). Fix: a 30000ms timeout on that one test only (not global). Verified 145/145 across 3 isolated runs, 2 parallel full runs and 1 serial full run. If another test ever times out at 5000ms, give it the same per-test timeout rather than raising the global one.
 ```
 
 ---

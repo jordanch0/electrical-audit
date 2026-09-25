@@ -142,5 +142,5 @@ describe('Welder photo -> export through the real UI', () => {
     expect(wb.getWorksheet('W002').getImages()).toHaveLength(1);
     expect(V(wb.getWorksheet('Register').getCell('F6'))).toBe('Pass');
     expect(V(wb.getWorksheet('Register').getCell('F7'))).toBe(''); // W002 untested: photo only
-  });
+  }, 30000); // long real-UI flow (~30 clicks + ExcelJS build); the default 5s limit timed out when files run in parallel
 });
