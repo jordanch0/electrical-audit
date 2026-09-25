@@ -51,11 +51,19 @@ describe('default Type list', () => {
 });
 
 describe('upgradeEltDropdowns — only an EXACT legacy default list is replaced', () => {
-  const stored = types => ({ types, failReasons: FAIL_REASONS, actions: ACTIONS });
-  it('exact old defaults -> the new four; the other lists are untouched', () => {
-    const out = upgradeEltDropdowns(stored([...OLD_TYPES]));
-    expect(out.types).toEqual(NEW_TYPES);
-    expect(out.failReasons).toEqual(FAIL_REASONS); expect(out.actions).toEqual(ACTIONS);
+  const stored = types => ({ types });
+  const storedLegacy = types => ({ types, failReasons: FAIL_REASONS, actions: ACTIONS });
+  it('exact old defaults -> the new four', () => {
+    expect(upgradeEltDropdowns(stored([...OLD_TYPES])).types).toEqual(NEW_TYPES);
+  });
+  it('the retired Failure Reason / Action Taken lists are dropped; an UNTOUCHED Action Taken list is replaced by the standard Rectified defaults (no rectified key stored)', () => {
+    const out = upgradeEltDropdowns(storedLegacy([...NEW_TYPES]));
+    expect(out).toEqual({ types: NEW_TYPES });
+  });
+  it('a CUSTOMISED Action Taken list carries over as the Rectified list; a customised Failure Reason list is simply retired', () => {
+    const out = upgradeEltDropdowns({ types: NEW_TYPES, failReasons: ['Only One'], actions: [...ACTIONS, 'Replaced Unit'] });
+    expect(out).toEqual({ types: NEW_TYPES, rectified: [...ACTIONS, 'Replaced Unit'] });
+    expect(upgradeEltDropdowns({ ...out, actions: ['x'] }).rectified).toEqual(out.rectified);   // an existing rectified list is never overwritten
   });
   it.each([
     ['an added option', [...OLD_TYPES, 'Bulkhead Light']],
@@ -77,7 +85,7 @@ describe('upgradeEltDropdowns — only an EXACT legacy default list is replaced'
   });
   it('through the real app: an untouched stored list is upgraded and re-saved; a customised one is left exactly as it was', async () => {
     seedSite();
-    localStorage.setItem('elt-dropdowns-v1', JSON.stringify(stored([...OLD_TYPES])));
+    localStorage.setItem('elt-dropdowns-v1', JSON.stringify(storedLegacy([...OLD_TYPES])));
     const user = userEvent.setup();
     await openElt(user, 'Dropdowns');
     NEW_TYPES.forEach(t => expect(screen.getByText(t)).toBeInTheDocument());
@@ -95,7 +103,7 @@ describe('upgradeEltDropdowns — only an EXACT legacy default list is replaced'
 describe('Reset restores the four new names', () => {
   it('a customised Type list resets to the new defaults (not the old ones)', async () => {
     seedSite();
-    localStorage.setItem('elt-dropdowns-v1', JSON.stringify({ types: ['Foo', 'Bar'], failReasons: FAIL_REASONS, actions: ACTIONS }));
+    localStorage.setItem('elt-dropdowns-v1', JSON.stringify({ types: ['Foo', 'Bar'] }));
     const user = userEvent.setup();
     await openElt(user, 'Dropdowns');
     await user.click(screen.getAllByRole('button', { name: 'Reset' })[0]);              // the Type list is first
@@ -107,16 +115,17 @@ describe('Reset restores the four new names', () => {
 });
 
 describe('existing fittings keep their stored type', () => {
-  it('a fitting typed with an old default still displays, edits and exports exactly as stored', async () => {
+  it('a fitting typed with the retired "Emergency Exit Sign" shows ONE exit-sign option (Exit Signs, selected), while its stored type and export stay exactly as stored', async () => {
     seedSite('Emergency Exit Sign');
     const user = userEvent.setup();
     await openElt(user, 'Audit');
-    expect(await screen.findByText(/Emergency Exit Sign/)).toBeInTheDocument();          // Audit row
+    expect(await screen.findByText(/Emergency Exit Sign/)).toBeInTheDocument();          // Audit row still shows the stored text
     await user.click(screen.getByRole('button', { name: 'Manage' }));
     await user.click(await screen.findByRole('button', { name: /Edit SE Door/ }));
     const select = screen.getByRole('combobox');
-    expect(select).toHaveValue('Emergency Exit Sign');                                    // kept visible although no longer a default
-    expect(optionsOf(select)).toEqual(['— Select', ...NEW_TYPES, 'Emergency Exit Sign', 'Other']);
+    expect(select).toHaveValue('Exit Signs');                                             // display only
+    expect(optionsOf(select)).toEqual(['— Select', ...NEW_TYPES, 'Other']);
+    expect(optionsOf(select).filter(o => /exit sign/i.test(o))).toHaveLength(1);          // the regression: never two exit-sign options
     cleanup();
     const proj = migrateProjectToAreas({ id: 'p1', name: 'Site A', assets: [{ id: 'a1', location: 'Site A', assetLocation: 'SE Door', assetId: '', type: 'Emergency Exit Sign', typeOther: '', maintained: 'Maintained', fitting: '' }] });
     const rows = eltRegisterRows(proj, { p1: { a1: { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' } } }, {});

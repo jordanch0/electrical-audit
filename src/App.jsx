@@ -9901,7 +9901,7 @@ function swbArrayBufferToBase64(buf){
 // ── SWB export: Register + one full sheet per board (same physical structure as Welder's export) ──
 // Register = one row per board (summary). Each board then has its own sheet: header, Audit Summary (incl. Score), the 11-item
 // checklist and that board's photos (one per row). Header blocks are plain (no fill / font / border), like ELT and Welder.
-const SWB_REGISTER_COLUMNS = ["Area","Board","Date Tested","Pass/Fail","Pass","Fail","N/A","Untested","Score","Highest Risk","Failed Items","Next Audit Due"];
+const SWB_REGISTER_COLUMNS = ["Area","Board","Date Tested","Pass/Fail","Pass","Fail","N/A","Untested","Score","Highest Risk","Failed Items","Rectified / Scheduled","Defect ID","Responsibility","Priority (L,M,H,U)","Next Audit Due"];
 // Board overall — the SAME rule as Welder's asset overall: untested until all 11 items are answered (Pass / Fail / N/A in any
 // mix); then any Fail -> fail, otherwise pass.
 const swbBoardOverall = bs => bs.untested > 0 ? "untested" : bs.fail > 0 ? "fail" : "pass";
@@ -9923,9 +9923,12 @@ function swbRegisterRows(project, allResults, meta) {
     const fails = SWB_CHECKLIST.filter(({key}) => swbGetStatus(res, project.id, area.id, board.id, key) === SWB_STATUS.FAIL);
     const risks = fails.map(({key}) => swbGetItem(res, project.id, area.id, board.id, key).risk).filter(Boolean);
     const top = SWB_RISK_ORDER.find(r => risks.includes(r));
+    // Defect columns are always present; values come from the FAIL items only (defectGateByStatus is redundant here — fails are already the FAIL items)
+    const failItems = fails.map(({key}) => defectGateByStatus(swbGetItem(res, project.id, area.id, board.id, key)));
+    const joined = k => [...new Set(failItems.map(it => String(it[k] || "").trim()).filter(Boolean))].join("; ");
     rows.push({ area, board, summary: bs, overall, cells: [
       area.name, board.name, overall !== "untested" && testDate ? fmtDate(testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
-      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), nextDue,
+      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), joined("priority"), nextDue,
     ]});
   }));
   return rows;
@@ -9959,7 +9962,7 @@ async function exportSWBExcel(project, allResults, meta) {
   // ── Register ──
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st) => { const c = ws.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
-  const cols = "ABCDEFGHIJKL".split(""); const n = cols.length;
+  const cols = "ABCDEFGHIJKLMNOP".split(""); const n = cols.length;
   setCell('A1',`${sName} — Switchboard / Enclosure Audit`);
   setCell('A2',coLine);
   setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
@@ -9974,12 +9977,12 @@ async function exportSWBExcel(project, allResults, meta) {
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci) => {
       let st = base;
-      if ([2,4,5,6,7,8,9,11].includes(ci)) st = ctr;
+      if ([2,4,5,6,7,8,9,13,14,15].includes(ci)) st = ctr;
       if (ci===3) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
       setCell(cols[ci]+r,v,st);
     });
   });
-  [22,26,13,11,7,7,7,10,9,13,44,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
+  [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
 
   // ── One sheet per board ──
   const used = new Set();
@@ -10916,7 +10919,8 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
   return React.createElement('div',{style:SS.listWrap}
     ,React.createElement('div',{style:{...SS.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
     ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},hint || "Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
-    ,LISTS.map(({key,label,defaults,color,desc})=>{
+    ,LISTS.map(({key,label,defaults,color,desc,noDefault})=>{
+      const showDef=showDefault&&!noDefault; // a list can opt out of the ★ DEFAULT concept (ELT Type starts blank)
       const items=(dropdowns&&dropdowns[key])||defaults;
       const newVal=newVals[key]||"";
       return React.createElement('div',{key,style:{...SS.addCard,marginBottom:14,border:"1px solid #93c5fd"}}
@@ -10929,11 +10933,11 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
         )
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:220,overflowY:"auto"}}
           ,items.map((item,i)=>{
-            const isFirst=i===0;const isDefault=showDefault&&isFirst;
+            const isFirst=i===0;const isDefault=showDef&&isFirst;
             return React.createElement('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
-              ,!isFirst&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:showDefault?"Set as default":"Move to top",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
+              ,!isFirst&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:showDef?"Set as default":"Move to top",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
               ,React.createElement(DeleteButton,{onDelete:()=>removeItem(key,item),label:"Delete?"})
             );
           })
@@ -11270,32 +11274,56 @@ const ELT_DEFAULT_TYPES        = ["Spitfire","Batten Lights","Exit Signs","Flood
 // any customised list (added / removed / re-ordered) is left untouched. Idempotent; stored fittings keep whatever type they have.
 const ELT_LEGACY_DEFAULT_TYPES = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)"];
 const sameList = (a,b) => Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((x,i)=>x===b[i]);
+// The fail panel now uses the app-wide standard lists (Rectified / Scheduled + Responsibility). The pre-standard ELT lists
+// (failReasons / actions) are retired: a CUSTOMISED old Action Taken list carries over as the Rectified list (an untouched default
+// list is replaced by the standard defaults); the old Failure Reason list is dropped. Idempotent.
+const ELT_LEGACY_DEFAULT_ACTIONS = ["Given to Site Contact","Repaired On-Site","Scheduled for Repair"];
 function upgradeEltDropdowns(dd) {
   if (!dd || typeof dd !== "object") return dd;
-  return sameList(dd.types, ELT_LEGACY_DEFAULT_TYPES) ? { ...dd, types: [...ELT_DEFAULT_TYPES] } : dd;
+  const upTypes = sameList(dd.types, ELT_LEGACY_DEFAULT_TYPES);
+  if (!("failReasons" in dd) && !("actions" in dd) && !upTypes) return dd; // nothing to do: same object back
+  const { failReasons:_fr, actions, ...rest } = dd;
+  const out = upTypes ? { ...rest, types: [...ELT_DEFAULT_TYPES] } : rest;
+  if (!Array.isArray(out.rectified) && Array.isArray(actions) && actions.length && !sameList(actions, ELT_LEGACY_DEFAULT_ACTIONS)) out.rectified = [...actions];
+  return out;
 }
 const ELT_MAINTAINED   = ["Maintained","Non-Maintained"];
-const ELT_DEFAULT_FAIL_REASONS = ["Lamp Failure","Battery Failure","No Power","Damaged/Broken","Switch Failure"];
-const ELT_DEFAULT_ACTIONS      = ["Given to Site Contact","Repaired On-Site","Scheduled for Repair"];
-const ELT_DEFAULT_DROPDOWNS = {types:ELT_DEFAULT_TYPES, failReasons:ELT_DEFAULT_FAIL_REASONS, actions:ELT_DEFAULT_ACTIONS};
+const ELT_DEFAULT_DROPDOWNS = {types:ELT_DEFAULT_TYPES, responsibility:[...DEFAULT_RESPONSIBILITY], rectified:[...DEFAULT_RECTIFIED]};
 const ELT_DROPDOWN_LISTS = [
-  {key:"types",       label:"TYPE",           defaults:ELT_DEFAULT_TYPES,        desc:"Options in the Type dropdown when adding or editing a fitting"},
-  {key:"failReasons", label:"FAILURE REASON", defaults:ELT_DEFAULT_FAIL_REASONS, desc:"Options in the Failure Reason dropdown on FAIL fittings"},
-  {key:"actions",     label:"ACTION TAKEN",   defaults:ELT_DEFAULT_ACTIONS,      desc:"Options in the Action Taken dropdown on FAIL fittings"},
+  {key:"types",          label:"TYPE",                         defaults:ELT_DEFAULT_TYPES,                 desc:"Options in the Type dropdown when adding or editing a fitting", noDefault:true},
+  {key:"responsibility", label:"RESPONSIBILITY",               defaults:ELT_DEFAULT_DROPDOWNS.responsibility, desc:"Options shown when logging a failed fitting"},
+  {key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION", defaults:ELT_DEFAULT_DROPDOWNS.rectified,      desc:"Actions available when rectifying a defect"},
 ];
-const ELT_DROPDOWN_HINT = "These lists feed the ELT dropdowns. \"Other\" (with a free-text box) is always available and is not listed here. Tap ★ to move an option to the top.";
+const ELT_DROPDOWN_HINT = "These lists feed the ELT dropdowns. \"Other\" (with a free-text box) is always available for Type and is not listed here. Tap ★ to move an option to the top; the top Responsibility / Rectified option is pre-filled when a fitting fails.";
 const ELT_CHECKS       = [
   {key:"visual",    label:"Visual Inspection"},
   {key:"discharge", label:"90-Minute Discharge Test"},
   {key:"switching", label:"Automatic Switching Test"},
   {key:"charging",  label:"Charging Circuit Test"},
 ];
-const ELT_COLUMNS = ["Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Score","Next Test Due","Notes"];
+const ELT_COLUMNS = ["Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Score","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)","Next Test Due"];
 const eltEl = React.createElement;
 
+const eltOtherText = (v, o) => v==="Other" ? ((o||"").trim()||"Other") : (v||"");
+// READ-TIME normalisation of pre-standard fail data (failReason / failReasonOther / action / actionOther). Stored data is never
+// rewritten by a read: the old Action Taken becomes `rectified` (unless one is already set), the old Failure Reason is folded into
+// the front of Notes as "Failure reason: X." and the old keys are dropped from the returned object — so the first save of that
+// fitting persists the standard shape, and nothing is ever folded twice. Records without the old keys are returned unchanged.
+// Only a FAIL record is folded: on a passing / untested one the old fields are retained data, hidden exactly as before (they must
+// never show in a passing row's notes) and fold the moment that fitting is FAIL again.
+function eltNormaliseRes(r) {
+  if (!r) return {};
+  if (!("failReason" in r || "failReasonOther" in r || "action" in r || "actionOther" in r)) return r;
+  if (eltOverall(r) !== STATUS.FAIL) return r;
+  const { failReason, failReasonOther, action, actionOther, ...rest } = r;
+  const reason = eltOtherText(failReason, failReasonOther), act = eltOtherText(action, actionOther);
+  if (act && !(rest.rectified||"").trim()) rest.rectified = act;
+  if (reason) rest.notes = `Failure reason: ${reason}.` + ((rest.notes||"").trim() ? ` ${rest.notes.trim()}` : "");
+  return rest;
+}
 function eltGetRes(results, pid, aid) {
   const r = results && results[pid] && results[pid][aid];
-  return {visual:"",discharge:"",switching:"",charging:"",failReason:"",failReasonOther:"",action:"",actionOther:"",notes:"",photos:[],...(r||{})};
+  return {visual:"",discharge:"",switching:"",charging:"",notes:"",photos:[],rectified:"",rectifiedDate:"",defectId:"",responsibility:"",priority:"",...eltNormaliseRes(r)};
 }
 // PASS only when all 4 sub-checks pass; FAIL as soon as any fails; otherwise not yet tested.
 function eltOverall(r) {
@@ -11309,16 +11337,6 @@ function eltFittingSummary(r) {
   const v = ELT_CHECKS.map(c=>r[c.key]);
   const pass = v.filter(x=>x===STATUS.PASS).length, fail = v.filter(x=>x===STATUS.FAIL).length, total = v.length;
   return { total, pass, fail, untested: total-pass-fail, score: checklistScore(pass, total) };
-}
-const eltOtherText = (v, o) => v==="Other" ? ((o||"").trim()||"Other") : (v||"");
-// Failure Reason + Action Taken + Notes combined into one string — export time only.
-function eltExportNotes(r) {
-  const notes = (r.notes||"").trim();
-  if (eltOverall(r)!==STATUS.FAIL) return notes;
-  const reason = eltOtherText(r.failReason, r.failReasonOther);
-  const action = eltOtherText(r.action, r.actionOther);
-  const head = reason && action ? `${reason} — ${action}` : (reason||action);
-  return head ? (notes ? `${head}. ${notes}` : head) : notes;
 }
 const eltTypeLabel = a => a.type==="Other" ? ((a.typeOther||"").trim()||"Other") : (a.type||"");
 const eltPF = v => v===STATUS.PASS?"Pass":v===STATUS.FAIL?"Fail":"";
@@ -11336,12 +11354,14 @@ function eltRegisterRows(project, allResults, meta) {
   return areaAssets(project).map(a=>{
     const r = eltGetRes(results, project.id, a.id);
     return {asset:a, res:r, overall:eltOverall(r)};
-  }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:r,overall})=>{
+  }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:raw,overall})=>{
+    const r = defectGate(raw, overall===STATUS.FAIL); // defect details are retained after a fitting leaves FAIL — only FAIL rows write them
     const date = (meta&&meta.testDate) || "";
     const nextDue = (meta&&meta.nextTestDate) || "";
-    return {asset:a, res:r, overall, cells:[
+    return {asset:a, res:raw, overall, cells:[
       a.location||project.name||"", a.assetLocation||"", a.assetId||"", eltTypeLabel(a), a.maintained||"", a.fitting||"",
-      date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(r[c.key])), eltPF(overall), scoreLabel(eltFittingSummary(r).score), nextDue?fmtDate(nextDue):"", eltExportNotes(r),
+      date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(raw[c.key])), eltPF(overall), scoreLabel(eltFittingSummary(raw).score),
+      r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.defectId||"", r.responsibility||"", (raw.notes||"").trim(), r.priority||"", nextDue?fmtDate(nextDue):"",
     ]};
   });
 }
@@ -11350,7 +11370,7 @@ async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-  const cols = "ABCDEFGHIJKLMNO".split(""); const n = cols.length;
+  const cols = "ABCDEFGHIJKLMNOPQRST".split(""); const n = ELT_COLUMNS.length;
   const merges = [];
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
@@ -11376,14 +11396,14 @@ async function exportELTExcel(project, allResults, meta) {
     const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
     row.cells.forEach((v,ci)=>{
       let st = base;
-      if (ci>=6 && ci<=10 || ci===12 || ci===13) st = ctr;
+      if ((ci>=6 && ci<=10) || ci===12 || ci===14 || ci===15 || ci===18 || ci===19) st = ctr;
       if (ci>=7 && ci<=10 && v==="Fail") st = failSt;
       if (ci===11) st = v==="Fail" ? failSt : passSt;
       setCell(cols[ci]+r,v,st);
     });
   });
   merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  [22,18,14,26,16,26,12,12,14,14,14,10,9,12,44].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  [22,18,14,26,16,26,12,12,14,14,14,10,9,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
   // (the register itself only lists tested fittings).
@@ -11414,12 +11434,15 @@ async function exportELTExcel(project, allResults, meta) {
   deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
 
-function ELTSelectOther({options, value, other, onChange, placeholder}) {
+// A retired default type that means the same as a current default: shown as the current one, stored value left untouched.
+const ELT_TYPE_ALIASES = {"Emergency Exit Sign":"Exit Signs"};
+function ELTSelectOther({options, value, other, onChange, placeholder, aliases}) {
   const SS = swbStyles();
   const opts = [...options];
-  if (value && value !== "Other" && !opts.includes(value)) opts.push(value); // option removed after it was used: keep it visible
+  const shown = aliases && aliases[value] && opts.includes(aliases[value]) ? aliases[value] : value; // display only — never rewrites the stored type
+  if (shown && shown !== "Other" && !opts.includes(shown)) opts.push(shown); // option removed after it was used: keep it visible
   return eltEl('div',null
-    ,eltEl('select',{style:{...SS.modalInput,cursor:"pointer"},value:value||"",onChange:e=>onChange(e.target.value,other||"")}
+    ,eltEl('select',{style:{...SS.modalInput,cursor:"pointer"},value:shown||"",onChange:e=>onChange(e.target.value,other||"")}
       ,eltEl('option',{value:""},placeholder||"— Select")
       ,[...opts,"Other"].map(o=>eltEl('option',{key:o,value:o},o))
     )
@@ -11520,7 +11543,7 @@ function ELTApp({ onGoHome }) {
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
       ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
-      ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:false,reserved:["Other"]})
+      ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:true,reserved:["Other"]})
       ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
@@ -11828,6 +11851,10 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
   // Live auto-save (the app-wide standard): every change is written straight to storage — there is no draft and no Save button.
   const set = patch=>{ setR(prev=>({...prev,...patch})); onPatch(patch); };
   const overall = eltOverall(r); const sm = SM[overall]; const isFail = overall===STATUS.FAIL;
+  const rectOpts = (dropdowns&&dropdowns.rectified)||ELT_DEFAULT_DROPDOWNS.rectified;
+  const respOpts = (dropdowns&&dropdowns.responsibility)||ELT_DEFAULT_DROPDOWNS.responsibility;
+  // ★ defaults are stored when the fitting becomes FAIL (derived at fitting level), same as Welder
+  useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
   const photoRef = React.useRef();
   const rRef = React.useRef(r); rRef.current = r;
   const setPhotos = photos=>set({photos});
@@ -11878,15 +11905,30 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,eltEl('label',{style:SS.modalLabel},"OVERALL RESULT (AUTOMATIC)")
       ,eltEl('div',{style:{...SS.modalInput,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,fontWeight:800}},overall===STATUS.UNTESTED?"Awaiting all 4 test results":sm.label)
     )
+    // same asset-level derived FAIL panel as Welder (and the rest of the app): RECTIFIED / SCHEDULED ACTION, DEFECT ID, RESPONSIBILITY, PRIORITY, DATE
     ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
       ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
-        ,eltEl('label',{style:SS.modalLabel},"FAILURE REASON")
-        ,eltEl(ELTSelectOther,{options:dropdowns.failReasons,value:r.failReason,other:r.failReasonOther,onChange:(v,o)=>set({failReason:v,failReasonOther:o})})
+        ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
+        ,eltEl(IELEditableDropdown,{options:rectOpts,value:r.rectified||rectOpts[0]||"",onChange:v=>set({rectified:v}),placeholder:"Select or type…"})
       )
       ,eltEl('div',{style:SS.modalField}
-        ,eltEl('label',{style:SS.modalLabel},"ACTION TAKEN")
-        ,eltEl(ELTSelectOther,{options:dropdowns.actions,value:r.action,other:r.actionOther,onChange:(v,o)=>set({action:v,actionOther:o})})
+        ,eltEl('label',{style:SS.modalLabel},"DEFECT ID")
+        ,eltEl('input',{style:SS.modalInput,type:"text",placeholder:"e.g. 74",value:r.defectId||"",onChange:e=>set({defectId:e.target.value})})
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"RESPONSIBILITY")
+        ,eltEl(IELEditableDropdown,{options:respOpts,value:r.responsibility||"",onChange:v=>set({responsibility:v}),placeholder:"Select or type…"})
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"PRIORITY")
+        ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
+        )
+      )
+      ,eltEl('div',{style:SS.modalField}
+        ,eltEl('label',{style:SS.modalLabel},"DATE RECTIFIED / SCHEDULED")
+        ,eltEl('input',{style:SS.modalInput,type:"date",value:r.rectifiedDate||"",onChange:e=>set({rectifiedDate:e.target.value})})
       )
     )
     ,eltEl('div',{style:SS.modalField}
@@ -11919,10 +11961,13 @@ function ELTReportView({project, results, meta, summary}) {
   // Same summary / Failed Items treatment as every other module, then the detailed register table below it
   const fails = rows.filter(x=>x.overall===STATUS.FAIL).map(({asset:a,res:r})=>({
     title: a.assetLocation||"Unnamed fitting",
+    badge: reportPriorityBadge(r.priority),
     path: [a.location||project.name,eltTypeLabel(a),a.maintained,a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · "),
+    defectId: r.defectId,
     comment: (r.notes||"").trim(),
-    lines: [`Failed: ${ELT_CHECKS.filter(c=>r[c.key]===STATUS.FAIL).map(c=>c.label).join(", ")}`, eltOtherText(r.failReason,r.failReasonOther)&&`Reason: ${eltOtherText(r.failReason,r.failReasonOther)}`].filter(Boolean),
-    rectified: eltOtherText(r.action,r.actionOther),
+    lines: [`Failed: ${ELT_CHECKS.filter(c=>r[c.key]===STATUS.FAIL).map(c=>c.label).join(", ")}`],
+    responsibility: r.responsibility,
+    rectified: r.rectified,
   }));
   return eltEl('div',{style:SS.summaryWrap}
     ,eltEl('div',{style:SS.summaryTitle},project.name)
@@ -11970,7 +12015,7 @@ function ELTAssetForm({initial, typeOptions, areaChoices, areaId, submitLabel, o
     ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
     ,eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"TYPE")
-      ,eltEl('div',{style:{marginTop:4}},eltEl(ELTSelectOther,{options:typeOptions,value:f.type,other:f.typeOther,onChange:(v,o)=>set({type:v,typeOther:o})}))
+      ,eltEl('div',{style:{marginTop:4}},eltEl(ELTSelectOther,{options:typeOptions,aliases:ELT_TYPE_ALIASES,value:f.type,other:f.typeOther,onChange:(v,o)=>set({type:v,typeOther:o})}))
     )
     ,eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"MAINTAINED / NON-MAINTAINED")
@@ -12317,7 +12362,9 @@ function IRTMegInput({value,onChange,label}){
   return React.createElement("div",null,
     React.createElement("div",{style:{fontSize:10,color:"#52525b",fontWeight:700,letterSpacing:0.5,marginBottom:3,textAlign:"center"}},label),
     React.createElement("div",{style:{position:"relative"}},
-      React.createElement("input",{style:{background:"#e8e6e2",border:`1px solid ${value&&value.trim()?"#93c5fd":"#e4e4e7"}`,borderRadius:8,color:"#1d4ed8",padding:"8px 26px 8px 8px",fontSize:14,fontWeight:700,outline:"none",width:"100%",boxSizing:"border-box",textAlign:"center",fontFamily:"'DM Mono','Courier New',monospace"},inputMode:"decimal",value:value||"",placeholder:"\u2014",onChange:e=>onChange(e.target.value),onBlur:handleBlur}),
+      React.createElement("input",{style:{background:"#f7f6f3",border:`1px solid ${value&&value.trim()?"#93c5fd":"#d4d4d8"}`,borderRadius:8,color:"#1d4ed8",padding:"8px 26px 8px 8px",fontSize:14,fontWeight:700,outline:"none",width:"100%",boxSizing:"border-box",textAlign:"center",fontFamily:"'DM Mono','Courier New',monospace"},inputMode:"decimal",value:value||"",placeholder:"\u2014",onChange:e=>onChange(e.target.value),
+        onFocus:e=>{e.target.style.borderColor="#3b82f6";e.target.style.boxShadow="0 0 0 3px rgba(96,165,250,0.35)";},
+        onBlur:e=>{e.target.style.boxShadow="none";e.target.style.borderColor=e.target.value.trim()?"#93c5fd":"#d4d4d8";handleBlur(e);}}),
       React.createElement("span",{style:{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",fontSize:9,color:"#93c5fd",fontWeight:700,pointerEvents:"none"}},"M\u03a9")
     )
   );
@@ -14214,13 +14261,12 @@ async function exportWelderExcel(project, allResults, meta) {
       put('C'+rr,resTxt,it.result==="pass"?passSt:it.result==="fail"?failSt:it.result==="na"?naSt:cellSt(bg,{horizontal:"center"}));
       put('D'+rr,it.value||"",cellSt(bg)); put('E'+rr,it.action||"",cellSt(bg)); rr++;
     });
-    // Defect details (FAIL welders only) then comments
+    // Defect details block: ALWAYS written (headings present on every welder sheet, values blank unless the welder is FAIL — `r` is
+    // already gated by defectGate), then comments
     rr++;
-    if (row.overall==="fail") {
-      [["Rectified / Scheduled",r.rectified],["Date Rectified / Scheduled",r.rectifiedDate?fmtDate(r.rectifiedDate):""],["Defect ID",r.defectId],["Responsibility",r.responsibility],["Priority",r.priority?`${r.priority} — ${PRIORITY_LABELS[r.priority]||""}`:""]]
-        .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
-      rr++;
-    }
+    [["Rectified / Scheduled",r.rectified],["Date Rectified / Scheduled",r.rectifiedDate?fmtDate(r.rectifiedDate):""],["Defect ID",r.defectId],["Responsibility",r.responsibility],["Priority",r.priority?`${r.priority} — ${PRIORITY_LABELS[r.priority]||""}`:""]]
+      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+    rr++;
     put('A'+rr,"Auditor Comments / Overall Notes",headSt); put('B'+rr,(raw.notes||"").trim(),cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5);
     sh.getRow(rr).height = 48; rr++;
     // Photos
@@ -14348,5 +14394,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

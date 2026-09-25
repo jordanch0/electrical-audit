@@ -43,31 +43,32 @@ describe('ELT Dropdowns tab', () => {
     const user = userEvent.setup();
     await openElt(user);
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
-    for (const t of ['Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Lamp Failure', 'Switch Failure', 'Given to Site Contact', 'Scheduled for Repair']) {
+    for (const t of ['Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Site Electrician', 'Client', 'Removed from Service', 'No Action Required']) {
       expect(screen.getByText(t)).toBeInTheDocument();
     }
     expect(screen.queryByText('Other')).not.toBeInTheDocument();
-    expect(screen.queryByText(/★ DEFAULT/)).not.toBeInTheDocument(); // no "default" concept: selects start blank
-    await addOption(user, 'Add new failure reason option…', 'other');
+    expect(screen.getAllByText(/★ DEFAULT/)).toHaveLength(2);        // the two FAIL-panel lists pre-fill their top option; the Type list has no default (selects start blank)
+    expect(within(screen.getByText('Spitfire').parentElement).queryByText(/★ DEFAULT/)).not.toBeInTheDocument();
+    await addOption(user, 'Add new type option…', 'other');
     expect(screen.queryByText('other')).not.toBeInTheDocument();
     expect(screen.getByText('Other is already built in')).toBeInTheDocument(); // explained, not silent
-    expect(ls('elt-dropdowns-v1') == null || !ls('elt-dropdowns-v1').failReasons.some(x => x.toLowerCase() === 'other')).toBe(true);
-    await user.type(screen.getByPlaceholderText('Add new failure reason option…'), 'x'); // typing again clears the message
+    expect(ls('elt-dropdowns-v1') == null || !ls('elt-dropdowns-v1').types.some(x => x.toLowerCase() === 'other')).toBe(true);
+    await user.type(screen.getByPlaceholderText('Add new type option…'), 'x'); // typing again clears the message
     expect(screen.queryByText('Other is already built in')).not.toBeInTheDocument();
   });
 
-  it('custom options appear in the Type / Failure Reason / Action Taken selects (with "Other" last) and persist across a reload', async () => {
+  it('custom options appear in the Type select (with "Other" last) and in the FAIL panel Responsibility / Rectified lists, and persist across a reload', async () => {
     const user = userEvent.setup();
     await openElt(user);
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
     await addOption(user, 'Add new type option…', 'Bulkhead Light');
-    await addOption(user, 'Add new failure reason option…', 'Ballast Failure');
-    await addOption(user, 'Add new action taken option…', 'Replaced Unit');
+    await addOption(user, 'Add new responsibility option…', 'Electrical Contractor');
+    await addOption(user, 'Add new rectified / scheduled action option…', 'Replaced Unit');
     expect(screen.getByText('Bulkhead Light')).toBeInTheDocument();
     await waitFor(() => expect(ls('elt-dropdowns-v1')).toMatchObject({
       types: ['Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Bulkhead Light'],
-      failReasons: expect.arrayContaining(['Ballast Failure']),
-      actions: expect.arrayContaining(['Replaced Unit']),
+      responsibility: expect.arrayContaining(['Electrical Contractor']),
+      rectified: expect.arrayContaining(['Replaced Unit']),
     }));
     expect(ls('elt-dropdowns-v1').types).not.toContain('Other');
 
@@ -84,53 +85,51 @@ describe('ELT Dropdowns tab', () => {
     expect(screen.getByPlaceholderText('Specify…')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 
-    // Failure Reason + Action Taken selects on a failed fitting
+    // the standard FAIL panel on a failed fitting: ★ defaults stored on becoming FAIL, custom options selectable
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('SE Door'));
     await user.click(screen.getAllByRole('button', { name: 'FAIL' })[0]);
-    const [reason, action] = screen.getAllByRole('combobox');
-    expect(optionsOf(reason)).toEqual(['— Select', 'Lamp Failure', 'Battery Failure', 'No Power', 'Damaged/Broken', 'Switch Failure', 'Ballast Failure', 'Other']);
-    expect(optionsOf(action)).toEqual(['— Select', 'Given to Site Contact', 'Repaired On-Site', 'Scheduled for Repair', 'Replaced Unit', 'Other']);
-    await user.selectOptions(reason, 'Ballast Failure');
-    expect(reason).toHaveValue('Ballast Failure');
+    await user.click(screen.getByRole('button', { name: /Site Electrician/ }));
+    await user.click(screen.getByText('Electrical Contractor'));
+    await user.click(screen.getByRole('button', { name: /Removed from Service/ }));
+    await user.click(screen.getByText('Replaced Unit'));
+    await waitFor(() => expect(ls('elt-results-v1').p1.a1).toMatchObject({ responsibility: 'Electrical Contractor', rectified: 'Replaced Unit' }));
   });
 
   it('★ moves an option to the top, Reset restores the defaults', async () => {
     const user = userEvent.setup();
     await openElt(user);
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
-    const row = screen.getByText('Switch Failure').parentElement;
-    await user.click(within(row).getByTitle('Move to top'));
-    await waitFor(() => expect(ls('elt-dropdowns-v1').failReasons[0]).toBe('Switch Failure'));
-    // one Reset button per list, in on-screen order: Type, Failure Reason, Action Taken
+    const row = screen.getByText('Client').parentElement;
+    await user.click(within(row).getByTitle('Set as default'));
+    await waitFor(() => expect(ls('elt-dropdowns-v1').responsibility[0]).toBe('Client'));
+    // one Reset button per list, in on-screen order: Type, Responsibility, Rectified / Scheduled
     await user.click(screen.getAllByRole('button', { name: 'Reset' })[1]);
     // Reset now asks first: nothing is discarded until the prompt is confirmed, and Keep cancels it
     const prompt = await screen.findByText('Reset list to defaults?');
-    expect(ls('elt-dropdowns-v1').failReasons[0]).toBe('Switch Failure');
+    expect(ls('elt-dropdowns-v1').responsibility[0]).toBe('Client');
     await user.click(within(prompt.parentElement).getByRole('button', { name: 'Keep' }));
     expect(screen.queryByText('Reset list to defaults?')).not.toBeInTheDocument();
-    expect(ls('elt-dropdowns-v1').failReasons[0]).toBe('Switch Failure');
+    expect(ls('elt-dropdowns-v1').responsibility[0]).toBe('Client');
     await user.click(screen.getAllByRole('button', { name: 'Reset' })[1]);
     const prompt2 = await screen.findByText('Reset list to defaults?');
     await user.click(within(prompt2.parentElement).getByRole('button', { name: 'Reset' }));
-    await waitFor(() => expect(ls('elt-dropdowns-v1').failReasons).toEqual(['Lamp Failure', 'Battery Failure', 'No Power', 'Damaged/Broken', 'Switch Failure']));
+    await waitFor(() => expect(ls('elt-dropdowns-v1').responsibility).toEqual(['Site Electrician', 'Site Manager', 'Contractor', 'Client']));
   });
 
   it('removing an option that is already used by a fitting keeps its value visible and selected', async () => {
     const user = userEvent.setup();
-    localStorage.setItem('elt-results-v1', JSON.stringify({ p1:{ a1:{ visual:'fail', discharge:'pass', switching:'pass', charging:'pass', failReason:'Lamp Failure', action:'Repaired On-Site' } } }));
+    localStorage.setItem('elt-results-v1', JSON.stringify({ p1:{ a1:{ visual:'fail', discharge:'pass', switching:'pass', charging:'pass', rectified:'Under Investigation' } } }));
     await openElt(user);
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
-    const row = screen.getByText('Lamp Failure').parentElement;
+    const row = screen.getByText('Under Investigation').parentElement;
     await user.click(trashIn(row));
     await user.click(within(row).getByRole('button', { name: 'Delete' })); // confirm step
-    await waitFor(() => expect(ls('elt-dropdowns-v1').failReasons).not.toContain('Lamp Failure'));
+    await waitFor(() => expect(ls('elt-dropdowns-v1').rectified).not.toContain('Under Investigation'));
 
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('SE Door'));
-    const [reason] = screen.getAllByRole('combobox');
-    expect(reason).toHaveValue('Lamp Failure');
-    expect(optionsOf(reason)).toContain('Lamp Failure');
+    expect(screen.getByDisplayValue('Under Investigation')).toBeInTheDocument();   // removed from the list but still shown on the fitting that used it
   });
 
   it("SWB's own Dropdowns tab is unchanged by the shared-view options (still shows ★ DEFAULT and its own lists)", async () => {
@@ -151,15 +150,15 @@ describe('ELT Dropdowns tab', () => {
     const user = userEvent.setup();
     await openElt(user);
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
-    const row = screen.getByText('No Power').parentElement;
+    const row = screen.getByText('Circuit Isolated').parentElement;
     await user.click(trashIn(row));
-    expect(screen.getByText('No Power')).toBeInTheDocument();           // first tap only asks
+    expect(screen.getByText('Circuit Isolated')).toBeInTheDocument();  // first tap only asks
     await user.click(within(row).getByRole('button', { name: 'Keep' }));
-    expect(screen.getByText('No Power')).toBeInTheDocument();
-    expect(ls('elt-dropdowns-v1') == null || ls('elt-dropdowns-v1').failReasons.includes('No Power')).toBe(true);
+    expect(screen.getByText('Circuit Isolated')).toBeInTheDocument();
+    expect(ls('elt-dropdowns-v1') == null || ls('elt-dropdowns-v1').rectified.includes('Circuit Isolated')).toBe(true);
     await user.click(trashIn(row));
     await user.click(within(row).getByRole('button', { name: 'Delete' }));
-    await waitFor(() => expect(screen.queryByText('No Power')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('Circuit Isolated')).not.toBeInTheDocument());
   });
 
   it("SWB's Dropdowns tab also confirms before deleting an option", async () => {

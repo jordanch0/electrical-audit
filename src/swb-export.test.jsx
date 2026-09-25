@@ -39,16 +39,16 @@ describe('swbRegisterRows / board overall (same rule as Welder)', () => {
     expect(swbBoardOverall({ untested: 0, fail: 0 })).toBe('pass');
     expect(swbBoardOverall({ untested: 0, fail: 2 })).toBe('fail');
   });
-  it('lists EVERY board (tested or not) in area order with the approved 12 columns', () => {
-    expect(SWB_REGISTER_COLUMNS).toEqual(['Area', 'Board', 'Date Tested', 'Pass/Fail', 'Pass', 'Fail', 'N/A', 'Untested', 'Score', 'Highest Risk', 'Failed Items', 'Next Audit Due']);
+  it('lists EVERY board (tested or not) in area order with the approved columns (defect set included)', () => {
+    expect(SWB_REGISTER_COLUMNS).toEqual(['Area', 'Board', 'Date Tested', 'Pass/Fail', 'Pass', 'Fail', 'N/A', 'Untested', 'Score', 'Highest Risk', 'Failed Items', 'Rectified / Scheduled', 'Defect ID', 'Responsibility', 'Priority (L,M,H,U)', 'Next Audit Due']);
     const rows = swbRegisterRows(project, results, meta);
     expect(rows.map(r => [r.cells[0], r.cells[1]])).toEqual([['Wash Plant', 'MSB'], ['Wash Plant', 'MCC 1'], ['Sub Station', 'MSB'], ['Sub Station', 'DB/1: North?']]);
     const [msb, mcc, msb2, db] = rows.map(r => r.cells);
-    expect(msb).toEqual(['Wash Plant', 'MSB', '13/07/2026', 'Pass', 11, 0, 0, 0, '100.0%', '', '', '13/07/2027']);
+    expect(msb).toEqual(['Wash Plant', 'MSB', '13/07/2026', 'Pass', 11, 0, 0, 0, '100.0%', '', '', '', '', '', '', '13/07/2027']);
     // partly answered: Pass/Fail blank, no date, score counts blanks against it (1 pass, 1 fail, 1 N/A: 1 / (11-1)), failed items list only FAIL items
-    expect(mcc).toEqual(['Wash Plant', 'MCC 1', '', '', 1, 1, 1, 8, '10.0%', 'Medium', 'Ventilation', '13/07/2027']);
-    expect(msb2).toEqual(['Sub Station', 'MSB', '13/07/2026', 'Fail', 10, 1, 0, 0, '90.9%', 'Urgent', 'Door Earthing', '13/07/2027']);
-    expect(db).toEqual(['Sub Station', 'DB/1: North?', '', '', 0, 0, 0, 11, '0.0%', '', '', '13/07/2027']);
+    expect(mcc).toEqual(['Wash Plant', 'MCC 1', '', '', 1, 1, 1, 8, '10.0%', 'Medium', 'Ventilation', 'Scheduled for Repair', 'D-7', 'Site Electrician', '', '13/07/2027']);   // defect set from the FAIL item only (the passing item's stale D STALE is ignored)
+    expect(msb2).toEqual(['Sub Station', 'MSB', '13/07/2026', 'Fail', 10, 1, 0, 0, '90.9%', 'Urgent', 'Door Earthing', '', 'D-9', '', '', '13/07/2027']);
+    expect(db).toEqual(['Sub Station', 'DB/1: North?', '', '', 0, 0, 0, 11, '0.0%', '', '', '', '', '', '', '13/07/2027']);
   });
   it('Highest Risk ignores a stale risk on a passing item (only FAIL items count)', () => {
     const [, mcc] = swbRegisterRows(project, results, meta);

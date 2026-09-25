@@ -75,7 +75,10 @@ describe('Welder export structure', () => {
     expect(['G6', 'H6', 'I6', 'J6', 'L6'].map(a => V(reg.getCell(a)))).toEqual(['', '', '', '', '']);
     expect(['G7', 'H7', 'I7', 'J7', 'K7', 'L7'].map(a => V(reg.getCell(a)))).toEqual(['Removed from Service', '01/08/2026', 'D-9', 'Site Electrician', 'Return to supplier', 'H']);
     const w1 = wb.getWorksheet('W001'); const text1 = []; w1.eachRow(r => r.eachCell(c => text1.push(V(c))));
-    expect(text1).not.toContain('D-9'); expect(text1).not.toContain('Defect ID');
+    expect(text1).not.toContain('D-9'); expect(text1).toContain('Defect ID');   // the defect block is ALWAYS present on a welder sheet, blank unless FAIL
+    const blockLabels = [31, 32, 33, 34, 35].map(r => V(w1.getCell(r, 1)));
+    expect(blockLabels).toEqual(['Rectified / Scheduled', 'Date Rectified / Scheduled', 'Defect ID', 'Responsibility', 'Priority']);
+    expect([31, 32, 33, 34, 35].map(r => V(w1.getCell(r, 2)))).toEqual(['', '', '', '', '']);
     const w2 = wb.getWorksheet('W002'); const text2 = []; w2.eachRow(r => r.eachCell(c => text2.push(V(c))));
     expect(text2).toContain('D-9'); expect(text2).toContain('Defect ID');
   });
@@ -94,7 +97,7 @@ describe('Welder export structure', () => {
     expect(V(sh.getCell('B21'))).toBe('Min insulation resistance 5 MΩ');
     expect(V(sh.getCell('C21'))).toBe('Pass'); expect(V(sh.getCell('D21'))).toBe('9.9 MΩ'); expect(V(sh.getCell('C23'))).toBe('N/A');
     expect(V(sh.getCell('C18'))).toBe('Pass');
-    expect(V(sh.getCell('A31'))).toBe('Auditor Comments / Overall Notes'); expect(V(sh.getCell('B31'))).toBe('All good');
+    expect(V(sh.getCell('A37'))).toBe('Auditor Comments / Overall Notes'); expect(V(sh.getCell('B37'))).toBe('All good');
   });
 });
 

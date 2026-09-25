@@ -16,9 +16,9 @@ const project = toAreas({
   ],
 });
 const results = { p1: {
-  a1: { ...pass4, notes:'Working well' },
-  a2: { ...pass4, discharge:'fail', failReason:'Other', failReasonOther:'Water ingress', action:'Given to Site Contact', notes:'Seal cracked' },
-  a3: { ...pass4, visual:'fail', failReason:'Lamp Failure', action:'Other', actionOther:'Ordered part' },
+  a1: { ...pass4, notes:'Working well', rectified:'Stale', defectId:'99', responsibility:'Client', priority:'U', rectifiedDate:'2026-01-01' }, // PASS with RETAINED defect data
+  a2: { ...pass4, discharge:'fail', rectified:'Scheduled for Repair', rectifiedDate:'2026-10-01', defectId:'74', responsibility:'Client', priority:'H', notes:'Seal cracked' },
+  a3: { ...pass4, visual:'fail', rectified:'Removed from Service', responsibility:'Site Electrician' },
   // a4 left completely untested (no entry)
   a5: { ...pass4, photos:[{id:'ph1',dataUrl:PNG},{id:'ph2',dataUrl:PNG}] },
 }};
@@ -39,10 +39,10 @@ async function runExport(proj, res, m) {
   return wb;
 }
 const text = c => { const v = c.value; return v==null ? '' : (typeof v==='object' && v.richText ? v.richText.map(t=>t.text).join('') : String(v)); };
-const rowVals = (ws, r, n=15) => Array.from({length:n},(_,i)=>text(ws.getCell(r,i+1)));
+const rowVals = (ws, r, n=20) => Array.from({length:n},(_,i)=>text(ws.getCell(r,i+1)));
 
 describe('ELT Excel export structure', () => {
-  it('writes header block, exact 15 columns (Score after Pass/Fail), and only tested fittings', async () => {
+  it('writes header block, exact 20 columns (Score, then the full defect set, after Pass/Fail), and only tested fittings', async () => {
     const wb = await runExport(project, results, meta);
     const ws = wb.getWorksheet('Emergency Lighting');
     expect(ws).toBeTruthy();
@@ -55,16 +55,16 @@ describe('ELT Excel export structure', () => {
     expect(text(ws.getCell('C3'))).toBe('Date Tested: 21/09/2026');
     expect(text(ws.getCell('E3'))).toBe('Next Test Due: 21/03/2027');
     // Rows 1-5 carry NO styling (same as the real IEL/RCD/TAT/Thermo files): no fill, font, border or alignment
-    for (let r = 1; r <= 5; r++) for (let c = 1; c <= 15; c++) {
+    for (let r = 1; r <= 5; r++) for (let c = 1; c <= 20; c++) {
       const cell = ws.getCell(r, c);
       expect(cell.fill, 'fill r'+r+' c'+c).toBeUndefined();
       expect(cell.font, 'font r'+r+' c'+c).toBeUndefined();
       expect(cell.border, 'border r'+r+' c'+c).toBeUndefined();
       expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined();
     }
-    // same merges and row heights as IEL (adjusted for 15 columns)
+    // same merges and row heights as IEL (adjusted for 20 columns)
     const merged = Object.keys(ws._merges).map(k => ws._merges[k].range).sort();
-    expect(merged).toEqual(['A1:O1','A2:O2','A3:B3','A4:O4','C3:D3','E3:O3'].sort());
+    expect(merged).toEqual(['A1:T1','A2:T2','A3:B3','A4:T4','C3:D3','E3:T3'].sort());
     expect([1,2,3,4,5].map(r => ws.getRow(r).height)).toEqual([32,16,16,6,40]);
 
     // blank 6pt spacer row 4, then the column headings on row 5; no summary block or sheet
@@ -79,7 +79,7 @@ describe('ELT Excel export structure', () => {
 
     // exact column order
     expect(rowVals(ws, 5)).toEqual(ELT_COLUMNS);
-    expect(ELT_COLUMNS).toEqual(['Location','Asset Location','Asset ID','Type','Maintained/Non-Maintained','Fitting Type/Manufacturer','Date','Visual Inspection','90-Min Discharge Test','Automatic Switching Test','Charging Circuit Test','Pass/Fail','Score','Next Test Due','Notes']);
+    expect(ELT_COLUMNS).toEqual(['Location','Asset Location','Asset ID','Type','Maintained/Non-Maintained','Fitting Type/Manufacturer','Date','Visual Inspection','90-Min Discharge Test','Automatic Switching Test','Charging Circuit Test','Pass/Fail','Score','Rectified / Scheduled','Date Rectified / Scheduled','Defect ID','Responsibility','Notes / Recommendations','Priority (L,M,H,U)','Next Test Due']);
 
     // register rows: 4 tested, untested excluded
     const rows = [6,7,8,9].map(r => rowVals(ws, r));
@@ -92,10 +92,10 @@ describe('ELT Excel export structure', () => {
     expect(rows[1][2]).toBe(''); // blank asset id preserved
 
     // dates always come from the report-level defaults
-    rows.forEach(r => { expect(r[6]).toBe('21/09/2026'); expect(r[13]).toBe('21/03/2027'); expect(r[12]).toMatch(/^\d+\.\d%$/); });
+    rows.forEach(r => { expect(r[6]).toBe('21/09/2026'); expect(r[19]).toBe('21/03/2027'); expect(r[12]).toMatch(/^\d+\.\d%$/); });
 
     // data rows keep real thin borders on all four sides (SWB's swbXAB); headings are plain
-    for (const r of [6,7,8,9]) for (let c = 1; c <= 15; c++) {
+    for (const r of [6,7,8,9]) for (let c = 1; c <= 20; c++) {
       const b = ws.getCell(r,c).border || {};
       ['top','bottom','left','right'].forEach(side => expect(b[side] && b[side].style, 'border r'+r+' c'+c+' '+side).toBe('thin'));
     }
@@ -105,17 +105,17 @@ describe('ELT Excel export structure', () => {
     expect(rows[1].slice(7,12)).toEqual(['Pass','Fail','Pass','Pass','Fail']);
     expect(rows[2].slice(7,12)).toEqual(['Fail','Pass','Pass','Pass','Fail']);
 
-    // notes column (now index 14: Score sits at 12, Next Test Due at 13)
-    expect(rows[0][14]).toBe('Working well');                                   // PASS: notes only
-    expect(rows[1][14]).toBe('Water ingress — Given to Site Contact. Seal cracked'); // Other reason + normal action + notes
-    expect(rows[2][14]).toBe('Lamp Failure — Ordered part');                    // normal reason + Other action, no notes
-    expect(rows[3][14]).toBe('');                                                // PASS with no notes
+    // defect columns (13 Rectified, 14 Date, 15 Defect ID, 16 Responsibility, 17 Notes, 18 Priority) — FAIL rows only
+    expect(rows[0].slice(13,19)).toEqual(['','','','','Working well','']);      // PASS with retained defect data: gated blank, notes kept
+    expect(rows[1].slice(13,19)).toEqual(['Scheduled for Repair','01/10/2026','74','Client','Seal cracked','H']);
+    expect(rows[2].slice(13,19)).toEqual(['Removed from Service','','','Site Electrician','','']);
+    expect(rows[3].slice(13,19)).toEqual(['','','','','','']);                  // PASS with nothing
   });
 
-  it('does not leak retained Failure Reason/Action into a passing row', async () => {
-    const res = { p1: { a1: { ...pass4, failReason:'Lamp Failure', action:'Repaired On-Site', notes:'ok' } } };
+  it('does not leak retained pre-standard Failure Reason/Action (or standard defect data) into a passing row', async () => {
+    const res = { p1: { a1: { ...pass4, failReason:'Lamp Failure', action:'Repaired On-Site', rectified:'Stale', notes:'ok' } } };
     const wb = await runExport({ ...project, areas:[{ ...project.areas[0], assets:[project.areas[0].assets[0]] }] }, res, meta);
-    expect(text(wb.getWorksheet('Emergency Lighting').getCell('O6'))).toBe('ok');
+    expect(text(wb.getWorksheet('Emergency Lighting').getCell('R6'))).toBe('ok');
   });
 });
 
@@ -175,10 +175,10 @@ describe('overall result state machine', () => {
     expect(eltOverall(R({ ...pass4, discharge:'fail' }))).toBe('fail');
   });
   it('fail → flipped back to pass: overall PASS, fail fields untouched by the derivation', () => {
-    const failed = R({ ...pass4, visual:'fail', failReason:'Other', failReasonOther:'Water ingress', action:'Repaired On-Site' });
+    const failed = R({ ...pass4, visual:'fail', rectified:'Repaired On-Site', defectId:'7' });
     expect(eltOverall(failed)).toBe('fail');
     const fixed = { ...failed, visual:'pass' };
     expect(eltOverall(fixed)).toBe('pass');
-    expect(fixed).toMatchObject({ failReason:'Other', failReasonOther:'Water ingress', action:'Repaired On-Site' });
+    expect(fixed).toMatchObject({ rectified:'Repaired On-Site', defectId:'7' });
   });
 });

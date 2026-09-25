@@ -29,7 +29,7 @@ const eltProject = toAreas({ id:'e1', name:'Site E', company:'Co', abn:'1', lice
   { id:'a1', location:'Site E', assetLocation:'SE Door', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'X' },
   { id:'a2', location:'Site E', assetLocation:'SW Roof', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Y' },
 ] });
-const eltResults = { e1: { a1: { ...pass4 }, a2: { ...pass4, visual:'fail', failReason:'Lamp Failure', action:'Repaired On-Site' } } };
+const eltResults = { e1: { a1: { ...pass4 }, a2: { ...pass4, visual:'fail', rectified:'Repaired On-Site' } } };
 
 const sides = ['top','bottom','left','right'];
 const sig = cell => JSON.stringify(sides.map(s => { const b = (cell.border || {})[s] || {}; return [b.style, b.color && b.color.argb]; }));
@@ -56,14 +56,14 @@ describe('SWB / ELT data-row borders', () => {
   it('SWB Register header block (rows 1–5) is plain — no fill, font or border — like ELT and Welder; the board sheet keeps a styled Audit Summary heading', async () => {
     const wb = await load(exportSWBExcel, swbProject, swbResults, swbMeta);
     const reg = wb.getWorksheet('Register');
-    for (let r = 1; r <= 5; r++) for (let c = 1; c <= 12; c++) {
+    for (let r = 1; r <= 5; r++) for (let c = 1; c <= 16; c++) {
       const cell = reg.getCell(r, c);
       expect(cell.fill, 'fill r' + r + ' c' + c).toBeUndefined();
       expect(cell.border, 'border r' + r + ' c' + c).toBeUndefined();
     }
     expect(String(reg.getCell('A1').value)).toBe('Site S — Switchboard / Enclosure Audit');
     expect([1, 2, 3, 4, 5].map(r => reg.getRow(r).height)).toEqual([32, 16, 16, 6, 40]);
-    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:L1', 'A2:L2', 'A3:B3', 'A4:L4', 'C3:D3', 'E3:L3'].sort());
+    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:B3', 'A4:P4', 'C3:D3', 'E3:P3'].sort());
     const board = wb.getWorksheet('MSB');
     expect(board.getCell('A7').fill.fgColor.argb).toBe('FFD9D9D9');                            // "Audit Summary" heading
   });

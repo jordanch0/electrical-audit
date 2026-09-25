@@ -12,7 +12,7 @@ const project = {
     { id:'a2', location:'Site A', assetLocation:'SW Roof', assetId:'', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Y' },
   ],
 };
-const results = { a1:{ ...pass4, notes:'fine' }, a2:{ ...pass4, visual:'fail', failReason:'Other', failReasonOther:'Water ingress', action:'Repaired On-Site' } };
+const results = { a1:{ ...pass4, notes:'fine' }, a2:{ ...pass4, visual:'fail', rectified:'Repaired On-Site', defectId:'74', responsibility:'Client', priority:'H', notes:'Water ingress' } };
 const meta = { auditor:'Jane', testDate:'2026-09-21', nextTestDate:'2027-01-01' };
 const ls = k => JSON.parse(localStorage.getItem(k));
 
@@ -71,7 +71,7 @@ describe('ELT complete-audit / history round trip', () => {
 });
 
 describe('ELT fail→pass flip keeps hidden fail fields', () => {
-  it('hides the defect panel, flips overall to PASS, and retains reason/action in storage', async () => {
+  it('hides the defect panel, flips overall to PASS, and retains the defect fields in storage', async () => {
     const user = userEvent.setup();
     await openElt(user);
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
@@ -84,7 +84,7 @@ describe('ELT fail→pass flip keeps hidden fail fields', () => {
     await waitFor(() => expect(ls('elt-results-v1').p1.a2.visual).toBe('pass'));
     const saved = ls('elt-results-v1').p1.a2;
     expect(eltOverall(saved)).toBe('pass');
-    expect(saved).toMatchObject({ failReason:'Other', failReasonOther:'Water ingress', action:'Repaired On-Site' });
+    expect(saved).toMatchObject({ rectified:'Repaired On-Site', defectId:'74', responsibility:'Client', priority:'H' });
   });
 
   it('reveals the panel only when overall is FAIL (not on partial passes)', async () => {

@@ -117,7 +117,8 @@ Reference: **SWB item page** (`SWBItemPage`) and **ELT** (`ELTAssetPage`). Parit
 - [ ] **Editable dropdown, fed by the module's customisable lists — not a native `<select>`.** Reuse `IELEditableDropdown`
   (`{options, value, onChange, placeholder, color, colorBg}`; TAT reuses it with its own accent). Options come from the module's
   `dropdowns` state with the module's defaults as fallback. Give the module's Dropdowns tab the matching lists (section 7).
-  Deliberate exception: ELT — see the exceptions list.
+  **No module is an exception any more** — ELT's old `FAILURE REASON` / `ACTION TAKEN` (`ELTSelectOther`) panel was replaced by this
+  standard panel (2026-09-26); `ELTSelectOther` now only serves ELT's Type field.
 - [ ] **Asset-level derived FAIL (Welder, ELT).** When the FAIL is a property of the whole asset (Welder: all 12 items answered and any Fail;
   ELT: any sub-check failed), put ONE panel on the asset page, not one per item. Compute the trigger from a derived summary function
   (never store it), pass that boolean to `useFailDefaults`, and gate reports/exports with `defectGate(res, overall==="fail")`.
@@ -187,8 +188,9 @@ for IEL/TAT-style Responsibility + Rectified lists.
   `DefectListCards({dropdowns, setDropdowns, sections, S, cardStyle})`.
 - [ ] Option rows: `★` promotes an option to the top (index 0 = default), delete = `DeleteButton compact`, "Reset" =
   `ConfirmReset`. List titles: `RESPONSIBILITY`, **`RECTIFIED / SCHEDULED ACTION`**.
-- [ ] **Reserved words**: pass `reserved:[...]` for values the UI supplies itself (ELT: `"Other"` — the shared view rejects adding
-  it, case-insensitively).
+- [ ] **Reserved words**: pass `reserved:[...]` for values the UI supplies itself (ELT Type: `"Other"` — the shared view rejects adding
+  it, case-insensitively). A list can opt out of the `★ DEFAULT` badge with `noDefault:true` (ELT's Type list: selects start blank; its
+  Responsibility / Rectified lists pre-fill their top option on FAIL like every other module).
 - [ ] The Dropdowns state is persisted under `-dropdowns-vN`, merged over module defaults on load so a new list key never breaks
   an old install.
 
@@ -204,8 +206,10 @@ Reference: **`exportELTExcel`** (ExcelJS), `exportSWBExcel` (ExcelJS + photos), 
   data is retained after an item leaves FAIL, an ungated export shows leftover defect data and priority-colours PASS rows.
   Module-specific equivalents are allowed and must be documented and tested: **Thermo** gates FAIL **or** MONITOR;
   **RCD** gates inline on the row's displayed Pass/Fail (`pf==="Fail"`, because a >300 ms injection result counts as Fail
-  whatever the stored status); **ELT** has no defect columns — its Failure Reason / Action Taken only reach the Notes cell for
-  failed fittings, via `eltExportNotes`. Whatever the mechanism, add a case to `export-defect-gating.test.js`.
+  whatever the stored status); **ELT** reads through `defectGate(raw, overall==="fail")` in `eltRegisterRows`, like Welder. Whatever the mechanism, add a case to `export-defect-gating.test.js`.
+- [ ] **Defect HEADINGS are always present — even with zero fails.** Column headings come from a static array (or a fixed block, as on the
+  per-welder sheet), never from "does any row fail?". Gating only blanks the VALUES. Add the module to `src/export-zero-fail.test.js`
+  (an "only passes" and a "nothing tested" dataset). Summary sheets (SWB Register, Welder Register) carry the same defect columns as the detail sheets.
 - [ ] **Deliver with `deliverExportFile(base64, filename, mime)`** — never a new mechanism (it handles the iOS native share
   bridge, Blob URLs and surfaces failures instead of failing silently).
 - [ ] **ExcelJS vs SheetJS matters.** The community SheetJS (`xlsx`) build **silently ignores** `s` style objects — RCD, IEL, TAT,
@@ -310,11 +314,10 @@ Run `npm test` and `npm run build` after every change. Vitest + jsdom, driving t
 
 | Where | Divergence | Why |
 |---|---|---|
-| **ELT** fail panel | Fields are `FAILURE REASON` / `ACTION TAKEN` using **`ELTSelectOther`** (native select + literal "Other" + text box), no Defect ID / Responsibility / Priority | The AS 2293.2 register has no defect register; "Other" is always available and never stored in the list (hence `reserved:["Other"]`). Same red panel styling (parity test). Placed above Notes like the rest. |
 | **ELT / Welder** structure | Two levels only: Site → Area → Assets (no panel/board layer); Audit is ONE grouped list (area headers), not the drill-down the other modules use; results keyed by asset id (not nested by area); one register export ordered by area. (Reverses the earlier "flat list" exception — 2026-09-25.) | Emergency lights / welders have no board level; asset-id keys mean zero results migration and free moves between areas |
 | **ELT / Welder** delete | Deleting an asset or an area also removes its results and photos (`removeAssetResults`) | **Deliberate improvement, not parity**: RCD / IEL / TAT / Thermo / SWB / IRT leave orphaned results and photos when an item is deleted. Worth backporting in a future pass; the older modules were intentionally left untouched |
 | **ELT / Welder** area names | Unique per site (case/whitespace-insensitive); add/rename to an existing name is refused | A duplicate would split one physical location into two groups; the older modules allow duplicates |
-| **ELT** report / export | Report keeps the 14-column register table under the standard summary; export lists **only tested** fittings and has no summary sheet; Dropdowns has no ★ default (`showDefault:false`) | The export mirrors the client's register; "★ moves to top" still works |
+| **ELT** report / export | Report keeps the 20-column register table (same columns as the export) under the standard summary; export lists **only tested** fittings and has no summary sheet; Dropdowns shows ★ DEFAULT on Responsibility / Rectified but not on Type (`noDefault:true`) | The export mirrors the client's register; "★ moves to top" still works |
 | **ELT** wording | `NEXT TEST DUE (default for all fittings)`; Start button reads "Start / Continue Testing" | Known small wording drift — candidate for a later copy pass, not a standard |
 | **Thermo** MONITOR | Third result, amber "⚠ MONITOR — DETAILS" panel, no failure defaults, listed as "Items to Monitor"; **4** report tiles (Total, Pass, Fail, Monitor); defect details exported for FAIL **and** MONITOR | MONITOR is not a failure but its panel deliberately collects the same details |
 | **Thermo** photos | "Photo" = a typed number ledger (`Add Photo` form, required photo number) matching a separate FLIR camera; no image data | No camera/image infra — don't assume it exists |
