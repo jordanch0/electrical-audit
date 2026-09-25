@@ -61,6 +61,8 @@ Do not change this pattern. There are known security vulnerabilities in the xlsx
 
 ---
 
+> **Building or changing a module? Read `NEW_MODULE_GUIDE.md` first** — the checklist of every standard below, with the reference module for each and the list of deliberate exceptions.
+
 ## Module Map
 
 `AppRoot` is the home screen (near end of `App.jsx`). It renders module cards and routes to each module via a `module` state string. Each module is self-contained with its own state, views, and storage keys.
