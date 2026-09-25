@@ -75,10 +75,10 @@ describe('ELT photo -> export through the real UI', () => {
     expect(media.map(sha)).toEqual([sha(bytes(JPEG_A)), sha(bytes(JPEG_B))]);
 
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf);
-    expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting', 'Photos']);
+    expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting', 'Defects', 'Photos']);
     const reg = wb.getWorksheet('Emergency Lighting');
-    expect(String(reg.getCell('B6').value)).toBe('SE Door');   // only the tested fitting is in the register
-    expect(reg.getCell('B7').value == null || String(reg.getCell('B7').value) === '').toBe(true);
+    expect(String(reg.getCell('C6').value)).toBe('SE Door');   // only the tested fitting is in the register
+    expect(reg.getCell('C7').value == null || String(reg.getCell('C7').value) === '').toBe(true);
     const ps = wb.getWorksheet('Photos');
     expect(ps.getImages()).toHaveLength(2);
     expect([2, 3].map(r => String(ps.getCell(r, 2).value))).toEqual(['SE Door', 'SW Roof']);

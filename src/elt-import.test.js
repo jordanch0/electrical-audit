@@ -54,9 +54,9 @@ describe('blank template', () => {
 });
 
 describe('header detection and validation', () => {
-  it("rejects another module's export (IEL has Location/Type but no Asset Location)", () => {
+  it("rejects another module's export (IEL has Location/Type but no Asset Location)", async () => {
     const iel = { id: 'p', name: 'Site I', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'p1', name: 'estops', circuits: ['x'], machineNames: { x: 'X' } }] }] };
-    exportIELExcel(iel, { a: { estops: { x: { status: 'pass' } } } }, meta);
+    await exportIELExcel(iel, { a: { estops: { x: { status: 'pass' } } } }, meta);
     const parsed = parseELTExcel(readPayload());
     expect(parsed.ok).toBe(false);
     expect(parsed.error).toMatch(/column headings/);

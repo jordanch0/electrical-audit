@@ -24,38 +24,38 @@ describe('RCD export', () => {
   const project = { id: 'p', name: 'Site R', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'pn', name: 'MSB', circuits: ['C1', 'C2'], circuitMeta: {} }] }] };
   it('push export includes defect details for FAIL rows only (push had none before)', async () => {
     const results = { p: { a: { pn: { C1: { push: { status: 'fail', ...failD }, inject: {} }, C2: { push: { status: 'pass', ...passD }, inject: {} } } } } };
-    exportExcel(results, project, meta, 'push', null);
+    await exportExcel(results, project, meta, 'push', null);
     const txt = sheetText();
     expect(txt).toContain('Defect ID');
     hasFail(txt); noStale(txt);
   });
   it('injection export includes defect details for FAIL rows only', async () => {
     const results = { p: { a: { pn: { C1: { push: {}, inject: { status: 'fail', resultPos: '>300', ...failD } }, C2: { push: {}, inject: { status: 'pass', resultPos: '12', resultNeg: '12', ...passD } } } } } };
-    exportExcel(results, project, meta, 'inject', null);
+    await exportExcel(results, project, meta, 'inject', null);
     const txt = sheetText(); hasFail(txt); noStale(txt);
   });
 });
 
 describe('IEL export', () => {
-  it('only FAIL rows carry defect details', () => {
+  it('only FAIL rows carry defect details', async () => {
     const project = { id: 'p', name: 'Site I', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'p1', name: 'estops', circuits: ['x', 'y'], machineNames: { x: 'X', y: 'Y' } }] }] };
     const results = { a: { estops: { x: { status: 'fail', ...failD, notes: 'n' }, y: { status: 'pass', ...passD, notes: 'n' } } } };
-    exportIELExcel(project, results, meta);
+    await exportIELExcel(project, results, meta);
     const txt = sheetText(); hasFail(txt); noStale(txt);
   });
 });
 
 describe('TAT export', () => {
-  it('only FAIL rows carry defect details', () => {
+  it('only FAIL rows carry defect details', async () => {
     const project = { id: 'p', name: 'Site T', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', defaultFreq: '3', items: ['x', 'y'], itemNames: { x: 'X', y: 'Y' }, itemTags: {}, itemEquipTypes: {}, itemFreqs: {} }] };
     const results = { a: { x: { status: 'fail', ...failD }, y: { status: 'pass', ...passD } } };
-    exportTATExcel(project, results, meta);
+    await exportTATExcel(project, results, meta);
     const txt = sheetText(); hasFail(txt); noStale(txt);
   });
 });
 
 describe('Thermo export', () => {
-  it('FAIL and MONITOR photos carry defect details; PASS photos do not', () => {
+  it('FAIL and MONITOR photos carry defect details; PASS photos do not', async () => {
     const project = { id: 'p', name: 'Site H', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', boards: [{ id: 'b', name: 'MSB', circuits: ['c1', 'c2', 'c3'], circuitNames: { c1: 'C1', c2: 'C2', c3: 'C3' } }] }] };
     const photo = (id, file, result, d) => ({ id, flirFile: file, temp: '', result, notes: '', rectifiedDate: '', ...d });
     const results = { a: { b: {
@@ -63,20 +63,20 @@ describe('Thermo export', () => {
       c2: [photo('2', '0002', 'PASS', passD)],
       c3: [photo('3', '0003', 'MONITOR', { defectId: 'D-MON', rectified: 'R-MON', responsibility: 'RESP-MON', priority: 'M' })],
     } } };
-    exportThermoExcel(project, results, meta);
+    await exportThermoExcel(project, results, meta);
     const txt = sheetText(); hasFail(txt); noStale(txt);
     expect(txt).toContain('D-MON'); // the MONITOR panel collects the same details on purpose
   });
 });
 
 describe('IRT export', () => {
-  it('only FAIL rows (manual or auto-detected) carry defect details', () => {
+  it('only FAIL rows (manual or auto-detected) carry defect details', async () => {
     const project = { id: 'p', name: 'Site N', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'pn', name: 'MCC1', items: ['x', 'y'], itemNames: { x: 'X', y: 'Y' } }] }] };
     const results = { p: { a: { pn: {
       x: { status: 'untested', testVoltage: '500V', readings: { L1E: '<1' }, ...failD }, // auto-detected FAIL
       y: { status: 'pass', testVoltage: '500V', readings: { L1E: '500' }, ...passD },
     } } } };
-    exportIRTExcel(project, results, meta);
+    await exportIRTExcel(project, results, meta);
     const txt = sheetText(); hasFail(txt); noStale(txt);
   });
 });

@@ -31,38 +31,38 @@ const ZERO = ['only passes', 'nothing tested'];
 describe.each(ZERO)('zero-fail exports keep every defect heading (%s)', kind => {
   const pass = kind === 'only passes';
 
-  it('RCD push + injection', () => {
+  it('RCD push + injection', async () => {
     const project = { id: 'p', name: 'Site R', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'pn', name: 'MSB', circuits: ['C1'], circuitMeta: {} }] }] };
     const results = pass ? { p: { a: { pn: { C1: { push: { status: 'pass' }, inject: { status: 'pass', resultPos: '12', resultNeg: '12' } } } } } } : {};
     for (const mode of ['push', 'inject']) {
-      payload = null; exportExcel(results, project, meta, mode, null);
+      payload = null; await exportExcel(results, project, meta, mode, null);
       csvHas(sheetJsText(), [...DEFECT, 'Rectified / Scheduled', 'Priority']);
     }
   });
 
-  it('IEL', () => {
+  it('IEL', async () => {
     const project = { id: 'p', name: 'Site I', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'p1', name: 'estops', circuits: ['x'], machineNames: { x: 'X' } }] }] };
-    exportIELExcel(project, pass ? { a: { estops: { x: { status: 'pass' } } } } : {}, meta);
+    await exportIELExcel(project, pass ? { a: { estops: { x: { status: 'pass' } } } } : {}, meta);
     csvHas(sheetJsText(), [...DEFECT, 'Rectified / Scheduled', 'Priority']);
   });
 
-  it('TAT', () => {
+  it('TAT', async () => {
     const project = { id: 'p', name: 'Site T', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', defaultFreq: '3', items: ['x'], itemNames: { x: 'X' }, itemTags: {}, itemEquipTypes: {}, itemFreqs: {} }] };
-    exportTATExcel(project, pass ? { a: { x: { status: 'pass' } } } : {}, meta);
+    await exportTATExcel(project, pass ? { a: { x: { status: 'pass' } } } : {}, meta);
     csvHas(sheetJsText(), [...DEFECT, 'Rectified / Scheduled', 'Priority']);
   });
 
-  it('Thermo', () => {
+  it('Thermo', async () => {
     const project = { id: 'p', name: 'Site H', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', boards: [{ id: 'b', name: 'MSB', circuits: ['c1'], circuitNames: { c1: 'C1' } }] }] };
     const results = pass ? { a: { b: { c1: [{ id: '1', flirFile: '0001', temp: '', result: 'PASS', notes: '', rectifiedDate: '' }] } } } : {};
-    exportThermoExcel(project, results, meta);
+    await exportThermoExcel(project, results, meta);
     csvHas(sheetJsText(), [...DEFECT, 'Rectified / Scheduled', 'Priority']);
   });
 
-  it('IRT', () => {
+  it('IRT', async () => {
     const project = { id: 'p', name: 'Site N', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', panels: [{ id: 'pn', name: 'MCC1', items: ['x'], itemNames: { x: 'X' } }] }] };
     const results = pass ? { p: { a: { pn: { x: { status: 'pass', testVoltage: '500V', readings: { L1E: '500' } } } } } } : {};
-    exportIRTExcel(project, results, meta);
+    await exportIRTExcel(project, results, meta);
     csvHas(sheetJsText(), [...DEFECT, 'Rectified / Scheduled', 'Priority']);
   });
 
@@ -80,7 +80,9 @@ describe.each(ZERO)('zero-fail exports keep every defect heading (%s)', kind => 
     const results = pass ? { p1: { a1: { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' } } } : {};
     await exportELTExcel(project, results, meta);
     const sheets = await exceljsSheets();
-    has(sheets['Emergency Lighting'], [...DEFECT, 'Rectified / Scheduled', 'Date Rectified / Scheduled', 'Priority (L,M,H,U)']);
+    has(sheets['Defects'], [...DEFECT, 'Rectified / Scheduled', 'Date Rectified / Scheduled', 'Priority']);
+    expect(sheets['Defects']).toContain('No defects recorded');
+    expect(sheets['Emergency Lighting']).not.toContain('Defect ID');   // the main table carries no defect columns
   });
 
   it('Welder: the Register AND the per-welder sheet (defect block present, blank)', async () => {

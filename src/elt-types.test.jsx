@@ -129,7 +129,7 @@ describe('existing fittings keep their stored type', () => {
     cleanup();
     const proj = migrateProjectToAreas({ id: 'p1', name: 'Site A', assets: [{ id: 'a1', location: 'Site A', assetLocation: 'SE Door', assetId: '', type: 'Emergency Exit Sign', typeOther: '', maintained: 'Maintained', fitting: '' }] });
     const rows = eltRegisterRows(proj, { p1: { a1: { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' } } }, {});
-    expect(rows[0].cells[3]).toBe('Emergency Exit Sign');                                 // export cell unchanged
+    expect(rows[0].cells[4]).toBe('Emergency Exit Sign');                                 // export cell unchanged
     expect(ls('elt-projects-v2')[0].areas[0].assets[0].type).toBe('Emergency Exit Sign'); // and nothing rewrote the stored value
   });
 });

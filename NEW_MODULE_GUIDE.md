@@ -210,6 +210,11 @@ Reference: **`exportELTExcel`** (ExcelJS), `exportSWBExcel` (ExcelJS + photos), 
 - [ ] **Defect HEADINGS are always present — even with zero fails.** Column headings come from a static array (or a fixed block, as on the
   per-welder sheet), never from "does any row fail?". Gating only blanks the VALUES. Add the module to `src/export-zero-fail.test.js`
   (an "only passes" and a "nothing tested" dataset). Summary sheets (SWB Register, Welder Register) carry the same defect columns as the detail sheets.
+- [ ] **A wide flat-table export (> ~10 columns) is SPLIT, not shrunk (2026-09-26).** Main table = `#`, identifiers, dates, result, key values, Notes
+  (no FAIL-only columns); a separate `Defects` sheet = FAIL rows only, keyed by the same `#`, always present with its headings and a "No defects
+  recorded" line when empty. Build it with `xlSplitSheets` (SheetJS) or copy `exportELTExcel` (ExcelJS). Keep the main table the FIRST sheet (importers read
+  sheet 1). Size every column to its heading (SheetJS cannot wrap) and target >= 85% fit-to-width on landscape A4. **Set page setup in the file**
+  (`xlPrintify` for SheetJS; `sheet.pageSetup` for ExcelJS): landscape, fit to 1 page wide, repeating heading row, footer. Test: `src/export-print-layout.test.js`.
 - [ ] **Deliver with `deliverExportFile(base64, filename, mime)`** — never a new mechanism (it handles the iOS native share
   bridge, Blob URLs and surfaces failures instead of failing silently).
 - [ ] **ExcelJS vs SheetJS matters.** The community SheetJS (`xlsx`) build **silently ignores** `s` style objects — RCD, IEL, TAT,

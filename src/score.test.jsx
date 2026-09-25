@@ -44,7 +44,7 @@ describe('ELT fitting score (its 4 checks, no N/A)', () => {
   it('the register row carries the Score right after Pass/Fail', () => {
     const proj = toAreas({ id: 'p1', name: 'S', assets: [{ id: 'a1', location: 'S', assetLocation: 'Door', assetId: '', type: 'Emergency Exit Sign', maintained: '', fitting: '' }] });
     const [row] = eltRegisterRows(proj, { p1: { a1: checks('pass', 'fail', 'pass', 'pass') } }, {});
-    expect(row.cells[11]).toBe('Fail'); expect(row.cells[12]).toBe('75.0%');
+    expect(row.cells[12]).toBe('Fail'); expect(row.cells[13]).toBe('75.0%');
   });
 });
 
