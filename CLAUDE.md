@@ -331,6 +331,12 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add feature requests here before starting a Claude Code session. Format: module · feature · expected behaviour.
 
 ```
+[ ] ALL · Code-split the main JS bundle · The whole app is ONE chunk (~2.2 MB, src/App.jsx) and it now exceeds Workbox's 2 MiB precache default, so
+    vite.config.js raises workbox.maximumFileSizeToCacheInBytes to 5 MiB (2026-09-26) to keep offline support. That is a stop-gap: a large single chunk means a
+    slower first load, especially on phones. Worth doing as its OWN task: lazy-load each module (RCD / IEL / TAT / Thermo / SWB / IRT / ELT / Welder / Calendar)
+    with React.lazy + dynamic import, and lazy-load ExcelJS / SheetJS / JSZip only when an export or import runs. Then lower the limit again. Do not fold this
+    into feature work.
+
 STATUS 2026-09-25: DONE — kept here only as the original spec. The original audit (2026-06-04, block in App.jsx) covered CalendarApp,
 RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp and AppRoot. Since then: the Calendar event-delete confirm was fixed and now shares
 `activeDeleteSetter` (so "CalendarApp: no delete actions" in that block is out of date), and ELT and Welder were built entirely on
