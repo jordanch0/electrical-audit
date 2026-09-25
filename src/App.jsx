@@ -13201,14 +13201,153 @@ function WelderStatusChip({overall}) {
 }
 const welderMetaDefaults = m => ({auditor:"",testDate:new Date().toISOString().slice(0,10),instruments:"",...(m||{})});
 
+// ── Welder Excel import ──────────────────────────────────────────────────────────────────────────
+// Structure only (same rule as ELT): reads the Register sheet of a Welder export (or the import template) for the welder
+// list — Location, Asset ID, Welder (Machine), Serial Number. Dates, Pass / Fail, defect columns, notes and every per-welder
+// checklist result are ignored, so an import always starts a fresh audit. The Register lists ALL welders (tested or not),
+// so unlike ELT a re-import recovers the complete list.
+// Header rule (SWB re-import bug class): a row is only the header if >= 3 of the anchors below match a cell EXACTLY.
+// "Welder (Machine)" is the module's identifying column and must be present (rows may leave it blank if they have an Asset ID).
+// Brand / Model: the Register only has the joined "Welder (Machine)" text, which cannot be split reliably ("Lincoln Electric" +
+// model). So identity is taken from the matching per-welder sheet's "Brand:" / "Model:" cells — but only when that sheet
+// verifiably belongs to the row (same position, Asset ID and Serial Number agree, and Brand + Model rejoin to the Register text).
+// Otherwise the whole text goes in Brand and the preview says so. No result data is ever read from the per-welder sheets.
+const WELDER_IMPORT_ANCHORS = ["location","asset id","welder (machine)","serial number"];
+const WELDER_IMPORT_PLACEHOLDERS = ELT_IMPORT_PLACEHOLDERS;
+function parseWelderExcel(data) {
+  try {
+    const sheets = (data && data.SheetNames) || [];
+    if (!sheets.length) return { ok:false, error:"The file has no sheets." };
+    const ordered = [...sheets.filter(n=>n.toLowerCase()==="register"), ...sheets.filter(n=>n.toLowerCase()!=="register")];
+    let rows=null, hi=-1, colOf=null, regName="", eltLike=false;
+    for (const name of ordered) {
+      const r = XLSX.utils.sheet_to_json(data.Sheets[name],{header:1,defval:"",raw:false});
+      for (let i=0;i<Math.min(r.length,10);i++) {
+        if (r[i].some(c=>String(c).length>60)) continue; // instructions / title text is never a header row
+        const norm = r[i].map(eltNormHeader);
+        if (norm.includes("asset location")) eltLike = true;
+        const hits = WELDER_IMPORT_ANCHORS.filter(a=>norm.includes(a));
+        if (hits.length>=3) { rows=r; hi=i; regName=name; colOf=a=>norm.indexOf(a); break; }
+      }
+      if (rows) break;
+    }
+    if (!rows) {
+      if (eltLike) return { ok:false, error:"This looks like an Emergency Lighting (ELT) file, not a Welder one. Import it from the Emergency Lighting module instead." };
+      return { ok:false, error:"Couldn't find the Welder column headings. The sheet needs a row with Location, Asset ID, Welder (Machine) and Serial Number. Download the import template to see the layout." };
+    }
+    const cM = colOf("welder (machine)");
+    if (cM<0) return { ok:false, error:"The \"Welder (Machine)\" column is missing — it is required. Download the import template to see the layout." };
+    const cLoc=colOf("location"), cId=colOf("asset id"), cSer=colOf("serial number");
+    const cell = (row,c)=>c>=0?String(row[c]==null?"":row[c]).trim():"";
+    // Site / company: title rows above the header. The title is "<site> — Welder Test" (before the rename: "— Welder (VRD) Test");
+    // strip exactly that suffix (never split on hyphens) and ignore template / export placeholders.
+    let siteName="", company="", abn="", licence="";
+    const t0 = hi>0 && rows[0] ? String(rows[0][0]||"").trim() : "";
+    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test\s*$/i,"").trim();
+    if (hi>1 && rows[1] && rows[1][0]) {
+      const p = parseCompanyRow(rows[1][0]);
+      const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
+      company = ph(p.company,WELDER_IMPORT_PLACEHOLDERS.company)?"":p.company;
+      abn = ph(p.abn,WELDER_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
+      licence = ph(p.licence,WELDER_IMPORT_PLACEHOLDERS.licence)?"":p.licence;
+    }
+    // Per-welder sheets (identity cells only), in workbook order — the export writes them in Register row order.
+    const detail = sheets.filter(n=>n!==regName).map(n=>{
+      const r = XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:"",raw:false});
+      const grab = (ri,ci,label)=>{ const v=String((r[ri]&&r[ri][ci])||""); const m=v.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; };
+      return { assetId:grab(2,2,"Asset ID"), brand:grab(3,0,"Brand"), model:grab(3,2,"Model"), serial:grab(4,0,"Serial Number") };
+    });
+    const assets=[], seen=new Set(); let skipped=0, duplicates=0, combined=0, exact=0, k=-1;
+    for (let i=hi+1;i<rows.length;i++) {
+      const row = rows[i];
+      if (!row.some(c=>String(c==null?"":c).trim()!=="")) continue; // blank row
+      k++;
+      const assetId=cell(row,cId), machine=cell(row,cM);
+      if (!assetId && !machine) { skipped++; continue; } // can't identify a welder
+      const location=cell(row,cLoc), serial=cell(row,cSer);
+      const key=[location,assetId,machine,serial].join("|").toLowerCase();
+      if (seen.has(key)) { duplicates++; continue; }
+      seen.add(key);
+      let brand=machine, model="";
+      const d = detail[k];
+      if (d && d.brand!==null && d.model!==null && d.assetId===assetId && d.serial===serial
+          && [d.brand,d.model].filter(Boolean).join(" ")===machine) { brand=d.brand; model=d.model; exact++; }
+      else if (machine) combined++;
+      assets.push({ id:uid(), location, assetId, brand, model, serial });
+    }
+    if (!assets.length) return { ok:false, error:"No welders found — every row was blank or had no Asset ID or Welder (Machine)." };
+    return { ok:true, siteName, company, abn, licence, assets, skipped, duplicates, combined, exact };
+  } catch(e) { return { ok:false, error:"Could not parse file — check it is a valid Excel or CSV file." }; }
+}
+function downloadWelderTemplate() {
+  const XLSX=XLSX_LIB; if(!XLSX){alert("Excel library not loaded");return;}
+  const rows=[
+    ["Site Name — enter your site name here"],
+    ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+    [""],
+    ["INSTRUCTIONS: Fill in one row per welder. Welder (Machine) is required — brand then model, e.g. Kemppi MinarcMig Evo 200 (it can be left blank if the welder has an Asset ID). Location defaults to the site name; Serial Number is optional. Leave the test columns (Date Tested onwards) blank — results are recorded in the app. Site and company are read from rows 1-2."],
+    [...WELDER_COLUMNS],
+    ["ONR Workshop", "W001", "Kemppi MinarcMig Evo 200", "2699294"],
+    ["ONR Workshop", "W002", "Unimig Razor 200", "N/A"],
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=WELDER_COLUMNS.map((c,i)=>({wch:i<4?26:14}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Welder Import");
+  const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+  deliverExportFile(out,"Welder_Import_Template.xlsx");
+}
+
 function WelderProjectListView({projects, allResults, onSelect, onAddProject, onDeleteProject}) {
   const SS = swbStyles();
   const [showAdd,setShowAdd] = React.useState(false);
+  const [tab,setTab] = React.useState("manual");
   const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
-  const closeAdd = ()=>{setShowAdd(false);setVals({name:"",company:"",abn:"",licence:""});};
+  const [importing,setImporting] = React.useState(false);
+  const [importPreview,setImportPreview] = React.useState(null);
+  const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [importError,setImportError] = React.useState("");
+  const fileRef = React.useRef();
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setVals({name:"",company:"",abn:"",licence:""});setImportPreview(null);setImportError("");};
+  const handleFile = e=>{
+    const file=e.target.files[0]; if(!file) return;
+    if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
+    setImporting(true);setImportError("");
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const buf=ev.target.result;
+        if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
+        const parsed=parseWelderExcel(XLSX.read(buf,{type:"array"}));
+        if(!parsed.ok){setImportError(parsed.error);return;}
+        setImportPreview(parsed);
+        setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
+      }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
+      finally{setImporting(false);}
+    };
+    reader.onerror=()=>{setImportError("Failed to read file.");setImporting(false);};
+    reader.readAsArrayBuffer(file);
+    e.target.value="";
+  };
+  const confirmImport = ()=>{
+    if(!importPreview) return;
+    const name=(importVals.name||"").trim()||"Imported Site";
+    onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
+      assets:importPreview.assets.map(a=>({...a,location:a.location||name}))});
+    closeAdd();
+  };
+  // Manual / Import toggle — same pencil / download icons as ELT, IEL, IRT and SWB, in Welder's accent
+  const tabStyle = active=>({...SS.tabBtn,...(active?{background:WELDER_COLOR_DIM,border:`1px solid ${WELDER_COLOR}`,color:WELDER_COLOR}:{})});
+  const ic = (...kids)=>eltEl('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,display:"inline",verticalAlign:"middle"}},...kids);
+  const pencil = ic(eltEl('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),eltEl('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}));
+  const download = ic(eltEl('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),eltEl('polyline',{points:'7 10 12 15 17 10'}),eltEl('line',{x1:12,y1:15,x2:12,y2:3}));
+  const warnings = importPreview ? [
+    importPreview.skipped>0&&nw(importPreview.skipped,"row")+" skipped (no Asset ID or Welder (Machine))",
+    importPreview.duplicates>0&&nw(importPreview.duplicates,"duplicate row")+" ignored",
+    importPreview.combined>0&&nw(importPreview.combined,"welder")+": brand and model couldn't be separated, so the whole make/model text went in Brand — edit in Manage",
+  ].filter(Boolean) : [];
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{...SS.listTitle,marginTop:24}},"Sites")
-    ,projects.length===0&&!showAdd&&eltEl('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one below.")
+    ,projects.length===0&&!showAdd&&eltEl('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel below.")
     ,projects.map(proj=>{
       const s = welderSiteSummary(proj,allResults);
       return eltEl('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
@@ -13229,14 +13368,46 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
     })
     ,showAdd
       ?eltEl('div',{style:SS.addCard}
-        ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
-        ,eltEl(ELTSiteFields,{vals,setVals})
-        ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-          ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});closeAdd();}},"Add Site")
-          ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
+        ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14}}
+          ,eltEl('button',{style:tabStyle(tab==="manual"),onClick:()=>setTab("manual")},pencil," Manual Entry")
+          ,eltEl('button',{style:tabStyle(tab==="import"),onClick:()=>setTab("import")},download," Import Excel")
+        )
+        ,tab==="manual"&&eltEl(React.Fragment,null
+          ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
+          ,eltEl(ELTSiteFields,{vals,setVals})
+          ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
+          )
+        )
+        ,tab==="import"&&eltEl(React.Fragment,null
+          ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel")
+          ,eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginBottom:12}},"Upload a Welder export or the import template. Columns: ",eltEl('strong',null,"Welder (Machine)")," (required) | Location | Asset ID | Serial Number. Only the welder register is imported — test results start blank.")
+          ,!importPreview&&eltEl(React.Fragment,null
+            ,eltEl('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile,"data-testid":"welder-import-file"})
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"Choose Excel / CSV File")
+            ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:downloadWelderTemplate},download," Download Import Template")
+            ,importError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
+            ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",marginTop:8},onClick:closeAdd},"Cancel")
+          )
+          ,importPreview&&eltEl(ImportErrorBoundary,null,eltEl(React.Fragment,null
+            ,eltEl('div',{style:{background:WELDER_COLOR_DIM,border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:10,padding:"12px",marginBottom:12}}
+              ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:WELDER_COLOR,marginBottom:8}},"✓ Preview")
+              ,eltEl('div',{style:{fontSize:12,color:"#3f3f46",marginBottom:4}},nw(importPreview.assets.length,"welder")+" found")
+              ,importPreview.assets.slice(0,4).map((a,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#6e6a66",marginBottom:2}},welderTitle(a),a.assetId&&welderMachine(a)?" · "+welderMachine(a):"",a.serial?" · S/N "+a.serial:""))
+              ,importPreview.assets.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+(importPreview.assets.length-4)+" more")
+              ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
+            )
+            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
+            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+              ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:confirmImport},"✓ Import Site")
+              ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>{setImportPreview(null);setImportError("");}},"Re-upload")
+              ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
+            )
+          ))
         )
       )
-      :eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add Site")
+      :eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add / Import Site")
   );
 }
 
@@ -13824,6 +13995,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

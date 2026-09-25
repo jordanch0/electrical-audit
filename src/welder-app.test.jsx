@@ -46,7 +46,7 @@ describe('Welder module shell', () => {
     const user = userEvent.setup();
     render(<AppRoot />);
     await user.click(screen.getByText('WELDER TESTING'));
-    await user.click(screen.getByRole('button', { name: '+ Add Site' }));
+    await user.click(screen.getByRole('button', { name: '+ Add / Import Site' }));
     await user.type(screen.getByPlaceholderText('Site name'), 'Test Site');
     await user.click(screen.getByRole('button', { name: 'Add Site' }));
     await user.click(await screen.findByText('Test Site'));
