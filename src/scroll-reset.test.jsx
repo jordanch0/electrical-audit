@@ -205,7 +205,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     localStorage.setItem('irt-projects-v1', JSON.stringify([project]));
 
     render(<AppRoot />);
-    await user.click(await screen.findByText('IR TESTING'));
+    await user.click(await screen.findByText('INSULATION RESISTANCE TESTING'));
     await user.click(await screen.findByText('IRT Site'));
     await user.type(await screen.findByPlaceholderText('Enter name to begin audit…'), 'Jordan');
     await user.click(await screen.findByText(/Start \/ Continue Audit/));
@@ -219,6 +219,53 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     await user.click(lastItem);
 
     await screen.findByText(/DANGER/);
+    expect(container.scrollTop).toBe(0);
+  });
+
+  it('ELT: opening a fitting resets the shared scroll container', async () => {
+    const user = userEvent.setup();
+    const project = {
+      id: 'site-1', name: 'ELT Site', company: '', abn: '', licence: '',
+      assets: ['Door 1', 'Door 2', 'Door 3'].map((n, i) => ({ id: 'a' + i, location: 'ELT Site', assetLocation: n, assetId: '', type: 'Emergency Exit Sign', maintained: 'Maintained', fitting: 'X' })),
+    };
+    localStorage.setItem('elt-projects-v1', JSON.stringify([project]));
+    localStorage.setItem('elt-meta-v1', JSON.stringify({ 'site-1': { auditor: 'Jordan', testDate: '2026-09-21', nextTestDate: '2027-03-21' } }));
+
+    render(<AppRoot />);
+    await user.click(await screen.findByText('EMERGENCY LIGHTING'));
+    await user.click(await screen.findByText('ELT Site', { selector: 'div' }));
+    await user.click(await screen.findByRole('button', { name: /^Audit$/ }));
+
+    const lastItem = await screen.findByText('Door 3');
+    const container = findScrollContainer(lastItem);
+    container.scrollTop = 500;
+
+    await user.click(lastItem);
+
+    await screen.findByText('Visual Inspection');
+    expect(container.scrollTop).toBe(0);
+  });
+  it('Welder: opening a welder resets the shared scroll container', async () => {
+    const user = userEvent.setup();
+    const project = {
+      id: 'site-1', name: 'Welder Site', company: '', abn: '', licence: '',
+      assets: ['W001', 'W002', 'W003'].map((n, i) => ({ id: 'a' + i, location: 'Shop', assetId: n, brand: 'B', model: 'M', serial: '1' })),
+    };
+    localStorage.setItem('welder-projects-v1', JSON.stringify([project]));
+    localStorage.setItem('welder-meta-v1', JSON.stringify({ 'site-1': { auditor: 'Jordan', testDate: '2026-09-21', nextTestDate: '2026-12-21' } }));
+
+    render(<AppRoot />);
+    await user.click(await screen.findByText('WELDER TESTING'));
+    await user.click(await screen.findByText('Welder Site', { selector: 'div' }));
+    await user.click(await screen.findByRole('button', { name: /^Audit$/ }));
+
+    const lastItem = await screen.findByText('W003');
+    const container = findScrollContainer(lastItem);
+    container.scrollTop = 500;
+
+    await user.click(lastItem);
+
+    await screen.findByText('Welder Inspection & Audit Checklist');
     expect(container.scrollTop).toBe(0);
   });
 });

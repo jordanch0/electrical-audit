@@ -11,7 +11,7 @@ The app is built with **React + JSX**, bundled by **Vite**. Source lives in `src
 
 **Version:** v11 (shown in AppRoot footer)
 **Brand colour:** `#e8731a` (SparkCheck orange)
-**Dark theme throughout:** background `#111`, surface `#161616`
+**Light theme throughout:** background `#e8e6e2`, surface `#f7f6f3` (the earlier dark `#111`/`#161616` theme is gone)
 
 ---
 
@@ -61,9 +61,11 @@ Do not change this pattern. There are known security vulnerabilities in the xlsx
 
 ---
 
+> **Building or changing a module? Read `NEW_MODULE_GUIDE.md` first** — the checklist of every standard below, with the reference module for each and the list of deliberate exceptions.
+
 ## Module Map
 
-`AppRoot` is the home screen (near end of `App.jsx`). It renders module cards and routes to each module via a `module` state string. Each module is self-contained with its own state, views, and storage keys.
+`AppRoot` is the home screen (near end of `App.jsx`). It renders one card per audit module (8 in a 2-column grid: RCD, IEL, TAT, Thermo, SWB, IRT, ELT, Welder) and routes to each via a `module` state string. **Calendar is not a grid card** — it is opened from a fixed pill (`data-testid="calendar-pill"`, aria-label "Open Test Calendar") pinned bottom-centre of the home screen only, positioned with `env(safe-area-inset-bottom)`. The header block pads with `env(safe-area-inset-top)` (never a fixed pixel offset) so it clears the iPhone notch / Dynamic Island. Each module is self-contained with its own state, views, and storage keys.
 
 | Module Key | Function Name | Approx. Line | Colour | Purpose |
 |---|---|---|---|---|
@@ -74,6 +76,10 @@ Do not change this pattern. There are known security vulnerabilities in the xlsx
 | `"thermo"` | `ThermoApp` | ~9220 | `#f97316` orange | Thermographic Testing — FLIR photo logging, thermal imaging audits |
 | `"swb"` | `SWBApp` | ~10177 | `#a855f7` purple | Switchboard Audit — 11-point visual inspection checklist |
 | `"irt"` | `IRTApp` | ~11769 | `#60a5fa` blue | Insulation Resistance Testing — IR testing of cables, motors |
+| `"elt"` | `ELTApp` | ~10977 | `#0f766e` teal | Emergency Lighting Testing (AS 2293.2:2019) — Site → Area → fittings (two levels, no panel layer; the old Location field IS the area), 4 Pass/Fail sub-checks per fitting, single-table Excel export ordered by area |
+| `"welder"` | `WelderApp` | ~11800 | `#be185d` rose | Welder Testing — Site → Area → welders (two levels; the old Location field IS the area), fixed 12-item checklist per welder (Pass/Fail/N/A + measured value + corrective action), derived per-welder Overall/Score/Actions (Score = Pass / (12 − N/A) × 100; Date Tested / Prepared By / Instruments are site-level only, set on Home), Summary Register table on the Report tab, per-welder Excel export from History (ExcelJS). Overall = Untested until all 12 items answered; Excel import of the welder register (see Welder Excel import below) |
+
+**Date maths rule (app-wide):** ISO `YYYY-MM-DD` strings parse as UTC midnight, so month/year additions must use `setUTCMonth`/`setUTCFullYear` (`addMonthsISO`, `addYearsISO`, `addTATMonths`). Local `setMonth` + `toISOString()` lost a day across daylight saving (13/07 + 3 months gave 12/10 in Sydney). `swbAddYear`/`irtAddYear` are correct in Australian timezones (local set + local format) and are covered by `src/date-helpers-dst.test.js`.
 
 ### Common Module Pattern
 Every module follows the same internal structure:
@@ -173,7 +179,8 @@ Auto-detects company/ABN/licence from row 2, header row from first 15 rows.
 - **Single file** — all components remain in `src/App.jsx`; do not split into separate files unless explicitly asked
 - **Functional components only** — React hooks (`useState`, `useEffect`, `useCallback`, `useRef`, `useMemo`)
 - **Inline styles everywhere** — no CSS classes, no stylesheets. All styling via `style={{...}}` objects
-- **Dark theme constants**: bg `#111`, surface `#161616`, border `#222`, text `#eee`, muted `#888`
+- **Light theme constants**: bg `#e8e6e2`, surface `#f7f6f3`, border `#e4e4e7`, text `#18181b`, muted `#52525b`
+- **Bottom nav**: every module uses the same bar (bg `#f7f6f3`, 1px `#e4e4e7` top border, 34px bottom padding) and the active tab is always slate `#334155` — never the module accent
 - **Section dividers**: `// ─────────────────────────────────────────────────────────────────────────`
 - **Australian locale**: dates DD/MM/YYYY, currency $AUD implied, standards references to AS/NZS
 - **Default export**: `App.jsx` ends with `export default AppRoot`
@@ -296,12 +303,24 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 
 ---
 
+### Other shared standards (design-consistency batch)
+
+- **Reset buttons** ("Reset" / "Reset to defaults" on any Dropdowns list) must go through the shared `ConfirmReset` wrapper — resetting silently discards customised options. **Dropdown option deletes** use `DeleteButton` with `compact: true`. `ConfirmReset`, `DeleteButton` and the Calendar event card all share `activeDeleteSetter`, so only one prompt is ever open. Covered by `src/reset-confirm.test.jsx` and `src/calendar-delete.test.jsx`.
+- **Fail-only panel** ("⚠ FAIL — DEFECT DETAILS"): same red panel in every module; label `RECTIFIED / SCHEDULED ACTION`; Defect ID placeholder `e.g. 74`; the panel sits **before** the notes/comments box; Rectified and Responsibility use the editable dropdown fed by the module's customisable lists (TAT has `tat-dropdowns-v1`); defect data is **retained** when an item leaves FAIL (never cleared on save). The ★ default (first list option) is *stored* when an item becomes FAIL (`failFill` / `useFailDefaults`), not just displayed. **ELT now uses this same panel** (2026-09-26 — the old FAILURE REASON / ACTION TAKEN panel and `eltExportNotes` are gone; ELT's Dropdowns tab has Type + Responsibility + Rectified). Pre-standard ELT records are reconciled at READ time by `eltNormaliseRes` (only for FAIL records: old Action Taken -> `rectified`, old Failure Reason folded into the front of Notes as "Failure reason: X.", old keys dropped on the next save; passing / untested records keep the old fields hidden), and `upgradeEltDropdowns` retires the old lists (a customised Action Taken list carries over as Rectified). **Every export always carries its defect column headings even with zero fails** (static arrays; gating only blanks values) — `src/export-zero-fail.test.js` covers all eight modules. Thermo's MONITOR result has its own amber "⚠ MONITOR — DETAILS" panel and is not treated as a failure.
+- **Save model — LIVE AUTO-SAVE everywhere (one standard, 2026-09-25)**: on every test-result item page (RCD, IEL, TAT, Thermo photo ledger, SWB, IRT, ELT, Welder) each change is written to storage immediately — no draft, no Save button, no "unsaved changes" prompt; Back just leaves. ELT, SWB and IRT were converted from Save-button drafts (`src/live-save.test.jsx`). IRT keeps `status` as `"untested"` (= auto-detect from readings) until the user overrides it, so a save never freezes a derived FAIL. Manage / Calendar forms keep their explicit Save buttons (record-editing forms, not test results); Thermo's "Add Photo" is an add-entry form that already commits per entry. Full rules and the measured write cost: NEW_MODULE_GUIDE.md §4 "SAVE MODEL".
+- **Report tab**: build it from `ReportStatTiles`, `ReportFailedItems` ("Failed Items": title, path, Defect ID, notes, → Responsibility, Rectified/Scheduled Action) and `ReportNoDefects` ("✓ No defects recorded"). Failed Items lists only items whose status is FAIL (retained defect data on a PASS item must never list it). No Export button on the Report tab — export lives in History. **Exports** only write defect details (Defect ID, Responsibility, Priority, Rectified / Scheduled, Risk) for FAIL rows (Thermo: FAIL and MONITOR) — new exports must read items through `defectGate` / `defectGateByStatus`, because that data is retained on the item after it leaves FAIL (`src/export-defect-gating.test.js`). RCD push and injection exports/report rows both carry the defect columns. ELT shows four tiles (Total, Pass, Fail, Untested) — it has no N/A result.
+- **ELT Excel import** (`parseELTExcel`, Manual / Import toggle on the ELT site list): accepts an ELT export or the blank template (`ELT_COLUMNS`, 20 headings; older 14/15-column exports still import, because only the six identifying headings Location / Asset Location / Asset ID / Type / Maintained / Fitting are read). **Structure only** — it reads Location, Asset Location (required), Asset ID, Type, Maintained, Fitting; results, dates and notes are ignored. The header row must match >= 3 ELT headings *exactly* (never a fuzzy "contains" match on title text — the SWB re-import bug) and include Asset Location. Unknown Type values import as "Other" + the text. The site name is taken by stripping the " — Emergency Lighting Test" suffix (not by splitting on hyphens), and the "SparkCheck" / template placeholders are ignored. Tests: `src/elt-import.test.js`, `src/elt-import-ui.test.jsx`.
+- **Welder Excel import** (`parseWelderExcel`, Manual / Import toggle on the Welder site list, rose `#be185d` on `#fce7f3`): accepts a Welder export or the blank template (`Welder_Import_Template.xlsx`, same 13 `WELDER_COLUMNS`). **Structure only** — reads the Register sheet's Location, Asset ID, Welder (Machine), Serial Number; dates, Pass / Fail, defect columns, notes and every per-welder checklist result are ignored. Header row = >= 3 of those 4 headings matching exactly, and `Welder (Machine)` must be present (a row may leave it blank if it has an Asset ID; rows with neither are skipped). Unlike ELT, the Register lists ALL welders (tested or not), so a re-import recovers the full list. **Brand / Model**: the Register only has the joined "Welder (Machine)" text (unsplittable — "Lincoln Electric" + model), so exact Brand / Model come from the matching per-welder sheet's `Brand:` / `Model:` cells, trusted only when that sheet verifiably belongs to the row (same position, Asset ID and Serial agree, Brand + Model rejoin to the Register text). Otherwise (template, hand-made file, mis-ordered sheets) the whole text goes in Brand and the preview says so. Site name: strip ` — Welder Test` **or the pre-rename ` — Welder (VRD) Test`** (real historical exports), never split on hyphens. An ELT file gets a friendly "looks like an ELT file" message. Tests: `src/welder-import.test.js` (unit + real `exportWelderExcel` round trip), `src/welder-import-ui.test.jsx` (toggle, preview, and the full UI export -> fresh-app import pipeline).
+- **Area grouping (ELT + Welder) — Site → Area → Assets, exactly two levels** (added 2026-09-25; this REVERSED the earlier deliberate "flat asset list" exception). Shape: `site.areas:[{id,name,assets:[…]}]`; an asset no longer stores `location` — its area's name is the Location (`areaAssets(site)` yields the flat list in area order, annotated with `location` + `areaId`; every summary, report, register and export reads through it, which is what makes exports come out grouped by area). ELT's `assetLocation` ("SE Door") stays on the asset. Results stay keyed `results[siteId][assetId]` (NOT nested by area), so moving an asset between areas needs no results migration. **Storage**: `elt-projects-v2` / `elt-history-v2` / `welder-projects-v2` / `welder-history-v2` (snapshots carry `areas`); results, meta and dropdowns stay `-v1` (unchanged shape). **Migration** (`loadVersioned` + `migrateProjectToAreas` / `migrateHistoryToAreas`, pure, tested in `src/area-migration.test.js`): the v2 key is read first; only if absent is the v1 key read and converted, and **the v1 key is never written or deleted** (permanent backup). Each asset's Location becomes an area — grouped case- and whitespace-insensitively, blank Location = the site name, first-appearance order, first-seen spelling, deterministic ids — so many assets sharing a Location land in ONE area. Area names are unique per site (add/rename to an existing name is refused). Manage uses the shared `AreaManager` (IRT-style collapsible area cards, inline rename, `DeleteButton`, add-area box; an Area select in the asset edit form moves an asset); Audit is one grouped list (`AreaAuditGroups`); Report has an AREA SUMMARY (`AreaSummaryRows`); History snapshots show area headers. **Deleting an asset or area also deletes its results and photos** (`removeAssetResults`) — a deliberate improvement over RCD/IEL/TAT/Thermo/SWB/IRT, which orphan results and photos on delete (candidate for a future backport; the older modules were intentionally not touched). Import: the Location column becomes the area (blank -> the site name as currently typed in the preview); the preview shows "N fittings in M areas". Export: column A "Location" is the area name, rows ordered by area then original order within the area, no separator rows (so re-import round-trips); per-welder sheets and the ELT Photos sheet follow the same order. Tests: `src/area-migration.test.js`, `src/area-views.test.jsx`, `src/area-import.test.jsx`. Each module keeps its own subtitle ("RCD AUDIT REPORT", …).
+
+---
+
 ## Known Bugs
 
 > Add bugs here before starting a Claude Code session. Format: module · symptom · suspected cause.
 
 ```
-[ ] Add your known bugs here
+[x] FIXED 2026-09-25 — intermittent test failure identified: `src/welder-export.test.jsx` > "Welder photo -> export through the real UI" > "photos on a fully tested welder and on an untested welder reach their own sheets intact" hit vitest's default 5000ms timeout when the whole suite ran in parallel (it drives ~30 UI clicks plus an ExcelJS build; passes alone in ~3s, and the full suite passed with --testTimeout=30000). Fix: a 30000ms timeout on that one test only (not global). Verified 145/145 across 3 isolated runs, 2 parallel full runs and 1 serial full run. If another test ever times out at 5000ms, give it the same per-test timeout rather than raising the global one.
 ```
 
 ---
@@ -311,6 +330,12 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add feature requests here before starting a Claude Code session. Format: module · feature · expected behaviour.
 
 ```
+STATUS 2026-09-25: DONE — kept here only as the original spec. The original audit (2026-06-04, block in App.jsx) covered CalendarApp,
+RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp and AppRoot. Since then: the Calendar event-delete confirm was fixed and now shares
+`activeDeleteSetter` (so "CalendarApp: no delete actions" in that block is out of date), and ELT and Welder were built entirely on
+`DeleteButton` / `ConfirmReset`. Verified in the real browser on 2026-09-25 for ELT and Welder: site delete, welder/fitting delete,
+Manage delete, dropdown option delete, list Reset, Home "Reset all results?" and photo delete all need a second step and Keep leaves
+data untouched. See the addendum block in App.jsx. New modules: follow NEW_MODULE_GUIDE.md section 5.
 [ ] ALL MODULES · Delete Consistency Audit · Standardise every destructive action across the entire
     app to use the shared DeleteButton component defined in the Design System section above.
 
@@ -323,10 +348,10 @@ Remove all of the following when converting a delete action to `DeleteButton`:
       • Trash icons / ✕ / × buttons that delete without a second step
       • Any button labelled "Delete" or "Remove" that acts immediately on first click
 
-    Modules to audit: CalendarApp, RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp, AppRoot
+    Modules to audit: CalendarApp, RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp, ELTApp, WelderApp, AppRoot
 
-    After completing all replacements, append an audit summary comment block at the
-    bottom of App.jsx (before the export default line):
+    After completing all replacements, append an audit summary comment block in App.jsx (the existing blocks sit
+    just above the MOUNT section, ~line 12650; the file itself ends with the export list and `export default AppRoot`):
 
     /*
     DELETE CONSISTENCY AUDIT — [date]
