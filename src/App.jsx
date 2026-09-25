@@ -12706,6 +12706,17 @@ DUPLICATE IMPLEMENTATIONS REMOVED:
 */
 
 /*
+DELETE CONSISTENCY AUDIT — ADDENDUM 2026-09-25 (verified current; the 2026-06-04 block above is unchanged)
+===========================================
+- CalendarApp: the "no delete actions" note above is out of date. The event-delete confirm was fixed later and now shares
+  activeDeleteSetter with DeleteButton / ConfirmReset (one prompt open at a time). Test: src/calendar-delete.test.jsx.
+- ELTApp and WelderApp were built after this audit and use DeleteButton / ConfirmReset throughout (site, fitting/welder, dropdown option,
+  list Reset, Home "Reset all results?", photo, history snapshot). Checked in the real browser 2026-09-25: every first click opens a
+  Delete/Keep (or Reset/Keep) prompt and Keep leaves stored data untouched. Tests: src/reset-confirm.test.jsx, src/calendar-delete.test.jsx.
+- No window.confirm() calls and none of the home-grown confirm-state names exist in the file.
+*/
+
+/*
 UI CONSISTENCY AUDIT — 2026-06-05
 ===========================================
 FIXED:

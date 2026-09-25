@@ -317,7 +317,6 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add bugs here before starting a Claude Code session. Format: module · symptom · suspected cause.
 
 ```
-[ ] Add your known bugs here
 [ ] Intermittent test failure: one failure seen in a 145-test run, not reproduced in 5 reruns, name not captured — if it recurs, capture the test name before investigating.
 ```
 
@@ -328,6 +327,12 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add feature requests here before starting a Claude Code session. Format: module · feature · expected behaviour.
 
 ```
+STATUS 2026-09-25: DONE — kept here only as the original spec. The original audit (2026-06-04, block in App.jsx) covered CalendarApp,
+RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp and AppRoot. Since then: the Calendar event-delete confirm was fixed and now shares
+`activeDeleteSetter` (so "CalendarApp: no delete actions" in that block is out of date), and ELT and Welder were built entirely on
+`DeleteButton` / `ConfirmReset`. Verified in the real browser on 2026-09-25 for ELT and Welder: site delete, welder/fitting delete,
+Manage delete, dropdown option delete, list Reset, Home "Reset all results?" and photo delete all need a second step and Keep leaves
+data untouched. See the addendum block in App.jsx. New modules: follow NEW_MODULE_GUIDE.md section 5.
 [ ] TAT / RCD / THERMO · Manual-Import toggle styling · ELT, IEL, IRT and SWB use pencil/download icons with an
     accent border, accent text and an accent tint on the active tab. Still to bring in line (a separate consistency pass,
     deliberately not done with the ELT import): TAT uses a slate active tint, RCD a plain white one, and Thermo has no
@@ -345,10 +350,10 @@ Remove all of the following when converting a delete action to `DeleteButton`:
       • Trash icons / ✕ / × buttons that delete without a second step
       • Any button labelled "Delete" or "Remove" that acts immediately on first click
 
-    Modules to audit: CalendarApp, RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp, AppRoot
+    Modules to audit: CalendarApp, RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp, ELTApp, WelderApp, AppRoot
 
-    After completing all replacements, append an audit summary comment block at the
-    bottom of App.jsx (before the export default line):
+    After completing all replacements, append an audit summary comment block in App.jsx (the existing blocks sit
+    just above the MOUNT section, ~line 12650; the file itself ends with the export list and `export default AppRoot`):
 
     /*
     DELETE CONSISTENCY AUDIT — [date]
