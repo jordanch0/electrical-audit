@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { waitFor } from '@testing-library/react';
 import * as XLSX from 'xlsx';
-import { parseWelderExcel, exportWelderExcel, WELDER_COLUMNS, WELDER_CHECKLIST } from './App.jsx';
+import { parseWelderExcel, exportWelderExcel, WELDER_COLUMNS, WELDER_CHECKLIST, migrateProjectToAreas as toAreas } from './App.jsx';
 
 const wbFrom = (rows, sheet = 'S') => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), sheet); return wb; };
 const HEAD = ['Location', 'Asset ID', 'Welder (Machine)', 'Serial Number'];
@@ -101,13 +101,13 @@ describe('parseWelderExcel — round trip from a REAL exportWelderExcel file', (
   beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
   afterEach(() => { delete window.webkit; vi.unstubAllGlobals(); });
   const keys = WELDER_CHECKLIST.map(c => c.key);
-  const project = { id: 'p1', name: 'Hearse Road - Firestone', company: 'Acme Pty Ltd', abn: '99 999', licence: 'EW1', assets: [
+  const project = toAreas({ id: 'p1', name: 'Hearse Road - Firestone', company: 'Acme Pty Ltd', abn: '99 999', licence: 'EW1', assets: [
     { id: 'a1', location: 'ONR Workshop', assetId: 'W001', brand: 'Lincoln Electric', model: 'Invertec 300', serial: '2699294' },
     { id: 'a2', location: 'ONR Workshop', assetId: 'W002', brand: 'Unimig', model: 'Razor', serial: 'N/A' },
     { id: 'a3', location: 'ONR Workshop', assetId: 'W/003', brand: '', model: '', serial: '' },            // untested, no machine, slash in ID
     { id: 'a4', location: 'ONR Workshop', assetId: '', brand: 'Kemppi', model: '', serial: 'K-4' },          // no Asset ID, brand only
     { id: 'a5', location: 'ONR Workshop', assetId: 'W002', brand: 'Unimig', model: 'Razor', serial: 'N/A' }, // same identity as a2 (sheet name de-duped)
-  ] };
+  ] });
   const results = { a1: { items: Object.fromEntries(keys.map(k => [k, { result: 'pass', value: '9 MΩ', action: '' }])), date: '2026-07-13', notes: 'secret note' } };
   const meta = { auditor: 'Jane', testDate: '2026-07-13', nextTestDate: '2026-10-13', instruments: 'Fluke' };
 

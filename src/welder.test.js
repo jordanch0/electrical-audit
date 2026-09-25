@@ -1,6 +1,6 @@
 // Welder module: checklist constants, per-asset summary / overall rule, and the derived Summary Register.
 import { describe, it, expect } from 'vitest';
-import { addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary } from './App.jsx';
+import { addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary, migrateProjectToAreas as toAreas } from './App.jsx';
 
 const keys = WELDER_CHECKLIST.map(c => c.key);
 // build a record from a string of results, in checklist order: P = pass, F = fail, N = N/A, . = blank
@@ -83,12 +83,12 @@ describe('score and actions', () => {
 });
 
 describe('Summary Register (derived, never entered separately)', () => {
-  const project = { id: 'p', name: 'Dixon Quarry Group', assets: [
+  const project = toAreas({ id: 'p', name: 'Dixon Quarry Group', assets: [
     { id: 'a1', location: 'ONR Workshop', assetId: 'W001', brand: 'Kemppi', model: 'MinarcMig Evo 200', serial: '2699294' },
     { id: 'a2', location: 'ONR Workshop', assetId: 'W004', brand: 'Unimig', model: 'Razor Weld', serial: 'N/A' },
     { id: 'a3', location: 'ONR Workshop', assetId: 'W009', brand: 'Unimig', model: 'SWF350', serial: 'NA' },
     { id: 'a4', location: 'ONR Workshop', assetId: 'W010', brand: '', model: '', serial: '' },
-  ] };
+  ] });
   const stale = { rectified: 'Removed from Service', defectId: 'D-9', responsibility: 'Site Electrician', priority: 'H' };
   const results = { p: {
     a1: rec('PPPPPNNNPPNN', { date: '2026-07-13', ...stale, notes: 'ok' }),                       // PASS with retained defect data

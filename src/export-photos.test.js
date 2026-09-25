@@ -2,7 +2,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import JSZip from 'jszip';
 import crypto from 'crypto';
-import { exportSWBExcel, exportELTExcel } from './App.jsx';
+import { exportSWBExcel, exportELTExcel, migrateProjectToAreas as toAreas } from './App.jsx';
 import { JPEG_A, JPEG_B } from './test/jpeg-fixtures.js';
 
 const EMU = 9525; // EMU per pixel
@@ -54,10 +54,10 @@ describe('photos in exports', () => {
 
   it('ELT: bytes identical, 4:3, fits its row, each photo on its own labelled row', async () => {
     const pass4 = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
-    const project = { id:'e1', name:'E', company:'C', assets:[
+    const project = toAreas({ id:'e1', name:'E', company:'C', assets:[
       { id:'a1', location:'E', assetLocation:'SE Door', assetId:'EL-1', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'X' },
       { id:'a2', location:'E', assetLocation:'SW Roof', assetId:'EL-2', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Y' },
-    ]};
+    ]});
     const zip = await unzipExport(exportELTExcel, project, { e1:{ a1:{ ...pass4, photos:[{id:'1',dataUrl:JPEG_A}] }, a2:{ ...pass4, photos:[{id:'2',dataUrl:JPEG_B}] } } }, { auditor:'J', testDate:'2026-09-21', nextTestDate:'2027-03-21' });
     const info = await inspect(zip, 'xl/worksheets/sheet2.xml'); // sheet2 = Photos
     checkPhotos(info, [JPEG_A, JPEG_B]);

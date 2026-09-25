@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportELTExcel, eltOverall, ELT_COLUMNS } from './App.jsx';
+import { exportELTExcel, eltOverall, ELT_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 const pass4 = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
 
-const project = {
+const project = toAreas({
   id: 'p1', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '12 345 678 901', licence: 'EW123456',
   assets: [
     { id:'a1', location:'Hearse Road Firestone', assetLocation:'SE Door',  assetId:'EL-001', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Clevertronics 24m' },
@@ -14,7 +14,7 @@ const project = {
     { id:'a4', location:'Hearse Road Firestone', assetLocation:'Store Room', assetId:'EL-004', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Untested one' },
     { id:'a5', location:'Hearse Road Firestone', assetLocation:'Office', assetId:'EL-005', type:'Emergency Exit Sign', maintained:'Non-Maintained', fitting:'Photo one' },
   ],
-};
+});
 const results = { p1: {
   a1: { ...pass4, notes:'Working well' },
   a2: { ...pass4, discharge:'fail', failReason:'Other', failReasonOther:'Water ingress', action:'Given to Site Contact', notes:'Seal cracked' },
@@ -113,7 +113,7 @@ describe('ELT Excel export structure', () => {
 
   it('does not leak retained Failure Reason/Action into a passing row', async () => {
     const res = { p1: { a1: { ...pass4, failReason:'Lamp Failure', action:'Repaired On-Site', notes:'ok' } } };
-    const wb = await runExport({ ...project, assets:[project.assets[0]] }, res, meta);
+    const wb = await runExport({ ...project, areas:[{ ...project.areas[0], assets:[project.areas[0].assets[0]] }] }, res, meta);
     expect(text(wb.getWorksheet('Emergency Lighting').getCell('N6'))).toBe('ok');
   });
 });

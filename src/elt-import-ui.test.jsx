@@ -61,9 +61,11 @@ describe('ELT site list: Manual / Import toggle', () => {
     await user.click(screen.getByRole('button', { name: /Import Site/ }));
     expect(await screen.findByText('Hearse Road - Firestone')).toBeInTheDocument();
     expect(screen.getByText(/2 fittings · 0 tested/)).toBeInTheDocument();
-    const proj = ls('elt-projects-v1')[0];
+    const proj = ls('elt-projects-v2')[0];
     expect(proj).toMatchObject({ name: 'Hearse Road - Firestone', company: 'Co Pty Ltd', abn: '98 765 432 109' });
-    expect(proj.assets.map(a => [a.assetLocation, a.assetId, a.type, a.typeOther, a.maintained, a.location])).toEqual([
+    expect(proj.assets).toBeUndefined();
+    expect(proj.areas.map(a => a.name)).toEqual(['Hearse Road - Firestone']); // blank Location -> one area named after the site
+    expect(proj.areas.flatMap(ar => ar.assets.map(a => [a.assetLocation, a.assetId, a.type, a.typeOther, a.maintained, ar.name]))).toEqual([
       ['SE Door', '007', 'Emergency Exit Sign', '', 'Maintained', 'Hearse Road - Firestone'], // blank Location defaults to the site name
       ['SW Roof', '', 'Other', 'Bulkhead Light', 'Non-Maintained', 'Hearse Road - Firestone'],
     ]);
@@ -78,7 +80,7 @@ describe('ELT site list: Manual / Import toggle', () => {
     expect(screen.queryByText('✓ Preview')).not.toBeInTheDocument();
     await user.upload(screen.getByTestId('elt-import-file'), new File(['x'], 'notes.txt', { type: 'text/plain' }));
     expect(await screen.findByText(/Please upload an Excel/)).toBeInTheDocument();
-    expect(ls('elt-projects-v1') || []).toEqual([]); // nothing created
+    expect(ls('elt-projects-v2') || []).toEqual([]); // nothing created
   });
 
   it('Re-upload returns to the file chooser without creating a site', async () => {
@@ -88,7 +90,7 @@ describe('ELT site list: Manual / Import toggle', () => {
     await screen.findByText('✓ Preview');
     await user.click(screen.getByRole('button', { name: 'Re-upload' }));
     expect(screen.getByRole('button', { name: /Download Import Template/ })).toBeInTheDocument();
-    expect(ls('elt-projects-v1') || []).toEqual([]); // nothing created
+    expect(ls('elt-projects-v2') || []).toEqual([]); // nothing created
     void waitFor; void within;
   });
 });

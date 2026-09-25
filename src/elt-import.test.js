@@ -2,7 +2,7 @@
 // bug: a row is only the header if >= 3 ELT headings match a cell exactly, and Asset Location must be one of them.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as XLSX from 'xlsx';
-import { parseELTExcel, downloadELTTemplate, exportELTExcel, exportIELExcel, ELT_COLUMNS } from './App.jsx';
+import { parseELTExcel, downloadELTTemplate, exportELTExcel, exportIELExcel, ELT_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -12,10 +12,10 @@ const wbFromRows = rows => { const wb = XLSX.utils.book_new(); XLSX.utils.book_a
 const HEAD = ['Location', 'Asset Location', 'Asset ID', 'Type', 'Maintained/Non-Maintained', 'Fitting Type/Manufacturer'];
 const readPayload = () => XLSX.read(payload.base64, { type: 'base64' });
 
-const project = { id: 'e1', name: 'Hearse Road - Firestone', company: 'Co Pty Ltd', abn: '98 765 432 109', licence: 'EW1234', assets: [
+const project = toAreas({ id: 'e1', name: 'Hearse Road - Firestone', company: 'Co Pty Ltd', abn: '98 765 432 109', licence: 'EW1234', assets: [
   { id: 'a1', location: 'Hearse Road - Firestone', assetLocation: 'SE Door', assetId: '007', type: 'Emergency Exit Sign', typeOther: '', maintained: 'Maintained', fitting: 'Clevertronics 24m' },
   { id: 'a2', location: 'Hearse Road - Firestone', assetLocation: 'SW Roof', assetId: '', type: 'Other', typeOther: 'Bulkhead Light', maintained: 'Non-Maintained', fitting: 'Y' },
-] };
+] });
 const pass4 = { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' };
 const meta = { auditor: 'Jane', testDate: '2026-09-21', nextTestDate: '2027-03-21' };
 

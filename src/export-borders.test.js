@@ -2,7 +2,7 @@
 // so they are the reference pair for real cell styling. Their data-row borders must stay identical.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportSWBExcel, exportELTExcel } from './App.jsx';
+import { exportSWBExcel, exportELTExcel, migrateProjectToAreas as toAreas } from './App.jsx';
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 let payload;
@@ -25,10 +25,10 @@ const swbResults = { s1: { ar1: { b1: {
 const swbMeta = { auditor:'Jane', testDate:'2026-09-21', nextTestDate:'2027-09-21' };
 
 const pass4 = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
-const eltProject = { id:'e1', name:'Site E', company:'Co', abn:'1', licence:'L', assets:[
+const eltProject = toAreas({ id:'e1', name:'Site E', company:'Co', abn:'1', licence:'L', assets:[
   { id:'a1', location:'Site E', assetLocation:'SE Door', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'X' },
   { id:'a2', location:'Site E', assetLocation:'SW Roof', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Y' },
-] };
+] });
 const eltResults = { e1: { a1: { ...pass4 }, a2: { ...pass4, visual:'fail', failReason:'Lamp Failure', action:'Repaired On-Site' } } };
 
 const sides = ['top','bottom','left','right'];

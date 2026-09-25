@@ -52,7 +52,7 @@ describe('Welder site list: Manual / Import toggle', () => {
     await user.type(screen.getByPlaceholderText('Site name'), 'Manual Site');
     await user.click(screen.getByRole('button', { name: 'Add Site' }));
     expect(await screen.findByText('Manual Site')).toBeInTheDocument();
-    expect(ls('welder-projects-v1')[0]).toMatchObject({ name: 'Manual Site', assets: [] });
+    expect(ls('welder-projects-v2')[0]).toMatchObject({ name: 'Manual Site', areas: [] });
   });
 
   it('upload -> preview with warnings -> editable site -> Import Site saves welders (location defaults to the site name)', async () => {
@@ -69,14 +69,16 @@ describe('Welder site list: Manual / Import toggle', () => {
     expect(screen.getByText(/1 welder: brand and model couldn't be separated/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Hearse Road - Firestone')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '✓ Import Site' }));
-    await waitFor(() => expect(ls('welder-projects-v1')).toHaveLength(1));
-    const p = ls('welder-projects-v1')[0];
+    await waitFor(() => expect(ls('welder-projects-v2')).toHaveLength(1));
+    const p = ls('welder-projects-v2')[0];
     expect(p).toMatchObject({ name: 'Hearse Road - Firestone', company: '' });
-    expect(p.assets.map(({ id, ...a }) => a)).toEqual([
+    expect(p.assets).toBeUndefined();
+    expect(p.areas.flatMap(ar => ar.assets.map(({ id, ...a }) => ({ location: ar.name, ...a })))).toEqual([
       { location: 'Hearse Road - Firestone', assetId: 'W1', brand: 'Kemppi Evo', model: '', serial: 'S1' },
       { location: 'Shed', assetId: 'W2', brand: '', model: '', serial: 'N/A' },
     ]);
-    expect(p.assets.every(a => a.id)).toBe(true);
+    expect(p.areas.map(a => a.name)).toEqual(['Hearse Road - Firestone', 'Shed']);  // rows grouped into areas by their Location cell
+    expect(p.areas.flatMap(a => a.assets).every(a => a.id)).toBe(true);
     expect(isEmpty('welder-results-v1')).toBe(true); // structure only
   });
 
@@ -85,7 +87,7 @@ describe('Welder site list: Manual / Import toggle', () => {
     await openImport(user);
     fireEvent.change(screen.getByTestId('welder-import-file'), { target: { files: [new File(['x'], 'notes.txt', { type: 'text/plain' })] } });
     expect(await screen.findByText(/Please upload an Excel/)).toBeInTheDocument();
-    expect(isEmpty('welder-projects-v1')).toBe(true);
+    expect(isEmpty('welder-projects-v2')).toBe(true);
   });
 
   it('rejects an ELT export and a headerless sheet — creating nothing', async () => {
@@ -96,7 +98,7 @@ describe('Welder site list: Manual / Import toggle', () => {
     expect(await screen.findByText(/looks like an Emergency Lighting \(ELT\) file/)).toBeInTheDocument();
     await user.upload(input, fileFrom([['just', 'some', 'cells']]));
     expect(await screen.findByText(/Couldn't find the Welder column headings/)).toBeInTheDocument();
-    expect(isEmpty('welder-projects-v1')).toBe(true);
+    expect(isEmpty('welder-projects-v2')).toBe(true);
   });
 
   it('Re-upload returns to the chooser; Cancel closes without creating a site', async () => {
@@ -110,7 +112,7 @@ describe('Welder site list: Manual / Import toggle', () => {
     await screen.findByText('✓ Preview');
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
     expect(screen.getByRole('button', { name: '+ Add / Import Site' })).toBeInTheDocument();
-    expect(isEmpty('welder-projects-v1')).toBe(true);
+    expect(isEmpty('welder-projects-v2')).toBe(true);
   });
 
   it('the template download goes through the share bridge and re-imports cleanly', async () => {
@@ -158,9 +160,10 @@ describe('Welder import — full real pipeline (UI export -> import into a fresh
     expect(screen.getByDisplayValue('Co')).toBeInTheDocument();
     expect(screen.queryByText(/couldn't be separated/)).toBeNull();      // exact Brand / Model recovered, no fallback note
     await user2.click(screen.getByRole('button', { name: '✓ Import Site' }));
-    await waitFor(() => expect(ls('welder-projects-v1')).toHaveLength(1));
-    const p = ls('welder-projects-v1')[0];
-    expect(p.assets.map(({ id, ...a }) => a)).toEqual([
+    await waitFor(() => expect(ls('welder-projects-v2')).toHaveLength(1));
+    const p = ls('welder-projects-v2')[0];
+    expect(p.assets).toBeUndefined();
+    expect(p.areas.flatMap(ar => ar.assets.map(({ id, ...a }) => ({ location: ar.name, ...a })))).toEqual([
       { location: 'ONR Workshop', assetId: 'W001', brand: 'Lincoln Electric', model: 'Invertec 300', serial: '2699294' },
       { location: 'ONR Workshop', assetId: 'W002', brand: 'Unimig', model: 'Razor', serial: 'N/A' },
     ]);

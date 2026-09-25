@@ -38,16 +38,17 @@ describe('ELT complete-audit / history round trip', () => {
     await user.click(await screen.findByRole('button', { name: /Complete Emergency Lighting Audit/ }));
     await user.click(screen.getByRole('button', { name: /Yes, Complete/ }));
 
-    await waitFor(() => expect(ls('elt-history-v1')).toHaveLength(1));
-    const snap = ls('elt-history-v1')[0];
+    await waitFor(() => expect(ls('elt-history-v2')).toHaveLength(1));
+    const snap = ls('elt-history-v2')[0];
     expect(snap.results).toEqual(results);
-    expect(snap.assets).toEqual(project.assets);
+    expect(snap.assets).toBeUndefined();
+    expect(snap.areas.flatMap(a => a.assets)).toEqual(project.assets.map(({ location, ...rest }) => rest)); // v1 flat seed migrated, then archived as areas
     expect(snap.auditor).toBe('Jane');
     expect(snap.meta.nextTestDate).toBe('2027-01-01');
     await waitFor(() => expect(ls('elt-results-v1').p1).toEqual({}));
     await waitFor(() => expect(ls('elt-meta-v1').p1.nextTestDate).toBe(''));
     expect(ls('elt-meta-v1').p1.auditor).toBe('Jane');
-    const snapshotBefore = JSON.stringify(ls('elt-history-v1'));
+    const snapshotBefore = JSON.stringify(ls('elt-history-v2'));
 
     // History → expand → Continue
     await user.click(screen.getByRole('button', { name: /History/ }));
@@ -57,7 +58,7 @@ describe('ELT complete-audit / history round trip', () => {
 
     await waitFor(() => expect(ls('elt-results-v1').p1).toEqual(results));
     await waitFor(() => expect(ls('elt-meta-v1').p1.nextTestDate).toBe('2027-01-01'));
-    expect(JSON.stringify(ls('elt-history-v1'))).toBe(snapshotBefore);
+    expect(JSON.stringify(ls('elt-history-v2'))).toBe(snapshotBefore);
 
     // Edit the restored audit; the archived snapshot must be unaffected
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
@@ -65,8 +66,8 @@ describe('ELT complete-audit / history round trip', () => {
     await user.click(screen.getAllByRole('button', { name: 'FAIL' })[0]);
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(ls('elt-results-v1').p1.a1.visual).toBe('fail'));
-    expect(JSON.stringify(ls('elt-history-v1'))).toBe(snapshotBefore);
-    expect(ls('elt-history-v1')[0].results.a1.visual).toBe('pass');
+    expect(JSON.stringify(ls('elt-history-v2'))).toBe(snapshotBefore);
+    expect(ls('elt-history-v2')[0].results.a1.visual).toBe('pass');
   });
 });
 

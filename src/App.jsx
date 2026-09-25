@@ -3875,8 +3875,8 @@ function CalendarApp({ onGoHome }) {
           load("thermo-projects-v1",[]),
           load(K_SWB_PROJECTS,[]),
           load(K_IRT_PROJECTS,[]),
-          load(K_ELT_PROJECTS,[]),
-          load(K_WELDER_PROJECTS,[]),
+          loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),
+          loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),
         ]);
         setEvents(ev);
         // Merge site names from all modules, deduplicate by name
@@ -10930,7 +10930,7 @@ function groupAssetsIntoAreas(assets, siteName) {
     const key = areaKey(name);
     let area = byKey.get(key);
     if (!area) {
-      const slug = key.replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,30) || "area";
+      const slug = areaSlug(key);
       let id = "area-"+slug, n = 2;
       while (usedIds.has(id)) id = "area-"+slug+"-"+(n++);
       usedIds.add(id);
@@ -10971,17 +10971,188 @@ function areaAssets(container) {
   return out;
 }
 
+const areaSlug = key => key.replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,30) || "area";
+// Id for a NEW area added in Manage: same deterministic rule the migration uses, numeric suffix on collision.
+function uniqueAreaId(areas, name) {
+  const used = new Set((areas||[]).map(a=>a.id));
+  const slug = areaSlug(areaKey(name)); let id = "area-"+slug, n = 2;
+  while (used.has(id)) id = "area-"+slug+"-"+(n++);
+  return id;
+}
+// Area names are unique per site (case / whitespace-insensitive) — the other hierarchical modules allow duplicates; here a
+// duplicate would double-group the same physical location, so adding / renaming to an existing name is refused.
+const areaNameTaken = (areas, name, exceptId) => (areas||[]).some(a => a.id!==exceptId && areaKey(a.name)===areaKey(name));
+// Deliberate improvement over the older modules (which leave an asset's results / photos orphaned when it is deleted): drop the
+// deleted assets' results so their photos stop consuming localStorage. History snapshots keep their own copy and are untouched.
+function removeAssetResults(all, projectId, ids) {
+  const site = (all||{})[projectId];
+  if (!site || !ids || !ids.length) return all;
+  const next = { ...site }; ids.forEach(id => { delete next[id]; });
+  return { ...all, [projectId]: next };
+}
+// Consecutive register rows (already in area order) grouped for the History snapshot list.
+function groupRowsByArea(rows) {
+  const out = [];
+  rows.forEach(r => { const last = out[out.length-1]; if (last && last.id === r.asset.areaId) last.rows.push(r); else out.push({ id:r.asset.areaId, name:r.asset.location, rows:[r] }); });
+  return out;
+}
+const AREA_HDR_STYLE = { fontSize:11, fontWeight:800, letterSpacing:0.6, textTransform:"uppercase", color:"#52525b", margin:"10px 2px 4px" };
+
+// Shared Manage list for the two-level Site → Area → Assets modules (ELT, Welder). Mechanics copied from the hierarchical
+// modules' Manage views (IRT/RCD/TAT/SWB/Thermo): collapsible area cards, inline rename (Enter / Save), DeleteButton, add-area
+// input at the bottom — minus the panel/board layer: assets sit directly inside the area.
+function AreaManager({project, accent, accentBorder, nounOne, assetTitle, assetSub, renderForm, seedFrom, onUpdate, onRemoveAssets}) {
+  const SS = swbStyles();
+  const areas = project.areas||[];
+  const [expanded,setExpanded] = React.useState(areas.length===1?areas[0].id:null);
+  const [editingArea,setEditingArea] = React.useState(null);
+  const [editAreaName,setEditAreaName] = React.useState("");
+  const [editingId,setEditingId] = React.useState(null);
+  const [addingIn,setAddingIn] = React.useState(null);
+  const [seed,setSeed] = React.useState({});
+  const [seedKey,setSeedKey] = React.useState(0);
+  const [newArea,setNewArea] = React.useState("");
+  const [err,setErr] = React.useState("");
+  const upd = next => onUpdate({...project, areas:next});
+  const pencil = (onClick,label) => React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick,"aria-label":label},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),React.createElement('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
+  const addArea = ()=>{
+    const n = newArea.trim(); if(!n) return;
+    if(areaNameTaken(areas,n)){setErr(`An area named “${n}” already exists.`);return;}
+    const id = uniqueAreaId(areas,n);
+    upd([...areas,{id,name:n,assets:[]}]); setNewArea(""); setErr(""); setExpanded(id);
+  };
+  const saveAreaName = id=>{
+    const n = editAreaName.trim(); if(!n){setEditingArea(null);setErr("");return;}
+    if(areaNameTaken(areas,n,id)){setErr(`An area named “${n}” already exists.`);return;}
+    upd(areas.map(a=>a.id===id?{...a,name:n}:a)); setEditingArea(null); setErr("");
+  };
+  const delArea = area=>{ upd(areas.filter(a=>a.id!==area.id)); onRemoveAssets&&onRemoveAssets((area.assets||[]).map(a=>a.id)); if(expanded===area.id) setExpanded(null); };
+  const addAsset = (areaId,fields)=>{
+    upd(areas.map(a=>a.id!==areaId?a:{...a,assets:[...(a.assets||[]),{...fields,id:uid()}]}));
+    setSeed(seedFrom?seedFrom(fields):{}); setSeedKey(k=>k+1);
+  };
+  const saveAsset = (areaId,assetId,fields,target)=>{
+    const to = target||areaId;
+    if(to===areaId) upd(areas.map(a=>a.id!==areaId?a:{...a,assets:(a.assets||[]).map(x=>x.id===assetId?{...x,...fields}:x)}));
+    else {
+      const cur = (areas.find(a=>a.id===areaId).assets||[]).find(x=>x.id===assetId);
+      const moved = {...cur,...fields};
+      upd(areas.map(a=>a.id===areaId?{...a,assets:(a.assets||[]).filter(x=>x.id!==assetId)}:a.id===to?{...a,assets:[...(a.assets||[]),moved]}:a));
+      setExpanded(to);
+    }
+    setEditingId(null);
+  };
+  const delAsset = (areaId,assetId)=>{
+    upd(areas.map(a=>a.id!==areaId?a:{...a,assets:(a.assets||[]).filter(x=>x.id!==assetId)}));
+    onRemoveAssets&&onRemoveAssets([assetId]);
+  };
+  const total = areas.reduce((n,a)=>n+(a.assets||[]).length,0);
+  return React.createElement(React.Fragment,null
+    ,React.createElement('div',{style:{fontSize:11,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:10}},`AREAS / LOCATIONS (${areas.length}) · ${nw(total,nounOne).toUpperCase()}`)
+    ,areas.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:13,marginBottom:12}},`No areas yet — add an area below, then add ${nounOne}s inside it.`)
+    ,areas.map(area=>{
+      const isOpen = expanded===area.id; const list = area.assets||[];
+      return React.createElement('div',{key:area.id,style:{background:"#f7f6f3",border:`1px solid ${accentBorder}`,borderRadius:12,marginBottom:10,overflow:"hidden"}}
+        ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 14px",flexWrap:"nowrap",gap:8,minWidth:0}}
+          ,editingArea===area.id
+            ?React.createElement('div',{style:{display:"flex",flexWrap:"wrap",gap:6,width:"100%",boxSizing:"border-box"}}
+              ,React.createElement('input',{style:{...SS.smallBtn,flex:1,minWidth:0,textAlign:"left",fontSize:14,background:"#e8e6e2",color:"#18181b"},value:editAreaName,onChange:e=>{setEditAreaName(e.target.value);setErr("");},onKeyDown:e=>e.key==="Enter"&&saveAreaName(area.id),autoFocus:true,"aria-label":"Area name"})
+              ,React.createElement('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac",flexShrink:0,whiteSpace:"nowrap"},onClick:()=>saveAreaName(area.id)},"Save")
+              ,React.createElement('button',{style:{...SS.smallBtn,flexShrink:0,whiteSpace:"nowrap"},onClick:()=>{setEditingArea(null);setErr("");}},"Cancel")
+            )
+            :React.createElement(React.Fragment,null
+              ,React.createElement('div',{style:{flex:1,cursor:"pointer",minWidth:0,overflow:"hidden"},onClick:()=>setExpanded(isOpen?null:area.id)}
+                ,React.createElement('div',{style:{fontWeight:700,color:"#18181b",fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
+                ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},nw(list.length,nounOne))
+              )
+              ,React.createElement('div',{style:{display:"flex",gap:6,alignItems:"center",flexWrap:"nowrap",flexShrink:0}}
+                ,pencil(()=>{setEditingArea(area.id);setEditAreaName(area.name);setErr("");},`Rename area ${area.name}`)
+                ,React.createElement('span',{role:"group","aria-label":`Delete area ${area.name}`,style:{display:"contents"}},React.createElement(DeleteButton,{onDelete:()=>delArea(area),label:"Delete area?"}))
+                ,React.createElement('span',{style:{fontSize:16,color:"#52525b",cursor:"pointer"},onClick:()=>setExpanded(isOpen?null:area.id)},isOpen?"▲":"▼")
+              )
+            )
+        )
+        ,isOpen&&React.createElement('div',{style:{padding:"0 14px 14px"}}
+          ,list.length===0&&addingIn!==area.id&&React.createElement('div',{style:{color:"#52525b",fontSize:13,marginBottom:8}},`No ${nounOne}s in this area yet.`)
+          ,list.map(a=>editingId===a.id
+            ?renderForm({key:a.id,initial:a,submitLabel:"Save",areaId:area.id,areaChoices:areas.map(x=>({id:x.id,name:x.name})),onSave:(f,target)=>saveAsset(area.id,a.id,f,target),onCancel:()=>setEditingId(null)})
+            :React.createElement('div',{key:a.id,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#e8e6e2",border:"1px solid #e4e4e7",borderRadius:10,marginBottom:6,minWidth:0}}
+              ,React.createElement('div',{style:{flex:1,minWidth:0}}
+                ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},assetTitle(a))
+                ,React.createElement('div',{style:{fontSize:11,color:"#52525b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},assetSub(a))
+              )
+              ,pencil(()=>{setAddingIn(null);setEditingId(a.id);},`Edit ${assetTitle(a)}`)
+              ,React.createElement('span',{role:"group","aria-label":`Delete ${nounOne} ${assetTitle(a)}`,style:{display:"contents"}},React.createElement(DeleteButton,{onDelete:()=>delAsset(area.id,a.id),label:`Delete ${nounOne}?`,compact:true}))
+            ))
+          ,addingIn===area.id
+            ?renderForm({key:seedKey,initial:seed,submitLabel:`+ Add ${nounOne[0].toUpperCase()+nounOne.slice(1)}`,areaId:area.id,onSave:f=>addAsset(area.id,f),onCancel:()=>setAddingIn(null)})
+            :React.createElement('button',{style:{...SS.ctaPrimary,background:accent,width:"100%",marginTop:4},onClick:()=>{setEditingId(null);setSeed({});setSeedKey(k=>k+1);setAddingIn(area.id);}},`+ Add ${nounOne[0].toUpperCase()+nounOne.slice(1)}`)
+        )
+      );
+    })
+    ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
+      ,React.createElement('input',{style:{...SS.metaInput,flex:1,minWidth:0},type:"text",value:newArea,placeholder:"New area / location name",onChange:e=>{setNewArea(e.target.value);setErr("");},onKeyDown:e=>e.key==="Enter"&&addArea(),"aria-label":"New area name"})
+      ,React.createElement('button',{style:{...SS.ctaPrimary,background:accent,flexShrink:0,whiteSpace:"nowrap"},onClick:addArea},"+ Add Area")
+    )
+    ,err&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:6}},err)
+  );
+}
+
+// Audit list grouped by area: an area header (name · count · tested · fails) then that area's rows. `statusOf(asset)` returns
+// "pass" | "fail" | "untested"; `renderRow(asset)` draws one row. Empty areas are not listed on the Audit tab.
+function AreaAuditGroups({areas, nounOne, accent, statusOf, renderRow}) {
+  const SS = swbStyles();
+  return React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:14}}
+    ,(areas||[]).filter(a=>(a.assets||[]).length>0).map(area=>{
+      const list = area.assets; let tested=0, fail=0;
+      list.forEach(a=>{ const s=statusOf(a); if(s!=="untested") tested++; if(s==="fail") fail++; });
+      return React.createElement('div',{key:area.id,"data-area":area.name}
+        ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,margin:"0 2px 6px",minWidth:0}}
+          ,React.createElement('div',{style:{fontSize:12,fontWeight:800,color:accent,letterSpacing:0.6,textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},area.name)
+          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0,whiteSpace:"nowrap"}},`${nw(list.length,nounOne)} · ${tested} tested`)
+          ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
+        )
+        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}},list.map(renderRow))
+      );
+    })
+  );
+}
+
+// Report tab "AREA SUMMARY" (same treatment as TAT / IRT / SWB): per area, tested / total with a progress bar.
+function AreaSummaryRows({areas, accent, statusOf}) {
+  const rows = (areas||[]).filter(a=>(a.assets||[]).length>0);
+  if(rows.length===0) return null;
+  return React.createElement('div',{style:{marginBottom:16}}
+    ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:accent,letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY")
+    ,rows.map(area=>{
+      let pass=0, fail=0; area.assets.forEach(a=>{ const s=statusOf(a); if(s==="pass") pass++; else if(s==="fail") fail++; });
+      const total = area.assets.length, tested = pass+fail; const pct = total>0?Math.round((tested/total)*100):0;
+      return React.createElement('div',{key:area.id,style:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 14px",marginBottom:8}}
+        ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}
+          ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
+          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0}},`${pass} pass · ${fail} fail · ${total-tested} untested`)
+        )
+        ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,overflow:"hidden"}}
+          ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":pct===100?"#16a34a":accent}})
+        )
+      );
+    })
+  );
+}
+
 // ═════════════════════════════════════════════════════════════════════════
 // ELT MODULE — Emergency Lighting Testing (AS 2293.2:2019)
-// Structure: Site → flat list of assets (fittings). Export is a single flat register table.
+// Structure: Site → Area → Assets (fittings) — two levels, no panel/board layer. Export is a single register table ordered by area.
 // ═════════════════════════════════════════════════════════════════════════
 const ELT_COLOR        = "#0f766e";
 const ELT_COLOR_DIM    = "#ccfbf1";
 const ELT_COLOR_BORDER = "#5eead4";
-const K_ELT_PROJECTS   = "elt-projects-v1";
+const K_ELT_PROJECTS   = "elt-projects-v2";   // v2: Site → Area → Assets (v1 = flat assets; kept untouched as a backup)
+const K_ELT_PROJECTS_V1 = "elt-projects-v1";
 const K_ELT_RESULTS    = "elt-results-v1";
 const K_ELT_META       = "elt-meta-v1";
-const K_ELT_HISTORY    = "elt-history-v1";
+const K_ELT_HISTORY    = "elt-history-v2";    // v2: snapshots carry `areas` (v1 carried `assets`)
+const K_ELT_HISTORY_V1  = "elt-history-v1";
 const K_ELT_DROPDOWNS  = "elt-dropdowns-v1";
 // Editable option lists. "Other" is not stored: ELTSelectOther always appends it as the last option.
 const ELT_DEFAULT_TYPES        = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)"];
@@ -11029,16 +11200,16 @@ const eltTypeLabel = a => a.type==="Other" ? ((a.typeOther||"").trim()||"Other")
 const eltPF = v => v===STATUS.PASS?"Pass":v===STATUS.FAIL?"Fail":"";
 function eltSummary(project, results) {
   let total=0, pass=0, fail=0;
-  (project.assets||[]).forEach(a=>{
+  areaAssets(project).forEach(a=>{
     const o = eltOverall(eltGetRes(results, project.id, a.id));
     if (o===STATUS.PASS) {pass++;total++;} else if (o===STATUS.FAIL) {fail++;total++;}
   });
-  return {total, pass, fail, assets:(project.assets||[]).length};
+  return {total, pass, fail, assets:areaAssets(project).length};
 }
 // One entry per tested asset (untested assets are excluded), cells in ELT_COLUMNS order.
 function eltRegisterRows(project, allResults, meta) {
   const results = allResults||{};
-  return (project.assets||[]).map(a=>{
+  return areaAssets(project).map(a=>{
     const r = eltGetRes(results, project.id, a.id);
     return {asset:a, res:r, overall:eltOverall(r)};
   }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:r,overall})=>{
@@ -11092,7 +11263,7 @@ async function exportELTExcel(project, allResults, meta) {
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
   // (the register itself only lists tested fittings).
-  const withPhotos = (project.assets||[]).map(a=>({asset:a,res:eltGetRes(allResults||{},project.id,a.id)})).filter(x=>(x.res.photos||[]).length>0);
+  const withPhotos = areaAssets(project).map(a=>({asset:a,res:eltGetRes(allResults||{},project.id,a.id)})).filter(x=>(x.res.photos||[]).length>0);
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
     const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
@@ -11158,7 +11329,7 @@ function ELTApp({ onGoHome }) {
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([load(K_ELT_PROJECTS,[]),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),load(K_ELT_HISTORY,[]),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...dd});}
+      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...dd});}
       finally{setLoaded(true);}
     })();
   },[]);
@@ -11172,14 +11343,14 @@ function ELTApp({ onGoHome }) {
   const _m = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10)};
   const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,6)};
   const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
-  const asset = project&&(project.assets||[]).find(a=>a.id===activeAssetId);
+  const asset = project&&areaAssets(project).find(a=>a.id===activeAssetId);
 
   const patchAsset = (assetId,patch)=>setAllResults(prev=>{
     const site = prev[activeProject]||{};
     return {...prev,[activeProject]:{...site,[assetId]:{...eltGetRes(prev,activeProject,assetId),...patch}}};
   });
   const archiveAudit = ()=>{
-    const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),assets:JSON.parse(JSON.stringify((project&&project.assets)||[])),meta:{...meta}};
+    const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
@@ -11191,7 +11362,7 @@ function ELTApp({ onGoHome }) {
 
   const SS = swbStyles();
   const summary = project?eltSummary(project,allResults[project.id]?allResults:{}):{total:0,pass:0,fail:0,assets:0};
-  const hasResults = !!project && (project.assets||[]).some(a=>{const r=eltGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||ELT_CHECKS.some(c=>r[c.key]);});
+  const hasResults = !!project && areaAssets(project).some(a=>{const r=eltGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||ELT_CHECKS.some(c=>r[c.key]);});
   const goBack = ()=>{
     if(viewSnap){setViewSnap(null);return;}
     if(view==="asset") setView("audit");
@@ -11224,9 +11395,9 @@ function ELTApp({ onGoHome }) {
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
-      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:false,reserved:["Other"]})
-      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_HOME,   label:"Home",   active:view==="home",                   onClick:goHome,                    color:"#334155"})
@@ -11375,7 +11546,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
     if(!importPreview) return;
     const name=(importVals.name||"").trim()||"Imported Site";
     onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
-      assets:importPreview.assets.map(a=>({...a,location:a.location||name}))});
+      areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
     setImportVals({name:"",company:"",abn:"",licence:""});closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as IEL, IRT and SWB, in ELT's accent
@@ -11420,7 +11591,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
           ,eltEl(ELTSiteFields,{vals,setVals})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});setVals({name:"",company:"",abn:"",licence:""});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});setVals({name:"",company:"",abn:"",licence:""});closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -11502,28 +11673,25 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
 function ELTAuditView({project, results, meta, summary, onOpen}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
-  const assets = project.assets||[];
   if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
       ,[["TESTED",summary.total,"#334155"],["PASS",summary.pass,"#16a34a"],["FAIL",summary.fail,"#dc2626"],[summary.assets===1?"FITTING":"FITTINGS",summary.assets,"#92400e"]].map(([l,v,c])=>
         eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
     )
-    ,assets.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add them in the Manage tab.")
-    ,eltEl('div',{style:{display:"flex",flexDirection:"column",gap:6}}
-      ,assets.map(a=>{
-        const r = eltGetRes(results,project.id,a.id); const o = eltOverall(r); const sm = SM[o];
-        const sub = [a.location,eltTypeLabel(a),a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · ");
-        return eltEl('button',{key:a.id,style:{display:"flex",alignItems:"center",gap:12,background:"#f7f6f3",border:`1px solid ${o===STATUS.UNTESTED?"#e4e4e7":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:()=>onOpen(a.id)}
-          ,eltEl(ELTStatusChip,{status:o})
-          ,eltEl('div',{style:{flex:1,minWidth:0}}
-            ,eltEl('div',{style:{fontSize:14,fontWeight:600,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.assetLocation||"Unnamed fitting")
-            ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},sub)
-          )
-          ,eltEl('span',{style:{fontSize:14,color:"#52525b",flexShrink:0}},">")
-        );
-      })
-    )
+    ,summary.assets===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add an area, then add fittings in the Manage tab.")
+    ,eltEl(AreaAuditGroups,{areas:project.areas,nounOne:"fitting",accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id)),renderRow:a=>{
+      const r = eltGetRes(results,project.id,a.id); const o = eltOverall(r); const sm = SM[o];
+      const sub = [eltTypeLabel(a),a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · ");
+      return eltEl('button',{key:a.id,style:{display:"flex",alignItems:"center",gap:12,background:"#f7f6f3",border:`1px solid ${o===STATUS.UNTESTED?"#e4e4e7":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:()=>onOpen(a.id)}
+        ,eltEl(ELTStatusChip,{status:o})
+        ,eltEl('div',{style:{flex:1,minWidth:0}}
+          ,eltEl('div',{style:{fontSize:14,fontWeight:600,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.assetLocation||"Unnamed fitting")
+          ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},sub)
+        )
+        ,eltEl('span',{style:{fontSize:14,color:"#52525b",flexShrink:0}},">")
+      );
+    }})
   );
 }
 
@@ -11631,6 +11799,7 @@ function ELTReportView({project, results, meta, summary}) {
       ,eltEl('div',{style:{...SS.duePill,borderColor:ELT_COLOR_BORDER,color:ELT_COLOR,padding:"7px 12px"}},eltEl('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('rect',{x:3,y:4,width:18,height:18,rx:2}),eltEl('line',{x1:16,y1:2,x2:16,y2:6}),eltEl('line',{x1:8,y1:2,x2:8,y2:6}),eltEl('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
     ,eltEl(ReportStatTiles,{rows:[["Total",summary.assets,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["Untested",Math.max(0,summary.assets-summary.total),"#92400e"]]})
+    ,eltEl(AreaSummaryRows,{areas:project.areas,accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:ELT_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -11649,16 +11818,21 @@ function ELTReportView({project, results, meta, summary}) {
   );
 }
 
-function ELTAssetForm({initial, typeOptions, defaultLocation, submitLabel, onSave, onCancel}) {
+function ELTAssetForm({initial, typeOptions, areaChoices, areaId, submitLabel, onSave, onCancel}) {
   const SS = swbStyles();
-  const [f,setF] = React.useState({assetId:"",location:defaultLocation||"",assetLocation:"",type:"",typeOther:"",maintained:"",fitting:"",...initial});
+  const { location: _legacyLocation, ...init } = initial||{};   // the area now owns "Location"
+  const [f,setF] = React.useState({assetId:"",assetLocation:"",type:"",typeOther:"",maintained:"",fitting:"",...init});
+  const [target,setTarget] = React.useState(areaId);
   const set = patch=>setF(prev=>({...prev,...patch}));
   const field = (lbl,k,ph)=>eltEl('div',{style:{marginBottom:8}}
     ,eltEl('div',{style:SS.metaLabelText},lbl)
     ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:f[k]||"",placeholder:ph,onChange:e=>set({[k]:e.target.value})})
   );
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${ELT_COLOR_BORDER}`}}
-    ,field("LOCATION (SITE)","location","e.g. Hearse Road Firestone")
+    ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
+      ,eltEl('div',{style:SS.metaLabelText},"AREA")
+      ,eltEl('select',{style:{...SS.metaInput,marginTop:4,width:"100%",minWidth:0},value:target,onChange:e=>setTarget(e.target.value),"aria-label":"Area"},areaChoices.map(c=>eltEl('option',{key:c.id,value:c.id},c.name)))
+    )
     ,field("ASSET LOCATION","assetLocation","e.g. SE Door")
     ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
     ,eltEl('div',{style:{marginBottom:8}}
@@ -11674,21 +11848,16 @@ function ELTAssetForm({initial, typeOptions, defaultLocation, submitLabel, onSav
     )
     ,field("FITTING TYPE / MANUFACTURER","fitting","e.g. Clevertronics 24m")
     ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-      ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!(f.assetLocation||"").trim())return;onSave({...f,assetLocation:f.assetLocation.trim(),location:(f.location||"").trim(),assetId:(f.assetId||"").trim(),fitting:(f.fitting||"").trim()});}},submitLabel)
+      ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!(f.assetLocation||"").trim())return;onSave({...f,assetLocation:f.assetLocation.trim(),assetId:(f.assetId||"").trim(),fitting:(f.fitting||"").trim()},target);}},submitLabel)
       ,eltEl('button',{style:SS.ctaSecondary,onClick:onCancel},"Cancel")
     )
   );
 }
 
-function ELTManageView({project, dropdowns, onUpdateProject}) {
+function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
-  const [adding,setAdding] = React.useState(false);
-  const [seed,setSeed] = React.useState({});
-  const [seedKey,setSeedKey] = React.useState(0);
-  const [editingId,setEditingId] = React.useState(null);
-  const assets = project.assets||[];
   const upd = u=>onUpdateProject(u);
   const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
   return eltEl('div',{style:SS.listWrap}
@@ -11709,31 +11878,22 @@ function ELTManageView({project, dropdowns, onUpdateProject}) {
         )
         ,editBtn(()=>{setVals({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});setEditingProject(true);})
       )
-    ,eltEl('div',{style:{fontSize:11,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:10}},`FITTINGS (${assets.length})`)
-    ,assets.length===0&&!adding&&eltEl('div',{style:{color:"#52525b",fontSize:13,marginBottom:12}},"No fittings yet.")
-    ,assets.map(a=>editingId===a.id
-      ?eltEl(ELTAssetForm,{key:a.id,typeOptions:dropdowns.types,initial:a,submitLabel:"Save",onSave:f=>{upd({...project,assets:assets.map(x=>x.id===a.id?{...x,...f}:x)});setEditingId(null);},onCancel:()=>setEditingId(null)})
-      :eltEl('div',{key:a.id,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,marginBottom:6,minWidth:0}}
-        ,eltEl('div',{style:{flex:1,minWidth:0}}
-          ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},a.assetLocation)
-          ,eltEl('div',{style:{fontSize:11,color:"#52525b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},[a.location,eltTypeLabel(a),a.maintained,a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · "))
-        )
-        ,editBtn(()=>{setAdding(false);setEditingId(a.id);})
-        ,eltEl(DeleteButton,{onDelete:()=>upd({...project,assets:assets.filter(x=>x.id!==a.id)}),label:"Delete fitting?",compact:true})
-      ))
-    ,adding
-      ?eltEl(ELTAssetForm,{key:seedKey,typeOptions:dropdowns.types,initial:seed,defaultLocation:project.name,submitLabel:"+ Add Fitting",onSave:f=>{upd({...project,assets:[...assets,{...f,id:uid()}]});setSeed({location:f.location,type:f.type,typeOther:f.typeOther,maintained:f.maintained,fitting:f.fitting});setSeedKey(k=>k+1);},onCancel:()=>setAdding(false)})
-      :eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginTop:8},onClick:()=>{setEditingId(null);setAdding(true);}},"+ Add Fitting")
+    ,eltEl(AreaManager,{project,accent:ELT_COLOR,accentBorder:ELT_COLOR_BORDER,nounOne:"fitting",
+      assetTitle:a=>a.assetLocation||"Unnamed fitting",
+      assetSub:a=>[eltTypeLabel(a),a.maintained,a.assetId&&`#${a.assetId}`].filter(Boolean).join(" · "),
+      seedFrom:f=>({type:f.type,typeOther:f.typeOther,maintained:f.maintained,fitting:f.fitting}),
+      renderForm:p=>eltEl(ELTAssetForm,{...p,typeOptions:dropdowns.types}),
+      onUpdate:upd,onRemoveAssets})
   );
 }
 
 function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
   const SS = swbStyles();
   const [expanded,setExpanded] = React.useState(null);
-  const snapStats = snap=>eltSummary({id:project.id,assets:snap.assets||project.assets||[]},{[project.id]:snap.results||{}});
+  const snapStats = snap=>eltSummary({id:project.id,areas:snap.areas||project.areas||[]},{[project.id]:snap.results||{}});
   if(viewSnap){
     const snap = viewSnap; const s = snapStats(snap);
-    const rows = eltRegisterRows({...project,assets:snap.assets||project.assets||[]},{[project.id]:snap.results||{}},snap.meta||{});
+    const rows = eltRegisterRows({...project,areas:snap.areas||project.areas||[]},{[project.id]:snap.results||{}},snap.meta||{});
     return eltEl('div',{style:SS.listWrap}
       ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}}
         ,eltEl('div',{style:{flex:1}}
@@ -11743,7 +11903,9 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
         ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
       )
       ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail}))
-      ,rows.map(row=>{
+      ,groupRowsByArea(rows).map(g=>eltEl('div',{key:g.id,"data-area":g.name}
+        ,eltEl('div',{style:AREA_HDR_STYLE},g.name)
+        ,g.rows.map(row=>{
         const sm = SM[row.overall];
         return eltEl('div',{key:row.asset.id,style:{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}}
           ,eltEl('div',{style:{width:48,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0}},sm.label)
@@ -11752,7 +11914,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
             ,row.cells[13]&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},row.cells[13])
           )
         );
-      })
+      })))
     );
   }
   return eltEl('div',{style:SS.listWrap}
@@ -13178,10 +13340,12 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
 const WELDER_COLOR        = "#be185d";
 const WELDER_COLOR_DIM    = "#fce7f3";
 const WELDER_COLOR_BORDER = "#f9a8d4";
-const K_WELDER_PROJECTS  = "welder-projects-v1";
+const K_WELDER_PROJECTS  = "welder-projects-v2";   // v2: Site → Area → Assets (v1 = flat assets; kept untouched as a backup)
+const K_WELDER_PROJECTS_V1 = "welder-projects-v1";
 const K_WELDER_RESULTS   = "welder-results-v1";
 const K_WELDER_META      = "welder-meta-v1";
-const K_WELDER_HISTORY   = "welder-history-v1";
+const K_WELDER_HISTORY   = "welder-history-v2";    // v2: snapshots carry `areas` (v1 carried `assets`)
+const K_WELDER_HISTORY_V1  = "welder-history-v1";
 const K_WELDER_DROPDOWNS = "welder-dropdowns-v1";
 const WELDER_INTERVAL_MONTHS = 3; // default test interval (editable per site via Next Test Due)
 // The 12 checklist items, in the client's order. `criteria` is static reference text (the "Test / Pass Criteria" column)
@@ -13238,12 +13402,12 @@ const welderPF = o => o==="pass"?"Pass":o==="fail"?"Fail":"";
 // Site summary for the project list / Home / Report tiles (asset-level: Total, Pass, Fail, Untested).
 function welderSiteSummary(project, results) {
   let pass=0, fail=0, untested=0;
-  (project.assets||[]).forEach(a => { const o = welderOverall(welderGetRes(results, project.id, a.id)); if (o==="pass") pass++; else if (o==="fail") fail++; else untested++; });
-  return { total:(project.assets||[]).length, pass, fail, untested, tested: pass+fail };
+  areaAssets(project).forEach(a => { const o = welderOverall(welderGetRes(results, project.id, a.id)); if (o==="pass") pass++; else if (o==="fail") fail++; else untested++; });
+  return { total:areaAssets(project).length, pass, fail, untested, tested: pass+fail };
 }
 // One row per welder (ALL welders, tested or not), cells in WELDER_COLUMNS order. Defect details are only written for FAIL rows.
 function welderRegisterRows(project, allResults, meta) {
-  return (project.assets||[]).map(a => {
+  return areaAssets(project).map(a => {
     const raw = welderGetRes(allResults||{}, project.id, a.id);
     const sum = welderSummary(raw);
     const r = defectGate(raw, sum.overall==="fail");
@@ -13262,7 +13426,8 @@ function welderRegisterRows(project, allResults, meta) {
 const welderOverallLabel = o => o==="pass" ? "PASS" : o==="fail" ? "FAIL" : "UNTESTED";
 const welderSM = o => o==="untested" ? SM[STATUS.UNTESTED] : SM[o];
 const welderTitle = a => a.assetId || welderMachine(a) || "Unnamed welder";
-const welderSub = a => [a.location, a.assetId&&welderMachine(a) ? welderMachine(a) : "", a.serial&&`S/N ${a.serial}`].filter(Boolean).join(" · ");
+// withLoc = false inside an area group (Audit / Manage), where the area header already says the location.
+const welderSub = (a, withLoc=true) => [withLoc&&a.location, a.assetId&&welderMachine(a) ? welderMachine(a) : "", a.serial&&`S/N ${a.serial}`].filter(Boolean).join(" · ");
 function WelderStatusChip({overall}) {
   const sm = welderSM(overall);
   return eltEl('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:overall==="untested"?11:11,fontWeight:800,textAlign:"center"}},overall==="untested"?"—":sm.label);
@@ -13400,7 +13565,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
     if(!importPreview) return;
     const name=(importVals.name||"").trim()||"Imported Site";
     onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
-      assets:importPreview.assets.map(a=>({...a,location:a.location||name}))});
+      areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
     closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as ELT, IEL, IRT and SWB, in Welder's accent
@@ -13444,7 +13609,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
           ,eltEl(ELTSiteFields,{vals,setVals})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -13531,7 +13696,6 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
 function WelderAuditView({project, results, meta, onOpen}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
-  const assets = project.assets||[];
   const s = welderSiteSummary(project,results);
   if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
   return eltEl('div',{style:SS.listWrap}
@@ -13539,20 +13703,18 @@ function WelderAuditView({project, results, meta, onOpen}) {
       ,[["TESTED",s.tested,"#334155"],["PASS",s.pass,"#16a34a"],["FAIL",s.fail,"#dc2626"],[s.total===1?"WELDER":"WELDERS",s.total,"#92400e"]].map(([l,v,c])=>
         eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
     )
-    ,assets.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add them in the Manage tab.")
-    ,eltEl('div',{style:{display:"flex",flexDirection:"column",gap:6}}
-      ,assets.map(a=>{
-        const o = welderOverall(welderGetRes(results,project.id,a.id)); const sm = welderSM(o);
-        return eltEl('button',{key:a.id,style:{display:"flex",alignItems:"center",gap:12,background:"#f7f6f3",border:`1px solid ${o==="untested"?"#e4e4e7":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:()=>onOpen(a.id)}
-          ,eltEl(WelderStatusChip,{overall:o})
-          ,eltEl('div',{style:{flex:1,minWidth:0}}
-            ,eltEl('div',{style:{fontSize:14,fontWeight:600,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderTitle(a))
-            ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderSub(a))
-          )
-          ,eltEl('span',{style:{fontSize:14,color:"#52525b",flexShrink:0}},">")
-        );
-      })
-    )
+    ,s.total===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add an area, then add welders in the Manage tab.")
+    ,eltEl(AreaAuditGroups,{areas:project.areas,nounOne:"welder",accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id)),renderRow:a=>{
+      const o = welderOverall(welderGetRes(results,project.id,a.id)); const sm = welderSM(o);
+      return eltEl('button',{key:a.id,style:{display:"flex",alignItems:"center",gap:12,background:"#f7f6f3",border:`1px solid ${o==="untested"?"#e4e4e7":sm.border+"55"}`,borderRadius:12,padding:"12px 14px",cursor:"pointer",textAlign:"left",width:"100%"},onClick:()=>onOpen(a.id)}
+        ,eltEl(WelderStatusChip,{overall:o})
+        ,eltEl('div',{style:{flex:1,minWidth:0}}
+          ,eltEl('div',{style:{fontSize:14,fontWeight:600,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderTitle(a))
+          ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderSub(a,false))
+        )
+        ,eltEl('span',{style:{fontSize:14,color:"#52525b",flexShrink:0}},">")
+      );
+    }})
   );
 }
 
@@ -13700,6 +13862,7 @@ function WelderReportView({project, results, meta}) {
       ,eltEl('div',{style:{...SS.duePill,borderColor:WELDER_COLOR_BORDER,color:WELDER_COLOR,padding:"7px 12px"}},"Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
     ,eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]})
+    ,eltEl(AreaSummaryRows,{areas:project.areas,accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:WELDER_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -13717,9 +13880,11 @@ function WelderReportView({project, results, meta}) {
   );
 }
 
-function WelderAssetForm({initial, defaultLocation, submitLabel, onSave, onCancel}) {
+function WelderAssetForm({initial, areaChoices, areaId, submitLabel, onSave, onCancel}) {
   const SS = swbStyles();
-  const [f,setF] = React.useState({location:defaultLocation||"",assetId:"",brand:"",model:"",serial:"",...initial});
+  const { location: _legacyLocation, ...init } = initial||{};   // the area now owns "Location"
+  const [f,setF] = React.useState({assetId:"",brand:"",model:"",serial:"",...init});
+  const [target,setTarget] = React.useState(areaId);
   const set = patch=>setF(prev=>({...prev,...patch}));
   const field = (lbl,k,ph)=>eltEl('div',{style:{marginBottom:8}}
     ,eltEl('div',{style:SS.metaLabelText},lbl)
@@ -13727,27 +13892,25 @@ function WelderAssetForm({initial, defaultLocation, submitLabel, onSave, onCance
   );
   const trim = o=>Object.fromEntries(Object.entries(o).map(([k,v])=>[k,typeof v==="string"?v.trim():v]));
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${WELDER_COLOR_BORDER}`}}
-    ,field("LOCATION","location","e.g. ONR Workshop")
+    ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
+      ,eltEl('div',{style:SS.metaLabelText},"AREA")
+      ,eltEl('select',{style:{...SS.metaInput,marginTop:4,width:"100%",minWidth:0},value:target,onChange:e=>setTarget(e.target.value),"aria-label":"Area"},areaChoices.map(c=>eltEl('option',{key:c.id,value:c.id},c.name)))
+    )
     ,field("ASSET ID","assetId","e.g. W001")
     ,field("BRAND","brand","e.g. Kemppi")
     ,field("MODEL","model","e.g. MinarcMig Evo 200")
     ,field("SERIAL NUMBER","serial","Serial number — “N/A” if none")
     ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-      ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{const t=trim(f);if(!t.assetId&&!t.brand&&!t.model)return;onSave(t);}},submitLabel)
+      ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{const t=trim(f);if(!t.assetId&&!t.brand&&!t.model)return;onSave(t,target);}},submitLabel)
       ,eltEl('button',{style:SS.ctaSecondary,onClick:onCancel},"Cancel")
     )
   );
 }
 
-function WelderManageView({project, onUpdateProject}) {
+function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
-  const [adding,setAdding] = React.useState(false);
-  const [seed,setSeed] = React.useState({});
-  const [seedKey,setSeedKey] = React.useState(0);
-  const [editingId,setEditingId] = React.useState(null);
-  const assets = project.assets||[];
   const upd = u=>onUpdateProject(u);
   const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
   return eltEl('div',{style:SS.listWrap}
@@ -13768,28 +13931,19 @@ function WelderManageView({project, onUpdateProject}) {
         )
         ,editBtn(()=>{setVals({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});setEditingProject(true);})
       )
-    ,eltEl('div',{style:{fontSize:11,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:10}},`WELDERS (${assets.length})`)
-    ,assets.length===0&&!adding&&eltEl('div',{style:{color:"#52525b",fontSize:13,marginBottom:12}},"No welders yet.")
-    ,assets.map(a=>editingId===a.id
-      ?eltEl(WelderAssetForm,{key:a.id,initial:a,submitLabel:"Save",onSave:f=>{upd({...project,assets:assets.map(x=>x.id===a.id?{...x,...f}:x)});setEditingId(null);},onCancel:()=>setEditingId(null)})
-      :eltEl('div',{key:a.id,style:{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,marginBottom:6,minWidth:0}}
-        ,eltEl('div',{style:{flex:1,minWidth:0}}
-          ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderTitle(a))
-          ,eltEl('div',{style:{fontSize:11,color:"#52525b",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},welderSub(a))
-        )
-        ,editBtn(()=>{setAdding(false);setEditingId(a.id);})
-        ,eltEl(DeleteButton,{onDelete:()=>upd({...project,assets:assets.filter(x=>x.id!==a.id)}),label:"Delete welder?",compact:true})
-      ))
-    ,adding
-      ?eltEl(WelderAssetForm,{key:seedKey,initial:seed,defaultLocation:project.name,submitLabel:"+ Add Welder",onSave:f=>{upd({...project,assets:[...assets,{...f,id:uid()}]});setSeed({location:f.location});setSeedKey(k=>k+1);},onCancel:()=>setAdding(false)})
-      :eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginTop:8},onClick:()=>{setEditingId(null);setAdding(true);}},"+ Add Welder")
+    ,eltEl(AreaManager,{project,accent:WELDER_COLOR,accentBorder:WELDER_COLOR_BORDER,nounOne:"welder",
+      assetTitle:a=>welderTitle(a),
+      assetSub:a=>welderSub(a,false),
+      seedFrom:()=>({}),
+      renderForm:p=>eltEl(WelderAssetForm,p),
+      onUpdate:upd,onRemoveAssets})
   );
 }
 
 function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
   const SS = swbStyles();
   const [expanded,setExpanded] = React.useState(null);
-  const snapProject = snap=>({...project,assets:snap.assets||project.assets||[]});
+  const snapProject = snap=>({...project,areas:snap.areas||project.areas||[]});
   const snapStats = snap=>welderSiteSummary(snapProject(snap),{[project.id]:snap.results||{}});
   if(viewSnap){
     const snap = viewSnap; const s = snapStats(snap);
@@ -13803,7 +13957,9 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
         ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
       )
       ,eltEl('div',{style:{marginBottom:14}},eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]}))
-      ,rows.map(row=>{
+      ,groupRowsByArea(rows).map(g=>eltEl('div',{key:g.id,"data-area":g.name}
+        ,eltEl('div',{style:AREA_HDR_STYLE},g.name)
+        ,g.rows.map(row=>{
         const sm = welderSM(row.overall);
         return eltEl('div',{key:row.asset.id,style:{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:sm.bg,border:`1px solid ${sm.border}44`,borderRadius:8,marginBottom:4}}
           ,eltEl('div',{style:{width:48,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0}},row.overall==="untested"?"—":sm.label)
@@ -13812,7 +13968,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
             ,row.cells[10]&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},row.cells[10])
           )
         );
-      })
+      })))
     );
   }
   return eltEl('div',{style:SS.listWrap}
@@ -13974,7 +14130,7 @@ function WelderApp({ onGoHome }) {
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([load(K_WELDER_PROJECTS,[]),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),load(K_WELDER_HISTORY,[]),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});}
+      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),loadVersioned(K_WELDER_HISTORY,K_WELDER_HISTORY_V1,[],migrateHistoryList),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});}
       finally{setLoaded(true);}
     })();
   },[]);
@@ -13988,7 +14144,7 @@ function WelderApp({ onGoHome }) {
   const _m = welderMetaDefaults(allMeta[activeProject]);
   const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,WELDER_INTERVAL_MONTHS)};
   const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
-  const asset = project&&(project.assets||[]).find(a=>a.id===activeAssetId);
+  const asset = project&&areaAssets(project).find(a=>a.id===activeAssetId);
   const today = ()=>new Date().toISOString().slice(0,10);
 
   const patchAsset = (assetId,patch)=>setAllResults(prev=>{
@@ -13996,7 +14152,7 @@ function WelderApp({ onGoHome }) {
     return {...prev,[activeProject]:{...site,[assetId]:{...welderGetRes(prev,activeProject,assetId),...patch}}};
   });
   const archiveAudit = ()=>{
-    const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),assets:JSON.parse(JSON.stringify((project&&project.assets)||[])),meta:{...meta}};
+    const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
   const clearSiteResults = ()=>{
@@ -14011,7 +14167,7 @@ function WelderApp({ onGoHome }) {
 
   const SS = swbStyles();
   const summary = project?welderSiteSummary(project,allResults):{total:0,pass:0,fail:0,untested:0,tested:0};
-  const hasResults = !!project && (project.assets||[]).some(a=>{const r=welderGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||WELDER_CHECKLIST.some(c=>welderItem(r,c.key).result);});
+  const hasResults = !!project && areaAssets(project).some(a=>{const r=welderGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||WELDER_CHECKLIST.some(c=>welderItem(r,c.key).result);});
   const goBack = ()=>{
     if(viewSnap){setViewSnap(null);return;}
     if(view==="asset") setView("audit");
@@ -14020,7 +14176,7 @@ function WelderApp({ onGoHome }) {
     else goProjects();
   };
   const exportSnap = snap=>{
-    exportWelderExcel({...project,assets:snap.assets||project.assets},{[project.id]:snap.results||{}},snap.meta||{});
+    exportWelderExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{});
   };
   const navBtn = (icon,label,active,onClick)=>eltEl(SWBNavBtn,{icon,label,active,onClick,color:"#334155"});
 
@@ -14048,7 +14204,7 @@ function WelderApp({ onGoHome }) {
       ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(WelderReportView,{project,results:allResults,meta})
-      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p))})
+      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns,setDropdowns,onBack:goHome,lists:WELDER_DROPDOWN_LISTS,hint:"These lists feed the Welder defect dropdowns. Tap ★ to move an option to the top.",showDefault:true})
       ,view==="history"&&project&&eltEl(WelderHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:exportSnap,onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
     )
@@ -14063,6 +14219,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

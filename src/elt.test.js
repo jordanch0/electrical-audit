@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS } from './App.jsx';
+import { eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
 
 const allPass = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
 
@@ -35,11 +35,11 @@ describe('eltExportNotes', () => {
 });
 
 describe('register + summary', () => {
-  const project = { id:'p1', name:'Site A', assets:[
+  const project = toAreas({ id:'p1', name:'Site A', assets:[
     { id:'a1', location:'Site A', assetLocation:'SE Door', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Clevertronics 24m' },
     { id:'a2', location:'Site A', assetLocation:'SW Roof', type:'Other', typeOther:'Bunker light', maintained:'Non-Maintained' },
     { id:'a3', location:'Site A', assetLocation:'Not yet tested', type:'Emergency Exit Sign' },
-  ]};
+  ]});
   const results = { p1: {
     a1: { ...allPass },
     a2: { ...allPass, discharge:'fail', failReason:'Battery Failure', action:'Scheduled for Repair' },

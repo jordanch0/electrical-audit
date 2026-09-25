@@ -51,13 +51,17 @@ describe('Welder module shell', () => {
     await user.click(screen.getByRole('button', { name: 'Add Site' }));
     await user.click(await screen.findByText('Test Site'));
     await user.click(screen.getByRole('button', { name: 'Manage' }));
+    await user.type(screen.getByPlaceholderText('New area / location name'), 'ONR Workshop');
+    await user.click(screen.getByRole('button', { name: '+ Add Area' }));
     await user.click(screen.getByRole('button', { name: '+ Add Welder' }));
     await user.type(screen.getByPlaceholderText('e.g. W001'), 'W001');
     await user.type(screen.getByPlaceholderText('e.g. Kemppi'), 'Kemppi');
     await user.type(screen.getByPlaceholderText(/Serial number/), 'N/A');
     await user.click(screen.getAllByRole('button', { name: '+ Add Welder' }).pop());
-    const a = ls('welder-projects-v1')[0].assets[0];
-    expect(a).toMatchObject({ assetId: 'W001', brand: 'Kemppi', serial: 'N/A' });
+    const area = ls('welder-projects-v2')[0].areas[0];
+    expect(area.name).toBe('ONR Workshop');
+    expect(area.assets[0]).toMatchObject({ assetId: 'W001', brand: 'Kemppi', serial: 'N/A' });
+    expect(area.assets[0]).not.toHaveProperty('location'); // the area owns Location now
   });
 
   it('welder page: read-only identity, static criteria on every item, live summary; W001 shape (7 Pass + 5 N/A) => PASS, no defect panel', async () => {
@@ -140,9 +144,10 @@ describe('Welder module shell', () => {
     await user.click(screen.getByRole('button', { name: 'Home' }));
     await user.click(screen.getByRole('button', { name: 'Complete Welder Audit' }));
     await user.click(screen.getByRole('button', { name: /Yes, Complete/ }));
-    const h = ls('welder-history-v1');
+    const h = ls('welder-history-v2');
     expect(h).toHaveLength(1);
-    expect(h[0].assets.map(a => a.assetId)).toEqual(['W001', 'W002']);
+    expect(h[0].assets).toBeUndefined();
+    expect(h[0].areas.flatMap(a => a.assets).map(a => a.assetId)).toEqual(['W001', 'W002']);
     expect(h[0].results.a1.items.visual.result).toBe('pass');
     expect(ls('welder-results-v1').dixon).toEqual({});
   });

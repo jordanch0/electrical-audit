@@ -6,7 +6,7 @@ import userEvent from '@testing-library/user-event';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import crypto from 'crypto';
-import AppRoot, { exportWelderExcel, WELDER_CHECKLIST, WELDER_COLUMNS } from './App.jsx';
+import AppRoot, { exportWelderExcel, WELDER_CHECKLIST, WELDER_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
 import { JPEG_A, JPEG_B } from './test/jpeg-fixtures.js';
 
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
@@ -16,12 +16,12 @@ const rec = (pattern, extra = {}) => ({
   items: Object.fromEntries(keys.map((k, i) => [k, { result: { P: 'pass', F: 'fail', N: 'na', '.': '' }[pattern[i]], value: i === 3 ? '9.9 MΩ' : '', action: '' }])),
   ...extra,
 });
-const project = { id: 'p1', name: 'Site A', company: 'Co', abn: '1', licence: 'L1', assets: [
+const project = toAreas({ id: 'p1', name: 'Site A', company: 'Co', abn: '1', licence: 'L1', assets: [
   { id: 'a1', location: 'ONR Workshop', assetId: 'W001', brand: 'Kemppi', model: 'Evo', serial: '2699294' },
   { id: 'a2', location: 'ONR Workshop', assetId: 'W002', brand: 'Unimig', model: 'Razor', serial: 'N/A' },
   { id: 'a3', location: 'ONR Workshop', assetId: 'W003', brand: '', model: '', serial: '' },
   { id: 'a4', location: 'ONR Workshop', assetId: 'W/004', brand: '', model: '', serial: '' },
-] };
+] });
 const stale = { rectified: 'Removed from Service', defectId: 'D-9', responsibility: 'Site Electrician', priority: 'H' };
 const meta = { auditor: 'Jane', testDate: '2026-07-13', nextTestDate: '2026-10-13', instruments: 'Fluke 1587' };
 let payload;
@@ -101,7 +101,7 @@ describe('Welder export structure', () => {
 describe('Welder photo -> export through the real UI', () => {
   it('photos on a fully tested welder and on an untested welder reach their own sheets intact', async () => {
     let shot = 0;
-    localStorage.setItem('welder-projects-v1', JSON.stringify([{ ...project, assets: project.assets.slice(0, 2) }]));
+    localStorage.setItem('welder-projects-v2', JSON.stringify([{ ...project, areas: [{ ...project.areas[0], assets: project.areas[0].assets.slice(0, 2) }] }]));
     localStorage.setItem('welder-meta-v1', JSON.stringify({ p1: meta }));
     vi.stubGlobal('Image', class { set src(v) { this._s = v; queueMicrotask(() => { this.width = 4000; this.height = 3000; this.onload && this.onload(); }); } get src() { return this._s; } });
     HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
