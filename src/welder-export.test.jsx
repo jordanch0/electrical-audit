@@ -48,7 +48,7 @@ describe('Welder export structure', () => {
     const { wb } = await build(results);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'W001', 'W002', 'W003', 'W-004']);
     const reg = wb.getWorksheet('Register');
-    expect(V(reg.getCell('A1'))).toBe('Site A — Welder (VRD) Test');
+    expect(V(reg.getCell('A1'))).toBe('Site A — Welder Test');
     expect(V(reg.getCell('A2'))).toBe('Co  |  ABN: 1  |  Electrical Licence: L1');
     expect(V(reg.getCell('A3'))).toBe('Auditor: Jane');
     expect(V(reg.getCell('E3'))).toBe('Next Test Due: 13/10/2026');
@@ -83,7 +83,7 @@ describe('Welder export structure', () => {
   it('welder sheet: header fields, Audit Summary (W001 shape = 12 / 7 / 0 / 5 / 100.0% / 0 / PASS) and the 12 checklist rows with criteria', async () => {
     const { wb } = await build(results);
     const sh = wb.getWorksheet('W001');
-    expect(V(sh.getCell('A1'))).toBe('VRD Welder Inspection & Audit Checklist');
+    expect(V(sh.getCell('A1'))).toBe('Welder Inspection & Audit Checklist');
     expect(V(sh.getCell('A3'))).toBe('Location: ONR Workshop'); expect(V(sh.getCell('C3'))).toBe('Asset ID: W001');
     expect(V(sh.getCell('A5'))).toBe('Serial Number: 2699294'); expect(V(sh.getCell('C6'))).toBe('Test Instruments: Fluke 1587');
     const summary = {}; for (let r = 9; r <= 15; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
@@ -113,7 +113,7 @@ describe('Welder photo -> export through the real UI', () => {
       await waitFor(() => expect(document.querySelectorAll('img[src^="data:image"]').length).toBe(before + 1));
     };
     render(<AppRoot />);
-    await user.click(screen.getByText('WELDER (VRD)'));
+    await user.click(screen.getByText('WELDER TESTING'));
     await user.click(await screen.findByText('Site A', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('W001'));

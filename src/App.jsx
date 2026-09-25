@@ -3689,7 +3689,7 @@ const CAL_TYPES = [
   { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12})), period:"Variable"   },
   { key:"irt",         label:"IR Testing",             color:"#1d4ed8", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), period:"Variable"   },
   { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M9 18h6M10 22h4'}),React.createElement('path',{d:'M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z'})), period:"6-Monthly"  },
-  { key:"welder",      label:"Welder (VRD) Test",      color:"#be185d", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'})), period:"3-Monthly"  },
+  { key:"welder",      label:"Welder Test",      color:"#be185d", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'})), period:"3-Monthly"  },
   { key:"other",       label:"Other / Custom",        color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
 ];
 
@@ -9614,26 +9614,31 @@ function AppRoot() {
   if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
   if (module === "welder") return React.createElement(WelderApp, {onGoHome: ()=>setModule(null)});
 
+  // Home-screen module icons: one consistent set (24px viewBox, 2px stroke, round caps, no fill)
+  const mIcon = (...kids) => React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},...kids);
+  const P = (d) => React.createElement('path',{d});
+  const R = (x,y,width,height,rx) => React.createElement('rect',{x,y,width,height,rx});
+  const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r});
   const modules = [
-    {key:"cal",color:"#4338ca",name:"TEST CALENDAR",desc:"Due dates & reminders",onClick:()=>setModule("cal"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))},
-    {key:"rcd",color:"#a3530f",name:"RCD TESTING",desc:"Push & injection tests",onClick:()=>setModule("rcd"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"currentColor",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13L13 2Z"}))},
-    {key:"iel",color:"#047857",name:"IEL TESTING",desc:"Lanyards, e-stops, isolators",onClick:()=>setModule("iel"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"}),React.createElement('path',{d:"M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"}))},
-    {key:"tat",color:"#1d4ed8",name:"TEST & TAG",desc:"In-service equipment",onClick:()=>setModule("tat"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7}))},
-    {key:"thermo",color:"#c2410c",name:"THERMOGRAPHIC",desc:"Thermo Camera Photos",onClick:()=>setModule("thermo"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"}))},
-    {key:"swb",color:"#7e22ce",name:"SWITCHBOARD",desc:"11-point visual audit",onClick:()=>setModule("swb"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12}))},
-    {key:"irt",color:"#1d4ed8",name:"IR TESTING",desc:"Insulation resistance",onClick:()=>setModule("irt"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:"M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"}))},
-    {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"AS 2293.2 test register",onClick:()=>setModule("elt"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M9 18h6M10 22h4"}),React.createElement('path',{d:"M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z"}))},
-    {key:"welder",color:"#be185d",name:"WELDER (VRD)",desc:"Voltage reduction device checks",onClick:()=>setModule("welder"),
-      icon:React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"}))},
+    {key:"rcd",color:"#a3530f",name:"RCD TESTING",desc:"Push and injection trip tests",onClick:()=>setModule("rcd"),
+      icon:mIcon(R(5,2,14,20,2),R(9,6,6,6,1),C(12,17,1.5))},
+    {key:"iel",color:"#047857",name:"IEL TESTING",desc:"Lanyards, e-stops and isolators",onClick:()=>setModule("iel"),
+      icon:mIcon(R(5,11,14,10,2),P("M8 11V7a4 4 0 0 1 8 0v4"),C(12,16,1))},
+    {key:"tat",color:"#1d4ed8",name:"TEST & TAG",desc:"In-service tool and lead testing",onClick:()=>setModule("tat"),
+      icon:mIcon(P("M8 2v3M14 2v3"),P("M5 5h12v4a6 6 0 0 1-12 0z"),P("M11 15v2"),P("M7 17h7l2 2.5-2 2.5H7z"))},
+    {key:"thermo",color:"#c2410c",name:"THERMOGRAPHIC",desc:"Thermal imaging photo log",onClick:()=>setModule("thermo"),
+      icon:mIcon(P("M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"),P("M13.5 13V8a1.5 1.5 0 0 0-3 0v5a2.5 2.5 0 1 0 3 0z"))},
+    {key:"swb",color:"#7e22ce",name:"SWITCHBOARD",desc:"11-point switchboard inspection",onClick:()=>setModule("swb"),
+      icon:mIcon(R(3,2,18,20,2),R(6,6,3,5,0.5),R(10.5,6,3,5,0.5),R(15,6,3,5,0.5),P("M6 15h12M6 18.5h12"))},
+    {key:"irt",color:"#1d4ed8",name:"IR TESTING",desc:"Cable and motor insulation tests",onClick:()=>setModule("irt"),
+      icon:mIcon(P("M3 17a9 9 0 0 1 18 0"),P("M12 17l4-6"),C(12,17,1),P("M3 21h18"))},
+    {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"AS 2293.2 emergency light register",onClick:()=>setModule("elt"),
+      icon:mIcon(R(2,6,20,12,2),C(8,9.5,1),P("M8 11.5v2l-1.5 2M8 13.5l2 1.5M6 12.5l3-1"),P("M14 12h5M17 10l2 2-2 2"))},
+    {key:"welder",color:"#be185d",name:"WELDER TESTING",desc:"Welder electrical safety checks",onClick:()=>setModule("welder"),
+      icon:mIcon(P("M4 10a8 8 0 0 1 16 0v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"),R(7,10,10,4,1))},
   ];
+  // Calendar lives in a fixed pill (not a grid card)
+  const calColor = "#4338ca";
 
   return React.createElement('div', {
     style:{
@@ -9650,7 +9655,7 @@ function AppRoot() {
     ref: el => { if(el) el.scrollTop = 0; }
   }
     , React.createElement('div', {style:{
-        paddingTop:52,
+        paddingTop:"calc(env(safe-area-inset-top, 0px) + 20px)",
         display:"flex",flexDirection:"column",
         alignItems:"center",
         minHeight:"100%",
@@ -9671,7 +9676,7 @@ function AppRoot() {
           , React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"#a3530f",stroke:"none"}
             , React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13L13 2Z"})
           )
-          , React.createElement('span',{style:{fontSize:10,color:"#a3530f",fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}, "Electrical Audit Software")
+          , React.createElement('span',{style:{fontSize:10,color:"#a3530f",fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}, "Electrical Audit Register")
         )
         , React.createElement('div', {style:{fontSize:38,fontWeight:900,letterSpacing:-1,lineHeight:1,marginBottom:0}}
           , React.createElement('span',{style:{color:"#18181b"}}, "SPARK")
@@ -9708,7 +9713,18 @@ function AppRoot() {
         ))
       )
 
-      , React.createElement('div',{style:{paddingBottom:24,textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
+      , React.createElement('div',{style:{paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 76px)",textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
+    )
+    // Fixed calendar pill — always reachable, clear of the iPhone home indicator
+    , React.createElement('button',{
+        onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
+        style:{position:"fixed",left:"50%",transform:"translateX(-50%)",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
+          display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:999,cursor:"pointer",
+          background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
+          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
+      }
+      , React.createElement('svg',{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},R(3,4,18,18,2),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))
+      , "Calendar"
     )
   );
 }
@@ -13086,7 +13102,7 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
 */
 
 // ═════════════════════════════════════════════════════════════════════════
-// WELDER (VRD) MODULE — welder / voltage-reduction-device compliance checks
+// WELDER MODULE — welder electrical safety checks
 // Structure: Site → flat list of welders (assets). Each welder has a fixed 12-item checklist; every item always shows
 // Result (Pass / Fail / N/A), Measured Value / Notes and Corrective Action Required. Per-asset overall result, score and
 // summary are DERIVED (never stored). The Summary Register is a table on the Report tab, derived from the welder entries.
@@ -13332,7 +13348,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:10}}
       ,eltEl('div',{style:{minWidth:0}}
         ,eltEl('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},welderTitle(asset))
-        ,eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:3}},"VRD Welder Inspection & Audit Checklist")
+        ,eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:3}},"Welder Inspection & Audit Checklist")
       )
       ,eltEl('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800,flexShrink:0}},welderOverallLabel(overall))
     )
@@ -13440,7 +13456,7 @@ function WelderReportView({project, results, meta}) {
   return eltEl('div',{style:SS.summaryWrap}
     ,eltEl('div',{style:SS.summaryTitle},project.name)
     ,project.company&&eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginTop:2,marginBottom:4}},project.company)
-    ,eltEl('div',{style:SS.summaryMeta},"WELDER (VRD) TEST REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
+    ,eltEl('div',{style:SS.summaryMeta},"WELDER TEST REPORT"+(meta.auditor?` · ${meta.auditor}`:""))
     ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,eltEl('div',{style:{...SS.duePill,borderColor:WELDER_COLOR_BORDER,color:WELDER_COLOR,padding:"7px 12px"}},"Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
@@ -13623,7 +13639,7 @@ async function exportWelderExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
-  setCell('A1',`${sName} — Welder (VRD) Test`);
+  setCell('A1',`${sName} — Welder Test`);
   setCell('A2',coLine);
   setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
   setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
@@ -13651,7 +13667,7 @@ async function exportWelderExcel(project, allResults, meta) {
     const sh = wb.addWorksheet(welderSheetName(a, used));
     const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const date = raw.date || (meta&&meta.testDate) || "";
-    put('A1',"VRD Welder Inspection & Audit Checklist");
+    put('A1',"Welder Inspection & Audit Checklist");
     put('A2',`${sName}  |  ${coLine}`);
     put('A3',`Location: ${a.location||""}`); put('C3',`Asset ID: ${a.assetId||""}`);
     put('A4',`Brand: ${a.brand||""}`);       put('C4',`Model: ${a.model||""}`);
@@ -13777,7 +13793,7 @@ function WelderApp({ onGoHome }) {
             ,eltEl('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},eltEl('polyline',{points:"15 18 9 12 15 6"}))
             ,eltEl('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Back")
           )
-          ,eltEl('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Welder (VRD) Testing")
+          ,eltEl('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Welder Testing")
           ,eltEl('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},(project&&project.name)||"")
         )
         ,eltEl('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}

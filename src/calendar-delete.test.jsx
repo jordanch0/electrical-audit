@@ -20,7 +20,7 @@ describe('Calendar delete confirm', () => {
   it('opening a second delete prompt closes the first (never two open at once)', async () => {
     const user = userEvent.setup();
     const { container } = render(<AppRoot />);
-    await user.click(screen.getByText('TEST CALENDAR'));
+    await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
     await waitFor(() => expect(trashButtons(container).length).toBe(2));
 
     await user.click(trashButtons(container)[0]);
@@ -34,7 +34,7 @@ describe('Calendar delete confirm', () => {
   it('Keep cancels and nothing is deleted', async () => {
     const user = userEvent.setup();
     const { container } = render(<AppRoot />);
-    await user.click(screen.getByText('TEST CALENDAR'));
+    await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
     await waitFor(() => expect(trashButtons(container).length).toBe(2));
     await user.click(trashButtons(container)[0]);
     await user.click(screen.getByRole('button', { name: 'Keep' }));
@@ -46,7 +46,7 @@ describe('Calendar delete confirm', () => {
     const user = userEvent.setup();
     localStorage.setItem('elt-projects-v1', JSON.stringify([{ id: 'p1', name: 'ELT Site Z', company: '', abn: '', licence: '', assets: [] }]));
     render(<AppRoot />);
-    await user.click(screen.getByText('TEST CALENDAR'));
+    await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
     await user.click(screen.getByRole('button', { name: /Add Event/ }));
     expect(await screen.findByText('Emergency Lighting')).toBeInTheDocument();
     expect(screen.getByRole('option', { name: 'ELT Site Z' })).toBeInTheDocument();

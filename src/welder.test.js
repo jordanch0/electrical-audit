@@ -1,4 +1,4 @@
-// Welder (VRD) module: checklist constants, per-asset summary / overall rule, and the derived Summary Register.
+// Welder module: checklist constants, per-asset summary / overall rule, and the derived Summary Register.
 import { describe, it, expect } from 'vitest';
 import { addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary } from './App.jsx';
 

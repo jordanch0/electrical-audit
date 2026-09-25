@@ -255,7 +255,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     localStorage.setItem('welder-meta-v1', JSON.stringify({ 'site-1': { auditor: 'Jordan', testDate: '2026-09-21', nextTestDate: '2026-12-21' } }));
 
     render(<AppRoot />);
-    await user.click(await screen.findByText('WELDER (VRD)'));
+    await user.click(await screen.findByText('WELDER TESTING'));
     await user.click(await screen.findByText('Welder Site', { selector: 'div' }));
     await user.click(await screen.findByRole('button', { name: /^Audit$/ }));
 
@@ -265,7 +265,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
 
     await user.click(lastItem);
 
-    await screen.findByText('VRD Welder Inspection & Audit Checklist');
+    await screen.findByText('Welder Inspection & Audit Checklist');
     expect(container.scrollTop).toBe(0);
   });
 });

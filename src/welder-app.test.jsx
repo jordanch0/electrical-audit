@@ -1,4 +1,4 @@
-// Welder (VRD) module shell: site -> welders (Manage) -> audit page -> derived FAIL panel -> Report register.
+// Welder module shell: site -> welders (Manage) -> audit page -> derived FAIL panel -> Report register.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -19,7 +19,7 @@ const seed = (extra = {}) => {
 };
 async function openSite(user) {
   render(<AppRoot />);
-  await user.click(screen.getByText('WELDER (VRD)'));
+  await user.click(screen.getByText('WELDER TESTING'));
   await user.click(await screen.findByText('Dixon Quarry Group'));
 }
 async function openWelder(user, id = 'W001') {
@@ -45,7 +45,7 @@ describe('Welder module shell', () => {
   it('adds a site and a welder (identity fields free text incl. "N/A" serial) in Manage', async () => {
     const user = userEvent.setup();
     render(<AppRoot />);
-    await user.click(screen.getByText('WELDER (VRD)'));
+    await user.click(screen.getByText('WELDER TESTING'));
     await user.click(screen.getByRole('button', { name: '+ Add Site' }));
     await user.type(screen.getByPlaceholderText('Site name'), 'Test Site');
     await user.click(screen.getByRole('button', { name: 'Add Site' }));
@@ -168,12 +168,12 @@ describe('Welder module shell', () => {
     expect(screen.getByText('RECTIFIED / SCHEDULED ACTION')).toBeInTheDocument();
   });
 
-  it('the Calendar knows the Welder (VRD) event type (not the "Other / Custom" fallback)', async () => {
+  it('the Calendar knows the Welder event type (not the "Other / Custom" fallback)', async () => {
     const user = userEvent.setup();
     const d = new Date(Date.now() + 3 * 864e5).toISOString().slice(0, 10);
     localStorage.setItem('cal-events-v1', JSON.stringify([{ id: 'e1', type: 'welder', site: 'Dixon Quarry Group', dueDate: d, notes: '', seriesId: null }]));
     render(<AppRoot />);
-    await user.click(screen.getByText('TEST CALENDAR'));
-    expect(await screen.findByText('Welder (VRD) Test')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
+    expect(await screen.findByText('Welder Test')).toBeInTheDocument();
   });
 });
