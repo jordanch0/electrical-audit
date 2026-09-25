@@ -318,6 +318,7 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 
 ```
 [ ] Add your known bugs here
+[ ] Intermittent test failure: one failure seen in a 145-test run, not reproduced in 5 reruns, name not captured — if it recurs, capture the test name before investigating.
 ```
 
 ---
