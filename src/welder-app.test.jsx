@@ -73,8 +73,10 @@ describe('Welder module shell', () => {
     expect(screen.getByText('Min insulation resistance 5 MΩ')).toBeInTheDocument(); // static criteria always visible
     expect(screen.getAllByPlaceholderText('Corrective action required')).toHaveLength(12);
     expect(screen.getAllByPlaceholderText('Measured value / notes')).toHaveLength(12);
-    expect(screen.getByDisplayValue('2026-07-13')).toBeInTheDocument();            // date prefilled from Home
-    expect(screen.getByDisplayValue('Fluke 1587')).toBeInTheDocument();            // instruments prefilled from Home
+    // Date Tested / Prepared By / Test Instruments live ONLY on Home now — no per-welder override on this page
+    ['DATE TESTED', 'PREPARED BY', 'TEST INSTRUMENTS'].forEach(l => expect(screen.queryByText(l)).not.toBeInTheDocument());
+    expect(screen.queryByDisplayValue('Fluke 1587')).not.toBeInTheDocument();
+    expect(screen.queryByDisplayValue('2026-07-13')).not.toBeInTheDocument();
     const pattern = 'PPPPPNNNPPNN';
     for (let i = 0; i < 12; i++) await setResult(user, i, pattern[i] === 'P' ? 'PASS' : 'N/A');
     expect(screen.getByText('Overall: PASS')).toBeInTheDocument();

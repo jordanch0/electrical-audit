@@ -11669,7 +11669,7 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,eltEl(CompleteAuditBtn,{color:ELT_COLOR,label:"Complete Emergency Lighting Audit",onComplete:onCompleteAudit})
     )
-    ,eltEl(DeleteButton,{onDelete:onReset,label:"Reset all results?"})
+    ,eltEl(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>eltEl('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
@@ -13379,12 +13379,16 @@ const WELDER_COLUMNS = ["Location","Asset ID","Welder (Machine)","Serial Number"
 
 function welderGetRes(results, pid, aid) {
   const r = results && results[pid] && results[pid][aid];
-  return { date:"", preparedBy:"", instruments:"", items:{}, notes:"", photos:[], rectified:"", rectifiedDate:"", defectId:"", responsibility:"", priority:"", ...(r||{}) };
+  // Date Tested / Prepared By / Test Instruments are SITE-level only (Home). Older records may carry per-welder overrides; they are
+  // dropped here so nothing reads them and they disappear from storage the next time the welder is saved.
+  const { date:_date, preparedBy:_preparedBy, instruments:_instruments, ...rest } = r||{};
+  return { items:{}, notes:"", photos:[], rectified:"", rectifiedDate:"", defectId:"", responsibility:"", priority:"", ...rest };
 }
 const welderItem = (r, key) => ({ result:"", value:"", action:"", ...(((r||{}).items||{})[key]||{}) });
 // Overall rule (exact): any item blank/unset -> "untested". All 12 answered (Pass / Fail / N/A in any mix): any Fail -> "fail",
-// otherwise "pass". N/A counts as answered and never blocks a PASS. Score = Pass / (Pass + Fail) x 100, N/A excluded (null when
-// nothing is scored). Actions Required = FAIL items that have a Corrective Action written.
+// otherwise "pass". N/A counts as answered and never blocks a PASS. Score = Pass / (Total items - N/A) x 100: blank and FAIL items both
+// stay in the denominator (a Fail never moves the score; only N/A removes an item from it, which raises the weight of every Pass).
+// null ("—") only when every item is N/A. Actions Required = FAIL items that have a Corrective Action written.
 function welderSummary(r) {
   let pass=0, fail=0, na=0, actions=0;
   WELDER_CHECKLIST.forEach(({key}) => {
@@ -13394,8 +13398,8 @@ function welderSummary(r) {
     else if (it.result === "na") na++;
   });
   const total = WELDER_CHECKLIST.length, untested = total - pass - fail - na;
-  const scored = pass + fail;
-  return { total, pass, fail, na, untested, actions, score: scored>0 ? Math.round((pass/scored)*1000)/10 : null,
+  const denominator = total - na;
+  return { total, pass, fail, na, untested, actions, score: denominator>0 ? Math.round((pass/denominator)*1000)/10 : null,
     overall: untested>0 ? "untested" : fail>0 ? "fail" : "pass" };
 }
 const welderOverall = r => welderSummary(r).overall;
@@ -13415,7 +13419,7 @@ function welderRegisterRows(project, allResults, meta) {
     const sum = welderSummary(raw);
     const r = defectGate(raw, sum.overall==="fail");
     const tested = sum.overall!=="untested";
-    const date = tested ? (raw.date || (meta&&meta.testDate) || "") : "";
+    const date = tested ? ((meta&&meta.testDate) || "") : "";
     const nextDue = tested ? ((meta&&meta.nextTestDate) || (date ? addMonthsISO(date, WELDER_INTERVAL_MONTHS) : "")) : "";
     return { asset:a, res:raw, summary:sum, overall:sum.overall, cells:[
       a.location||project.name||"", a.assetId||"", welderMachine(a), a.serial||"", date?fmtDate(date):"", welderPF(sum.overall),
@@ -13667,15 +13671,15 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
         ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
-        ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED (default for all welders)")
+        ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED")
         ,eltEl('div',{style:{position:"relative",marginTop:4}},dateBox(meta.testDate,"Select date…"),overlay(meta.testDate,nd=>{const autoPrev=meta.testDate?addMonthsISO(meta.testDate,WELDER_INTERVAL_MONTHS):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addMonthsISO(nd,WELDER_INTERVAL_MONTHS)}:{})});}))
       )
       ,eltEl('div',{style:{marginTop:8}}
-        ,eltEl('div',{style:SS.metaLabelText},"NEXT TEST DUE (default for all welders)")
+        ,eltEl('div',{style:SS.metaLabelText},"NEXT TEST DUE")
         ,eltEl('div',{style:{position:"relative",marginTop:4}},dateBox(meta.nextTestDate,"Not set"),overlay(meta.nextTestDate,v=>setMeta({nextTestDate:v})))
       )
       ,eltEl('div',{style:{marginTop:8}}
-        ,eltEl('div',{style:SS.metaLabelText},"TEST INSTRUMENTS (default for all welders)")
+        ,eltEl('div',{style:SS.metaLabelText},"TEST INSTRUMENTS")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4},value:meta.instruments||"",placeholder:"e.g. Fluke 1587 (S/N …), cal. due …",onChange:e=>setMeta({instruments:e.target.value})})
       )
     )
@@ -13695,7 +13699,7 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,eltEl(CompleteAuditBtn,{color:WELDER_COLOR,label:"Complete Welder Audit",onComplete:onCompleteAudit})
     )
-    ,eltEl(DeleteButton,{onDelete:onReset,label:"Reset all results?"})
+    ,eltEl(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>eltEl('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
@@ -13762,19 +13766,6 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     // identity — edited in Manage, read-only here
     ,eltEl('div',{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 12px",marginBottom:12}}
       ,ro("LOCATION",asset.location),ro("ASSET ID",asset.assetId),ro("BRAND",asset.brand),ro("MODEL",asset.model),ro("SERIAL NUMBER",asset.serial)
-    )
-    // per-audit fields, prefilled from Home and overridable
-    ,eltEl('div',{style:SS.modalField}
-      ,eltEl('label',{style:SS.modalLabel},"DATE TESTED")
-      ,eltEl('input',{style:SS.modalInput,type:"date",value:r.date||meta.testDate||"",onChange:e=>set({date:e.target.value})})
-    )
-    ,eltEl('div',{style:SS.modalField}
-      ,eltEl('label',{style:SS.modalLabel},"PREPARED BY")
-      ,eltEl('input',{style:SS.modalInput,type:"text",value:r.preparedBy||meta.auditor||"",onChange:e=>set({preparedBy:e.target.value})})
-    )
-    ,eltEl('div',{style:SS.modalField}
-      ,eltEl('label',{style:SS.modalLabel},"TEST INSTRUMENTS")
-      ,eltEl('input',{style:SS.modalInput,type:"text",value:r.instruments||meta.instruments||"",placeholder:"Instrument make / model / serial",onChange:e=>set({instruments:e.target.value})})
     )
     // live Audit Summary
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"4px 0 8px"}},"AUDIT SUMMARY")
@@ -14067,13 +14058,13 @@ async function exportWelderExcel(project, allResults, meta) {
     const a = row.asset; const raw = row.res; const sum = row.summary; const r = defectGate(raw, row.overall==="fail");
     const sh = wb.addWorksheet(welderSheetName(a, used));
     const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-    const date = raw.date || (meta&&meta.testDate) || "";
+    const date = (meta&&meta.testDate) || "";
     put('A1',"Welder Inspection & Audit Checklist");
     put('A2',`${sName}  |  ${coLine}`);
     put('A3',`Location: ${a.location||""}`); put('C3',`Asset ID: ${a.assetId||""}`);
     put('A4',`Brand: ${a.brand||""}`);       put('C4',`Model: ${a.model||""}`);
     put('A5',`Serial Number: ${a.serial||""}`); put('C5',`Date Tested: ${date?fmtDate(date):""}`);
-    put('A6',`Prepared By: ${raw.preparedBy||(meta&&meta.auditor)||""}`); put('C6',`Test Instruments: ${raw.instruments||(meta&&meta.instruments)||""}`);
+    put('A6',`Prepared By: ${(meta&&meta.auditor)||""}`); put('C6',`Test Instruments: ${(meta&&meta.instruments)||""}`);
     [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr,c1,rr,c2));
     sh.getRow(1).height = 24;
     // Audit summary
@@ -14225,6 +14216,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

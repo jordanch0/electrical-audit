@@ -59,16 +59,35 @@ describe('overall result rule', () => {
 });
 
 describe('score and actions', () => {
-  it('Score = Pass / (Pass + Fail) x 100 with N/A excluded from the denominator', () => {
-    expect(welderSummary(rec('PPPPPPPPFFNN')).score).toBe(80);   // 8 / 10
+  it('Score = Pass / (Total items - N/A) x 100: blanks and FAILs stay in the denominator, only N/A leaves it', () => {
+    expect(welderSummary(rec('PPPPPPPPFFNN')).score).toBe(80);   // 8 / (12 - 2)
     expect(welderSummary(rec('PFFFFFFFFFFF')).score).toBe(8.3);  // 1 / 12, one decimal
-    expect(welderSummary(rec('PPPPPNNNNNNN')).score).toBe(100);
+    expect(welderSummary(rec('PPPPPNNNNNNN')).score).toBe(100);  // 5 / (12 - 7)
+    expect(welderSummary(rec('PPPP........')).score).toBe(33.3); // blanks count against the score: 4 / 12 (the old formula said 100)
   });
 
-  it('shows "—" when nothing is scored (all N/A or all blank)', () => {
+  it('live sequence: 0 answered 0.0% -> PASS 8.3% -> then FAIL leaves it at 8.3% -> then N/A raises it to 9.1%', () => {
+    const at = pattern => welderScoreLabel(welderSummary(rec(pattern)).score);
+    expect(at('............')).toBe('0.0%');   // nothing answered is 0 / 12, not "—"
+    expect(at('P...........')).toBe('8.3%');   // 1 / 12
+    expect(at('PF..........')).toBe('8.3%');   // a Fail does not move the score (not in the numerator, still in the denominator)
+    expect(at('PFN.........')).toBe('9.1%');   // 1 / 11: N/A removes one item from the denominator
+    expect(at('PFNN........')).toBe('10.0%');  // 1 / 10
+  });
+
+  it('a Fail never changes the score; an N/A only ever raises it (for a welder with at least one Pass)', () => {
+    const s = p => welderSummary(rec(p)).score;
+    expect(s('PF..........')).toBe(s('P...........'));
+    expect(s('PFFFFFFFFFFF')).toBe(s('P...........'));
+    expect(s('PN..........')).toBeGreaterThan(s('P...........'));
+    expect(s('PFN.........')).toBeGreaterThan(s('PF..........'));
+  });
+
+  it('shows "—" only when EVERY item is N/A (nothing left in the denominator)', () => {
     expect(welderSummary(rec('NNNNNNNNNNNN')).score).toBeNull();
     expect(welderScoreLabel(welderSummary(rec('NNNNNNNNNNNN')).score)).toBe('—');
-    expect(welderScoreLabel(welderSummary({}).score)).toBe('—');
+    expect(welderSummary(rec('NNNNNNNNNNN.')).score).toBe(0);    // 0 / 1 — one item still open, so a real 0.0%
+    expect(welderScoreLabel(welderSummary({}).score)).toBe('0.0%'); // a brand-new welder is 0 / 12
   });
 
   it('Actions Required counts only FAIL items that have a Corrective Action (the client sample shows 0 despite Pass items with actions)', () => {
