@@ -43,7 +43,7 @@ describe('ELT Dropdowns tab', () => {
     const user = userEvent.setup();
     await openElt(user);
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
-    for (const t of ['Emergency Exit Sign', 'Combination Unit (Sign + 2 Side Lights)', 'Lamp Failure', 'Switch Failure', 'Given to Site Contact', 'Scheduled for Repair']) {
+    for (const t of ['Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Lamp Failure', 'Switch Failure', 'Given to Site Contact', 'Scheduled for Repair']) {
       expect(screen.getByText(t)).toBeInTheDocument();
     }
     expect(screen.queryByText('Other')).not.toBeInTheDocument();
@@ -65,7 +65,7 @@ describe('ELT Dropdowns tab', () => {
     await addOption(user, 'Add new action taken option…', 'Replaced Unit');
     expect(screen.getByText('Bulkhead Light')).toBeInTheDocument();
     await waitFor(() => expect(ls('elt-dropdowns-v1')).toMatchObject({
-      types: ['Emergency Exit Sign', 'Combination Unit (Sign + 2 Side Lights)', 'Bulkhead Light'],
+      types: ['Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Bulkhead Light'],
       failReasons: expect.arrayContaining(['Ballast Failure']),
       actions: expect.arrayContaining(['Replaced Unit']),
     }));
@@ -79,7 +79,7 @@ describe('ELT Dropdowns tab', () => {
     await user.click(screen.getByRole('button', { name: 'Manage' }));
     await user.click(screen.getByRole('button', { name: '+ Add Fitting' }));
     const typeOpts = optionsOf(screen.getByRole('combobox'));
-    expect(typeOpts).toEqual(['— Select', 'Emergency Exit Sign', 'Combination Unit (Sign + 2 Side Lights)', 'Bulkhead Light', 'Other']);
+    expect(typeOpts).toEqual(['— Select', 'Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Bulkhead Light', 'Other']);
     await user.selectOptions(screen.getByRole('combobox'), 'Other'); // literal Other still reveals the text box
     expect(screen.getByPlaceholderText('Specify…')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));

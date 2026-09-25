@@ -13,7 +13,7 @@ const HEAD = ['Location', 'Asset Location', 'Asset ID', 'Type', 'Maintained/Non-
 const readPayload = () => XLSX.read(payload.base64, { type: 'base64' });
 
 const project = toAreas({ id: 'e1', name: 'Hearse Road - Firestone', company: 'Co Pty Ltd', abn: '98 765 432 109', licence: 'EW1234', assets: [
-  { id: 'a1', location: 'Hearse Road - Firestone', assetLocation: 'SE Door', assetId: '007', type: 'Emergency Exit Sign', typeOther: '', maintained: 'Maintained', fitting: 'Clevertronics 24m' },
+  { id: 'a1', location: 'Hearse Road - Firestone', assetLocation: 'SE Door', assetId: '007', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: 'Clevertronics 24m' },
   { id: 'a2', location: 'Hearse Road - Firestone', assetLocation: 'SW Roof', assetId: '', type: 'Other', typeOther: 'Bulkhead Light', maintained: 'Non-Maintained', fitting: 'Y' },
 ] });
 const pass4 = { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' };
@@ -27,7 +27,7 @@ describe('round trip: re-importing an ELT export', () => {
     expect(parsed.siteName).toBe('Hearse Road - Firestone'); // the other modules would truncate this at the hyphen
     expect(parsed).toMatchObject({ company: 'Co Pty Ltd', abn: '98 765 432 109', licence: 'EW1234' });
     expect(parsed.assets.map(a => ({ ...a, id: undefined }))).toEqual([
-      { id: undefined, location: 'Hearse Road - Firestone', assetLocation: 'SE Door', assetId: '007', type: 'Emergency Exit Sign', typeOther: '', maintained: 'Maintained', fitting: 'Clevertronics 24m' },
+      { id: undefined, location: 'Hearse Road - Firestone', assetLocation: 'SE Door', assetId: '007', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: 'Clevertronics 24m' },
       { id: undefined, location: 'Hearse Road - Firestone', assetLocation: 'SW Roof', assetId: '', type: 'Other', typeOther: 'Bulkhead Light', maintained: 'Non-Maintained', fitting: 'Y' },
     ]);
     for (const a of parsed.assets) { expect(a).not.toHaveProperty('visual'); expect(a).not.toHaveProperty('failReason'); } // structure only

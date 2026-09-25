@@ -11161,7 +11161,16 @@ const K_ELT_HISTORY    = "elt-history-v2";    // v2: snapshots carry `areas` (v1
 const K_ELT_HISTORY_V1  = "elt-history-v1";
 const K_ELT_DROPDOWNS  = "elt-dropdowns-v1";
 // Editable option lists. "Other" is not stored: ELTSelectOther always appends it as the last option.
-const ELT_DEFAULT_TYPES        = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)"];
+const ELT_DEFAULT_TYPES        = ["Spitfire","Batten Lights","Exit Signs","Floodlights / Spotlights"];
+// The original default Type list. ELT persists its dropdown lists on every open, so an install that never customised Type has THESE
+// stored. upgradeEltDropdowns swaps them for the new defaults ONLY when the stored list is exactly this (same items, same order) —
+// any customised list (added / removed / re-ordered) is left untouched. Idempotent; stored fittings keep whatever type they have.
+const ELT_LEGACY_DEFAULT_TYPES = ["Emergency Exit Sign","Combination Unit (Sign + 2 Side Lights)"];
+const sameList = (a,b) => Array.isArray(a) && Array.isArray(b) && a.length===b.length && a.every((x,i)=>x===b[i]);
+function upgradeEltDropdowns(dd) {
+  if (!dd || typeof dd !== "object") return dd;
+  return sameList(dd.types, ELT_LEGACY_DEFAULT_TYPES) ? { ...dd, types: [...ELT_DEFAULT_TYPES] } : dd;
+}
 const ELT_MAINTAINED   = ["Maintained","Non-Maintained"];
 const ELT_DEFAULT_FAIL_REASONS = ["Lamp Failure","Battery Failure","No Power","Damaged/Broken","Switch Failure"];
 const ELT_DEFAULT_ACTIONS      = ["Given to Site Contact","Repaired On-Site","Scheduled for Repair"];
@@ -11335,7 +11344,7 @@ function ELTApp({ onGoHome }) {
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...dd});}
+      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});}
       finally{setLoaded(true);}
     })();
   },[]);
@@ -11497,8 +11506,8 @@ function downloadELTTemplate() {
     [""],
     ["INSTRUCTIONS: Fill in one row per fitting. Only Asset Location is required; Location defaults to the site name. Type, Maintained/Non-Maintained, Asset ID and Fitting Type/Manufacturer are optional. Leave the test columns (Date onwards) blank — results are recorded in the app. Site and company are read from rows 1-2."],
     [...ELT_COLUMNS],
-    ["", "SE Door", "", "Emergency Exit Sign", "Maintained", "Clevertronics 24m"],
-    ["", "SW Roof", "", "Combination Unit (Sign + 2 Side Lights)", "Non-Maintained", ""],
+    ["", "SE Door", "", "Exit Signs", "Maintained", "Clevertronics 24m"],
+    ["", "SW Roof", "", "Batten Lights", "Non-Maintained", ""],
   ];
   const ws=XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"]=ELT_COLUMNS.map((c,i)=>({wch:i<6?24:14}));
@@ -14225,6 +14234,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

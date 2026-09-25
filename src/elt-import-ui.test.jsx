@@ -46,9 +46,9 @@ describe('ELT site list: Manual / Import toggle', () => {
     const rows = [
       ['Hearse Road - Firestone — Emergency Lighting Test'], ['Co Pty Ltd  |  ABN: 98 765 432 109'], [], [],
       HEAD,
-      ['', 'SE Door', '007', 'Emergency Exit Sign', 'Maintained', 'Clevertronics'],
+      ['', 'SE Door', '007', 'Exit Signs', 'Maintained', 'Clevertronics'],
       ['', 'SW Roof', '', 'Bulkhead Light', 'Non-Maintained', ''],
-      ['', '', '5', 'Emergency Exit Sign', '', ''],
+      ['', '', '5', 'Exit Signs', '', ''],
     ];
     await user.upload(screen.getByTestId('elt-import-file'), fileFrom(rows));
     expect(await screen.findByText('✓ Preview')).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe('ELT site list: Manual / Import toggle', () => {
     expect(proj.assets).toBeUndefined();
     expect(proj.areas.map(a => a.name)).toEqual(['Hearse Road - Firestone']); // blank Location -> one area named after the site
     expect(proj.areas.flatMap(ar => ar.assets.map(a => [a.assetLocation, a.assetId, a.type, a.typeOther, a.maintained, ar.name]))).toEqual([
-      ['SE Door', '007', 'Emergency Exit Sign', '', 'Maintained', 'Hearse Road - Firestone'], // blank Location defaults to the site name
+      ['SE Door', '007', 'Exit Signs', '', 'Maintained', 'Hearse Road - Firestone'], // blank Location defaults to the site name
       ['SW Roof', '', 'Other', 'Bulkhead Light', 'Non-Maintained', 'Hearse Road - Firestone'],
     ]);
     expect(ls('elt-results-v1') || {}).toEqual({}); // structure only: no results imported
