@@ -39,6 +39,10 @@ const ICON_DEFS = {
   welder:     () => [_ip("M4 10a8 8 0 0 1 16 0v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"),_ir(7,10,10,4,1)],
   cal:        () => [_ir(3,4,18,18,2),_il(16,2,16,6),_il(8,2,8,6),_il(3,10,21,10)],
 };
+// CHECKLIST SCORE — one rule for every module that scores a checklist (Welder, ELT, SWB): Pass / (Total items − N/A) × 100, one
+// decimal. Blank (untested) and FAIL items stay in the denominator; only N/A leaves it. null ("—") only when every item is N/A.
+function checklistScore(pass, total, na = 0) { const d = total - na; return d > 0 ? Math.round((pass / d) * 1000) / 10 : null; }
+const scoreLabel = sc => sc == null ? "—" : sc.toFixed(1) + "%";
 function moduleIcon(key, size = 18) { const d = ICON_DEFS[key]; return d ? iconEl(size, d()) : null; }
 
 const fmtDate = d => { if(!d) return ""; try { return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return d; } };
@@ -9839,7 +9843,7 @@ function swbBoardSummary(results, projectId, areaId, boardId) {
     if(v===SWB_STATUS.PASS)pass++; else if(v===SWB_STATUS.FAIL)fail++;
     else if(v===SWB_STATUS.NA)na++; else untested++;
   });
-  return {pass,fail,na,untested,total:SWB_CHECKLIST.length};
+  return {pass,fail,na,untested,total:SWB_CHECKLIST.length,score:checklistScore(pass,SWB_CHECKLIST.length,na)};
 }
 function swbSiteSummary(results, project) {
   let pass=0,fail=0,na=0,untested=0;
@@ -10411,7 +10415,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
         ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-        ,[["PASS",bs.pass,"#16a34a"],["FAIL",bs.fail,"#dc2626"],["N/A",bs.na,"#334155"],["—",bs.untested,"#92400e"]].map(([l,v,c])=>
+        ,[["PASS",bs.pass,"#16a34a"],["FAIL",bs.fail,"#dc2626"],["N/A",bs.na,"#334155"],["—",bs.untested,"#92400e"],["SCORE",scoreLabel(bs.score),"#334155"]].map(([l,v,c])=>
           React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l)
         )
       )
@@ -10583,6 +10587,7 @@ function SWBReportView({project,results,meta,onBack}) {
             ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#dc2626",fontWeight:800}},bs.fail," F")
             ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#334155"}},bs.na," N/A")
             ,bs.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},bs.untested," U")
+            ,React.createElement('span',{style:{fontSize:11,color:"#334155",fontWeight:700}},scoreLabel(bs.score))
             ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#16a34a",fontWeight:800,fontSize:12}},"✓")
           );
         })
@@ -11208,7 +11213,7 @@ const ELT_CHECKS       = [
   {key:"switching", label:"Automatic Switching Test"},
   {key:"charging",  label:"Charging Circuit Test"},
 ];
-const ELT_COLUMNS = ["Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Next Test Due","Notes"];
+const ELT_COLUMNS = ["Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Score","Next Test Due","Notes"];
 const eltEl = React.createElement;
 
 function eltGetRes(results, pid, aid) {
@@ -11221,6 +11226,12 @@ function eltOverall(r) {
   if (v.includes(STATUS.FAIL)) return STATUS.FAIL;
   if (v.every(x=>x===STATUS.PASS)) return STATUS.PASS;
   return STATUS.UNTESTED;
+}
+// Per-fitting summary over its 4 checks. Score = Pass / 4 x 100 (ELT has no N/A), so blank checks count against the score.
+function eltFittingSummary(r) {
+  const v = ELT_CHECKS.map(c=>r[c.key]);
+  const pass = v.filter(x=>x===STATUS.PASS).length, fail = v.filter(x=>x===STATUS.FAIL).length, total = v.length;
+  return { total, pass, fail, untested: total-pass-fail, score: checklistScore(pass, total) };
 }
 const eltOtherText = (v, o) => v==="Other" ? ((o||"").trim()||"Other") : (v||"");
 // Failure Reason + Action Taken + Notes combined into one string — export time only.
@@ -11253,7 +11264,7 @@ function eltRegisterRows(project, allResults, meta) {
     const nextDue = (meta&&meta.nextTestDate) || "";
     return {asset:a, res:r, overall, cells:[
       a.location||project.name||"", a.assetLocation||"", a.assetId||"", eltTypeLabel(a), a.maintained||"", a.fitting||"",
-      date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(r[c.key])), eltPF(overall), nextDue?fmtDate(nextDue):"", eltExportNotes(r),
+      date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(r[c.key])), eltPF(overall), scoreLabel(eltFittingSummary(r).score), nextDue?fmtDate(nextDue):"", eltExportNotes(r),
     ]};
   });
 }
@@ -11262,7 +11273,7 @@ async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-  const cols = "ABCDEFGHIJKLMN".split(""); const n = cols.length;
+  const cols = "ABCDEFGHIJKLMNO".split(""); const n = cols.length;
   const merges = [];
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
@@ -11288,14 +11299,14 @@ async function exportELTExcel(project, allResults, meta) {
     const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
     row.cells.forEach((v,ci)=>{
       let st = base;
-      if (ci>=6 && ci<=10 || ci===12) st = ctr;
+      if (ci>=6 && ci<=10 || ci===12 || ci===13) st = ctr;
       if (ci>=7 && ci<=10 && v==="Fail") st = failSt;
       if (ci===11) st = v==="Fail" ? failSt : passSt;
       setCell(cols[ci]+r,v,st);
     });
   });
   merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  [22,18,14,26,16,26,12,12,14,14,14,10,12,44].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  [22,18,14,26,16,26,12,12,14,14,14,10,9,12,44].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
   // (the register itself only lists tested fittings).
@@ -11771,6 +11782,11 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:ELT_COLOR,border:`1px dashed ${ELT_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
     )
+    ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
+    ,eltEl('div',{style:{display:"flex",gap:6,marginBottom:14}},(()=>{ const sum = eltFittingSummary(r);
+      return [["TOTAL",sum.total,"#334155"],["PASS",sum.pass,"#16a34a"],["FAIL",sum.fail,"#dc2626"],["—",sum.untested,"#92400e"],["SCORE",scoreLabel(sum.score),"#334155"]].map(([l,v,col])=>
+        eltEl('div',{key:l,style:{flex:1,minWidth:56,textAlign:"center",background:"#f7f6f3",borderRadius:8,border:`1px solid ${col}33`,padding:"6px 2px"}}
+          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:col}},v),eltEl('div',{style:{fontSize:9,color:"#6e6a66",fontWeight:700}},l))); })())
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"TESTS")
     ,ELT_CHECKS.map(({key,label})=>
       eltEl('div',{key,style:{display:"flex",alignItems:"center",gap:10,background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:12,padding:"10px 12px",marginBottom:6}}
@@ -11951,7 +11967,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
           ,eltEl('div',{style:{width:48,fontSize:10,fontWeight:800,color:sm.fg,textAlign:"center",flexShrink:0}},sm.label)
           ,eltEl('div',{style:{flex:1,minWidth:0}}
             ,eltEl('div',{style:{fontSize:13,color:"#3f3f46"}},row.asset.assetLocation)
-            ,row.cells[13]&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},row.cells[13])
+            ,row.cells[14]&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},row.cells[14])
           )
         );
       })))
@@ -13437,12 +13453,11 @@ function welderSummary(r) {
     else if (it.result === "na") na++;
   });
   const total = WELDER_CHECKLIST.length, untested = total - pass - fail - na;
-  const denominator = total - na;
-  return { total, pass, fail, na, untested, actions, score: denominator>0 ? Math.round((pass/denominator)*1000)/10 : null,
+  return { total, pass, fail, na, untested, actions, score: checklistScore(pass, total, na),
     overall: untested>0 ? "untested" : fail>0 ? "fail" : "pass" };
 }
 const welderOverall = r => welderSummary(r).overall;
-const welderScoreLabel = sc => sc==null ? "—" : sc.toFixed(1)+"%";
+const welderScoreLabel = scoreLabel;
 const welderMachine = a => [a.brand, a.model].map(x=>(x||"").trim()).filter(Boolean).join(" ");
 const welderPF = o => o==="pass"?"Pass":o==="fail"?"Fail":"";
 // Site summary for the project list / Home / Report tiles (asset-level: Total, Pass, Fail, Untested).
@@ -14255,6 +14270,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

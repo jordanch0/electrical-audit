@@ -49,15 +49,18 @@ describe('register + summary', () => {
   it('counts only pass/fail assets', () => {
     expect(eltSummary(project, results)).toMatchObject({ total:2, pass:1, fail:1 });
   });
-  it('emits 14 columns in order and excludes untested assets', () => {
+  it('emits 15 columns in order (Score right after Pass/Fail) and excludes untested assets', () => {
     const rows = eltRegisterRows(project, results, meta);
-    expect(ELT_COLUMNS).toHaveLength(14);
+    expect(ELT_COLUMNS).toHaveLength(15);
+    expect(ELT_COLUMNS.slice(11,14)).toEqual(['Pass/Fail','Score','Next Test Due']);
     expect(rows).toHaveLength(2);
-    expect(rows[0].cells).toHaveLength(14);
+    expect(rows[0].cells).toHaveLength(15);
     expect(rows[0].cells.slice(0,6)).toEqual(['Site A','SE Door','','Emergency Exit Sign','Maintained','Clevertronics 24m']);
     expect(rows[0].cells[11]).toBe('Pass');
+    expect(rows[0].cells[12]).toBe('100.0%');   // 4 / 4
+    expect(rows[1].cells[12]).toBe('75.0%');    // 3 / 4 (discharge failed)
     expect(rows[1].cells[3]).toBe('Bunker light');
     expect(rows[1].cells.slice(7,12)).toEqual(['Pass','Fail','Pass','Pass','Fail']);
-    expect(rows[1].cells[13]).toBe('Battery Failure — Scheduled for Repair');
+    expect(rows[1].cells[14]).toBe('Battery Failure — Scheduled for Repair');
   });
 });

@@ -39,10 +39,10 @@ async function runExport(proj, res, m) {
   return wb;
 }
 const text = c => { const v = c.value; return v==null ? '' : (typeof v==='object' && v.richText ? v.richText.map(t=>t.text).join('') : String(v)); };
-const rowVals = (ws, r, n=14) => Array.from({length:n},(_,i)=>text(ws.getCell(r,i+1)));
+const rowVals = (ws, r, n=15) => Array.from({length:n},(_,i)=>text(ws.getCell(r,i+1)));
 
 describe('ELT Excel export structure', () => {
-  it('writes header block, exact 14 columns, and only tested fittings', async () => {
+  it('writes header block, exact 15 columns (Score after Pass/Fail), and only tested fittings', async () => {
     const wb = await runExport(project, results, meta);
     const ws = wb.getWorksheet('Emergency Lighting');
     expect(ws).toBeTruthy();
@@ -55,30 +55,31 @@ describe('ELT Excel export structure', () => {
     expect(text(ws.getCell('C3'))).toBe('Date Tested: 21/09/2026');
     expect(text(ws.getCell('E3'))).toBe('Next Test Due: 21/03/2027');
     // Rows 1-5 carry NO styling (same as the real IEL/RCD/TAT/Thermo files): no fill, font, border or alignment
-    for (let r = 1; r <= 5; r++) for (let c = 1; c <= 14; c++) {
+    for (let r = 1; r <= 5; r++) for (let c = 1; c <= 15; c++) {
       const cell = ws.getCell(r, c);
       expect(cell.fill, 'fill r'+r+' c'+c).toBeUndefined();
       expect(cell.font, 'font r'+r+' c'+c).toBeUndefined();
       expect(cell.border, 'border r'+r+' c'+c).toBeUndefined();
       expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined();
     }
-    // same merges and row heights as IEL (adjusted for 14 columns)
+    // same merges and row heights as IEL (adjusted for 15 columns)
     const merged = Object.keys(ws._merges).map(k => ws._merges[k].range).sort();
-    expect(merged).toEqual(['A1:N1','A2:N2','A3:B3','A4:N4','C3:D3','E3:N3'].sort());
+    expect(merged).toEqual(['A1:O1','A2:O2','A3:B3','A4:O4','C3:D3','E3:O3'].sort());
     expect([1,2,3,4,5].map(r => ws.getRow(r).height)).toEqual([32,16,16,6,40]);
 
     // blank 6pt spacer row 4, then the column headings on row 5; no summary block or sheet
     expect(rowVals(ws, 4).every(v => v === '')).toBe(true);
     expect(wb.getWorksheet('Summary')).toBeUndefined();
 
-    // no percentage / pass-rate anywhere in either sheet
-    wb.eachSheet(sheet => sheet.eachRow(row => row.eachCell(c => {
-      expect(text(c)).not.toMatch(/%|pass rate/i);
+    // percentages only in the Score column (col 13) of the data rows; no "pass rate" text and no % anywhere else in either sheet
+    wb.eachSheet(sheet => sheet.eachRow((row, rowNo) => row.eachCell((c, colNo) => {
+      const isScoreCell = sheet.name === 'Emergency Lighting' && rowNo >= 6 && colNo === 13;
+      if (isScoreCell) expect(text(c)).toMatch(/^\d+\.\d%$/); else expect(text(c)).not.toMatch(/%|pass rate/i);
     })));
 
     // exact column order
     expect(rowVals(ws, 5)).toEqual(ELT_COLUMNS);
-    expect(ELT_COLUMNS).toEqual(['Location','Asset Location','Asset ID','Type','Maintained/Non-Maintained','Fitting Type/Manufacturer','Date','Visual Inspection','90-Min Discharge Test','Automatic Switching Test','Charging Circuit Test','Pass/Fail','Next Test Due','Notes']);
+    expect(ELT_COLUMNS).toEqual(['Location','Asset Location','Asset ID','Type','Maintained/Non-Maintained','Fitting Type/Manufacturer','Date','Visual Inspection','90-Min Discharge Test','Automatic Switching Test','Charging Circuit Test','Pass/Fail','Score','Next Test Due','Notes']);
 
     // register rows: 4 tested, untested excluded
     const rows = [6,7,8,9].map(r => rowVals(ws, r));
@@ -91,10 +92,10 @@ describe('ELT Excel export structure', () => {
     expect(rows[1][2]).toBe(''); // blank asset id preserved
 
     // dates always come from the report-level defaults
-    rows.forEach(r => { expect(r[6]).toBe('21/09/2026'); expect(r[12]).toBe('21/03/2027'); });
+    rows.forEach(r => { expect(r[6]).toBe('21/09/2026'); expect(r[13]).toBe('21/03/2027'); expect(r[12]).toMatch(/^\d+\.\d%$/); });
 
     // data rows keep real thin borders on all four sides (SWB's swbXAB); headings are plain
-    for (const r of [6,7,8,9]) for (let c = 1; c <= 14; c++) {
+    for (const r of [6,7,8,9]) for (let c = 1; c <= 15; c++) {
       const b = ws.getCell(r,c).border || {};
       ['top','bottom','left','right'].forEach(side => expect(b[side] && b[side].style, 'border r'+r+' c'+c+' '+side).toBe('thin'));
     }
@@ -104,17 +105,17 @@ describe('ELT Excel export structure', () => {
     expect(rows[1].slice(7,12)).toEqual(['Pass','Fail','Pass','Pass','Fail']);
     expect(rows[2].slice(7,12)).toEqual(['Fail','Pass','Pass','Pass','Fail']);
 
-    // notes column
-    expect(rows[0][13]).toBe('Working well');                                   // PASS: notes only
-    expect(rows[1][13]).toBe('Water ingress — Given to Site Contact. Seal cracked'); // Other reason + normal action + notes
-    expect(rows[2][13]).toBe('Lamp Failure — Ordered part');                    // normal reason + Other action, no notes
-    expect(rows[3][13]).toBe('');                                                // PASS with no notes
+    // notes column (now index 14: Score sits at 12, Next Test Due at 13)
+    expect(rows[0][14]).toBe('Working well');                                   // PASS: notes only
+    expect(rows[1][14]).toBe('Water ingress — Given to Site Contact. Seal cracked'); // Other reason + normal action + notes
+    expect(rows[2][14]).toBe('Lamp Failure — Ordered part');                    // normal reason + Other action, no notes
+    expect(rows[3][14]).toBe('');                                                // PASS with no notes
   });
 
   it('does not leak retained Failure Reason/Action into a passing row', async () => {
     const res = { p1: { a1: { ...pass4, failReason:'Lamp Failure', action:'Repaired On-Site', notes:'ok' } } };
     const wb = await runExport({ ...project, areas:[{ ...project.areas[0], assets:[project.areas[0].assets[0]] }] }, res, meta);
-    expect(text(wb.getWorksheet('Emergency Lighting').getCell('N6'))).toBe('ok');
+    expect(text(wb.getWorksheet('Emergency Lighting').getCell('O6'))).toBe('ok');
   });
 });
 
