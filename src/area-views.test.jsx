@@ -184,5 +184,15 @@ describe('export order = area order', () => {
     const wb = await load();
     expect(col(wb.getWorksheet('Register'), 'A', 6, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'W1', 'W3', 'W2', 'W4']);
+    // each welder sheet's header reads its AREA name as Location (the asset itself no longer stores one)
+    expect(['W1', 'W3', 'W2', 'W4'].map(n => String(wb.getWorksheet(n).getCell('A3').value))).toEqual(['Location: North Bay', 'Location: North Bay', 'Location: Yard', 'Location: Yard']);
+  });
+
+  it('ELT Photos sheet is also in area order, labelled with the area name', async () => {
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const res = { p1: { a4: { ...MODS.elt.tested(), photos: [{ id: '1', dataUrl: PNG }] }, a1: { ...MODS.elt.tested(), photos: [{ id: '2', dataUrl: PNG }] } } };
+    await exportELTExcel(interleavedElt, res, { auditor: 'J', testDate: '2026-07-13', nextTestDate: '2027-01-13' });
+    const ws = (await load()).getWorksheet('Photos');
+    expect([2, 3].map(r => [String(ws.getCell('A' + r).value), String(ws.getCell('B' + r).value)])).toEqual([['North Bay', 'Door 1'], ['Yard', 'Door 4']]);
   });
 });

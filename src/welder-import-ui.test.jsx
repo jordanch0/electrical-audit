@@ -63,7 +63,13 @@ describe('Welder site list: Manual / Import toggle', () => {
       ['', 'W1', 'Kemppi Evo', 'S1'], ['', 'W1', 'Kemppi Evo', 'S1'], ['', '', '', 'S9'], ['Shed', 'W2', '', 'N/A'],
     ]));
     expect(await screen.findByText('✓ Preview')).toBeInTheDocument();
-    expect(screen.getByText('2 welders found')).toBeInTheDocument();
+    expect(screen.getByText('2 welders in 2 areas')).toBeInTheDocument();
+    expect(screen.getByText('Hearse Road - Firestone — 1 welder')).toBeInTheDocument(); // blank Location follows the site name...
+    expect(screen.getByText('Shed — 1 welder')).toBeInTheDocument();
+    const siteBox = screen.getByDisplayValue('Hearse Road - Firestone');
+    await user.clear(siteBox); await user.type(siteBox, 'Renamed Site');
+    expect(screen.getByText('Renamed Site — 1 welder')).toBeInTheDocument();          // ...as it is edited in the preview
+    await user.clear(siteBox); await user.type(siteBox, 'Hearse Road - Firestone');
     expect(screen.getByText(/1 row skipped \(no Asset ID or Welder \(Machine\)\)/)).toBeInTheDocument();
     expect(screen.getByText(/1 duplicate row ignored/)).toBeInTheDocument();
     expect(screen.getByText(/1 welder: brand and model couldn't be separated/)).toBeInTheDocument();
@@ -123,7 +129,7 @@ describe('Welder site list: Manual / Import toggle', () => {
     expect(payload.filename || payload.name || '').toMatch(/Welder_Import_Template\.xlsx/);
     const buf = Buffer.from(payload.base64, 'base64');
     await user.upload(screen.getByTestId('welder-import-file'), new File([buf], 'Welder_Import_Template.xlsx', { type: XLSX_MIME }));
-    expect(await screen.findByText('2 welders found')).toBeInTheDocument();
+    expect(await screen.findByText('2 welders in 1 area')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Welder Import Template')).toBeInTheDocument(); // placeholder title ignored -> file name used
   });
 });
@@ -155,7 +161,7 @@ describe('Welder import — full real pipeline (UI export -> import into a fresh
     const user2 = userEvent.setup();
     await openImport(user2);
     await user2.upload(screen.getByTestId('welder-import-file'), new File([exportedBytes], 'Welder_Site_A.xlsx', { type: XLSX_MIME }));
-    expect(await screen.findByText('2 welders found')).toBeInTheDocument();
+    expect(await screen.findByText('2 welders in 1 area')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Site A - North')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Co')).toBeInTheDocument();
     expect(screen.queryByText(/couldn't be separated/)).toBeNull();      // exact Brand / Model recovered, no fallback note

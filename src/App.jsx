@@ -11554,6 +11554,9 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const ic = (...kids)=>eltEl('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,display:"inline",verticalAlign:"middle"}},...kids);
   const pencil = ic(eltEl('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),eltEl('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}));
   const download = ic(eltEl('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),eltEl('polyline',{points:'7 10 12 15 17 10'}),eltEl('line',{x1:12,y1:15,x2:12,y2:3}));
+  // Preview groups rows into areas exactly as the import will (blank Location -> the site name as currently typed).
+  const pvName = (importVals.name||"").trim()||"Imported Site";
+  const pvAreas = importPreview ? groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||pvName})),pvName) : [];
   const warnings = importPreview ? [
     importPreview.skipped>0&&nw(importPreview.skipped,"row")+" skipped (no Asset Location)",
     importPreview.duplicates>0&&nw(importPreview.duplicates,"duplicate row")+" ignored",
@@ -11597,7 +11600,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         )
         ,tab==="import"&&eltEl(React.Fragment,null
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel")
-          ,eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginBottom:12}},"Upload an ELT export or the import template. Columns: ",eltEl('strong',null,"Asset Location")," (required) | Location | Asset ID | Type | Maintained/Non-Maintained | Fitting Type/Manufacturer. Only the fitting register is imported — test results start blank. (An export only lists fittings that were tested.)")
+          ,eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginBottom:12}},"Upload an ELT export or the import template. Columns: ",eltEl('strong',null,"Asset Location")," (required) | Location | Asset ID | Type | Maintained/Non-Maintained | Fitting Type/Manufacturer. Only the fitting register is imported — test results start blank. Each Location becomes an area. (An export only lists fittings that were tested.)")
           ,!importPreview&&eltEl(React.Fragment,null
             ,eltEl('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile,"data-testid":"elt-import-file"})
             ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"Choose Excel / CSV File")
@@ -11608,9 +11611,9 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
           ,importPreview&&eltEl(ImportErrorBoundary,null,eltEl(React.Fragment,null
             ,eltEl('div',{style:{background:ELT_COLOR_DIM,border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:10,padding:"12px",marginBottom:12}}
               ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:ELT_COLOR,marginBottom:8}},"✓ Preview")
-              ,eltEl('div',{style:{fontSize:12,color:"#3f3f46",marginBottom:4}},nw(importPreview.assets.length,"fitting")+" found")
-              ,importPreview.assets.slice(0,4).map((a,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#6e6a66",marginBottom:2}},a.assetLocation,a.assetId?" · #"+a.assetId:""))
-              ,importPreview.assets.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+(importPreview.assets.length-4)+" more")
+              ,eltEl('div',{style:{fontSize:12,color:"#3f3f46",marginBottom:4}},nw(importPreview.assets.length,"fitting")+" in "+nw(pvAreas.length,"area"))
+              ,pvAreas.slice(0,4).map(ar=>eltEl('div',{key:ar.id,style:{fontSize:11,color:"#6e6a66",marginBottom:2}},ar.name," — ",nw(ar.assets.length,"fitting")))
+              ,pvAreas.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+nw(pvAreas.length-4,"more area"))
               ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
             )
             ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
@@ -13573,6 +13576,9 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const ic = (...kids)=>eltEl('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,display:"inline",verticalAlign:"middle"}},...kids);
   const pencil = ic(eltEl('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),eltEl('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}));
   const download = ic(eltEl('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),eltEl('polyline',{points:'7 10 12 15 17 10'}),eltEl('line',{x1:12,y1:15,x2:12,y2:3}));
+  // Preview groups rows into areas exactly as the import will (blank Location -> the site name as currently typed).
+  const pvName = (importVals.name||"").trim()||"Imported Site";
+  const pvAreas = importPreview ? groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||pvName})),pvName) : [];
   const warnings = importPreview ? [
     importPreview.skipped>0&&nw(importPreview.skipped,"row")+" skipped (no Asset ID or Welder (Machine))",
     importPreview.duplicates>0&&nw(importPreview.duplicates,"duplicate row")+" ignored",
@@ -13615,7 +13621,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         )
         ,tab==="import"&&eltEl(React.Fragment,null
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel")
-          ,eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginBottom:12}},"Upload a Welder export or the import template. Columns: ",eltEl('strong',null,"Welder (Machine)")," (required) | Location | Asset ID | Serial Number. Only the welder register is imported — test results start blank.")
+          ,eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginBottom:12}},"Upload a Welder export or the import template. Columns: ",eltEl('strong',null,"Welder (Machine)")," (required) | Location | Asset ID | Serial Number. Only the welder register is imported — test results start blank. Each Location becomes an area.")
           ,!importPreview&&eltEl(React.Fragment,null
             ,eltEl('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile,"data-testid":"welder-import-file"})
             ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"Choose Excel / CSV File")
@@ -13626,9 +13632,9 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
           ,importPreview&&eltEl(ImportErrorBoundary,null,eltEl(React.Fragment,null
             ,eltEl('div',{style:{background:WELDER_COLOR_DIM,border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:10,padding:"12px",marginBottom:12}}
               ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:WELDER_COLOR,marginBottom:8}},"✓ Preview")
-              ,eltEl('div',{style:{fontSize:12,color:"#3f3f46",marginBottom:4}},nw(importPreview.assets.length,"welder")+" found")
-              ,importPreview.assets.slice(0,4).map((a,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#6e6a66",marginBottom:2}},welderTitle(a),a.assetId&&welderMachine(a)?" · "+welderMachine(a):"",a.serial?" · S/N "+a.serial:""))
-              ,importPreview.assets.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+(importPreview.assets.length-4)+" more")
+              ,eltEl('div',{style:{fontSize:12,color:"#3f3f46",marginBottom:4}},nw(importPreview.assets.length,"welder")+" in "+nw(pvAreas.length,"area"))
+              ,pvAreas.slice(0,4).map(ar=>eltEl('div',{key:ar.id,style:{fontSize:11,color:"#6e6a66",marginBottom:2}},ar.name," — ",nw(ar.assets.length,"welder")))
+              ,pvAreas.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+nw(pvAreas.length-4,"more area"))
               ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
             )
             ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})

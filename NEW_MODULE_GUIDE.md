@@ -20,7 +20,7 @@ Terminology: **reference** = the module to copy from. **Shared** = a helper/comp
   `DeleteButton`, `ConfirmReset`, `failFill` / `useFailDefaults`, `defectGate` / `defectGateByStatus`, `ReportStatTiles` /
   `ReportFailedItems` / `ReportNoDefects` / `reportPriorityBadge`, `DefectListCards`, `SWBDropdownsView`,
   `IELEditableDropdown`, `CompleteAuditBtn`, `NavBtn` (+ `NAV_ICON_*`), `deliverExportFile`, `resizeImageToDataUrl`,
-  `parseCompanyRow`, `ImportErrorBoundary`, `nw()`, `slugify`, `uid`, `fmtDate`, `load` / `save`.
+  `parseCompanyRow`, `ImportErrorBoundary`, `nw()`, `slugify`, `uid`, `fmtDate`, `load` / `save`, and, for Site → Area → Assets modules, `AreaManager`, `AreaAuditGroups`, `AreaSummaryRows`, `groupAssetsIntoAreas`, `areaAssets`, `loadVersioned`, `removeAssetResults`.
 - [ ] Look at how **each** existing module does the thing (not just one). Where they disagree, say so and recommend — don't
   silently pick. (This app's audit found the same idea implemented differently in 7 modules; that is the cost being avoided.)
 - [ ] Phase 2 — implement, run `npm test` **and** `npm run build` after every change, then verify in a real browser (section 11).
@@ -43,11 +43,11 @@ Terminology: **reference** = the module to copy from. **Shared** = a helper/comp
 Reference: **`ELTApp`** (newest, cleanest), `SWBApp`.
 
 - [ ] Storage keys: `<module>-<thing>-v1` as `K_<MOD>_*` constants. The standard five: `-projects-`, `-results-`, `-meta-`,
-  `-history-`, `-dropdowns-` (e.g. `elt-projects-v1`, `elt-results-v1`, `elt-meta-v1`, `elt-history-v1`, `elt-dropdowns-v1`).
+  `-history-`, `-dropdowns-` (e.g. `elt-projects-v2`, `elt-results-v1`, `elt-meta-v1`, `elt-history-v2`, `elt-dropdowns-v1` — ELT and Welder projects/history are `-v2` since the area change; only keys whose shape changed were bumped).
   Extra lists get their own key (e.g. TAT's `tat-dropdowns-v1`). Bump the version (`v1`→`v2`) on any data-model change so
   existing users' data isn't misread. (RCD is `v6` and IEL `v2` for historical reasons; new modules start at `v1`.)
 - [ ] **Site (project) shape**: `{ id, name, company, abn, licence, <structure> }` where structure is `areas: [...]`
-  (hierarchical, e.g. `areas → panels/boards → items`) or `assets: [...]` (flat, ELT). `id` = the module's slug helper on the
+  (hierarchical, e.g. `areas → panels/boards → items`) or the two-level `areas: [{id, name, assets:[…]}]` (ELT, Welder: assets sit directly in an area, no panel/board layer). `id` = the module's slug helper on the
   name (`slugify`, `ielSlug`, `swbSlug`, … — every one appends a `uid`, so ids are collision-safe; never build an id from the
   bare name). Never store results on the site.
 - [ ] **Results**: `results[projectId][...structureIds] = record`, record has `status` (`STATUS` values `untested|pass|fail|na`)
@@ -55,7 +55,7 @@ Reference: **`ELTApp`** (newest, cleanest), `SWBApp`.
 - [ ] **Meta**: `meta[projectId] = { auditor, testDate, nextTestDate }`.
 - [ ] **History snapshot** (pushed by `archiveAudit`, newest first, capped at 100):
   `{ id, projectId, projectName, testDate, auditor, archivedAt, results, meta }` **plus a copy of the structure if it is
-  editable** (ELT stores `assets`) so exporting an old audit uses the structure as it was.
+  editable** (ELT and Welder store `areas`) so exporting an old audit uses the structure as it was.
 - [ ] `load`/`save` helpers: load everything in one mount effect, set a `loaded` flag, and gate every persistence effect on it
   (`React.useEffect(()=>{ if(loaded) save(K_X, x); },[x,loaded])`). Use `load`/`save` — don't touch `localStorage` for data
   (RCD and IEL read a small "audit entered" flag from it directly; that is legacy, not a pattern to copy). `save` already
@@ -63,6 +63,8 @@ Reference: **`ELTApp`** (newest, cleanest), `SWBApp`.
 - [ ] A site delete must also delete that site's results, meta **and** history entries (reference: `ELTApp` / `RCDApp`
   `onDeleteProject`). TAT's currently removes only results, leaving meta/history orphaned — don't copy it.
 - [ ] Count strings go through `nw(n, "fitting")` — never hand-write "N items" (it produced "1 fittings").
+- [ ] **Changing a stored data model = a migration, done this way (reference: the ELT/Welder area change).** (1) New key version for ONLY the keys whose shape changed. (2) A pure, non-mutating, idempotent migrate function per shape (site, history snapshot). (3) Load through `loadVersioned(newKey, oldKey, fallback, migrate)`: new key first; only if absent read the old key and migrate; **never write or delete the old key** — it is a permanent backup and makes the migration reversible. (4) Anything else that reads the key (e.g. `CalendarApp`) must use the same loader. (5) Tests: fixtures in the OLD shape including the awkward cases (many items sharing a value, blanks, case/whitespace variants, empty and malformed records), a seeded property test (count, ids and every field preserved; no duplicate groups), old key byte-identical afterwards, then mutation-check each rule. (6) Verify against the real stored data read-only, and in a scratch origin — never write to the real one.
+- [ ] Deleting an item removes its results/photos in ELT and Welder — a deliberate improvement over the older modules (see the exceptions table); do the same in new modules.
 
 ---
 
@@ -252,7 +254,7 @@ Reference: **`parseELTExcel`** + the ELT site-list toggle (`ELTProjectListView`)
 - [ ] Toggle: **Manual Entry / Import Excel** with the pencil and download icons; active tab = module accent border + text on the
   accent tint (ELT: `#0f766e` on `#ccfbf1`). Button text **"+ Add / Import Site"**; empty text **"No sites yet — add one or import
   from Excel below."** A module *without* import says "+ Add Site" / "No sites yet — add one to start testing."
-- [ ] **Import lessons from Welder (`parseWelderExcel`) — a per-asset-sheet export.** (1) Read the **Register** for the list; never read results from per-asset sheets. (2) If the Register joins two fields into one cell (Welder: Brand + Model), don't guess a split — recover the exact fields from the asset's own sheet **identity cells only**, and only after verifying that sheet belongs to the row (position + a stable identifier such as Asset ID and Serial agree + the parts rejoin to the Register text); otherwise fall back to the joined text and say so in the preview. The rejoin check alone is NOT enough (two welders can share machine text split differently) — test that case. (3) After renaming a module, keep the **old title suffix** importable (Welder accepts both ` — Welder Test` and ` — Welder (VRD) Test`), since real exports outlive a rename. (4) Detect another module's export and say so (ELT file -> "import it from Emergency Lighting"). (5) The app persists empty `{}` / `[]` for a module's keys on mount, so "nothing was created" tests assert *empty*, not `null`. (6) Mutation-check safety tests: loosen the header rule, drop the identity verification, drop the skip rule, and confirm a test fails each time.
+- [ ] **Import lessons from Welder (`parseWelderExcel`) — a per-asset-sheet export.** (1) Read the **Register** for the list; never read results from per-asset sheets. (2) If the Register joins two fields into one cell (Welder: Brand + Model), don't guess a split — recover the exact fields from the asset's own sheet **identity cells only**, and only after verifying that sheet belongs to the row (position + a stable identifier such as Asset ID and Serial agree + the parts rejoin to the Register text); otherwise fall back to the joined text and say so in the preview. The rejoin check alone is NOT enough (two welders can share machine text split differently) — test that case. (3) After renaming a module, keep the **old title suffix** importable (Welder accepts both ` — Welder Test` and ` — Welder (VRD) Test`), since real exports outlive a rename. (4) Detect another module's export and say so (ELT file -> "import it from Emergency Lighting"). (5) The app persists empty `{}` / `[]` for a module's keys on mount, so "nothing was created" tests assert *empty*, not `null`. (6) Mutation-check safety tests: loosen the header rule, drop the identity verification, drop the skip rule, and confirm a test fails each time. (7) In a two-level module the Location column becomes the AREA on import — blank Location = the site name as currently typed in the preview, and the preview shows the resulting area counts.
 
 ---
 
@@ -311,7 +313,9 @@ Run `npm test` and `npm run build` after every change. Vitest + jsdom, driving t
 | Where | Divergence | Why |
 |---|---|---|
 | **ELT** fail panel | Fields are `FAILURE REASON` / `ACTION TAKEN` using **`ELTSelectOther`** (native select + literal "Other" + text box), no Defect ID / Responsibility / Priority | The AS 2293.2 register has no defect register; "Other" is always available and never stored in the list (hence `reserved:["Other"]`). Same red panel styling (parity test). Placed above Notes like the rest. |
-| **ELT** structure | Flat `assets` list; no area/board hierarchy; Audit tab is the list (no `AuditGatePage`); one register export | Emergency lights are a flat register per site |
+| **ELT / Welder** structure | Two levels only: Site → Area → Assets (no panel/board layer); Audit is ONE grouped list (area headers), not the drill-down the other modules use; results keyed by asset id (not nested by area); one register export ordered by area. (Reverses the earlier "flat list" exception — 2026-09-25.) | Emergency lights / welders have no board level; asset-id keys mean zero results migration and free moves between areas |
+| **ELT / Welder** delete | Deleting an asset or an area also removes its results and photos (`removeAssetResults`) | **Deliberate improvement, not parity**: RCD / IEL / TAT / Thermo / SWB / IRT leave orphaned results and photos when an item is deleted. Worth backporting in a future pass; the older modules were intentionally left untouched |
+| **ELT / Welder** area names | Unique per site (case/whitespace-insensitive); add/rename to an existing name is refused | A duplicate would split one physical location into two groups; the older modules allow duplicates |
 | **ELT** report / export | Report keeps the 14-column register table under the standard summary; export lists **only tested** fittings and has no summary sheet; Dropdowns has no ★ default (`showDefault:false`) | The export mirrors the client's register; "★ moves to top" still works |
 | **ELT** wording | `NEXT TEST DUE (default for all fittings)`; Start button reads "Start / Continue Testing" | Known small wording drift — candidate for a later copy pass, not a standard |
 | **Thermo** MONITOR | Third result, amber "⚠ MONITOR — DETAILS" panel, no failure defaults, listed as "Items to Monitor"; **4** report tiles (Total, Pass, Fail, Monitor); defect details exported for FAIL **and** MONITOR | MONITOR is not a failure but its panel deliberately collects the same details |
@@ -330,5 +334,5 @@ _Keep this guide current: when a standard changes, change it here in the same co
 ### Welder — module-specific notes
 - Overall is UNTESTED until every checklist item has any result (Pass / Fail / N/A); a Fail among blanks does not decide it. The asset-level FAIL panel, Failed Items and export defect columns therefore only appear once all items are answered.
 - Actions Required counts FAIL items with a non-empty Corrective Action only.
-- Identity fields (Location, Brand, Model, Serial, Asset ID) are edited in Manage and read-only on the welder page; per-audit fields (date, prepared by, instruments) prefill from Home and can be overridden.
+- Identity fields (Brand, Model, Serial, Asset ID) are edited in Manage; Location is the welder's AREA (changed with the Area select in the edit form) and read-only on the welder page; per-audit fields (date, prepared by, instruments) prefill from Home and can be overridden.
 - Export shape (`exportWelderExcel`, ExcelJS): a "Register" sheet (all welders, plain header block rows 1–5, full-grid borders, tinted Pass/Fail cells) plus ONE SHEET PER WELDER in the client checklist layout (header fields, Audit Summary, 12 items with criteria, defect details for FAIL welders only, comments, embedded photos). This register + per-asset sheets shape is new; reuse it when a client form is per-asset. Export is offered only from History snapshots.

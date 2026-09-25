@@ -52,7 +52,8 @@ describe('ELT site list: Manual / Import toggle', () => {
     ];
     await user.upload(screen.getByTestId('elt-import-file'), fileFrom(rows));
     expect(await screen.findByText('✓ Preview')).toBeInTheDocument();
-    expect(screen.getByText('2 fittings found')).toBeInTheDocument();
+    expect(screen.getByText('2 fittings in 1 area')).toBeInTheDocument();
+    expect(screen.getByText('Hearse Road - Firestone — 2 fittings')).toBeInTheDocument(); // blank Location -> the site-name area
     expect(screen.getByText(/1 row skipped \(no Asset Location\)/)).toBeInTheDocument();
     expect(screen.getByText(/Not in your Type list \(imported as Other\): Bulkhead Light/)).toBeInTheDocument();
     expect(screen.getByDisplayValue('Hearse Road - Firestone')).toBeInTheDocument(); // editable site name, hyphen intact
