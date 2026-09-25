@@ -9898,87 +9898,145 @@ function swbArrayBufferToBase64(buf){
   for(let i=0;i<len;i++) binary+=String.fromCharCode(bytes[i]);
   return window.btoa(binary);
 }
+// ── SWB export: Register + one full sheet per board (same physical structure as Welder's export) ──
+// Register = one row per board (summary). Each board then has its own sheet: header, Audit Summary (incl. Score), the 11-item
+// checklist and that board's photos (one per row). Header blocks are plain (no fill / font / border), like ELT and Welder.
+const SWB_REGISTER_COLUMNS = ["Area","Board","Date Tested","Pass/Fail","Pass","Fail","N/A","Untested","Score","Highest Risk","Failed Items","Next Audit Due"];
+// Board overall — the SAME rule as Welder's asset overall: untested until all 11 items are answered (Pass / Fail / N/A in any
+// mix); then any Fail -> fail, otherwise pass.
+const swbBoardOverall = bs => bs.untested > 0 ? "untested" : bs.fail > 0 ? "fail" : "pass";
+const SWB_RISK_ORDER = ["U","H","M","L"];
+function swbNextDue(meta) {
+  const testDate = (meta && meta.testDate) || "";
+  return meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : (testDate ? swbAddYear(testDate) : "");
+}
+// One entry per board (all boards, tested or not), cells in SWB_REGISTER_COLUMNS order. Highest Risk / Failed Items only look at
+// FAIL items (a passing item can retain a stale risk rating).
+function swbRegisterRows(project, allResults, meta) {
+  const res = allResults || {};
+  const testDate = (meta && meta.testDate) || "";
+  const nextDue = swbNextDue(meta);
+  const rows = [];
+  (project.areas || []).forEach(area => (area.boards || []).forEach(board => {
+    const bs = swbBoardSummary(res, project.id, area.id, board.id);
+    const overall = swbBoardOverall(bs);
+    const fails = SWB_CHECKLIST.filter(({key}) => swbGetStatus(res, project.id, area.id, board.id, key) === SWB_STATUS.FAIL);
+    const risks = fails.map(({key}) => swbGetItem(res, project.id, area.id, board.id, key).risk).filter(Boolean);
+    const top = SWB_RISK_ORDER.find(r => risks.includes(r));
+    rows.push({ area, board, summary: bs, overall, cells: [
+      area.name, board.name, overall !== "untested" && testDate ? fmtDate(testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
+      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), nextDue,
+    ]});
+  }));
+  return rows;
+}
+// Unique, valid Excel sheet name (<= 31 chars, no []:*?/\) for a board. A clash gets the area name ("MSB (Wash Plant)"), then " (2)".
+function swbSheetName(board, area, used) {
+  const clean = s => String(s == null ? "" : s).replace(/[\[\]:*?\/\\]/g, "-").trim();
+  const base = clean(board.name).slice(0, 28) || "Board";
+  const taken = n => used.has(n.toLowerCase()) || n.toLowerCase() === "register";
+  let name = base;
+  if (taken(name)) { const a = clean(area.name).slice(0, 12); name = (base.slice(0, Math.max(4, 31 - 3 - a.length)) + " (" + a + ")").slice(0, 31); }
+  const stem = name; let k = 2;
+  while (taken(name)) { const suffix = " (" + k + ")"; name = stem.slice(0, 31 - suffix.length) + suffix; k++; }
+  used.add(name.toLowerCase());
+  return name;
+}
 async function exportSWBExcel(project, allResults, meta) {
-  const wb=new ExcelJS.Workbook();
-  const ws=wb.addWorksheet("Switchboard Audit");
-  const setCell=(ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-  const merges=[];
-  const n=6;const cols="ABCDEF".split("");
-  let r=0;
-  const pid=project.id;const results=allResults[pid]||{};
-  const sName=project.name||"Site";
-  const testDate=(meta&&meta.testDate)||"";
-  const nextDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):(testDate?swbAddYear(testDate):"");
-  const coLine=`${project.company||"SparkCheck"} Electrical Audit Software Pty. Ltd.${project.abn?`  |  ABN: ${project.abn}`:""}${project.licence?`  |  Electrical Licence: ${project.licence}`:""}`;
-  const titleSt =swbXCS(SWB_XC.white,{bold:true,sz:14,color:{rgb:SWB_XC.darkGrey}},{horizontal:"left"});
-  const subSt   =swbXCS(SWB_XC.white,{sz:9,color:{rgb:SWB_XC.mutedGrey}},{horizontal:"left"});
-  const metaSt  =swbXCS(SWB_XC.lightGrey,{sz:9,color:{rgb:SWB_XC.darkGrey}},{horizontal:"left"});
-  const hdrSt   =swbXCS(SWB_XC.white,{bold:true,sz:10,color:{rgb:SWB_XC.black}},{horizontal:"center",wrapText:true},swbXAB());
-  const bhdSt   =swbXCS(SWB_XC.white,{bold:true,sz:11,color:{rgb:SWB_XC.black}},{horizontal:"left"},{top:swbXB("medium",SWB_XC.black),bottom:swbXB("medium",SWB_XC.black)});
-  const spcSt   =swbXCS(SWB_XC.white);
-  const phoSt   =swbXCS(SWB_XC.white,{sz:9,color:{rgb:SWB_XC.mutedGrey},italic:true},{horizontal:"left"});
-  const phoHdrSt=swbXCS(SWB_XC.white,{bold:true,sz:9,color:{rgb:SWB_XC.black}},{horizontal:"left"});
-  setCell("A1",`${sName}  —  Switchboard / Enclosure Audit`,titleSt);
-  for(let c=1;c<n;c++) setCell(cols[c]+"1","",swbXCS(SWB_XC.white)); merges.push({s:{r:0,c:0},e:{r:0,c:n-1}}); r=1;
-  setCell("A2",coLine,subSt); for(let c=1;c<n;c++) setCell(cols[c]+"2","",swbXCS(SWB_XC.white)); merges.push({s:{r:1,c:0},e:{r:1,c:n-1}}); r=2;
-  setCell("A3",`Auditor: ${(meta&&meta.auditor)||""}`,metaSt); setCell("B3","",metaSt); setCell("C3",`Date Tested: ${fmtDate(testDate)}`,metaSt); setCell("D3","",metaSt); setCell("E3",`Next Annual Audit Due: ${nextDue}`,metaSt); setCell("F3","",metaSt);
-  merges.push({s:{r:2,c:0},e:{r:2,c:1}}); merges.push({s:{r:2,c:2},e:{r:2,c:3}}); merges.push({s:{r:2,c:4},e:{r:2,c:5}}); r=3;
-  for(let c=0;c<n;c++) setCell(cols[c]+"4","",spcSt); merges.push({s:{r:3,c:0},e:{r:3,c:n-1}}); r=4;
-  ["Item","Pass / Fail","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((h,i)=>setCell(cols[i]+"5",h,hdrSt)); r=5;
-  let di=0;
-  (project.areas||[]).forEach(area=>{
-    (area.boards||[]).forEach(board=>{
-      const bl=`${area.name}  ›  ${board.name}`;
-      setCell(cols[0]+(r+1),bl,bhdSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",bhdSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
-      SWB_CHECKLIST.forEach(({key,label})=>{
-        const item=defectGateByStatus(((results[area.id]||{})[board.id]||{})[key]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""});
-        const st=item.status||SWB_STATUS.UNTESTED;
-        const pfLabel=st===SWB_STATUS.PASS?"Pass":st===SWB_STATUS.FAIL?"Fail":st===SWB_STATUS.NA?"N/A":"Untested";
-        const rs=swbXRS(di,item.risk||"");
-        const bg=rs.fill.fgColor.rgb; const fc=rs.font.color; const bd=rs.font.bold;
-        const cSt=(h)=>swbXCS(bg,{sz:10,color:fc,bold:bd},{wrapText:true,horizontal:h||"left"},swbXAB());
-        setCell(cols[0]+(r+1),label,rs);
-        setCell(cols[1]+(r+1),pfLabel,cSt("center"));
-        setCell(cols[2]+(r+1),item.defectId||"",rs);
-        setCell(cols[3]+(r+1),item.comment||"",rs);
-        setCell(cols[4]+(r+1),item.risk||"",cSt("center"));
-        setCell(cols[5]+(r+1),(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
-        r++; di++;
-      });
-      const bd=(results[area.id]||{})[board.id]||{};
-      let boardPhotos=bd._photos||[];
-      SWB_CHECKLIST.forEach(({key})=>{const it=bd[key];if(it&&it.photos&&it.photos.length)boardPhotos=[...boardPhotos,...it.photos];});
-      if(boardPhotos.length){
-        setCell(cols[0]+(r+1),"Photos",phoHdrSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
-        const perRow=3; // photos side by side, 2 board-columns wide each, wrapping every 3
-        const photoRows=Math.ceil(boardPhotos.length/perRow);
-        for(let row=0;row<photoRows;row++){
-          const imgRow=r;
-          for(let c=0;c<n;c++) setCell(cols[c]+(imgRow+1),"",spcSt);
-          ws.getRow(imgRow+1).height=EXPORT_PHOTO_ROW_PT;
-          for(let col=0;col<perRow;col++){
-            const p=boardPhotos[row*perRow+col];
-            if(!p) continue;
-            const m=/^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
-            if(!m) continue;
-            let ext=m[1]==="jpg"?"jpeg":m[1];
-            if(!["jpeg","png","gif"].includes(ext)) ext="jpeg";
-            const imgId=wb.addImage({base64:p.dataUrl,extension:ext});
-            ws.addImage(imgId,{tl:{col:col*2+0.15,row:imgRow+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
-          }
-          r++;
-        }
-      } else {
-        setCell(cols[0]+(r+1),"— No photos captured for this board —",phoSt); for(let c=1;c<n;c++) setCell(cols[c]+(r+1),"",spcSt); merges.push({s:{r,c:0},e:{r,c:n-1}}); r++;
-      }
+  const wb = new ExcelJS.Workbook();
+  const sName = project.name || "Site";
+  const testDate = (meta && meta.testDate) || "";
+  const nextDue = swbNextDue(meta);
+  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
+  const rows = swbRegisterRows(project, allResults, meta);
+  const res = allResults || {};
+  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
+  const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
+  const cellSt = (bg,extra) => swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
+
+  // ── Register ──
+  const ws = wb.addWorksheet("Register");
+  const setCell = (ref,val,st) => { const c = ws.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
+  const cols = "ABCDEFGHIJKL".split(""); const n = cols.length;
+  setCell('A1',`${sName} — Switchboard / Enclosure Audit`);
+  setCell('A2',coLine);
+  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E3',`Next Audit Due: ${nextDue}`);
+  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
+    .forEach(m => ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
+  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+'5',t));
+  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1).height = h; });
+  rows.forEach((row,i) => {
+    const r = 6 + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
+    const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
+    row.cells.forEach((v,ci) => {
+      let st = base;
+      if ([2,4,5,6,7,8,9,11].includes(ci)) st = ctr;
+      if (ci===3) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
+      setCell(cols[ci]+r,v,st);
     });
   });
-  merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  [28,12,12,42,8,30].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-  const buf=await wb.xlsx.writeBuffer();
-  const wbOut=swbArrayBufferToBase64(buf);
-  const fname=`SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
-  deliverExportFile(wbOut, fname);
+  [22,26,13,11,7,7,7,10,9,13,44,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
+
+  // ── One sheet per board ──
+  const used = new Set();
+  rows.forEach(row => {
+    const { area, board, summary: bs, overall } = row;
+    const sh = wb.addWorksheet(swbSheetName(board, area, used));
+    const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
+    put('A1',"Switchboard / Enclosure Audit");
+    put('A2',`${sName}  |  ${coLine}`);
+    put('A3',`Area: ${area.name}`); put('C3',`Board: ${board.name}`);
+    put('A4',`Auditor: ${(meta&&meta.auditor)||""}`); put('C4',`Date Tested: ${testDate?fmtDate(testDate):""}`);
+    put('A5',`Next Audit Due: ${nextDue}`);
+    [[1,1,7],[2,1,7],[3,1,2],[3,3,7],[4,1,2],[4,3,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr,c1,rr,c2));
+    sh.getRow(1).height = 24;
+    // Audit summary
+    let rr = 7;
+    put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
+    const overallSt = overall==="pass" ? passSt : overall==="fail" ? failSt : naSt;
+    [["Total Items",String(bs.total)],["Pass",String(bs.pass)],["Fail",String(bs.fail)],["N/A",String(bs.na)],["Untested",String(bs.untested)],["Score",scoreLabel(bs.score)],["Overall",overall.toUpperCase()]]
+      .forEach(([l,v]) => { put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,l==="Overall"?overallSt:cellSt(SWB_XC.white,{horizontal:"center"})); rr++; });
+    // Checklist
+    rr++;
+    ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((t,i) => put("ABCDEFG"[i]+rr,t,headSt)); rr++;
+    SWB_CHECKLIST.forEach(({key,label},idx) => {
+      const raw = (((res[project.id]||{})[area.id]||{})[board.id]||{})[key] || {status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
+      const item = defectGateByStatus(raw);                    // defect details only for FAIL items
+      const st = item.status || SWB_STATUS.UNTESTED;
+      const resTxt = st===SWB_STATUS.PASS ? "Pass" : st===SWB_STATUS.FAIL ? "Fail" : st===SWB_STATUS.NA ? "N/A" : "";
+      const rs = swbXRS(idx, item.risk || "");
+      const bg = rs.fill.fgColor.rgb;
+      put('A'+rr,`${idx+1}. ${label}`,rs);
+      put('B'+rr,(SWB_GUIDANCE[key]||{}).pass||"",cellSt(bg));
+      put('C'+rr,resTxt,st===SWB_STATUS.PASS?passSt:st===SWB_STATUS.FAIL?failSt:st===SWB_STATUS.NA?naSt:cellSt(bg,{horizontal:"center"}));
+      put('D'+rr,item.defectId||"",rs);
+      put('E'+rr,item.comment||"",rs);
+      put('F'+rr,item.risk||"",swbXCS(bg,{sz:10,color:rs.font.color,bold:rs.font.bold},{wrapText:true,horizontal:"center"},swbXAB()));
+      put('G'+rr,(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
+      rr++;
+    });
+    // Photos — this board's photos, one per row
+    swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
+      rr++;
+      put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
+      sh.getRow(rr).height = EXPORT_PHOTO_ROW_PT;
+      const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+      if (m) {
+        let ext = m[1]==="jpg"?"jpeg":m[1];
+        if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
+        const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+      }
+    });
+    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+  });
+
+  const buf = await wb.xlsx.writeBuffer();
+  deliverExportFile(swbArrayBufferToBase64(buf), `SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
 
 // ─── Excel import ─────────────────────────────────────────────────────────
@@ -14270,6 +14328,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;

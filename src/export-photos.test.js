@@ -43,13 +43,13 @@ function checkPhotos({ media, anchors, target, rowHeightPt }, sources) {
 }
 
 describe('photos in exports', () => {
-  it('SWB: bytes identical, 4:3, fits its row', async () => {
+  it('SWB: bytes identical, 4:3, fits its row, one photo per row on the board sheet', async () => {
     const project = { id:'s1', name:'S', company:'C', areas:[{ id:'a', name:'A', boards:[{ id:'b', name:'MSB' }] }] };
     const zip = await unzipExport(exportSWBExcel, project, { s1:{ a:{ b:{ enclosure:{status:'pass'}, _photos:[{id:'1',dataUrl:JPEG_A},{id:'2',dataUrl:JPEG_B}] } } } }, { auditor:'J', testDate:'2026-09-21' });
-    const info = await inspect(zip, 'xl/worksheets/sheet1.xml');
+    const info = await inspect(zip, 'xl/worksheets/sheet2.xml');   // sheet1 = Register, sheet2 = the MSB board sheet
     checkPhotos(info, [JPEG_A, JPEG_B]);
-    expect(info.anchors[0].col).toBe(0); expect(info.anchors[1].col).toBe(2); // side by side, same row
-    expect(info.anchors[0].row).toBe(info.anchors[1].row);
+    expect(info.anchors.every(a => a.col === 1)).toBe(true);     // column B, like Welder's per-welder sheets
+    expect(info.anchors[1].row).toBe(info.anchors[0].row + 1);   // one photo per row
   });
 
   it('ELT: bytes identical, 4:3, fits its row, each photo on its own labelled row', async () => {
