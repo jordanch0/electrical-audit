@@ -11128,7 +11128,7 @@ function ELTApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
-      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
@@ -11148,6 +11148,97 @@ function ELTApp({ onGoHome }) {
   );
 }
 
+// ── ELT Excel import ──────────────────────────────────────────────────────────────────────────────
+// Accepts an ELT export (the 14-column register) or the blank template — same headings, one parser. Structure only:
+// it reads the fitting register (Location, Asset Location, Asset ID, Type, Maintained, Fitting); test results, dates and
+// notes are ignored so every import starts a fresh audit (same as the other modules).
+// Header rule (learned from the SWB re-import bug): a row is only the header if at least 3 of ELT's identifying headings
+// match a cell EXACTLY, and "Asset Location" must be one of them — never a fuzzy "contains" match on title text.
+const ELT_IMPORT_ANCHORS = ["location","asset location","asset id","type","maintained/non-maintained","fitting type/manufacturer"];
+const eltNormHeader = c => String(c==null?"":c).toLowerCase().replace(/\s*\/\s*/g,"/").replace(/\s+/g," ").trim();
+const ELT_IMPORT_PLACEHOLDERS = { company:["companyname","sparkcheck"], abn:["12 345 678 901"], licence:["123456c"] };
+function parseELTExcel(data, typeOptions) {
+  try {
+    const types = typeOptions || ELT_DEFAULT_TYPES;
+    const sheets = (data && data.SheetNames) || [];
+    if (!sheets.length) return { ok:false, error:"The file has no sheets." };
+    let rows=null, hi=-1, colOf=null;
+    for (const name of sheets) {
+      const r = XLSX.utils.sheet_to_json(data.Sheets[name],{header:1,defval:"",raw:false});
+      for (let i=0;i<Math.min(r.length,10);i++) {
+        if (r[i].some(c=>String(c).length>60)) continue; // instructions / title text is never a header row
+        const norm = r[i].map(eltNormHeader);
+        const hits = ELT_IMPORT_ANCHORS.filter(a=>norm.includes(a));
+        if (hits.length>=3) { rows=r; hi=i; colOf=a=>norm.indexOf(a); break; }
+      }
+      if (rows) break;
+    }
+    if (!rows) return { ok:false, error:"Couldn't find the ELT column headings. The sheet needs a row with Location, Asset Location, Asset ID, Type, Maintained/Non-Maintained and Fitting Type/Manufacturer. Download the import template to see the layout." };
+    const cAL = colOf("asset location");
+    if (cAL<0) return { ok:false, error:"The \"Asset Location\" column is missing — every fitting needs one." };
+    const cLoc=colOf("location"), cId=colOf("asset id"), cType=colOf("type"), cMaint=colOf("maintained/non-maintained"), cFit=colOf("fitting type/manufacturer");
+    const cell = (row,c)=>c>=0?String(row[c]==null?"":row[c]).trim():"";
+    // Site / company: from the title rows above the header. The title is "<site> — Emergency Lighting Test"; strip exactly that
+    // suffix (never split on hyphens: "Hearse Road - Firestone" must survive), and ignore template / export placeholders.
+    let siteName="", company="", abn="", licence="";
+    const t0 = hi>0 && rows[0] ? String(rows[0][0]||"").trim() : "";
+    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test\s*$/i,"").trim();
+    if (hi>1 && rows[1] && rows[1][0]) {
+      const p = parseCompanyRow(rows[1][0]);
+      const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
+      company = ph(p.company,ELT_IMPORT_PLACEHOLDERS.company)?"":p.company;
+      abn = ph(p.abn,ELT_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
+      licence = ph(p.licence,ELT_IMPORT_PLACEHOLDERS.licence)?"":p.licence;
+    }
+    const assets=[], seen=new Set(), unknownTypes=[]; let skipped=0, duplicates=0, badMaintained=0;
+    for (let i=hi+1;i<rows.length;i++) {
+      const row = rows[i];
+      if (!row.some(c=>String(c==null?"":c).trim()!=="")) continue; // blank row
+      const assetLocation = cell(row,cAL);
+      if (!assetLocation) { skipped++; continue; } // a row with data but no Asset Location can't be a fitting
+      const location=cell(row,cLoc), assetId=cell(row,cId), fitting=cell(row,cFit);
+      const key=[location,assetLocation,assetId].join("|").toLowerCase();
+      if (seen.has(key)) { duplicates++; continue; }
+      seen.add(key);
+      let type="", typeOther="";
+      const tRaw=cell(row,cType);
+      if (tRaw) {
+        const m = types.find(o=>o.toLowerCase()===tRaw.toLowerCase());
+        if (m) type=m;
+        else if (tRaw.toLowerCase()==="other") type="Other";
+        else { type="Other"; typeOther=tRaw; if (!unknownTypes.some(u=>u.toLowerCase()===tRaw.toLowerCase())) unknownTypes.push(tRaw); }
+      }
+      let maintained="";
+      const mRaw=cell(row,cMaint);
+      if (mRaw) {
+        const k=mRaw.toLowerCase().replace(/[\s-]+/g,"");
+        maintained = k==="maintained"?"Maintained":k==="nonmaintained"?"Non-Maintained":"";
+        if (!maintained) badMaintained++;
+      }
+      assets.push({ id:uid(), assetId, location, assetLocation, type, typeOther, maintained, fitting });
+    }
+    if (!assets.length) return { ok:false, error:"No fittings found — every row was blank or had no Asset Location." };
+    return { ok:true, siteName, company, abn, licence, assets, skipped, duplicates, unknownTypes, badMaintained };
+  } catch(e) { return { ok:false, error:"Could not parse file — check it is a valid Excel or CSV file." }; }
+}
+function downloadELTTemplate() {
+  const XLSX=XLSX_LIB; if(!XLSX){alert("Excel library not loaded");return;}
+  const rows=[
+    ["Site Name — enter your site name here"],
+    ["Company Name  |  ABN: 12 345 678 901  |  Electrical Licence: 123456C"],
+    [""],
+    ["INSTRUCTIONS: Fill in one row per fitting. Only Asset Location is required; Location defaults to the site name. Type, Maintained/Non-Maintained, Asset ID and Fitting Type/Manufacturer are optional. Leave the test columns (Date onwards) blank — results are recorded in the app. Site and company are read from rows 1-2."],
+    [...ELT_COLUMNS],
+    ["", "SE Door", "", "Emergency Exit Sign", "Maintained", "Clevertronics 24m"],
+    ["", "SW Roof", "", "Combination Unit (Sign + 2 Side Lights)", "Non-Maintained", ""],
+  ];
+  const ws=XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"]=ELT_COLUMNS.map((c,i)=>({wch:i<6?24:14}));
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"ELT Import");
+  const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+  deliverExportFile(out,"ELT_Import_Template.xlsx");
+}
+
 function ELTSiteFields({vals, setVals}) {
   const SS = swbStyles();
   return [["SITE NAME","name","Site name"],["COMPANY (optional)","company","Company name"],["ABN (optional)","abn","e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","licence","e.g. 123456C"]].map(([lbl,k,ph])=>
@@ -11158,13 +11249,58 @@ function ELTSiteFields({vals, setVals}) {
   );
 }
 
-function ELTProjectListView({projects, allResults, onSelect, onAddProject, onDeleteProject}) {
+function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddProject, onDeleteProject}) {
   const SS = swbStyles();
   const [showAdd,setShowAdd] = React.useState(false);
+  const [tab,setTab] = React.useState("manual");
   const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [importing,setImporting] = React.useState(false);
+  const [importPreview,setImportPreview] = React.useState(null);
+  const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [importError,setImportError] = React.useState("");
+  const fileRef = React.useRef();
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setImportPreview(null);setImportError("");};
+  const handleFile = e=>{
+    const file=e.target.files[0]; if(!file) return;
+    if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
+    setImporting(true);setImportError("");
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const buf=ev.target.result;
+        if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
+        const parsed=parseELTExcel(XLSX.read(buf,{type:"array"}),typeOptions);
+        if(!parsed.ok){setImportError(parsed.error);return;}
+        setImportPreview(parsed);
+        setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
+      }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
+      finally{setImporting(false);}
+    };
+    reader.onerror=()=>{setImportError("Failed to read file.");setImporting(false);};
+    reader.readAsArrayBuffer(file);
+    e.target.value="";
+  };
+  const confirmImport = ()=>{
+    if(!importPreview) return;
+    const name=(importVals.name||"").trim()||"Imported Site";
+    onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
+      assets:importPreview.assets.map(a=>({...a,location:a.location||name}))});
+    setImportVals({name:"",company:"",abn:"",licence:""});closeAdd();
+  };
+  // Manual / Import toggle — same pencil / download icons as IEL, IRT and SWB, in ELT's accent
+  const tabStyle = active=>({...SS.tabBtn,...(active?{background:ELT_COLOR_DIM,border:`1px solid ${ELT_COLOR}`,color:ELT_COLOR}:{})});
+  const ic = (...kids)=>eltEl('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,display:"inline",verticalAlign:"middle"}},...kids);
+  const pencil = ic(eltEl('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),eltEl('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"}));
+  const download = ic(eltEl('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),eltEl('polyline',{points:'7 10 12 15 17 10'}),eltEl('line',{x1:12,y1:15,x2:12,y2:3}));
+  const warnings = importPreview ? [
+    importPreview.skipped>0&&nw(importPreview.skipped,"row")+" skipped (no Asset Location)",
+    importPreview.duplicates>0&&nw(importPreview.duplicates,"duplicate row")+" ignored",
+    importPreview.unknownTypes.length>0&&"Not in your Type list (imported as Other): "+importPreview.unknownTypes.join(", "),
+    importPreview.badMaintained>0&&nw(importPreview.badMaintained,"row")+" with an unrecognised Maintained value left blank",
+  ].filter(Boolean) : [];
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{...SS.listTitle,marginTop:24}},"Sites")
-    ,projects.length===0&&!showAdd&&eltEl('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one to start testing.")
+    ,projects.length===0&&!showAdd&&eltEl('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel below.")
     ,projects.map(proj=>{
       const s = eltSummary(proj,allResults);
       return eltEl('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
@@ -11185,14 +11321,46 @@ function ELTProjectListView({projects, allResults, onSelect, onAddProject, onDel
     })
     ,showAdd
       ?eltEl('div',{style:SS.addCard}
-        ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
-        ,eltEl(ELTSiteFields,{vals,setVals})
-        ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-          ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});setVals({name:"",company:"",abn:"",licence:""});setShowAdd(false);}},"Add Site")
-          ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
+        ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14}}
+          ,eltEl('button',{style:tabStyle(tab==="manual"),onClick:()=>setTab("manual")},pencil," Manual Entry")
+          ,eltEl('button',{style:tabStyle(tab==="import"),onClick:()=>setTab("import")},download," Import Excel")
+        )
+        ,tab==="manual"&&eltEl(React.Fragment,null
+          ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
+          ,eltEl(ELTSiteFields,{vals,setVals})
+          ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),assets:[]});setVals({name:"",company:"",abn:"",licence:""});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
+          )
+        )
+        ,tab==="import"&&eltEl(React.Fragment,null
+          ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel")
+          ,eltEl('div',{style:{fontSize:12,color:"#6e6a66",marginBottom:12}},"Upload an ELT export or the import template. Columns: ",eltEl('strong',null,"Asset Location")," (required) | Location | Asset ID | Type | Maintained/Non-Maintained | Fitting Type/Manufacturer. Only the fitting register is imported — test results start blank. (An export only lists fittings that were tested.)")
+          ,!importPreview&&eltEl(React.Fragment,null
+            ,eltEl('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile,"data-testid":"elt-import-file"})
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"Choose Excel / CSV File")
+            ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:downloadELTTemplate},download," Download Import Template")
+            ,importError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
+            ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",marginTop:8},onClick:closeAdd},"Cancel")
+          )
+          ,importPreview&&eltEl(ImportErrorBoundary,null,eltEl(React.Fragment,null
+            ,eltEl('div',{style:{background:ELT_COLOR_DIM,border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:10,padding:"12px",marginBottom:12}}
+              ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:ELT_COLOR,marginBottom:8}},"✓ Preview")
+              ,eltEl('div',{style:{fontSize:12,color:"#3f3f46",marginBottom:4}},nw(importPreview.assets.length,"fitting")+" found")
+              ,importPreview.assets.slice(0,4).map((a,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#6e6a66",marginBottom:2}},a.assetLocation,a.assetId?" · #"+a.assetId:""))
+              ,importPreview.assets.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+(importPreview.assets.length-4)+" more")
+              ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
+            )
+            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
+            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
+              ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:confirmImport},"✓ Import Site")
+              ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>{setImportPreview(null);setImportError("");}},"Re-upload")
+              ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
+            )
+          ))
         )
       )
-      :eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add Site")
+      :eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginTop:8},onClick:()=>setShowAdd(true)},"+ Add / Import Site")
   );
 }
 
@@ -12899,5 +13067,5 @@ FIX — DATE RECTIFIED OVERLAY PATTERN — 2026-06-07
   - Applied to: RCD (push + inject), IEL, TAT, Thermo, SWB, IRT
 */
 
-export { parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
+export { parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;
