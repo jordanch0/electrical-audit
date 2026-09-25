@@ -85,9 +85,9 @@ Reference: **`ELTApp`** shell and nav; `SWBNavBtn`/`NavBtn`.
   Manual/Import toggle — **not** the nav.
 - [ ] **Registering a module** (all of these, in one change):
   1. `AppRoot`: add `if (module === "<key>") return React.createElement(<Mod>App, {onGoHome: ()=>setModule(null)});`
-  2. `AppRoot` `modules` array (the 2-column home grid — Calendar is NOT in it; it is the fixed bottom pill): `{key, color, name, desc, onClick, icon}` (same shape as the others). Icon = `mIcon(...)` with the `P`/`R`/`C` helpers: 24px viewBox, stroke 2, round caps, no fill, so it matches the set. Keep `desc` to one short line (~30 chars) so the two columns stay even.
+  2. `AppRoot` `modules` array (the 2-column home grid — Calendar is NOT in it; it is the fixed bottom pill): `{key, color, name, desc, onClick, icon}` (same shape as the others). **Icon = an entry in the `ICON_DEFS` registry, used as `moduleIcon("<key>")`** (24px viewBox, stroke 2, round caps, no fill, thematic to what the module tests) — the home card (18px) and the Calendar (15px) both call it, so the two can never drift. Keep `desc` to one short line (~30 chars) so the two columns stay even.
   3. A `<MOD>_COLOR` constant (+ `_DIM`/`_BORDER` tints if the accent is used for tints).
-  4. **Calendar**: add an entry to `CAL_TYPES` (label, colour, icon, period) **and** add `K_<MOD>_PROJECTS` to the site-list
+  4. **Calendar**: add an entry to `CAL_TYPES` (label, colour, period, and `icon: moduleIcon("<key>", 15)` — the SAME registry key as the home card, never a separate drawing) **and** add `K_<MOD>_PROJECTS` to the site-list
      `Promise.all` in `CalendarApp` (ELT was missing from both — a real bug).
   5. CLAUDE.md: Module Map row, and add the module to the "Modules to audit" scope of the Delete Consistency item.
 - [ ] Project list header pattern: title, "Sites" heading, site cards with the `DeleteButton` ("Remove site?") under each card.
@@ -263,7 +263,7 @@ Reference: **`parseELTExcel`** + the ELT site-list toggle (`ELTProjectListView`)
   site" forms in every existing module use plain `COMPANY` / `ABN` / `ELECTRICAL LICENCE` — consistent with each other, so copy
   that there.)
 - [ ] History title is **"Audit History"** (empty *and* populated) — never "<Module> History".
-- [ ] Complete: heading `COMPLETE ACTIVE AUDIT`, button **"Complete <Module> Audit"** (RCD's is per test: "Complete Push Test").
+- [ ] Complete: heading `COMPLETE ACTIVE AUDIT`, button **"Complete <Module> Audit"** (RCD's is per test: "Complete Push Test"). **Text only — no icon or ✓ glyph on the button or on its "Yes, Complete" confirm** (pass a plain string as `label`; `src/ui-consistency.test.jsx` fails if a label is an element).
   Start button: `Start / Continue Audit`.
 - [ ] Next-date label: **`NEXT TEST DUE`**. Date fields display DD/MM/YYYY via `fmtDate` (never raw ISO).
 - [ ] Empty report: **"✓ No defects recorded"**; list heading **"Failed Items"**; defect field label

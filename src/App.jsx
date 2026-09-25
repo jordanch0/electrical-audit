@@ -16,6 +16,31 @@ const SM = {
 const uid = () => Math.random().toString(36).slice(2,9);
 // "1 fitting" / "2 fittings" — count + correctly pluralised noun
 const nw = (n, singular, plural) => `${n} ${n === 1 ? singular : (plural || singular + "s")}`;
+
+// ─────────────────────────────────────────────────────────────────────────
+// ICON REGISTRY — the ONE source of every module / test-type icon (24px viewBox, stroke 2, round caps, no fill).
+// The home-screen cards (18px), the Calendar event types (15px) and RCD's own Push / Injection buttons all call
+// moduleIcon(key, size), so an icon can never drift between screens. Change an icon HERE only.
+const iconEl = (size, kids) => React.createElement('svg',{width:size,height:size,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",style:{flexShrink:0}},...kids);
+const _ip = d => React.createElement('path',{d});
+const _ir = (x,y,width,height,rx) => React.createElement('rect',{x,y,width,height,rx});
+const _ic = (cx,cy,r) => React.createElement('circle',{cx,cy,r});
+const _il = (x1,y1,x2,y2) => React.createElement('line',{x1,y1,x2,y2});
+const ICON_DEFS = {
+  rcd:        () => [_ir(5,2,14,20,2),_ir(9,6,6,6,1),_ic(12,17,1.5)],                                          // circuit-breaker face with test button
+  rcd_push:   () => [_ic(12,16,5),_ic(12,16,1.5),_ip("M12 2v5"),_ip("M9.5 5L12 7.5 14.5 5")],                  // push test: a round button being pressed
+  rcd_inject: () => [_ic(12,14,8),_ip("M10 2h4"),_ip("M12 2v4"),_ip("M12 14l3-3")],                            // injection test: stopwatch (trip time in ms)
+  iel:        () => [_ir(5,11,14,10,2),_ip("M8 11V7a4 4 0 0 1 8 0v4"),_ic(12,16,1)],
+  tat:        () => [_ip("M8 2v3M14 2v3"),_ip("M5 5h12v4a6 6 0 0 1-12 0z"),_ip("M11 15v2"),_ip("M7 17h7l2 2.5-2 2.5H7z")],
+  thermo:     () => [_ip("M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"),_ip("M13.5 13V8a1.5 1.5 0 0 0-3 0v5a2.5 2.5 0 1 0 3 0z")],
+  swb:        () => [_ir(3,2,18,20,2),_ir(6,6,3,5,0.5),_ir(10.5,6,3,5,0.5),_ir(15,6,3,5,0.5),_ip("M6 15h12M6 18.5h12")],
+  irt:        () => [_ip("M3 17a9 9 0 0 1 18 0"),_ip("M12 17l4-6"),_ic(12,17,1),_ip("M3 21h18")],
+  elt:        () => [_ir(2,6,20,12,2),_ic(8,9.5,1),_ip("M8 11.5v2l-1.5 2M8 13.5l2 1.5M6 12.5l3-1"),_ip("M14 12h5M17 10l2 2-2 2")],
+  welder:     () => [_ip("M4 10a8 8 0 0 1 16 0v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"),_ir(7,10,10,4,1)],
+  cal:        () => [_ir(3,4,18,18,2),_il(16,2,16,6),_il(8,2,8,6),_il(3,10,21,10)],
+};
+function moduleIcon(key, size = 18) { const d = ICON_DEFS[key]; return d ? iconEl(size, d()) : null; }
+
 const fmtDate = d => { if(!d) return ""; try { return new Date(d).toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return d; } };
 const fmtDateTime = d => { if(!d) return ""; try { return new Date(d).toLocaleString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"}); } catch(_) { return d; } };
 // ISO-date maths must run in UTC: new Date("YYYY-MM-DD") is UTC midnight, so adding months in LOCAL time and reading the result
@@ -1122,13 +1147,13 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('div', { style: S.modeSelectLabel,}, "SELECT TEST TYPE"  )
 , React.createElement('div', { style: S.modeBtnRow,}
 , React.createElement('button', { style: {...S.modeBtnPush,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartPush:undefined,}
-, React.createElement('span', { style: S.modeBtnIcon,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
+, React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_push",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Push Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${pushPct}%`,background:"#a3530f"},}))
 , React.createElement('span', { style: S.modeBtnPct,}, pushPct, "% · "  , pushSum.fail>0?`${pushSum.fail} FAIL`:"clear")
 )
 , React.createElement('button', { style: {...S.modeBtnInject,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartInject:undefined,}
-, React.createElement('span', { style: S.modeBtnIcon,}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})))
+, React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_inject",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Injection Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${injectPct}%`,background:"#1d4ed8"},}))
 , React.createElement('span', { style: S.modeBtnPct,}, injectPct, "% · "  , injectSum.fail>0?`${injectSum.fail} FAIL`:"clear")
@@ -1137,7 +1162,7 @@ React.createElement('div', { style: S.homeWrap,}
 /* Complete audit button */
 , auditEntered===true&&React.createElement('div', { style: {width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"},}
 , React.createElement('div', { style: {fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "COMPLETE ACTIVE AUDIT")
-, React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#a3530f":activeMode==="inject"?"#1d4ed8":"#a3530f", label:activeMode==="push"?React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))),React.createElement('span',null," Complete Push Test")):activeMode==="inject"?React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))),React.createElement('span',null," Complete Injection Test")):React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e"}},"✓"),React.createElement('span',{style:{color:"#18181b"}}," Complete RCD Audit")), onComplete:onCompleteAudit})
+, React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#a3530f":activeMode==="inject"?"#1d4ed8":"#a3530f", label:activeMode==="push"?"Complete Push Test":activeMode==="inject"?"Complete Injection Test":"Complete RCD Audit", onComplete:onCompleteAudit})
 )
 , confirmReset
 ?React.createElement('div', { style: S.confirmRow,}, React.createElement('span', { style: {color:"#dc2626",fontSize:13},}, "Reset all results?"  ), React.createElement('button', { style: S.confirmYes, onClick: ()=>{onReset();setConfirmReset(false);},}, "Yes"), React.createElement('button', { style: S.confirmNo, onClick: ()=>setConfirmReset(false),}, "Cancel"))
@@ -1322,7 +1347,7 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginBottom:4},}
 , React.createElement('span', { style: {fontSize:13,fontWeight:800,color:"#18181b"},}, snap.label)
 , React.createElement('span', { style: {fontSize:11,padding:"2px 8px",borderRadius:5,background:snap.mode==="inject"?"#dbeafe":"#fdecdc",color:snap.mode==="inject"?"#1d4ed8":"#a3530f",border:`1px solid ${snap.mode==="inject"?"#93c5fd":"#fdba74"}`},}
-, snap.mode==="inject"?React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Injection"):React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push")
+, snap.mode==="inject"?React.createElement(React.Fragment,null,moduleIcon("rcd_inject",15)," Injection"):React.createElement(React.Fragment,null,moduleIcon("rcd_push",15)," Push")
 )
 , hasFail&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 )
@@ -2026,7 +2051,7 @@ return(React.createElement('div', { style: S.circuitWrap,}
 , React.createElement('button', { style: {...S.quickBtn,background:"#e4e4e7",color:"#6e6a66",borderColor:"#d4d4d8"}, onClick: ()=>onSetAll(STATUS.UNTESTED),}, "Reset")
 )
 , !isPush && (
-React.createElement('div', { style: {fontSize:12,color:"#1d4ed8",background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"8px 12px",marginBottom:12},}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), " "
+React.createElement('div', { style: {fontSize:12,color:"#1d4ed8",background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"8px 12px",marginBottom:12},}, moduleIcon("rcd_inject",15), " "
 , React.createElement('strong', null, "Annual mode" ), " — tap any circuit to open the injection test form"
 )
 )
@@ -2088,8 +2113,8 @@ return(React.createElement('div',{style:S.summaryWrap}
   ,project.company&&React.createElement('div',{style:{fontSize:12,color:"#6e6a66",marginTop:2,marginBottom:4}},project.company)
   ,React.createElement('div',{style:S.summaryMeta},"RCD AUDIT REPORT",_optionalChain([meta,'optionalAccess',_177=>_177.auditor])?` · ${meta.auditor}`:"")
   ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}
-    ,_optionalChain([meta,'optionalAccess',_178=>_178.pushDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#fdba74",color:"#a3530f",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}))," Push: ",fmtDate(meta.pushDate)," → next ",(meta.nextPushDate?fmtDate(meta.nextPushDate):addMonths(meta.pushDate,1)))
-    ,_optionalChain([meta,'optionalAccess',_179=>_179.injectDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#93c5fd",color:"#1d4ed8",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Injection: ",fmtDate(meta.injectDate)," → next ",(meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(meta.injectDate,1)))
+    ,_optionalChain([meta,'optionalAccess',_178=>_178.pushDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#fdba74",color:"#a3530f",padding:"7px 12px"}},moduleIcon("rcd_push",15)," Push: ",fmtDate(meta.pushDate)," → next ",(meta.nextPushDate?fmtDate(meta.nextPushDate):addMonths(meta.pushDate,1)))
+    ,_optionalChain([meta,'optionalAccess',_179=>_179.injectDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#93c5fd",color:"#1d4ed8",padding:"7px 12px"}},moduleIcon("rcd_inject",15)," Injection: ",fmtDate(meta.injectDate)," → next ",(meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(meta.injectDate,1)))
   )
   ,[["PUSH TEST",pushSum,"#a3530f"],["INJECTION TEST",injectSum,"#1d4ed8"]].map(([lbl,sum,col])=>(
     React.createElement('div',{key:lbl,style:{marginBottom:20}}
@@ -2920,7 +2945,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
     })
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e",display:"inline-flex"}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))),React.createElement('span',null," Complete IEL Audit")),onComplete:onCompleteAudit})
+      ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:"Complete IEL Audit",onComplete:onCompleteAudit})
     )
     ,confirmReset
       ?React.createElement('div',{style:SI.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SI.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SI.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
@@ -3679,17 +3704,17 @@ const SI={
 const K_CAL_EVENTS = "cal-events-v1";
 
 const CAL_TYPES = [
-  { key:"rcd_push",    label:"RCD Push Test",          color:"#a3530f", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})), period:"Monthly"    },
-  { key:"rcd_inject",  label:"RCD Injection Test",     color:"#1d4ed8", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), period:"Annual"     },
-  { key:"iel_estop",   label:"IEL E-Stops",            color:"#dc2626", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'#6e6a66',strokeWidth:2},React.createElement('circle',{cx:12,cy:12,r:10})), period:"3-Monthly"  },
-  { key:"iel_lanyard", label:"IEL Lanyards",           color:"#047857", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},React.createElement('path',{d:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'}),React.createElement('path',{d:'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'})), period:"3-Monthly"  },
-  { key:"iel_iso",     label:"IEL Isolators",          color:"#92400e", icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill: "#6e6a66",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})), period:"3-Monthly"  },
-  { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7})), period:"Variable"   },
-  { key:"thermo",      label:"Thermographic Testing",  color:"#c2410c", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'})), period:"Variable"   },
-  { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('rect',{x:2,y:3,width:20,height:18,rx:2}),React.createElement('line',{x1:8,y1:3,x2:8,y2:21}),React.createElement('line',{x1:16,y1:3,x2:16,y2:21}),React.createElement('line',{x1:2,y1:12,x2:22,y2:12})), period:"Variable"   },
-  { key:"irt",         label:"IR Testing",             color:"#1d4ed8", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'})), period:"Variable"   },
-  { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M9 18h6M10 22h4'}),React.createElement('path',{d:'M12 2a7 7 0 0 0-4 12.7c.6.5 1 1.2 1 2V17h6v-.3c0-.8.4-1.5 1-2A7 7 0 0 0 12 2z'})), period:"6-Monthly"  },
-  { key:"welder",      label:"Welder Test",      color:"#be185d", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z'})), period:"3-Monthly"  },
+  { key:"rcd_push",    label:"RCD Push Test",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
+  { key:"rcd_inject",  label:"RCD Injection Test",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
+  { key:"iel_estop",   label:"IEL E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_lanyard", label:"IEL Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_iso",     label:"IEL Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:moduleIcon("tat",15), period:"Variable"   },
+  { key:"thermo",      label:"Thermographic Testing",  color:"#c2410c", icon:moduleIcon("thermo",15), period:"Variable"   },
+  { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:moduleIcon("swb",15), period:"Variable"   },
+  { key:"irt",         label:"IR Testing",             color:"#1d4ed8", icon:moduleIcon("irt",15), period:"Variable"   },
+  { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:moduleIcon("elt",15), period:"6-Monthly"  },
+  { key:"welder",      label:"Welder Test",      color:"#be185d", icon:moduleIcon("welder",15), period:"3-Monthly"  },
   { key:"other",       label:"Other / Custom",        color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
 ];
 
@@ -4069,7 +4094,7 @@ function CalendarApp({ onGoHome }) {
         // Calendar grid
         ,React.createElement('div',{style:{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}
           // Empty cells before first day
-          ,[...Array(firstDay)].map((_,i)=>React.createElement('div',{key:"e"+i,style:{height:52}}))
+          ,[...Array(firstDay)].map((_,i)=>React.createElement('div',{key:"e"+i,style:{height:44}}))
           // Day cells
           ,[...Array(daysInMonth)].map((_,i)=>{
             const day=i+1;
@@ -4276,7 +4301,7 @@ function CompleteAuditBtn({ color, label, onComplete }) {
     return React.createElement('div', {style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#18181b",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
-        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#0f766e",color:"#FFFFFF",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Yes, Complete")
+        ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#0f766e",color:"#FFFFFF",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},"Yes, Complete")
         ,React.createElement('button',{style:{flex:1,padding:"11px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:10,fontSize:13,cursor:"pointer"},onClick:()=>setConfirm(false)},"Cancel")
       )
     );
@@ -4972,7 +4997,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     )
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))),React.createElement('span',null," Complete Test & Tag Audit")),onComplete:onCompleteAudit})
+      ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:"Complete Test & Tag Audit",onComplete:onCompleteAudit})
     )
     ,confirmReset
       ?React.createElement('div',{style:{...ST.confirmRow,width:"100%",maxWidth:500}}
@@ -6756,7 +6781,7 @@ function ThermoNavBtn(props) {
 // ─────────────────────────────────────────────────────────────────────────
 // ThermoCompleteAuditBtn — alias of shared CompleteAuditBtn with Thermo colour
 function ThermoCompleteAuditBtn({onComplete}) {
-  return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e"}},"✓"),React.createElement('span',{style:{color:"#18181b"}}," Complete Thermographic Audit")), onComplete});
+  return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: "Complete Thermographic Audit", onComplete});
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -6851,7 +6876,7 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
 // ─────────────────────────────────────────────────────────────────────────
 // SWBCompleteAuditBtn — alias of shared CompleteAuditBtn with SWB colour
 function SWBCompleteAuditBtn({onComplete}) {
-  return React.createElement(CompleteAuditBtn, {color: "#7e22ce", label: React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e"}},"✓"),React.createElement('span',{style:{color:"#18181b"}}," Complete Switchboard Audit")), onComplete});
+  return React.createElement(CompleteAuditBtn, {color: "#7e22ce", label: "Complete Switchboard Audit", onComplete});
 }
 
 // SWB-specific EditableDropdown using swbStyles colors
@@ -9614,28 +9639,24 @@ function AppRoot() {
   if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
   if (module === "welder") return React.createElement(WelderApp, {onGoHome: ()=>setModule(null)});
 
-  // Home-screen module icons: one consistent set (24px viewBox, 2px stroke, round caps, no fill)
-  const mIcon = (...kids) => React.createElement('svg',{width:18,height:18,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},...kids);
-  const P = (d) => React.createElement('path',{d});
-  const R = (x,y,width,height,rx) => React.createElement('rect',{x,y,width,height,rx});
-  const C = (cx,cy,r) => React.createElement('circle',{cx,cy,r});
+  // Home-screen module icons come from the shared registry (moduleIcon) — the Calendar reads the very same definitions.
   const modules = [
     {key:"rcd",color:"#a3530f",name:"RCD TESTING",desc:"Push and injection trip tests",onClick:()=>setModule("rcd"),
-      icon:mIcon(R(5,2,14,20,2),R(9,6,6,6,1),C(12,17,1.5))},
-    {key:"iel",color:"#047857",name:"IEL TESTING",desc:"Lanyards, e-stops and isolators",onClick:()=>setModule("iel"),
-      icon:mIcon(R(5,11,14,10,2),P("M8 11V7a4 4 0 0 1 8 0v4"),C(12,16,1))},
+      icon:moduleIcon("rcd")},
+    {key:"iel",color:"#047857",name:"IEL TESTING",desc:"Isolators, E-Stops and Lanyards",onClick:()=>setModule("iel"),
+      icon:moduleIcon("iel")},
     {key:"tat",color:"#1d4ed8",name:"TEST & TAG",desc:"In-service tool and lead testing",onClick:()=>setModule("tat"),
-      icon:mIcon(P("M8 2v3M14 2v3"),P("M5 5h12v4a6 6 0 0 1-12 0z"),P("M11 15v2"),P("M7 17h7l2 2.5-2 2.5H7z"))},
+      icon:moduleIcon("tat")},
     {key:"thermo",color:"#c2410c",name:"THERMOGRAPHIC",desc:"Thermal imaging photo log",onClick:()=>setModule("thermo"),
-      icon:mIcon(P("M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"),P("M13.5 13V8a1.5 1.5 0 0 0-3 0v5a2.5 2.5 0 1 0 3 0z"))},
+      icon:moduleIcon("thermo")},
     {key:"swb",color:"#7e22ce",name:"SWITCHBOARD",desc:"11-point switchboard inspection",onClick:()=>setModule("swb"),
-      icon:mIcon(R(3,2,18,20,2),R(6,6,3,5,0.5),R(10.5,6,3,5,0.5),R(15,6,3,5,0.5),P("M6 15h12M6 18.5h12"))},
+      icon:moduleIcon("swb")},
     {key:"irt",color:"#1d4ed8",name:"IR TESTING",desc:"Cable and motor insulation tests",onClick:()=>setModule("irt"),
-      icon:mIcon(P("M3 17a9 9 0 0 1 18 0"),P("M12 17l4-6"),C(12,17,1),P("M3 21h18"))},
-    {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"AS 2293.2 emergency light register",onClick:()=>setModule("elt"),
-      icon:mIcon(R(2,6,20,12,2),C(8,9.5,1),P("M8 11.5v2l-1.5 2M8 13.5l2 1.5M6 12.5l3-1"),P("M14 12h5M17 10l2 2-2 2"))},
+      icon:moduleIcon("irt")},
+    {key:"elt",color:"#0f766e",name:"EMERGENCY LIGHTING",desc:"Emergency lighting checks",onClick:()=>setModule("elt"),
+      icon:moduleIcon("elt")},
     {key:"welder",color:"#be185d",name:"WELDER TESTING",desc:"Welder electrical safety checks",onClick:()=>setModule("welder"),
-      icon:mIcon(P("M4 10a8 8 0 0 1 16 0v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"),R(7,10,10,4,1))},
+      icon:moduleIcon("welder")},
   ];
   // Calendar lives in a fixed pill (not a grid card)
   const calColor = "#4338ca";
@@ -9723,7 +9744,7 @@ function AppRoot() {
           background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
           fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
       }
-      , React.createElement('svg',{width:16,height:16,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},R(3,4,18,18,2),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))
+      , moduleIcon("cal",16)
       , "Calendar"
     )
   );
@@ -12387,7 +12408,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
         React.createElement("span",{style:{fontSize:11,color:"#52525b"}},summary.total," total")
       )
     ),
-    React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?IRT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:3}),React.createElement('path',{d:'M12 1v4M12 19v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M1 12h4M19 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83'}))," Start / Continue Audit"),
+    React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?IRT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},moduleIcon("irt",15)," Start / Continue Audit"),
     auditEntered===true&&React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}},
       React.createElement("div",{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT"),
       React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit})
@@ -12400,7 +12421,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
 
 // IRTCompleteBtn — alias of shared CompleteAuditBtn with IRT colour
 function IRTCompleteBtn({color,onComplete}){
-  const lbl=React.createElement(React.Fragment,null,React.createElement('span',{style:{color:"#0f766e",display:"inline-flex"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'20 6 9 17 4 12'}))),React.createElement('span',null," Complete IR Testing Audit"));
+  const lbl="Complete IR Testing Audit";
   return React.createElement(CompleteAuditBtn, {color: color||IRT_COLOR, label: lbl, onComplete});
 }
 
@@ -12874,7 +12895,7 @@ function IRTApp({onGoHome}){
             React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"})),
             React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Back")
           ),
-          React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"IR Testing"),
+          React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Insulation Resistance Testing"),
           React.createElement('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},project?.name||"")
         ),
         React.createElement('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome},
@@ -14234,6 +14255,6 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltExportNotes, eltSummary, eltRegisterRows, ELT_COLUMNS };
 export default AppRoot;
