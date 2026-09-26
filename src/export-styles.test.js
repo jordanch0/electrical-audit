@@ -236,3 +236,37 @@ describe('ELT (ExcelJS): content-width columns, wrapped headings, shared date-wi
     expect(wb.getWorksheet('Defects').getRow(5).values.slice(1)).toHaveLength(10);
   });
 });
+
+describe('TAT export: the Electrical Test column', () => {
+  const withElec = { a: { ...tatResults.a } };
+  ['a', 'e'].forEach(k => { withElec.a[k] = { ...withElec.a[k], visualCheck: true, electricalCheck: 'fail' }; });
+  ['b', 'c'].forEach(k => { withElec.a[k] = { ...withElec.a[k], visualCheck: true, electricalCheck: 'pass' }; });
+  const run = () => exportTATExcel(tatProject, withElec, meta);
+
+  it('sits right after Visual Inspection; shows Pass / Fail / blank; Fail cells are red, Pass plain (like ELT check columns)', async () => {
+    await run(); const wb = await load(); const ws = wb.getWorksheet('Test & Tag'); const h = ws.getRow(5).values;
+    const v = h.indexOf('Visual Inspection'), e = h.indexOf('Electrical Test');
+    expect(e).toBe(v + 1); expect(h[e + 1]).toBe('Pass / Fail');
+    const col = r => ws.getCell(6 + r, e);
+    expect(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((_, r) => String(col(r).value || ''))).toEqual(['Fail', 'Pass', 'Pass', '', 'Fail', '', '']);
+    expect(argb(col(0))).toBe(PALETTE.fail); expect(col(0).font.bold).toBe(true); expect(col(0).font.color.argb).toBe('FF9C0006');
+    expect(argb(col(4))).toBe(PALETTE.fail);
+    for (const r of [1, 2]) expect([PALETTE.white, PALETTE.zebra]).toContain(argb(col(r)));   // Pass is plain (zebra), not green
+    expect(col(1).alignment.horizontal).toBe('center');
+  });
+
+  it('the main sheet still fits >= 95% of a landscape page, heading words fit, and nothing else moved (# first, Notes last)', async () => {
+    await run(); const wb = await load(); const ws = wb.getWorksheet('Test & Tag'); const n = ws.getRow(5).cellCount;
+    let px = 0; for (let c = 1; c <= n; c++) px += widthOf(ws, c) * 7 + 5;
+    expect(Math.min(1, ((11.69 - 0.5) * 96) / px)).toBeGreaterThanOrEqual(0.95);
+    const h = ws.getRow(5).values.slice(1);
+    expect(h).toEqual(['#', 'Area', 'Asset ID / Tag', 'Description', 'Equipment Type', 'Visual Inspection', 'Electrical Test', 'Pass / Fail', 'Date Tested', 'Test Frequency', 'Next Test Due', 'Notes / Comments']);
+    expect(longestSegment('Electrical Test')).toBeLessThanOrEqual(widthOf(ws, h.indexOf('Electrical Test') + 1) + 1);
+  });
+
+  it('a legacy record (no electrical field) exports a blank Electrical Test cell', async () => {
+    await exportTATExcel(tatProject, tatResults, meta); const wb = await load(); const ws = wb.getWorksheet('Test & Tag');
+    const e = ws.getRow(5).values.indexOf('Electrical Test');
+    for (let r = 6; r < 13; r++) expect(String(ws.getCell(r, e).value || '')).toBe('');
+  });
+});

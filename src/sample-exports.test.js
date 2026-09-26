@@ -40,7 +40,7 @@ it('IEL', async () => {
 it('TAT', async () => {
   const ids = range(N).map(i => 'x' + i);
   const project = { id: 'p', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Workshop', defaultFreq: '3', items: ids, itemNames: Object.fromEntries(ids.map((x, i) => [x, 'Angle grinder ' + (i + 1)])), itemTags: Object.fromEntries(ids.map((x, i) => [x, 'TAG' + (1000 + i)])), itemEquipTypes: {}, itemFreqs: Object.fromEntries(ids.map((x, i) => [x, ['3', '1', '6', '12', '2'][i % 5]])) }] };
-  const results = { a: Object.fromEntries(ids.map((x, i) => [x, isFail(i) ? { lastTested: '2026-09-21', status: 'fail', notes: 'Damaged lead', ...fd(i) } : i % 13 === 7 ? { lastTested: '2026-09-21', status: 'na' } : i % 17 === 3 ? { lastTested: '2026-09-21', status: 'untested' } : { lastTested: '2026-09-21', status: 'pass', notes: i % 5 === 0 ? 'ok' : '' }])) };
+  const results = { a: Object.fromEntries(ids.map((x, i) => [x, isFail(i) ? { lastTested: '2026-09-21', status: 'fail', visualCheck: i % 2 === 0, electricalCheck: 'fail', notes: 'Damaged lead', ...fd(i) } : i % 13 === 7 ? { lastTested: '2026-09-21', status: 'na' } : i % 17 === 3 ? { lastTested: '2026-09-21', status: 'untested' } : { lastTested: '2026-09-21', status: 'pass', visualCheck: true, electricalCheck: i % 7 === 0 ? '' : 'pass', notes: i % 5 === 0 ? 'ok' : '' }])) };
   await exportTATExcel(project, results, meta); save('tat');
 });
 

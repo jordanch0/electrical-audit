@@ -96,7 +96,7 @@ function xjPageSetup(sheet, landscape, titleRow) {
     margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 }, ...(titleRow ? { printTitlesRow: `${titleRow}:${titleRow}` } : {}) };
   sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
 }
-const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Test Voltage|Score|L\d|N-E)/;
+const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
 // Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
 function xjResultStyle(v) {
   const k = String(v == null ? "" : v).toUpperCase(); const ctr = { horizontal: "center", vertical: "center" };
@@ -116,7 +116,7 @@ function xjSheet(wb, name, o) {
   // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
   o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
   [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1).height = h; });
-  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const priCol = o.headers.findIndex(h => h === "Priority");
+  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
   o.rows.forEach((cells, ri) => {
     const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
     const base = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
@@ -124,6 +124,7 @@ function xjSheet(wb, name, o) {
     for (let c = 0; c < n; c++) {
       const v = cells[c] == null ? "" : cells[c]; let st = XJ_CENTER.test(o.headers[c]) ? ctr : base;
       if (c === resultCol) st = xjResultStyle(v) || ctr;
+      if (c === elecCol && String(v).toUpperCase() === "FAIL") st = xjResultStyle("FAIL");   // a check column: Fail red, Pass plain
       if (c === priCol) { const pc = swbXPC(v); if (pc) st = swbXCS(pc.bg, { bold: pc.bold, sz: 10, color: { rgb: pc.font } }, { horizontal: "center", vertical: "top" }, swbXAB()); }
       put(r, c + 1, v, st);
     }
@@ -4345,9 +4346,22 @@ function addTATMonths(dateStr, months) {
   } catch(_) { return ""; }
 }
 
+// Electrical Test (the result shown on the test-and-tag machine): "" = not recorded, "pass" or "fail". An ADDITIVE optional field — a stored record
+// without it reads as "" and is never rewritten by a read, so no storage-key bump is needed and every legacy record / History snapshot is untouched.
+// Overall result rule (the overall result itself stays manual): PASS can only be marked when the Visual Inspection is ticked AND the Electrical Test
+// passed; Electrical FAIL forces the overall result to FAIL. The gate applies when MARKING pass — an item already PASS (e.g. legacy) is never changed.
+const tatCanPass = item => !!(item && item.visualCheck) && (item && item.electricalCheck) === "pass";
+function tatElectricalPatch(item, next, testDate) {
+  const patch = { electricalCheck: next };
+  if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }
+  else if (next !== "pass" && item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;  // pass cleared: the PASS it justified goes
+  return patch;
+}
 function tatGetItem(results, siteId, areaId, itemId) {
-  return(((results[siteId]||{})[areaId]||{})[itemId])||{
-    status:TAT_STATUS.UNTESTED, visualCheck:false,
+  const rec = (((results[siteId]||{})[areaId]||{})[itemId]);
+  if (rec) return "electricalCheck" in rec ? rec : { ...rec, electricalCheck:"" };   // read-time default only (a copy — storage is never touched)
+  return {
+    status:TAT_STATUS.UNTESTED, visualCheck:false, electricalCheck:"",
     equipType:"", freq:"3", lastTested:"", notes:"", priority:"", tag:"", desc:""
   };
 }
@@ -4409,7 +4423,7 @@ async function exportTATExcel(project, results, meta) {
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
       rows.push({
-        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
+        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
         defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
       });
     });
@@ -4420,8 +4434,8 @@ async function exportTATExcel(project, results, meta) {
     meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
     mainSheet: "Test & Tag",
-    headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
-    widths: [16, 12, 24, 12, 10, 9, 11, 10, 11, 22],
+    headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
+    widths: [14, 12, 22, 11, 10, 10, 9, 11, 10, 11, 20],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
@@ -4960,6 +4974,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
             ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginBottom:4}},d.equipType)
             ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
               ,React.createElement('span',{style:{color:d.visualCheck?"#16a34a":"#52525b",fontWeight:600}},d.visualCheck?"✓":"○"," Visual")
+              ,React.createElement('span',{style:{color:d.electricalCheck==="pass"?"#16a34a":d.electricalCheck==="fail"?"#dc2626":"#52525b",fontWeight:600}},d.electricalCheck==="pass"?"✓":d.electricalCheck==="fail"?"✕":"○"," Electrical")
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
               ,React.createElement('span',null,freqLabel)
             )
@@ -4980,7 +4995,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
   useFailDefaults(item.status===TAT_STATUS.FAIL,item,{rectified:((dropdowns&&dropdowns.rectified)||DEFAULT_RECTIFIED)[0],responsibility:((dropdowns&&dropdowns.responsibility)||DEFAULT_RESPONSIBILITY)[0]},onPatch);
   const name=(area.itemNames||{})[itemId]||item.tag||item.desc||itemId;
   const sm=TAT_SM[item.status||TAT_STATUS.UNTESTED]||TAT_SM.untested;
-  const canPass=item.visualCheck;
+  const canPass=tatCanPass(item);
   // Read freq and equipType from area metadata as source of truth (overrides results default)
   const areaFreq=(area.itemFreqs||{})[itemId]||item.freq||"3";
   const areaEquip=(area.itemEquipTypes||{})[itemId]||item.equipType||"";
@@ -4991,6 +5006,11 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     if(s===TAT_STATUS.PASS&&!canPass)return;
     const testDate=meta.testDate||new Date().toISOString().slice(0,10);
     onPatch({status:s,...(s===TAT_STATUS.PASS||s===TAT_STATUS.FAIL?{lastTested:testDate}:{})});
+  };
+
+  const setElectrical=v=>{
+    const next=(item.electricalCheck||"")===v?"":v;   // re-tapping the active button clears it back to "not recorded"
+    onPatch(tatElectricalPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
   };
 
   const toggleVisual=()=>{
@@ -5048,10 +5068,22 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         )
       )
 
+      // Electrical test — the pass / fail shown on the test-and-tag machine (FAIL sets the overall result to FAIL)
+      ,React.createElement('div',{style:{marginBottom:16}}
+        ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:2}},"ELECTRICAL TEST")
+        ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:8}},"Result shown on the test-and-tag machine")
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,[["pass",TAT_STATUS.PASS],["fail",TAT_STATUS.FAIL]].map(([v,s])=>{
+            const s2=TAT_SM[s]; const active=(item.electricalCheck||"")===v;
+            return React.createElement('button',{key:v,"data-testid":"tat-electrical-"+v,"aria-label":"Electrical test "+s2.label,"aria-pressed":active,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?s2.border:"#d4d4d8"}`,background:active?s2.bg:"#f7f6f3",color:active?s2.fg:"#52525b"},onClick:()=>setElectrical(v)},s2.label);
+          })
+        )
+      )
+
       // Result
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
-        ,!canPass&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked before marking PASS")
+        ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked and the Electrical Test passed before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
             const sm2=TAT_SM[s]||TAT_SM.untested;
@@ -5136,7 +5168,7 @@ function TATReportView({project,results,meta,onBack}){
       if((v.status||TAT_STATUS.UNTESTED)===TAT_STATUS.FAIL){
         const mn=(area.itemNames||{})[itemId]||itemId;
         const tag=(area.itemTags||{})[itemId]||"";
-        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
+        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,electrical:v.electricalCheck||"",priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
       }
     });
   });
@@ -5165,7 +5197,7 @@ function TATReportView({project,results,meta,onBack}){
         );
       })
     )
-    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
+    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:f.electrical==="fail"?["Electrical test: FAIL"]:[],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
     ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
@@ -5524,6 +5556,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               )
               ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#52525b",marginTop:3}}
                 ,React.createElement('span',{style:{color:v.visualCheck?"#16a34a":"#52525b"}},v.visualCheck?"✓":"✕"," Visual")
+                ,React.createElement('span',{style:{color:v.electricalCheck==="pass"?"#16a34a":v.electricalCheck==="fail"?"#dc2626":"#52525b"}},v.electricalCheck==="pass"?"✓":v.electricalCheck==="fail"?"✕":"○"," Electrical")
                 ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
               )
               ,v.notes&&React.createElement('div',{style:{fontSize:10,color:"#a3530f",marginTop:2}},"✎ ",v.notes)
@@ -14186,5 +14219,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCanPass, tatElectricalPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
