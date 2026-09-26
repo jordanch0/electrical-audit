@@ -340,8 +340,9 @@ Remove all of the following when converting a delete action to `DeleteButton`:
     from the other modules' projects (fine). To do, INVESTIGATE FIRST: decide which lists are fixed by design and which should be customisable; drop the category wording from the
     TAT recurrence options (or read TAT's freqOptions); keep the STORED recurrence values ("none" / "Monthly" / "3-Monthly" / "6-Monthly" / "Annual") backward compatible so existing
     events and their generated due dates are untouched; add tests. Search: `CAL_TYPES`, `form.recur` (verified 2026-09-26: the event form state, `blank.recur`, `generateSeries`), "1-Monthly — Hire".
-    NOTE: the same category wording also appears on TAT's OWN Dropdowns tab (frequency labels such as "1 Month — Hire / Construction"). That copy is INTENTIONAL and stays as is —
-    only Calendar's duplicate needs addressing. The Calendar event card also shortens the labels ("3-Monthly (Bldg/Const)", "6-Monthly (Factory/Whs)", ~line 3746); include it in the same pass.
+    THREE copies of the category wording, all accounted for: (a) TAT's OWN Dropdowns tab frequency labels ("1 Month — Hire / Construction" etc.) — INTENTIONAL, settled, KEEP as is;
+    (b) Calendar's Recurrence <select> for TAT events (~line 4208) — duplicate, FIX; (c) the Calendar event card's shortened labels ("3-Monthly (Bldg/Const)", "6-Monthly (Factory/Whs)", ~line 3746) — duplicate, FIX.
+    Do (b) and (c) in the same pass; leave (a) alone.
 
 [ ] ALL · Consolidate the five near-identical EditableDropdown components · The FAIL-panel dropdowns (Rectified / Responsibility) are five copies of the same control:
     `EditableDropdown` (RCD), `IELEditableDropdown` (IEL, and TAT reuses it with its accent colour), `SWBEditableDropdown`, `ThermoEditableDropdown`, `IRTEditableDropdown`. They behave
