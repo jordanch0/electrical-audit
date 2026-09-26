@@ -4,7 +4,7 @@ import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, cleanup, waitFor, within, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ExcelJS from 'exceljs';
-import AppRoot, { exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY } from './App.jsx';
+import AppRoot, { exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON } from './App.jsx';
 import { JPEG_A } from './test/jpeg-fixtures.js';
 
 const ls = k => JSON.parse(localStorage.getItem(k));
@@ -17,7 +17,7 @@ beforeAll(() => {
 });
 const img = (w = 300, h = 400, n = 'p') => new File(['x'], `${n}_${w}x${h}.jpg`, { type: 'image/jpeg' });
 afterEach(() => cleanup());
-const bins = () => screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg'));
+const bins = () => screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg') && !b.getAttribute('aria-label'));
 const idbKeys = () => new Promise((res, rej) => { const rq = indexedDB.open('sparkcheck-gsd-photos', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('photos'); rq.onsuccess = () => { const db = rq.result; const q = db.transaction('photos').objectStore('photos').getAllKeys(); q.onsuccess = () => { db.close(); res(q.result.map(String).sort()); }; q.onerror = () => rej(q.error); }; rq.onerror = () => rej(rq.error); });
 const clearIdb = () => new Promise(res => { const rq = indexedDB.open('sparkcheck-gsd-photos', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('photos'); rq.onsuccess = () => { const db = rq.result; const t = db.transaction('photos', 'readwrite'); t.objectStore('photos').clear(); t.oncomplete = () => { db.close(); res(); }; }; rq.onerror = () => res(); });
 
@@ -76,7 +76,7 @@ describe('data helpers', () => {
     expect(gsdNumbered(proj, items).map(e => [e.item.id, e.n])).toEqual([['y', 1], ['x', 2], ['z', 3]]);
   });
   it('title = the Common Defect, or the first line of the Description when it is "Other" / blank', () => {
-    expect(gsdTitle({ commonDefect: 'Oil / grease spill', description: 'x' })).toBe('Oil / grease spill');
+    expect(gsdTitle({ commonDefect: 'Conduit loose or damaged', description: 'x' })).toBe('Conduit loose or damaged');
     expect(gsdTitle({ commonDefect: 'Other', description: 'Cable rubbing\nmore' })).toBe('Cable rubbing');
     expect(gsdTitle({ commonDefect: '', description: '' })).toBe('Untitled defect');
   });
@@ -89,10 +89,29 @@ describe('data helpers', () => {
     expect(s.entries[0].detail).toBe('Guarding · High · Site Manager · Fix by 31/10/2026');
     expect(gsdReportSections(proj, [{ id: 'i', areaId: 'a1', description: 'Only text', photos: [] }])[0].entries[0].detail).toBe('');
   });
-  it('the default lists avoid every other module\'s scope', () => {
+  it('the default lists are ELECTRICAL (items, electrical defects, or what an electrical item could cause) and avoid every other module\'s scope', () => {
     const owned = /switchboard|labell?ing|ventilation|vermin|busbar|rcd|e-?stop|isolator|lanyard|extension lead|power board|(?<!non-)emergency|exit sign|hot ?spot|weld/i;
-    [...GSD_DEFAULT_CATEGORIES, ...GSD_DEFAULT_COMMON].forEach(x => expect(x, x).not.toMatch(owned));
+    const electrical = /cable|conduit|junction|outlet|gpo|light|conductor|motor|electrical|wiring|equipment|ingress|weatherproof|enclosure|gland/i;
+    [...GSD_DEFAULT_CATEGORIES, ...GSD_DEFAULT_COMMON].forEach(x => { expect(x, x).not.toMatch(owned); expect(x, x).toMatch(electrical); });
+    [...GSD_DEFAULT_CATEGORIES, ...GSD_DEFAULT_COMMON].forEach(x => expect(x, x).not.toMatch(/housekeeping|structural|handrail|grating|oil|corroded|walkway or exit|machine guarding/i));   // the old general items are gone
     expect(GSD_DEFAULT_RESPONSIBILITY[0]).toBe('Site Manager');
+  });
+  it('a stored list that is EXACTLY the old default is replaced by the new default; a customised list is left alone', () => {
+    const up = gsdUpgradeDropdowns({ categories: GSD_LEGACY_CATEGORIES, common: GSD_LEGACY_COMMON, responsibility: ['A'] });
+    expect(up.categories).toEqual(GSD_DEFAULT_CATEGORIES); expect(up.common).toEqual(GSD_DEFAULT_COMMON); expect(up.responsibility).toEqual(['A']);
+    const custom = ['Housekeeping', 'Mine']; expect(gsdUpgradeDropdowns({ categories: custom }).categories).toEqual(custom);
+  });
+  it('the Common Defect text is exported ONCE (through the Description), never as a second field — even when Description is still the auto-filled text', async () => {
+    let payload; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } };
+    const proj = { id: 's1', name: 'S', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'Plant' }] };
+    const item = { id: 'i', areaId: 'a1', assetLocation: 'Pump', category: 'Conduit / Cable Tray', commonDefect: 'Conduit loose or damaged', description: 'Conduit loose or damaged', descAuto: 'Conduit loose or damaged', photos: [], priority: 'H', responsibility: 'Site Manager', dueDate: '' };
+    await exportGSDExcel(proj, [item], { auditor: 'J', testDate: '2026-09-21' });
+    const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64'));
+    const rowsWith = ws => { let n = 0; ws.eachRow(row => { let hit = false; row.eachCell(cell => { if (String(cell.value).includes('Conduit loose or damaged')) hit = true; }); if (hit) n++; }); return n; };
+    expect(rowsWith(wb.getWorksheet('Defects Report'))).toBe(1);        // the caption row ("#1  Pump — Conduit loose or damaged"); the muted line does not repeat it
+    expect(rowsWith(wb.getWorksheet('Register'))).toBe(1);              // the Register's Description column; there is no separate Common Defect column
+    expect(wb.getWorksheet('Register').getRow(5).values.slice(1)).not.toContain('Common Defect');
+    delete window.webkit;
   });
 });
 
@@ -160,38 +179,41 @@ describe('Audit: photo-first quick-add, live auto-save, cards', () => {
   it('Common Defect pre-fills the Description — but never over the user\'s own wording, and re-picks replace only its own auto text', async () => {
     seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');
     const sel = screen.getByLabelText('Common defect'); const desc = screen.getByLabelText('Description');
-    await user.selectOptions(sel, 'Oil / grease spill'); expect(desc).toHaveValue('Oil / grease spill');
-    await user.selectOptions(sel, 'Loose or missing fixings'); expect(desc).toHaveValue('Loose or missing fixings');       // still the auto text -> replaced
+    await user.selectOptions(sel, 'Conduit loose or damaged'); expect(desc).toHaveValue('Conduit loose or damaged');
+    await user.selectOptions(sel, 'Outlet / GPO damaged'); expect(desc).toHaveValue('Outlet / GPO damaged');       // still the auto text -> replaced
     await user.clear(desc); await user.type(desc, 'Bolts sheared at base');
-    await user.selectOptions(sel, 'Oil / grease spill'); expect(desc).toHaveValue('Bolts sheared at base');                // user wording is kept
+    await user.selectOptions(sel, 'Conduit loose or damaged'); expect(desc).toHaveValue('Bolts sheared at base');                // user wording is kept
     await user.selectOptions(sel, 'Other'); expect(desc).toHaveValue('Bolts sheared at base');
     await waitFor(() => expect(ls('gsd-items-v1').s1[0]).toMatchObject({ commonDefect: 'Other', description: 'Bolts sheared at base' }));
   });
   it('a card shows the # , the priority dot, the title, and "Area — Asset Location"; tapping opens the item', async () => {
     seedSite(); localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [
-      { id: 'i1', areaId: 'a1', assetLocation: 'Screen deck', category: '', commonDefect: 'Oil / grease spill', description: 'x', descAuto: '', photos: [], priority: 'H', responsibility: '', dueDate: '' },
+      { id: 'i1', areaId: 'a1', assetLocation: 'Screen deck', category: '', commonDefect: 'Conduit loose or damaged', description: 'x', descAuto: '', photos: [], priority: 'H', responsibility: '', dueDate: '' },
       { id: 'i2', areaId: 'a1', assetLocation: '', category: '', commonDefect: 'Other', description: 'Fix cabling from isolator\nmore', descAuto: '', photos: [], priority: '', responsibility: '', dueDate: '' }] }));
     const user = userEvent.setup(); await open(user, 'Audit');
     const cards = screen.getAllByTestId('gsd-card');
-    expect(within(cards[0]).getByText('#1')).toBeInTheDocument(); expect(within(cards[0]).getByText('Oil / grease spill')).toBeInTheDocument();
+    expect(within(cards[0]).getByText('#1')).toBeInTheDocument(); expect(within(cards[0]).getByText('Conduit loose or damaged')).toBeInTheDocument();
     expect(within(cards[0]).getByText('Concrete Plant — Screen deck')).toBeInTheDocument(); expect(within(cards[0]).getByTestId('gsd-pri-H')).toBeInTheDocument();
     expect(within(cards[1]).getByText('Fix cabling from isolator')).toBeInTheDocument(); expect(within(cards[1]).getByText('Concrete Plant')).toBeInTheDocument();
     expect(within(cards[1]).queryByTestId(/gsd-pri-/)).not.toBeInTheDocument();
     await user.click(cards[0]); expect(await screen.findByText('#1 · Concrete Plant')).toBeInTheDocument();
   });
-  it('"Add another defect in <area>" keeps you in the same area: new defect, new photo, opens its page', async () => {
-    seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');
-    await user.upload(screen.getByTestId('gsd-add-another'), img(300, 400, 'n2'));
-    await waitFor(() => expect(ls('gsd-items-v1').s1).toHaveLength(2));
-    expect(ls('gsd-items-v1').s1.map(i => i.areaId)).toEqual(['a2', 'a2']); expect(await screen.findByText('#2 · Workshop')).toBeInTheDocument();
-  });
-  it('areas can be added inline (unique per site, case-insensitive) and show even when empty', async () => {
+  it('the item page has ONE Back (the header one), no Area field, and no "Add another defect"; the Audit tab has no Add Area (Manage owns areas)', async () => {
     seedSite(); const user = userEvent.setup(); await open(user, 'Audit');
+    expect(screen.queryByLabelText('New area name')).not.toBeInTheDocument(); expect(screen.queryByRole('button', { name: '+ Add Area' })).not.toBeInTheDocument(); expect(screen.queryByTestId('gsd-add-another')).not.toBeInTheDocument();
+    await addDefect(user, 'Workshop');
+    expect(screen.getAllByText('Back')).toHaveLength(1);                                              // only the header Back
+    expect(screen.queryByLabelText('Area')).not.toBeInTheDocument(); expect(screen.queryByText('AREA')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Add another defect/)).not.toBeInTheDocument(); expect(screen.queryByTestId('gsd-add-another')).not.toBeInTheDocument();
+    await user.click(screen.getByText('Back')); expect(await screen.findByRole('button', { name: 'Add defect to Workshop' })).toBeInTheDocument();   // the one Back returns to the Audit list
+  });
+  it('areas are added in MANAGE (unique per site, case-insensitive) and then show on the Audit tab even when empty', async () => {
+    seedSite(); const user = userEvent.setup(); await open(user, 'Manage');
     await user.type(screen.getByLabelText('New area name'), 'workshop'); await user.click(screen.getByRole('button', { name: '+ Add Area' }));
     expect(screen.getByText('"workshop" is already an area')).toBeInTheDocument();
     await user.clear(screen.getByLabelText('New area name')); await user.type(screen.getByLabelText('New area name'), 'Pit 4'); await user.click(screen.getByRole('button', { name: '+ Add Area' }));
-    expect(await screen.findByRole('button', { name: 'Add defect to Pit 4' })).toBeInTheDocument();
-    expect(ls('gsd-projects-v1')[0].areas.map(a => a.name)).toEqual(['Concrete Plant', 'Workshop', 'Pit 4']);
+    await waitFor(() => expect(ls('gsd-projects-v1')[0].areas.map(a => a.name)).toEqual(['Concrete Plant', 'Workshop', 'Pit 4']));
+    await user.click(screen.getByRole('button', { name: 'Audit' })); expect(await screen.findByRole('button', { name: 'Add defect to Pit 4' })).toBeInTheDocument();
   });
 });
 
@@ -203,9 +225,9 @@ describe('photos on an item: add / remove / reorder', () => {
     const ids = () => ls('gsd-items-v1').s1[0].photos.map(p => p.w);
     expect(ids()).toEqual([300, 400, 500]); expect(screen.getByText('Primary photo')).toBeInTheDocument();
     const rows = () => screen.getAllByTestId('gsd-photo-row');
-    await user.click(within(rows()[1]).getByRole('button', { name: 'Move photo earlier' }));
+    await user.click(within(rows()[1]).getByRole('button', { name: 'Move photo up' }));
     await waitFor(() => expect(ids()).toEqual([400, 300, 500]));
-    expect(within(rows()[0]).getByRole('button', { name: 'Move photo earlier' })).toBeDisabled(); expect(within(rows()[2]).getByRole('button', { name: 'Move photo later' })).toBeDisabled();
+    expect(within(rows()[0]).getByRole('button', { name: 'Move photo up' })).toBeDisabled(); expect(within(rows()[2]).getByRole('button', { name: 'Move photo down' })).toBeDisabled();
     const removedId = ls('gsd-items-v1').s1[0].photos[2].id;
     await user.click(within(rows()[2]).getAllByRole('button').pop());                       // the bin (compact, icon only)
     { const bs = within(rows()[2]).getAllByRole('button'); await user.click(bs[bs.length - 2]); }   // compact confirm has no accessible name: the button before Keep
@@ -221,14 +243,55 @@ describe('photos on an item: add / remove / reorder', () => {
 });
 
 describe('duplicate, delete, area removal', () => {
-  it('Duplicate copies every field EXCEPT the photos, into the chosen area, and opens the copy', async () => {
-    seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Concrete Plant', [img(300, 400, 'a'), img(300, 400, 'b')]);
+  const openPicker = async (user, name) => { await user.click(screen.getByRole('button', { name })); return within(await screen.findByTestId('gsd-area-picker')); };
+  it('Duplicate is a pill; tapping it OFFERS the areas (including this one); picking one copies every field EXCEPT the photos into it and opens the copy', async () => {
+    seedSite(['Concrete Plant', 'Workshop', 'Pit 4']); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Concrete Plant', [img(300, 400, 'a'), img(300, 400, 'b')]);
     await user.type(screen.getByLabelText('Description'), 'Guard missing'); await user.type(screen.getByLabelText('Asset location'), 'Crusher'); await user.click(screen.getByRole('button', { name: 'M — Medium' }));
-    await user.selectOptions(screen.getByLabelText('Duplicate into area'), 'Workshop'); await user.click(screen.getByRole('button', { name: 'Duplicate (no photos)' }));
+    const dup = screen.getByRole('button', { name: 'Duplicate' }); expect(dup).toHaveStyle({ borderRadius: '999px' });
+    expect(ls('gsd-items-v1').s1).toHaveLength(1);                                       // tapping does not silently copy
+    const picker = await openPicker(user, 'Duplicate');
+    expect(picker.getAllByRole('button').map(b => b.textContent)).toEqual(['Concrete Plant (this area)', 'Workshop', 'Pit 4', 'Cancel']);
+    await user.click(picker.getByRole('button', { name: 'Workshop' }));
     await waitFor(() => expect(ls('gsd-items-v1').s1).toHaveLength(2));
     const [orig, copy] = ls('gsd-items-v1').s1;
     expect(copy).toMatchObject({ areaId: 'a2', description: 'Guard missing', assetLocation: 'Crusher', priority: 'M' }); expect(copy.photos).toEqual([]); expect(copy.id).not.toBe(orig.id); expect(orig.photos).toHaveLength(2);
     expect(await screen.findByText('#2 · Workshop')).toBeInTheDocument();
+  });
+  it('Duplicate into the SAME area is a deliberate choice, and Cancel leaves everything alone', async () => {
+    seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');
+    let picker = await openPicker(user, 'Duplicate'); await user.click(picker.getByRole('button', { name: 'Cancel' })); expect(screen.queryByTestId('gsd-area-picker')).not.toBeInTheDocument(); expect(ls('gsd-items-v1').s1).toHaveLength(1);
+    picker = await openPicker(user, 'Duplicate'); await user.click(picker.getByRole('button', { name: 'Workshop (this area)' }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1.map(i => i.areaId)).toEqual(['a2', 'a2']));
+  });
+  it('Move re-parents the SAME record (id, data and photos kept) into the chosen area; the current area is not offered; # follows the area order', async () => {
+    seedSite(); const user = userEvent.setup(); await open(user, 'Audit');
+    await addDefect(user, 'Concrete Plant', [img(300, 400, 'a')]); await user.type(screen.getByLabelText('Description'), 'First'); await user.click(screen.getByText('Back'));
+    await addDefect(user, 'Workshop', [img(300, 400, 'b'), img(400, 300, 'c')]); await user.type(screen.getByLabelText('Description'), 'Misplaced'); await user.click(screen.getByRole('button', { name: 'H — High' }));
+    expect(await screen.findByText('#2 · Workshop')).toBeInTheDocument();
+    const before = ls('gsd-items-v1').s1.find(i => i.description === 'Misplaced'); const keys = await idbKeys();
+    const move = screen.getByRole('button', { name: 'Move' }); expect(move).toHaveStyle({ borderRadius: '999px' });
+    const picker = await openPicker(user, 'Move'); expect(picker.getAllByRole('button').map(b => b.textContent)).toEqual(['Concrete Plant', 'Cancel']);   // Workshop (where it is) is not offered
+    await user.click(picker.getByRole('button', { name: 'Concrete Plant' }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1.find(i => i.id === before.id).areaId).toBe('a1'));
+    const after = ls('gsd-items-v1').s1.find(i => i.id === before.id);
+    expect(after).toMatchObject({ id: before.id, description: 'Misplaced', priority: 'H' }); expect(after.photos).toEqual(before.photos); expect(ls('gsd-items-v1').s1).toHaveLength(2);
+    expect(await idbKeys()).toEqual(keys);                                                 // no photo record created or removed
+    expect(await screen.findByText('#2 · Concrete Plant')).toBeInTheDocument();          // now the LAST defect of Concrete Plant (area order), so # 2
+    await user.click(screen.getByText('Back')); const cards = screen.getAllByTestId('gsd-card');
+    expect(cards.map(c => c.textContent.match(/#\d+/)[0])).toEqual(['#1', '#2']); expect(within(cards[1]).getByText('Misplaced')).toBeInTheDocument();
+  });
+  it('a moved defect goes to the END of the new area, like a newly added one', async () => {
+    seedSite(); const user = userEvent.setup(); await open(user, 'Audit');
+    await addDefect(user, 'Workshop'); await user.type(screen.getByLabelText('Description'), 'Misplaced'); await user.click(screen.getByText('Back'));
+    await addDefect(user, 'Concrete Plant'); await user.type(screen.getByLabelText('Description'), 'Later'); await user.click(screen.getByText('Back'));
+    await user.click(screen.getAllByTestId('gsd-card').find(c => c.textContent.includes('Misplaced')));
+    const picker = await openPicker(user, 'Move'); await user.click(picker.getByRole('button', { name: 'Concrete Plant' }));
+    await user.click(screen.getByText('Back')); const cards = screen.getAllByTestId('gsd-card');
+    expect(cards.map(c => c.textContent.replace(/[^A-Za-z#0-9]/g, ''))).toEqual([expect.stringContaining('#1Later'), expect.stringContaining('#2Misplaced')]);
+  });
+  it('Move with no other area explains why instead of offering nothing silently', async () => {
+    seedSite(['Only Area']); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Only Area');
+    const picker = await openPicker(user, 'Move'); expect(picker.getByText(/no other area/i)).toBeInTheDocument();
   });
   it('Delete asks first ("Keep" leaves everything), then removes the defect AND its photos', async () => {
     seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');

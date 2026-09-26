@@ -15,7 +15,7 @@ beforeAll(() => {
   gsdPhotoIO.exportCopy = async () => ({ dataUrl: JPEG_A });
 });
 afterEach(() => cleanup());
-const bins = () => screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg'));   // icon-only delete bins
+const bins = () => screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg') && !b.getAttribute('aria-label'));   // icon-only delete bins (the edit pencils carry an aria-label)   // icon-only delete bins
 const confirmNo = async user => { const bs = screen.getAllByRole('button'); await user.click(bs[bs.findIndex(b => b.textContent === 'Keep') - 1]); };  // the button before "Keep" is the (compact) confirm
 const idbKeys = () => new Promise((res, rej) => { const rq = indexedDB.open('sparkcheck-gsd-photos', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('photos'); rq.onsuccess = () => { const db = rq.result; const q = db.transaction('photos').objectStore('photos').getAllKeys(); q.onsuccess = () => { db.close(); res(q.result.map(String).sort()); }; q.onerror = () => rej(q.error); }; rq.onerror = () => rej(rq.error); });
 const clearIdb = () => new Promise(res => { const rq = indexedDB.open('sparkcheck-gsd-photos', 1); rq.onupgradeneeded = () => rq.result.createObjectStore('photos'); rq.onsuccess = () => { const db = rq.result; const t = db.transaction('photos', 'readwrite'); t.objectStore('photos').clear(); t.oncomplete = () => { db.close(); res(); }; }; rq.onerror = () => res(); });
@@ -79,7 +79,7 @@ describe('Complete audit, History, Reset, deletes — photos follow their owner'
   });
   it('Manage: a rename to an existing area is refused; Dropdowns lists Category / Common Defect / Responsibility (no Priority list)', async () => {
     seedSite(); const user = userEvent.setup(); await open(user, 'Manage');
-    await user.click(screen.getByRole('button', { name: 'Rename Workshop' })); await user.clear(screen.getByLabelText('Rename area')); await user.type(screen.getByLabelText('Rename area'), 'concrete plant'); await user.click(screen.getByRole('button', { name: 'Save' }));
+    await user.click(screen.getByRole('button', { name: 'Rename area Workshop' })); await user.clear(screen.getByLabelText('Rename area')); await user.type(screen.getByLabelText('Rename area'), 'concrete plant'); await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(screen.getByText('"concrete plant" is already an area')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Dropdowns' }));
     expect(await screen.findByText('CATEGORY')).toBeInTheDocument(); expect(screen.getByText('COMMON DEFECT')).toBeInTheDocument(); expect(screen.getByText('RESPONSIBILITY')).toBeInTheDocument(); expect(screen.queryByText('PRIORITY')).not.toBeInTheDocument();
@@ -89,6 +89,7 @@ describe('Complete audit, History, Reset, deletes — photos follow their owner'
     await seedItems(); const user = userEvent.setup(); await open(user, 'Report');
     expect(await screen.findByText('SITE DEFECTS REPORT · Jane')).toBeInTheDocument(); expect(screen.getByText(/^defects$/i)).toBeInTheDocument(); expect(screen.getByText('High / Urgent', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('Defect i1', { exact: false })).toBeInTheDocument(); expect(screen.getAllByText('Guarding · High · Site Manager').length).toBe(2);
+    expect(screen.queryAllByText('Defect i1', { exact: false })).toHaveLength(1);       // the description is shown once — it is also the title, so no second line
     cleanup(); localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [] })); await open(userEvent.setup(), 'Report'); expect(await screen.findByText('✓ No defects recorded')).toBeInTheDocument();
   });
 });

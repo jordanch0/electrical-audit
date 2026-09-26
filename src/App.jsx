@@ -14322,8 +14322,14 @@ const K_GSD_PROJECTS = "gsd-projects-v1", K_GSD_ITEMS = "gsd-items-v1", K_GSD_ME
 const gsdEl = React.createElement;
 // The default lists deliberately avoid everything another module formally tests (RCD, IEL, TAT, Thermo, SWB, IRT, ELT, Welder): no switchboard covers /
 // labelling / ventilation, no RCDs, e-stops, isolators, lanyards, portable leads / power boards, emergency lighting, hot spots or welders.
-const GSD_DEFAULT_CATEGORIES = ["Housekeeping","Cabling / Conduit (general)","Mechanical / Equipment","Guarding","Structural / Building","Signage (safety / warning)","General Lighting (non-emergency)","Access / Egress","Water / Drainage"];
-const GSD_DEFAULT_COMMON = ["Cables across walkway (trip hazard)","Unsupported or loose cable / conduit","Cable tray damaged or overloaded","Poor housekeeping / materials in access way","Blocked walkway or exit path","Missing or damaged machine guarding","Missing or faded safety signage","General lighting not working","Damaged handrail / step / platform","Damaged floor grating or cover plate","Corroded or damaged structure / support","Loose or missing fixings","Oil / grease spill","Water pooling or leak (general)"];
+const GSD_DEFAULT_CATEGORIES = ["Cabling / Cable Management","Conduit / Cable Tray","Junction Boxes / Field Enclosures","Outlets / GPOs / Fixed Wiring","General Lighting (non-emergency)","Weatherproofing / Ingress Protection","Mechanical Protection of Electrical Equipment","Motors / Fixed Equipment (visual)","Electrical Warning Signage","Trip / Access Hazard from Electrical Items"];
+const GSD_DEFAULT_COMMON = ["Cable damaged or sheath worn","Cable unsupported or dangling","Cable across walkway (trip hazard)","Cable tray damaged or overloaded","Conduit loose or damaged","Cable protection missing (exposed to damage)","Cable entry not sealed (gland missing)","Junction box damaged or lid missing","Junction box loose / needs remounting","Outlet / GPO damaged","Weatherproof cover or door missing","Light fitting damaged or not working (general)","Exposed or open-ended conductors","Motor terminal box lid missing or damaged","Missing electrical warning signage","Water ingress at electrical equipment"];
+// The first defaults (housekeeping / structural wording) were too general. A stored list that is EXACTLY the old default is replaced by the new default at load
+// (the user never customised it); a customised list is left alone.
+const GSD_LEGACY_CATEGORIES = ["Housekeeping","Cabling / Conduit (general)","Mechanical / Equipment","Guarding","Structural / Building","Signage (safety / warning)","General Lighting (non-emergency)","Access / Egress","Water / Drainage"];
+const GSD_LEGACY_COMMON = ["Cables across walkway (trip hazard)","Unsupported or loose cable / conduit","Cable tray damaged or overloaded","Poor housekeeping / materials in access way","Blocked walkway or exit path","Missing or damaged machine guarding","Missing or faded safety signage","General lighting not working","Damaged handrail / step / platform","Damaged floor grating or cover plate","Corroded or damaged structure / support","Loose or missing fixings","Oil / grease spill","Water pooling or leak (general)"];
+const gsdUpgradeDropdowns = dd => { const o = { ...(dd || {}) }; const same = (a, b) => Array.isArray(a) && JSON.stringify(a) === JSON.stringify(b);
+  if (same(o.categories, GSD_LEGACY_CATEGORIES)) o.categories = GSD_DEFAULT_CATEGORIES; if (same(o.common, GSD_LEGACY_COMMON)) o.common = GSD_DEFAULT_COMMON; return o; };
 const GSD_DEFAULT_RESPONSIBILITY = ["Site Manager","Maintenance","Contractor","Client"];
 const GSD_DEFAULT_DROPDOWNS = { categories: GSD_DEFAULT_CATEGORIES, common: GSD_DEFAULT_COMMON, responsibility: GSD_DEFAULT_RESPONSIBILITY };
 const GSD_DROPDOWN_LISTS = [
@@ -14502,6 +14508,9 @@ async function exportGSDExcel(project, items, meta) {
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────────────────────────────
+// The app's edit affordance everywhere (AreaManager, ELT / Welder Manage): a small blue-outlined pencil icon button with an accessible name.
+const gsdPencil = (onClick, label) => gsdEl("button", { "aria-label": label, title: label, style: { background: "transparent", border: "1px solid rgba(59,130,246,0.35)", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", lineHeight: 1, cursor: "pointer", flexShrink: 0, color: "#1d4ed8" }, onClick },
+  gsdEl("svg", { viewBox: "0 0 24 24", width: 14, height: 14, fill: "none", stroke: "#1d4ed8", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0 } }, gsdEl("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }), gsdEl("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" })));
 const gsdPriDot = p => p ? gsdEl("span", { "data-testid": "gsd-pri-" + p, title: PRIORITY_LABELS[p], style: { width: 9, height: 9, borderRadius: "50%", background: PRIORITY_COLORS[p], display: "inline-block", flexShrink: 0 } }) : null;
 function GSDApp({ onGoHome }) {
   const [projects, setProjects] = React.useState([]);
@@ -14519,7 +14528,7 @@ function GSDApp({ onGoHome }) {
   React.useLayoutEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view, activeItemId]);
   React.useEffect(() => {
     (async () => {
-      try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); setProjects(p); setAllItems(i); setAllMeta(m); setHistory(h); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...dd }); }
+      try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); setProjects(p); setAllItems(i); setAllMeta(m); setHistory(h); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...gsdUpgradeDropdowns(dd) }); }
       finally { setLoaded(true); }
     })();
   }, []);
@@ -14550,6 +14559,8 @@ function GSDApp({ onGoHome }) {
       setItems(list => [...list, item]); setActiveItemId(item.id); setView("item");
     } catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
   };
+  // Move re-parents the SAME record (its photos and data stay); it goes to the END of the new area, so its # follows the area order
+  const moveItem = (id, areaId) => setItems(list => { const it = list.find(i => i.id === id); return it && it.areaId !== areaId ? [...list.filter(i => i.id !== id), { ...it, areaId }] : list; });
   const addPhotos = async (id, files) => {
     if (!files || !files.length) return;
     try { const photos = await gsdStorePhotos(Array.from(files)); setPhotoError(""); setItems(list => list.map(i => i.id === id ? { ...i, photos: [...(i.photos || []), ...photos] } : i)); }
@@ -14595,11 +14606,10 @@ function GSDApp({ onGoHome }) {
       , view === "home" && project && gsdEl(GSDHomeView, { project, meta, setMeta, items, onStartAudit: goAudit,
           onCompleteAudit: () => { archiveAudit(); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); },
           onReset: () => { gsdPhotoStore.delItems(items); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); } })
-      , view === "audit" && project && gsdEl(GSDAuditView, { project, numbered, meta, photoError, onOpen: id => { setActiveItemId(id); setView("item"); }, onAddDefect: addDefect,
-          onAddArea: name => { if (!name.trim() || gsdAreaTaken(project, name)) return false; setProjects(prev => prev.map(p => p.id === project.id ? { ...p, areas: [...(p.areas || []), { id: uid(), name: name.trim() }] } : p)); return true; } })
+      , view === "audit" && project && gsdEl(GSDAuditView, { project, numbered, meta, photoError, onOpen: id => { setActiveItemId(id); setView("item"); }, onAddDefect: addDefect })
       , view === "item" && project && activeEntry && gsdEl(GSDItemPage, { key: activeEntry.item.id, project, item: activeEntry.item, num: activeEntry.n, dropdowns, photoError,
           onPatch: patch => patchItem(activeEntry.item.id, patch), onAddPhotos: files => addPhotos(activeEntry.item.id, files), onRemovePhoto: p => removePhoto(activeEntry.item.id, p), onMovePhoto: (pid, d) => movePhoto(activeEntry.item.id, pid, d),
-          onAddAnother: files => addDefect(activeEntry.item.areaId, files), onDelete: () => { deleteItem(activeEntry.item.id); setActiveItemId(null); setView("audit"); },
+          onMove: areaId => moveItem(activeEntry.item.id, areaId), onDelete: () => { deleteItem(activeEntry.item.id); setActiveItemId(null); setView("audit"); },
           onClone: areaId => { const nid = cloneItem(activeEntry.item.id, areaId); if (nid) setActiveItemId(nid); }, onClose: () => { setActiveItemId(null); setView("audit"); } })
       , view === "report" && project && gsdEl(GSDReportView, { project, items, meta })
       , view === "manage" && project && gsdEl(GSDManageView, { project, items, onUpdateProject: updated => setProjects(prev => prev.map(p => p.id === updated.id ? updated : p)),
@@ -14670,18 +14680,16 @@ function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAu
     , gsdEl(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => gsdEl("button", { style: SS.resetBtn, onClick: open }, "Reset all test results") }));
 }
 
-function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect, onAddArea }) {
+function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect }) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor && meta.auditor.trim());
   const fileRef = React.useRef(); const pendingArea = React.useRef(null);
-  const [newArea, setNewArea] = React.useState(""); const [areaErr, setAreaErr] = React.useState("");
   if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on the Home tab to begin.");
   const startAdd = areaId => { pendingArea.current = areaId; if (fileRef.current) fileRef.current.click(); };
-  const addArea = () => { if (!newArea.trim()) return; if (onAddArea(newArea)) { setNewArea(""); setAreaErr(""); } else setAreaErr(`"${newArea.trim()}" is already an area`); };
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
     , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 8 } }, photoError)
-    , (project.areas || []).length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13, marginBottom: 10 } }, "No areas yet — add an area below, then add defects to it.")
+    , (project.areas || []).length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13, marginBottom: 10 } }, "No areas yet — add an area in the Manage tab, then add defects to it.")
     , gsdEl("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }
       , (project.areas || []).map(area => {
         const list = numbered.filter(e => e.area.id === area.id);
@@ -14698,21 +14706,27 @@ function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect
                   , gsdEl("span", { style: { fontSize: 14, fontWeight: 600, color: "#18181b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, gsdTitle(item)))
                 , gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [area.name, item.assetLocation].filter(Boolean).join(" — ")))
               , gsdEl("span", { style: { fontSize: 14, color: "#52525b", flexShrink: 0 } }, ">")))));
-      }))
-    , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 16 } }
-      , gsdEl("input", { style: { ...SS.metaInput, flex: 1, minWidth: 0 }, type: "text", value: newArea, placeholder: "Add new area…", "aria-label": "New area name", onChange: e => { setNewArea(e.target.value); setAreaErr(""); } })
-      , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: addArea }, "+ Add Area"))
-    , areaErr && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginTop: 6 } }, areaErr));
+      })));
 }
 
-function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAddPhotos, onRemovePhoto, onMovePhoto, onAddAnother, onDelete, onClone, onClose }) {
+const gsdPill = { padding: "9px 16px", background: GSD_COLOR_DIM, color: GSD_COLOR, border: `1px solid ${GSD_COLOR}`, borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+// One area picker for BOTH Duplicate and Move: the caller decides which areas are offered and what picking does.
+function GSDAreaPicker({ title, areas, currentId, emptyText, onPick, onCancel }) {
+  return gsdEl("div", { role: "group", "aria-label": title, "data-testid": "gsd-area-picker", style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px", marginBottom: 12 } }
+    , gsdEl("div", { style: { fontSize: 12, fontWeight: 800, color: "#18181b", marginBottom: 8 } }, title)
+    , areas.length === 0 && gsdEl("div", { style: { fontSize: 12, color: "#52525b", marginBottom: 8 } }, emptyText)
+    , gsdEl("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 } }, areas.map(a => gsdEl("button", { key: a.id, type: "button", style: gsdPill, onClick: () => onPick(a.id) }, a.name + (a.id === currentId ? " (this area)" : ""))))
+    , gsdEl("button", { type: "button", style: { ...gsdPill, background: "transparent", color: "#52525b", border: "1px solid #d4d4d8" }, onClick: onCancel }, "Cancel"));
+}
+
+function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAddPhotos, onRemovePhoto, onMovePhoto, onMove, onDelete, onClone }) {
   const SS = swbStyles();
   const [r, setR] = React.useState(item);
-  const [cloneTo, setCloneTo] = React.useState((project.areas.find(a => a.id !== item.areaId) || project.areas[0] || {}).id || "");
+  const [picker, setPicker] = React.useState(null);            // null | "duplicate" | "move"
   // Live auto-save (the app-wide standard): every change is written straight to storage — no draft, no Save button.
   const set = patch => { setR(prev => ({ ...prev, ...patch })); onPatch(patch); };
-  const photoRef = React.useRef(); const anotherRef = React.useRef();
-  const area = project.areas.find(a => a.id === r.areaId) || { name: "" };
+  const photoRef = React.useRef();
+  const area = project.areas.find(a => a.id === item.areaId) || { name: "" };
   const catOpts = (dropdowns && dropdowns.categories) || GSD_DEFAULT_CATEGORIES;
   const commonOpts = ((dropdowns && dropdowns.common) || GSD_DEFAULT_COMMON).filter(o => String(o).trim().toLowerCase() !== "other");
   const respOpts = (dropdowns && dropdowns.responsibility) || GSD_DEFAULT_RESPONSIBILITY;
@@ -14723,17 +14737,16 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     set(patch);
   };
   const photos = item.photos || [];
-  const iconBtn = (label, onClick, disabled) => gsdEl("button", { type: "button", "aria-label": label, disabled, style: { width: 30, height: 30, borderRadius: 6, border: "1px solid #d4d4d8", background: "#f7f6f3", color: disabled ? "#a1a1aa" : "#334155", cursor: disabled ? "default" : "pointer", fontSize: 13, flexShrink: 0 }, onClick }, label === "Move photo earlier" ? "◀" : "▶");
+  const arrowBtn = (label, glyph, onClick, disabled) => gsdEl("button", { type: "button", "aria-label": label, disabled, style: { width: 30, height: 30, borderRadius: 6, border: "1px solid #d4d4d8", background: "#f7f6f3", color: disabled ? "#a1a1aa" : "#334155", cursor: disabled ? "default" : "pointer", fontSize: 13, flexShrink: 0 }, onClick }, glyph);
   const field = (lbl, child) => gsdEl("div", { style: SS.modalField }, gsdEl("label", { style: SS.modalLabel }, lbl), child);
   return gsdEl("div", { style: { padding: "16px", background: "#e8e6e2", minHeight: "100%" } }
-    , gsdEl(ELTBackBtn, { onClick: onClose })
     , gsdEl("div", { style: { fontSize: 20, fontWeight: 800, color: "#18181b" } }, `#${num} · ${area.name}`)
     , gsdEl("div", { style: { margin: "14px 0 16px" } }
       , gsdEl("div", { style: { fontSize: 10, color: "#6e6a66", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 } }, "PHOTOS")
       , photos.map((p, i) => gsdEl("div", { key: p.id, "data-testid": "gsd-photo-row", style: { display: "flex", alignItems: "center", gap: 10, width: "100%", minWidth: 0, overflow: "hidden", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 10, padding: 8, marginBottom: 8 } }
         , gsdEl(GSDPhoto, { photo: p, thumb: true, style: { width: 52, height: 52, objectFit: "cover", borderRadius: 6, flexShrink: 0, border: "1px solid #d4d4d8" } })
         , gsdEl("div", { style: { flex: 1, minWidth: 0, fontSize: 12, color: "#52525b" } }, i === 0 ? "Primary photo" : `Photo ${i + 1}`)
-        , iconBtn("Move photo earlier", () => onMovePhoto(p.id, -1), i === 0), iconBtn("Move photo later", () => onMovePhoto(p.id, 1), i === photos.length - 1)
+        , arrowBtn("Move photo up", "▲", () => onMovePhoto(p.id, -1), i === 0), arrowBtn("Move photo down", "▼", () => onMovePhoto(p.id, 1), i === photos.length - 1)
         , gsdEl(DeleteButton, { onDelete: () => onRemovePhoto(p), compact: true })))
       , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 6 } }, photoError)
       , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
@@ -14747,13 +14760,13 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     , field("RESPONSIBILITY", gsdEl(IELEditableDropdown, { options: respOpts, value: r.responsibility || "", onChange: v => set({ responsibility: v }), placeholder: "Select or type…" }))
     , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
     , field("FIX BY DATE (informational)", gsdEl("input", { style: SS.modalInput, type: "date", value: r.dueDate || "", "aria-label": "Fix by date", onChange: e => set({ dueDate: e.target.value }) }))
-    , field("AREA", gsdEl("select", { style: { ...SS.modalInput, width: "100%", minWidth: 0 }, value: r.areaId, "aria-label": "Area", onChange: e => set({ areaId: e.target.value }) }, project.areas.map(a => gsdEl("option", { key: a.id, value: a.id }, a.name))))
-    , gsdEl("input", { ref: anotherRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-another", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddAnother(f); } })
-    , gsdEl("button", { type: "button", style: { width: "100%", padding: "12px", background: GSD_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: "pointer", marginBottom: 10 }, onClick: () => anotherRef.current && anotherRef.current.click() }, `+ Add another defect in ${area.name}`)
-    , project.areas.length > 0 && gsdEl("div", { style: { display: "flex", gap: 8, alignItems: "center", marginBottom: 12, minWidth: 0 } }
-      , gsdEl("select", { style: { ...SS.modalInput, flex: 1, minWidth: 0 }, value: cloneTo, "aria-label": "Duplicate into area", onChange: e => setCloneTo(e.target.value) }, project.areas.map(a => gsdEl("option", { key: a.id, value: a.id }, a.name)))
-      , gsdEl("button", { type: "button", style: { ...SS.smallBtn, flexShrink: 0 }, onClick: () => onClone(cloneTo) }, "Duplicate (no photos)"))
-    , gsdEl("div", { style: { display: "flex", justifyContent: "flex-end" } }, gsdEl(DeleteButton, { onDelete, label: "Delete defect?" })));
+    , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
+    , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
+    , gsdEl("div", { style: { display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", justifyContent: "space-between" } }
+      , gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
+        , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "duplicate" ? null : "duplicate") }, "Duplicate")
+        , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "move" ? null : "move") }, "Move"))
+      , gsdEl(DeleteButton, { onDelete, label: "Delete defect?" })));
 }
 
 function GSDReportView({ project, items, meta }) {
@@ -14772,6 +14785,7 @@ function GSDReportView({ project, items, meta }) {
       , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, letterSpacing: 0.8, marginBottom: 6, textTransform: "uppercase" } }, sec.area.name, " · ", nw(sec.entries.length, "defect"))
       , sec.entries.map(e => gsdEl("div", { key: e.item.id, style: { background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 10, padding: "8px 12px", marginBottom: 6 } }
         , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#18181b" } }, `#${e.n}`, gsdPriDot(e.item.priority), gsdTitle(e.item))
+        , (e.item.description || "").trim() && e.item.description.trim() !== gsdTitle(e.item) && gsdEl("div", { style: { fontSize: 12, color: "#3f3f46", marginTop: 2, whiteSpace: "pre-wrap" } }, e.item.description.trim())
         , e.item.assetLocation && gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, e.item.assetLocation)
         , e.detail && gsdEl("div", { style: { fontSize: 11, color: "#6e6a66", marginTop: 2 } }, e.detail))))));
 }
@@ -14795,7 +14809,7 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
           , gsdEl("button", { style: { padding: "9px 14px", background: "transparent", color: "#6e6a66", border: "1px solid #d4d4d8", borderRadius: 8, fontSize: 13, cursor: "pointer" }, onClick: () => setEditingProject(false) }, "Cancel")))
       : gsdEl("div", { style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" } }
         , gsdEl("div", null, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: "#18181b" } }, project.name), project.company && gsdEl("div", { style: { fontSize: 12, color: "#6e6a66", marginTop: 2 } }, project.company))
-        , gsdEl("button", { "aria-label": "Edit site details", style: { ...SS.smallBtn, flexShrink: 0 }, onClick: () => { setVals({ name: project.name, company: project.company || "", abn: project.abn || "", licence: project.licence || "" }); setEditingProject(true); } }, "Edit"))
+        , gsdPencil(() => { setVals({ name: project.name, company: project.company || "", abn: project.abn || "", licence: project.licence || "" }); setEditingProject(true); }, "Edit site details"))
     , gsdEl("div", { style: { fontSize: 10, color: "#6e6a66", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 } }, "AREAS")
     , areas.map(a => {
       const n = items.filter(i => i.areaId === a.id).length;
@@ -14803,7 +14817,7 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
         , renaming === a.id
           ? gsdEl(React.Fragment, null, gsdEl("input", { style: { ...SS.metaInput, flex: 1, minWidth: 0 }, value: renameVal, "aria-label": "Rename area", onChange: e => setRenameVal(e.target.value) }), gsdEl("button", { style: SS.smallBtn, onClick: () => saveRename(a) }, "Save"), gsdEl("button", { style: SS.smallBtn, onClick: () => { setRenaming(null); setErr(""); } }, "Cancel"))
           : gsdEl(React.Fragment, null, gsdEl("div", { style: { flex: 1, minWidth: 0 } }, gsdEl("div", { style: { fontSize: 14, fontWeight: 600, color: "#18181b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, a.name), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, nw(n, "defect")))
-            , gsdEl("button", { style: { ...SS.smallBtn, flexShrink: 0 }, "aria-label": `Rename ${a.name}`, onClick: () => { setRenaming(a.id); setRenameVal(a.name); } }, "Rename")
+            , gsdPencil(() => { setRenaming(a.id); setRenameVal(a.name); }, `Rename area ${a.name}`)
             , gsdEl(DeleteButton, { onDelete: () => { onRemoveArea(a.id); onUpdateProject({ ...project, areas: areas.filter(x => x.id !== a.id) }); }, label: "Remove area and its defects?", compact: true })));
     })
     , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10 } }
@@ -14839,6 +14853,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 }
 
 
-export { GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
