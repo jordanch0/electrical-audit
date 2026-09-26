@@ -189,10 +189,13 @@ function xjSheet(wb, name, o) {
   });
   if (!o.rows.length && o.emptyText) put(6, 1, o.emptyText);
   (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
-  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  // A date is written as "dd/mm/yyyy" TEXT in a wrapping cell, and Excel / Sheets break it at a "/" if the column is even slightly tight (their
+  // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = /^(Date|Next Test)/.test(o.headers[i]) ? Math.max(w, XJ_DATE_W) : w; });
   xjPageSetup(ws, o.landscape !== false, 5);
   return ws;
 }
+const XJ_DATE_W = 13;   // fits "21/09/2026" (10 characters) on ONE line with a margin for Excel / Google Sheets metrics
 const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
 // Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
 // o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
@@ -4535,7 +4538,7 @@ async function exportTATExcel(project, results, meta) {
       const st = item.status || TAT_STATUS.UNTESTED;
       const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
-      const nextDue = item.lastTested ? addTATMonths(item.lastTested, parseInt(areaFreq)) : "";
+      const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
       rows.push({
         cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
         defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,

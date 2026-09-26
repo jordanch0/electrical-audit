@@ -8,11 +8,11 @@ import { exportIELExcel, exportThermoExcel, exportTATExcel, exportExcel } from '
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
 afterEach(() => { delete window.webkit; });
-const meta = { auditor: 'Jane', testDate: '2026-09-21', nextTestDate: '2027-09-21' };
+const meta = { auditor: 'Jane', testDate: '2026-09-21', nextTestDate: '2027-09-21', pushDate: '2026-09-21', injectDate: '2026-09-21' };
 const load = async () => { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64')); return wb; };
 const argb = c => c && c.fill && c.fill.fgColor && c.fill.fgColor.argb;
 const PALETTE = { pass: 'FFE2EFDA', fail: 'FFFFC7CE', na: 'FFD9D9D9', monitor: 'FFFFD966', white: 'FFFFFFFF', zebra: 'FFF5F5F5', U: 'FF9B0000', H: 'FFFFC7CE', M: 'FFFFD966', L: 'FFE2EFDA' };
-const failD = (i, priority) => ({ defectId: 'D-' + i, rectified: 'Scheduled for Repair', responsibility: 'Client', priority });
+const failD = (i, priority) => ({ lastTested: '2026-09-21', defectId: 'D-' + i, rectified: 'Scheduled for Repair', responsibility: 'Client', priority });
 
 // [module, run(), main sheet, expected result-column heading, [expected Pass/Fail text per data row]]
 const ielProject = { id: 'p', name: 'Site I', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'p1', name: 'estops', circuits: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], machineNames: { a: 'M1', b: 'M2', c: 'M3', d: 'M4', e: 'M5', f: 'M6', g: 'M7' } }] }] };
@@ -88,6 +88,23 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
     const seen = {}; for (let r = 6; r < 10; r++) seen[String(ws.getCell(r, col).value)] = ws.getCell(r, col);
     ['U', 'H', 'M', 'L'].forEach(p => expect(argb(seen[p]), p).toBe(PALETTE[p]));
     expect(seen.U.font.color.argb).toBe('FFFFFFFF'); expect(seen.U.font.bold).toBe(true);           // urgent = white bold on dark red
+  });
+
+  it('every DATE column is wide enough for a full "dd/mm/yyyy" on ONE line (dates are wrapping TEXT cells; Excel / Sheets break a tight one at the "/")', async () => {
+    await run(); const wb = await load(); let checked = 0;
+    for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
+      ws.getRow(5).values.forEach((h, col) => {
+        if (!/^(Date|Next Test)/.test(String(h))) return;
+        // 10 characters + a 30% margin for other apps' font metrics; the column width is what the file declares
+        expect(ws.getColumn(col).width, `${ws.name} / "${h}"`).toBeGreaterThanOrEqual(13);
+        for (let r = 6; r < ws.rowCount + 1; r++) {
+          const v = ws.getCell(r, col).value; if (v == null || v === '') continue;
+          expect(String(v), `${ws.name} / "${h}" r${r}`).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);   // plain 10-character text, never a longer date-time string
+          checked++;
+        }
+      });
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 
   it('page setup is NATIVE in the file: A4, landscape, fit to 1 page wide, heading row repeated, footer', async () => {
