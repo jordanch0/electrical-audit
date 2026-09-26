@@ -220,3 +220,15 @@ describe('xlPrintify itself', () => {
     expect((await zip.file('xl/workbook.xml').async('string')).match(/_xlnm.Print_Titles/g)).toHaveLength(1);
   });
 });
+
+describe('TAT Frequency column: the plain interval only', () => {
+  it('shows exactly "1 Month" / "3 Months" / "6 Months" / "12 Months" / "2 Months" — no site-type description joined on — and is narrow', async () => {
+    const p = { ...tatProject, areas: [{ ...tatProject.areas[0], items: ['a', 'b', 'c', 'd', 'e'], itemNames: { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' }, itemTags: {}, itemFreqs: { a: '1', b: '3', c: '6', d: '12', e: '2' } }] };
+    await exportTATExcel(p, {}, meta);
+    const wb = readWb(); const g = grid(wb, wb.SheetNames[0]); const fc = g[4].indexOf('Frequency');
+    expect(g.slice(5).filter(r => /^\d+$/.test(r[0])).map(r => r[fc])).toEqual(['1 Month', '3 Months', '6 Months', '12 Months', '2 Months']);
+    expect(JSON.stringify(g)).not.toMatch(/Construction|Hire|Demolition|Warehouse|Hostile/);
+    const zip = await readZip(); const xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
+    expect(widthsOf(xml)[fc]).toBeLessThan(11);                                       // narrowed to fit "12 Months" (heading "Frequency" is 9)
+  });
+});

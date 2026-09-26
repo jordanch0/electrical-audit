@@ -4458,6 +4458,8 @@ function tatDS(ri,pf,priority=""){
 }
 function tatSetCell(ws,ref,value,style){const t=typeof value==="number"?"n":"s";ws[ref]={v:value!=null?value:"",t,s:style};}
 
+// Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
+const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
 async function exportTATExcel(project, results, meta) {
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
@@ -4476,7 +4478,7 @@ async function exportTATExcel(project, results, meta) {
       const areaFreq = (area.itemFreqs || {})[itemId] || item.freq || "3";
       const st = item.status || TAT_STATUS.UNTESTED;
       const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
-      const freqLabel = TAT_FREQUENCIES.find(f => f.value === areaFreq)?.label || `${areaFreq} Months`;
+      const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? addTATMonths(item.lastTested, parseInt(areaFreq)) : "";
       rows.push({
         cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
@@ -4489,7 +4491,7 @@ async function exportTATExcel(project, results, meta) {
     meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
     headers: ["Area", "Asset ID / Tag", "Description", "Equip. Type", "Visual Insp.", "Pass / Fail", "Date Tested", "Frequency", "Next Test Due", "Notes / Comments"],
-    widths: [16, 15, 24, 13, 13, 10, 13, 11, 15, 24],
+    widths: [16, 15, 24, 13, 13, 10, 13, 10, 15, 24],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
