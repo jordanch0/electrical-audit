@@ -14479,6 +14479,40 @@ function GSDApp({ onGoHome }) {
     const copy = { ...src, id: uid(), areaId, photos: [] };
     setItems(list => [...list, copy]); return copy.id;
   };
+  const [historyError, setHistoryError] = React.useState("");
+  const continueFromSnap = async snap => {
+    const copied = [];
+    try {
+      // areas the snapshot used that no longer exist are restored (by id, or mapped to a same-named area) so no defect ends up in a missing area
+      const areaMap = {}; const addAreas = [];
+      (snap.areas || []).forEach(a => {
+        if ((project.areas || []).some(x => x.id === a.id)) { areaMap[a.id] = a.id; return; }
+        const same = [...(project.areas || []), ...addAreas].find(x => gsdAreaKey(x.name) === gsdAreaKey(a.name));
+        if (same) { areaMap[a.id] = same.id; return; }
+        addAreas.push({ id: a.id, name: a.name }); areaMap[a.id] = a.id;
+      });
+      const newItems = [];
+      for (const it of (snap.items || [])) {
+        const photos = [];
+        for (const p of (it.photos || [])) {
+          const full = await gsdPhotoStore.get(p.id); if (!full) continue;                    // a photo whose record is gone is dropped, never left dangling
+          const thumb = await gsdPhotoStore.get(p.id + "~t"); const nid = uid();
+          copied.push({ id: nid }); await gsdPhotoStore.put(nid, full); if (thumb) await gsdPhotoStore.put(nid + "~t", thumb);
+          photos.push({ id: nid, w: p.w, h: p.h });
+        }
+        newItems.push({ ...JSON.parse(JSON.stringify(it)), areaId: areaMap[it.areaId] || it.areaId, photos });
+      }
+      // only now (everything copied) is the current audit discarded — a failure above leaves it untouched
+      gsdPhotoStore.delItems(items);
+      if (addAreas.length) setProjects(prev => prev.map(p => p.id === project.id ? { ...p, areas: [...(p.areas || []), ...addAreas] } : p));
+      setAllItems(prev => ({ ...prev, [activeProject]: newItems }));
+      setAllMeta(prev => ({ ...prev, [activeProject]: { ...snap.meta } }));
+      setHistoryError(""); setViewSnap(null); setView("audit");
+    } catch (_) {
+      await Promise.all(copied.map(p => gsdPhotoStore.delPhoto(p)));                           // roll back the copies made so far
+      setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");
+    }
+  };
   const dropSite = pid => { gsdPhotoStore.delItems(allItems[pid] || []); history.filter(h => h.projectId === pid).forEach(h => gsdPhotoStore.delItems(h.items)); };
   const archiveAudit = () => {
     const snap = { id: uid(), projectId: activeProject, projectName: (project && project.name) || "", testDate: meta.testDate || "", auditor: meta.auditor || "", archivedAt: new Date().toISOString(), items: JSON.parse(JSON.stringify(items)), areas: JSON.parse(JSON.stringify((project && project.areas) || [])), meta: { ...meta } };
@@ -14521,7 +14555,7 @@ function GSDApp({ onGoHome }) {
       , view === "dropdowns" && project && gsdEl(SWBDropdownsView, { dropdowns, setDropdowns, onBack: goHome, lists: GSD_DROPDOWN_LISTS, hint: GSD_DROPDOWN_HINT, showDefault: true, reserved: ["Other"] })
       , view === "history" && project && gsdEl(GSDHistoryView, { history: history.filter(h => h.projectId === activeProject), project, viewSnap, setViewSnap,
           onDelete: id => { const h = history.find(x => x.id === id); if (h) gsdPhotoStore.delItems(h.items); setHistory(prev => prev.filter(x => x.id !== id)); },
-          onExportSnap: snap => exportGSDExcel({ ...project, areas: snap.areas || project.areas }, snap.items || [], snap.meta || {}) }))
+          onExportSnap: snap => exportGSDExcel({ ...project, areas: snap.areas || project.areas }, snap.items || [], snap.meta || {}), onContinueFromSnap: continueFromSnap, error: historyError }))
     , view !== "projects" && gsdEl("nav", { style: SS.bottomNav }
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_HOME, label: "Home", active: view === "home", onClick: goHome, color: "#334155" })
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_AUDIT, label: "Audit", active: ["audit", "item"].includes(view), onClick: goAudit, color: "#334155" })
@@ -14748,7 +14782,7 @@ function GSDSummaryPills({ defects, urgent, photos }) {
       gsdEl("div", { key: l, style: { flex: 1, minWidth: 90, background: "#f7f6f3", border: `1px solid ${col}33`, borderRadius: 8, padding: "6px 12px", textAlign: "center" } }
         , gsdEl("div", { style: { fontSize: 18, fontWeight: 800, color: col } }, v), gsdEl("div", { style: { fontSize: 10, color: "#6e6a66" } }, l))));
 }
-function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onExportSnap }) {
+function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error }) {
   const SS = swbStyles();
   const [expanded, setExpanded] = React.useState(null);
   if (viewSnap) {
@@ -14769,6 +14803,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
   }
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("div", { style: { ...SS.listTitle, color: "#334155" } }, "Audit History")
+    , error && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 8 } }, error)
     , history.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No archived audits yet. Use “Complete Site Defects Audit” on the Home tab.")
     , history.map(snap => {
       const n = (snap.items || []).length, urgent = gsdHighUrgent(snap.items), photos = gsdPhotoCount(snap.items); const open = expanded === snap.id;
@@ -14789,6 +14824,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
           , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" } }
             , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b", fontWeight: 700 }, onClick: () => setViewSnap(snap) }, "View Results")
             , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b" }, onClick: () => onExportSnap(snap) }, "Export")
+            , gsdEl(ContinueConfirmBtn, { onConfirm: () => onContinueFromSnap(snap), styleObj: SS.smallBtn, color: GSD_COLOR })
             , gsdEl(DeleteButton, { onDelete: () => onDelete(snap.id) }))));
     }));
 }

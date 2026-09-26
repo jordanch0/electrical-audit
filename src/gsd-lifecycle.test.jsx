@@ -126,11 +126,11 @@ describe('GSD History matches ELT: accordion cards, View Results / Export / Dele
     cleanup(); localStorage.setItem('gsd-history-v1', JSON.stringify([{ ...JSON.parse(localStorage.getItem('gsd-history-v1'))[0], items: [mk('i9', 'a1', [], { priority: 'L' })] }]));
     await open(userEvent.setup(), 'History'); expect(within(await screen.findByTestId('gsd-history-card')).queryByText(/HIGH \/ URGENT$/)).not.toBeInTheDocument();       // no badge at zero
   });
-  it('tapping a card expands it (▾) to View Results, Export and the full Delete — and NO Continue; opening another card collapses the first', async () => {
+  it('tapping a card expands it (▾) to View Results, Export, Continue and the full Delete (exactly ELT\'s four); opening another card collapses the first', async () => {
     await seedHistory(2); const user = userEvent.setup(); await open(user, 'History');
     const [a, b] = await screen.findAllByTestId('gsd-history-card');
     await user.click(within(a).getByRole('button', { expanded: false })); expect(within(a).getByRole('button', { name: 'View Results' })).toBeInTheDocument(); expect(within(a).getByRole('button', { name: 'Export' })).toBeInTheDocument();
-    expect(within(a).queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument(); expect(within(a).getAllByRole('button').some(x => x.textContent === '' && x.querySelector('svg'))).toBe(true);   // the bin
+    expect(within(a).getByRole('button', { name: /Continue/ })).toBeInTheDocument(); expect(within(a).getAllByRole('button').some(x => x.textContent === '' && x.querySelector('svg'))).toBe(true);   // the bin
     await user.click(within(b).getByRole('button', { expanded: false })); expect(within(b).getByRole('button', { name: 'Export' })).toBeInTheDocument(); expect(within(a).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     await user.click(within(b).getByRole('button', { expanded: true })); expect(within(b).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();      // tap again to collapse
   });
@@ -158,6 +158,83 @@ describe('GSD History matches ELT: accordion cards, View Results / Export / Dele
     await user.click(screen.getByRole('button', { name: /Continue/ })); expect(screen.getByText(/replace your current audit/i)).toBeInTheDocument();
     const bin = screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg') && !b.getAttribute('aria-label')).pop(); await user.click(bin);
     expect(screen.queryByText(/replace your current audit/i)).not.toBeInTheDocument(); expect(screen.getByText('Delete?')).toBeInTheDocument();                // opening another prompt collapses it
+  });
+});
+
+// ── Continue: ELT's mechanism (replace the current audit with a deep COPY of the snapshot, restore its meta, go to Audit) — with the photo RECORDS copied, never shared ──
+describe('GSD History: Continue', () => {
+  const keysFor = async ids => (await idbKeys()).filter(k => ids.some(id => k === id || k === id + '~t'));
+  const clickContinue = async user => { await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false })); await user.click(screen.getByRole('button', { name: /Continue/ })); };
+  async function seedContinue({ withActive = true } = {}) {
+    seedSite(['Concrete Plant', 'Workshop']);
+    const snapItems = [mk('s1i', 'a1', [[300, 400], [400, 300]], { description: 'Archived one' }), mk('s2i', 'a2', [], { description: 'Archived two' })];
+    const actItems = withActive ? [mk('act', 'a1', [[500, 500]], { description: 'Live defect' })] : [];
+    await seedPhotos(snapItems); await seedPhotos(actItems);
+    localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: actItems }));
+    localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor: 'Now Auditor', testDate: '2026-10-05' } }));
+    localStorage.setItem('gsd-history-v1', JSON.stringify([{ id: 'h1', projectId: 's1', projectName: 'Site G', testDate: '2026-09-21', auditor: 'Jane', archivedAt: '2026-09-22T10:00:00.000Z', items: JSON.parse(JSON.stringify(snapItems)), areas: [{ id: 'a1', name: 'Concrete Plant' }, { id: 'a2', name: 'Workshop' }], meta: { auditor: 'Jane', testDate: '2026-09-21', nextTestDate: '2027-09-21' } }]));
+    return { snapItems, actItems, snapPhotoIds: snapItems.flatMap(i => i.photos.map(p => p.id)), actPhotoIds: actItems.flatMap(i => i.photos.map(p => p.id)) };
+  }
+  it('asks first ("replace your current audit"); Cancel and an outside click leave everything as it was', async () => {
+    const s = await seedContinue(); const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user);
+    expect(screen.getByText(/replace your current audit/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' })); expect(screen.queryByText(/replace your current audit/i)).not.toBeInTheDocument();
+    expect(ls('gsd-items-v1').s1.map(i => i.id)).toEqual(['act']); expect(await keysFor(s.actPhotoIds)).toHaveLength(2);
+  });
+  it('restores the snapshot as the live audit (a copy: same defects and fields, its meta back), replaces the current one, and opens the Audit tab', async () => {
+    const s = await seedContinue(); const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user);
+    await user.click(screen.getByRole('button', { name: /Yes, Continue/ }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1.map(i => i.id)).toEqual(['s1i', 's2i']));
+    const live = ls('gsd-items-v1').s1; expect(live.map(i => i.description)).toEqual(['Archived one', 'Archived two']); expect(live[0].photos).toHaveLength(2); expect(live[1].photos).toHaveLength(0);
+    expect(ls('gsd-meta-v1').s1).toMatchObject({ auditor: 'Jane', testDate: '2026-09-21', nextTestDate: '2027-09-21' });
+    expect(await screen.findByRole('button', { name: 'Add defect to Concrete Plant' })).toBeInTheDocument();                       // on the Audit tab
+    expect(screen.getAllByTestId('gsd-card').map(c => c.textContent)).toEqual([expect.stringContaining('Archived one'), expect.stringContaining('Archived two')]);
+    expect(ls('gsd-history-v1')).toHaveLength(1);                                                                                     // the snapshot itself stays
+    expect(await keysFor(s.actPhotoIds)).toEqual([]);                                                                                 // the replaced live audit's photos are gone (ELT discards them too)
+  });
+  it('PHOTO INTEGRITY: the live audit gets its OWN copies (new ids, same bytes and sizes); the snapshot keeps its originals; nothing is lost or duplicated', async () => {
+    const s = await seedContinue(); const before = await gsdPhotoStore.get(s.snapPhotoIds[0]);
+    const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user); await user.click(screen.getByRole('button', { name: /Yes, Continue/ }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1.map(i => i.id)).toEqual(['s1i', 's2i']));
+    const live = ls('gsd-items-v1').s1[0].photos; const snap = ls('gsd-history-v1')[0].items[0].photos;
+    expect(live).toHaveLength(2); expect(live.map(p => p.id).filter(id => snap.some(q => q.id === id))).toEqual([]);                  // no shared ids
+    expect(live.map(p => [p.w, p.h])).toEqual(snap.map(p => [p.w, p.h]));                                                             // sizes carried over
+    const copy = await gsdPhotoStore.get(live[0].id); expect(new Uint8Array(copy.buf)).toEqual(new Uint8Array(before.buf)); expect(copy.type).toBe(before.type);        // same bytes
+    expect(await gsdPhotoStore.get(live[0].id + '~t')).toBeTruthy();                                                                  // thumbnail copied too
+    expect(await keysFor(s.snapPhotoIds)).toHaveLength(4);                                                                            // originals intact
+    expect(await keysFor(live.map(p => p.id))).toHaveLength(4);                                                                       // exactly one copy each (full + thumb): 2 photos -> 4 records
+    expect((await idbKeys()).length).toBe(8);                                                                                         // 2 originals + 2 copies, x (full + thumb) — nothing extra
+  });
+  it('the copy and the snapshot are INDEPENDENT: deleting the snapshot keeps the live photos; resetting the live audit keeps the snapshot photos', async () => {
+    const s = await seedContinue({ withActive: false }); const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user); await user.click(screen.getByRole('button', { name: /Yes, Continue/ }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1).toHaveLength(2)); const liveIds = ls('gsd-items-v1').s1[0].photos.map(p => p.id);
+    await user.click(screen.getByRole('button', { name: 'History' })); await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false }));
+    await user.click(bins()[bins().length - 1]); await screen.findByText('Delete?'); { const bs = screen.getAllByRole('button'); await user.click(bs[bs.findIndex(b => b.textContent === 'Keep') - 1]); }
+    await waitFor(() => expect(ls('gsd-history-v1')).toEqual([]));
+    expect(await keysFor(s.snapPhotoIds)).toEqual([]); expect(await keysFor(liveIds)).toHaveLength(4);                                // snapshot gone, live copies survive
+  });
+  it('an area the snapshot used that no longer exists is restored (or mapped to a same-named one), so no defect is orphaned', async () => {
+    const s = await seedContinue({ withActive: false });
+    localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'x9', name: 'workshop' }] }]));          // a1 deleted; a2 (Workshop) re-created under another id
+    const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user); await user.click(screen.getByRole('button', { name: /Yes, Continue/ }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1).toHaveLength(2));
+    const areas = ls('gsd-projects-v1')[0].areas; expect(areas.map(a => a.name)).toEqual(['workshop', 'Concrete Plant']);          // Concrete Plant restored; Workshop NOT duplicated
+    const live = ls('gsd-items-v1').s1; expect(live[0].areaId).toBe('a1'); expect(live[1].areaId).toBe('x9');                          // mapped to the existing same-named area
+    expect(live.every(i => areas.some(a => a.id === i.areaId))).toBe(true); expect(s.snapPhotoIds.length).toBe(2);
+  });
+  it('a snapshot photo whose record is missing is dropped from the copy (never a dangling id)', async () => {
+    const s = await seedContinue({ withActive: false }); await gsdPhotoStore.del(s.snapPhotoIds[1]); await gsdPhotoStore.del(s.snapPhotoIds[1] + '~t');
+    const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user); await user.click(screen.getByRole('button', { name: /Yes, Continue/ }));
+    await waitFor(() => expect(ls('gsd-items-v1').s1).toHaveLength(2)); expect(ls('gsd-items-v1').s1[0].photos).toHaveLength(1);
+  });
+  it('a storage failure while copying rolls back: the current audit is untouched, no stray records, and the reason is shown', async () => {
+    const s = await seedContinue(); const orig = gsdPhotoStore.put; let n = 0;
+    const user = userEvent.setup(); await open(user, 'History'); await clickContinue(user); const before = (await idbKeys()).length;
+    gsdPhotoStore.put = async (...a) => { if (++n === 2) throw new Error('quota'); return orig(...a); };
+    try { await user.click(screen.getByRole('button', { name: /Yes, Continue/ })); expect(await screen.findByText(/Could not continue this audit/)).toBeInTheDocument(); }
+    finally { gsdPhotoStore.put = orig; }
+    expect(ls('gsd-items-v1').s1.map(i => i.id)).toEqual(['act']); expect(ls('gsd-meta-v1').s1.auditor).toBe('Now Auditor'); expect(await keysFor(s.actPhotoIds)).toHaveLength(2);
+    expect((await idbKeys()).length).toBe(before);                                                                                    // every partial copy was removed
   });
 });
 
