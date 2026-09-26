@@ -1099,7 +1099,6 @@ const pushSum=summariseProject(results,project,"push");
 const injectSum=summariseProject(results,project,"inject");
 const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.fail+pushSum.na)/pushSum.total)*100):0;
 const injectPct=injectSum.total>0?Math.round(((injectSum.pass+injectSum.fail+injectSum.na)/injectSum.total)*100):0;
-const [confirmReset,setConfirmReset]=React.useState(false);
 const hasAuditor=!!(meta&&meta.auditor&&meta.auditor.trim());
 return (
 React.createElement('div', { style: S.homeWrap,}
@@ -1157,9 +1156,7 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('div', { style: {fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "COMPLETE ACTIVE AUDIT")
 , React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#a3530f":activeMode==="inject"?"#1d4ed8":"#a3530f", label:activeMode==="push"?"Complete Push Test":activeMode==="inject"?"Complete Injection Test":"Complete RCD Audit", onComplete:onCompleteAudit})
 )
-, confirmReset
-?React.createElement('div', { style: S.confirmRow,}, React.createElement('span', { style: {color:"#dc2626",fontSize:13},}, "Reset all results?"  ), React.createElement('button', { style: S.confirmYes, onClick: ()=>{onReset();setConfirmReset(false);},}, "Yes"), React.createElement('button', { style: S.confirmNo, onClick: ()=>setConfirmReset(false),}, "Cancel"))
-:React.createElement('button', { style: S.resetBtn, onClick: ()=>setConfirmReset(true),}, "Reset all test results"   )
+, React.createElement(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => React.createElement('button', { style: S.resetBtn, onClick: open }, "Reset all test results") })
 )
 );
 }
@@ -2866,7 +2863,6 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
 function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onCompleteAudit,activeCatKey,auditEntered,lastArchivedAt}){
-  const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
@@ -2915,9 +2911,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:"Complete IEL Audit",onComplete:onCompleteAudit})
     )
-    ,confirmReset
-      ?React.createElement('div',{style:SI.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SI.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SI.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
+    ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );
 }
 
@@ -4910,7 +4904,6 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // T&T HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
 function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,auditEntered,onCompleteAudit}){
-  const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   return React.createElement('div',{style:ST.homeWrap}
@@ -4956,13 +4949,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:"Complete Test & Tag Audit",onComplete:onCompleteAudit})
     )
-    ,confirmReset
-      ?React.createElement('div',{style:{...ST.confirmRow,width:"100%",maxWidth:500}}
-        ,React.createElement('span',{style:{color:"#dc2626",fontSize:13,flex:1}},"Reset all test results?")
-        ,React.createElement('button',{style:ST.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes")
-        ,React.createElement('button',{style:ST.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
-      )
-      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
+    ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );
 }
 
@@ -7142,7 +7129,6 @@ function ThermoHomeView({
   auditEntered,
   onCompleteAudit
 }) {
-  const [confirmReset, setConfirmReset] = React.useState(false);
   const photoCount = sitePhotoCount(results, project);
   const hasFail = siteHasFail(results, project);
   const hasAuditor = !!(meta.auditor && meta.auditor.trim());
@@ -7281,41 +7267,21 @@ function ThermoHomeView({
     }
   }, "COMPLETE ACTIVE AUDIT"), /*#__PURE__*/React.createElement(ThermoCompleteAuditBtn, {
     onComplete: onCompleteAudit
-  })), confirmReset ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      flexWrap: "wrap",
-      width: "100%",
-      maxWidth: 500
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#dc2626",
-      fontSize: 13,
-      flex: 1
-    }
-  }, "Reset all photo logs?"), /*#__PURE__*/React.createElement("button", {
-    style: STH.confirmYes,
-    onClick: () => {
-      onReset();
-      setConfirmReset(false);
-    }
-  }, "Yes"), /*#__PURE__*/React.createElement("button", {
-    style: STH.confirmNo,
-    onClick: () => setConfirmReset(false)
-  }, "Cancel")) : /*#__PURE__*/React.createElement("button", {
-    style: {
-      background: "transparent",
-      border: "none",
-      color: "#52525b",
-      fontSize: 12,
-      cursor: "pointer",
-      textDecoration: "underline"
-    },
-    onClick: () => setConfirmReset(true)
-  }, "Reset all photo logs"));
+  })), /*#__PURE__*/React.createElement(ConfirmReset, {
+    onConfirm: onReset,
+    prompt: "Reset all photo logs?",
+    renderIdle: open => /*#__PURE__*/React.createElement("button", {
+      style: {
+        background: "transparent",
+        border: "none",
+        color: "#52525b",
+        fontSize: 12,
+        cursor: "pointer",
+        textDecoration: "underline"
+      },
+      onClick: open
+    }, "Reset all photo logs")
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -10291,7 +10257,6 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditEntered}) {
   const SS=swbStyles();
-  const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round((summary.pass+summary.fail+summary.na)/summary.total*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?swbAddYear(testDate):"";
@@ -10334,9 +10299,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(SWBCompleteAuditBtn,{onComplete:onCompleteAudit})
     )
-    ,confirmReset
-      ?React.createElement('div',{style:SS.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SS.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:SS.resetBtn,onClick:()=>setConfirmReset(true)},"Reset all test results")
+    ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
@@ -10350,7 +10313,6 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
   const SS=swbStyles();
   const bs=swbBoardSummary(results,project.id,area.id,board.id);
   const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
-  const [confirmReset,setConfirmReset]=React.useState(false);
   const [photos,setPhotosL]=React.useState(swbGetBoardPhotos(results,project.id,area.id,board.id));
   const photoInputRef=React.useRef();
   const addPhotos=async e=>{
@@ -10384,13 +10346,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
         )
       )
       ,bs.untested<SWB_CHECKLIST.length&&React.createElement('div',{style:{marginTop:10}}
-        ,confirmReset
-          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8}}
-            ,React.createElement('span',{style:{fontSize:12,color:"#991b1b",flex:1}},"Reset all results for this board?")
-            ,React.createElement('button',{style:SS.confirmYes,onClick:()=>{onResetBoard();setConfirmReset(false);}},"Yes")
-            ,React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
-          )
-          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")
+        ,React.createElement(ConfirmReset,{onConfirm:onResetBoard,prompt:"Reset all results for this board?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:open},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")})
       )
     )
     ,React.createElement('div',{style:{marginBottom:16}}
@@ -12454,7 +12410,6 @@ function IRTAreaListView({project,results,onSelect}){
 // ─── Home view — mirrors SWBHomeView exactly ──────────────────────────────
 function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditEntered}){
   const SS=irtStyles();
-  const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?irtAddYear(testDate):"";
@@ -12481,9 +12436,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       React.createElement("div",{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT"),
       React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit})
     ),
-    confirmReset
-      ?React.createElement('div',{style:SS.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SS.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:SS.resetBtn,onClick:()=>setConfirmReset(true)},"Reset all test results")
+    React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
@@ -14874,6 +14827,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 }
 
 
-export { gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
