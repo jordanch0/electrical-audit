@@ -627,6 +627,17 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
 // Two-step confirm for every "Reset to defaults" button. Resetting a dropdown list silently discarded any customised
 // options, so it now asks first. Same one-prompt-open-at-a-time rule as DeleteButton. renderIdle(open) draws the
 // module's own idle button so its styling is unchanged.
+// ONE rule for "add an option" on every Dropdowns tab: trimmed; an option that ALREADY exists (case-insensitive) is REFUSED with a notice — never silently moved
+// to the end (that used to change the ★ default when the moved option was first) — and a reserved word (ELT's "Other") is refused as "already built in".
+// Returns { empty:true } | { notice } | { items } (the new list). The caller keeps the typed text when refused so it can be edited.
+function dropdownAdd(items, raw, reserved) {
+  const v = String(raw == null ? "" : raw).trim(); if (!v) return { empty: true };
+  const key = v.toLowerCase();
+  const hit = (reserved || []).find(r => r.toLowerCase() === key); if (hit) return { notice: `${hit} is already built in` };
+  const dup = (items || []).find(x => String(x).toLowerCase() === key); if (dup !== undefined) return { notice: `"${dup}" is already in the list` };
+  return { items: [...(items || []), v] };
+}
+function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#dc2626" } }, text) : null; }
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
   const open = () => {
@@ -1353,6 +1364,7 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 // ─────────────────────────────────────────────────────────────────────────
 function SettingsView({ dropdowns, setDropdowns, logo, setLogo, onBack }) {
 const [newVals, setNewVals] = React.useState({});
+const [notice, setNotice] = React.useState({});
 const logoRef = React.useRef();
 const handleLogoUpload = e => {
 const file = e.target.files[0]; if(!file) return;
@@ -1362,8 +1374,11 @@ reader.readAsDataURL(file);
 e.target.value = "";
 };
 const addItem = (key,val) => {
-if(!val.trim()) return;
-setDropdowns(d => ({...d,[key]:[...((_nullishCoalesce(d[key], () => ([]))).filter(x=>x!==val.trim())),val.trim()]}));
+const r = dropdownAdd((dropdowns&&dropdowns[key])||[], val);
+if(r.empty) return;
+if(r.notice){ setNotice(n=>({...n,[key]:r.notice})); return; }
+setNotice(n=>({...n,[key]:""}));
+setDropdowns(d => ({...d,[key]:r.items}));
 setNewVals(v => ({...v,[key]:""}));
 };
 const removeItem = (key,val) => setDropdowns(d => ({...d,[key]:(_nullishCoalesce(d[key], () => ([]))).filter(x=>x!==val)}));
@@ -1407,12 +1422,13 @@ return React.createElement('div', { key: i, style: {display:"flex",alignItems:"c
 })
 , items.length===0&&React.createElement('div', { style: {fontSize:12,color:"#52525b",padding:"6px 0"},}, "No options — add one below"     )
 )
-, React.createElement('div', { style: {display:"flex",gap:8},}
+, React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap"},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: `Add new ${label.toLowerCase()} option…`,
 value: newVal,
-onChange: e=>setNewVals(v=>({...v,[key]:e.target.value})),
+onChange: e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},
 onKeyDown: e=>{ if(e.key==="Enter"){ addItem(key,newVal); } },})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addItem(key,newVal),}, "+ Add" )
+, React.createElement(DropdownNotice,{text:notice[key]})
 )
 )
 );
@@ -2620,8 +2636,9 @@ function IELApp({ onGoHome }) {
 // Editable Responsibility / Rectified-Scheduled option lists behind the fail-panel dropdowns (IEL and TAT share this).
 function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
   const [newVals,setNewVals]=React.useState({});
+  const [notice,setNotice]=React.useState({});
   const items=(key)=>(dropdowns&&dropdowns[key])||[];
-  const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
+  const addItem=(key,val)=>{const r=dropdownAdd(items(key),val);if(r.empty)return;if(r.notice){setNotice(n=>({...n,[key]:r.notice}));return;}setNotice(n=>({...n,[key]:""}));setDropdowns(d=>({...d,[key]:r.items}));setNewVals(x=>({...x,[key]:""}));};
   const removeItem=(key,item)=>setDropdowns(d=>({...d,[key]:items(key).filter(x=>x!==item)}));
   const resetKey=(key,def)=>setDropdowns(d=>({...d,[key]:def}));
   return React.createElement(React.Fragment,null,sections.map(({key,label,color,desc,defaults})=>{
@@ -2646,12 +2663,13 @@ function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
           })
           ,items(key).length===0&&React.createElement('div',{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options — add one below")
         )
-        ,React.createElement('div',{style:{display:"flex",gap:8}}
+        ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
           ,React.createElement('input',{style:{...S.smallInput,flex:1},
             placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
-            onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
+            onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement(DropdownNotice,{text:notice[key]})
         )
       );
     }));
@@ -5682,17 +5700,23 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
   const [newEquip, setNewEquip] = React.useState("");
   const [newFreqMonths, setNewFreqMonths] = React.useState("");
   const [newName, setNewName] = React.useState("");
+  const [notice, setNotice] = React.useState({});
+  const note = (k,t) => setNotice(n=>({...n,[k]:t}));
   const addName = () => {
-    if(!newName.trim()||(applianceNames||[]).includes(newName.trim())) return;
-    setApplianceNames(prev=>[...(prev||[]), newName.trim()]);
+    const r = dropdownAdd(applianceNames||[], newName);
+    if(r.empty) return; if(r.notice){ note("names",r.notice); return; }
+    note("names","");
+    setApplianceNames(r.items);
     setNewName("");
   };
   const removeName = n => setApplianceNames(prev=>(prev||[]).filter(x=>x!==n));
   const resetNames = () => setApplianceNames([...TAT_DEFAULT_NAMES]);
 
   const addEquip = () => {
-    if(!newEquip.trim()||equipTypes.includes(newEquip.trim())) return;
-    setEquipTypes(prev=>[...prev, newEquip.trim()]); setNewEquip("");
+    const r = dropdownAdd(equipTypes, newEquip);
+    if(r.empty) return; if(r.notice){ note("equip",r.notice); return; }
+    note("equip","");
+    setEquipTypes(r.items); setNewEquip("");
   };
   const removeEquip = val => setEquipTypes(prev=>prev.filter(x=>x!==val));
   const resetEquip = () => setEquipTypes([...TAT_DEFAULT_EQUIP_TYPES]);
@@ -5701,7 +5725,9 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     const months = parseInt(newFreqMonths);
     if(!months||isNaN(months)||months<1) return;
     const val = String(months);
-    if((freqOptions||[]).find(f=>f.value===val)) return;
+    const existing = (freqOptions||[]).find(f=>f.value===val);
+    if(existing){ note("freq",`"${existing.label}" is already in the list`); return; }
+    note("freq","");
     const label = months===1?"1 Month":`${months} Months`;
     setFreqOptions(prev=>[...(prev||[]), {value:val, label}].sort((a,b)=>parseInt(a.value)-parseInt(b.value)));
     setNewFreqMonths("");
@@ -5732,9 +5758,10 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
           ,React.createElement(DeleteButton,{onDelete:()=>removeName(n),compact:true})
         ))
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>setNewName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addName()})
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>{setNewName(e.target.value);note("names","");},onKeyDown:e=>e.key==="Enter"&&addName()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addName},"+ Add")
+        ,React.createElement(DropdownNotice,{text:notice.names})
       )
       ,React.createElement(ConfirmReset,{onConfirm:resetNames,renderIdle:open=>React.createElement('button',{style:{...ST.smallBtn,color:"#52525b",fontSize:11},onClick:open},"Reset to defaults")})
     )
@@ -5749,9 +5776,10 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
           ,React.createElement(DeleteButton,{onDelete:()=>removeEquip(t),compact:true})
         ))
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add equipment type…",value:newEquip,onChange:e=>setNewEquip(e.target.value),onKeyDown:e=>e.key==="Enter"&&addEquip()})
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add equipment type…",value:newEquip,onChange:e=>{setNewEquip(e.target.value);note("equip","");},onKeyDown:e=>e.key==="Enter"&&addEquip()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addEquip},"+ Add")
+        ,React.createElement(DropdownNotice,{text:notice.equip})
       )
       ,React.createElement(ConfirmReset,{onConfirm:resetEquip,renderIdle:open=>React.createElement('button',{style:{...ST.smallBtn,color:"#52525b",fontSize:11},onClick:open},"Reset to defaults")})
     )
@@ -5767,9 +5795,10 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
           ,React.createElement(DeleteButton,{onDelete:()=>removeFreq(f.value),compact:true})
         ))
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Number of months e.g. 2",type:"number",min:"1",value:newFreqMonths,onChange:e=>setNewFreqMonths(e.target.value),onKeyDown:e=>e.key==="Enter"&&addFreq()})
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Number of months e.g. 2",type:"number",min:"1",value:newFreqMonths,onChange:e=>{setNewFreqMonths(e.target.value);note("freq","");},onKeyDown:e=>e.key==="Enter"&&addFreq()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:addFreq},"+ Add")
+        ,React.createElement(DropdownNotice,{text:notice.freq})
       )
       ,React.createElement(ConfirmReset,{onConfirm:resetFreq,renderIdle:open=>React.createElement('button',{style:{...ST.smallBtn,color:"#52525b",fontSize:11},onClick:open},"Reset to defaults")})
     )
@@ -8975,8 +9004,9 @@ function ThermoHistoryView({
 // ─────────────────────────────────────────────────────────────────────────
 function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
   const[newVals,setNewVals]=React.useState({});
+  const[notice,setNotice]=React.useState({});
   const items=key=>(dropdowns&&dropdowns[key])||[];
-  const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
+  const addItem=(key,val)=>{const r=dropdownAdd(items(key),val);if(r.empty)return;if(r.notice){setNotice(n=>({...n,[key]:r.notice}));return;}setNotice(n=>({...n,[key]:""}));setDropdowns(d=>({...d,[key]:r.items}));setNewVals(x=>({...x,[key]:""}));};
   const removeItem=(key,item)=>setDropdowns(d=>({...d,[key]:items(key).filter(x=>x!==item)}));
   const resetItem=(key)=>{
     if(key==="responsibility")setDropdowns(d=>({...d,[key]:[...RESPONSIBILITY_OPTIONS]}));
@@ -9003,12 +9033,13 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
           ))
           ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options — add one below")
         )
-        ,React.createElement("div",{style:{display:"flex",gap:8,marginBottom:8}}
+        ,React.createElement("div",{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}
           ,React.createElement("input",{style:{flex:1,background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"8px 10px",fontSize:13,outline:"none"},
             placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
-            onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
+            onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement(DropdownNotice,{text:notice[key]})
         )
         ,React.createElement(ConfirmReset,{onConfirm:()=>resetItem(key),renderIdle:open=>React.createElement("button",{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset to defaults")})
       );
@@ -10711,11 +10742,11 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
   const [notice, setNotice] = React.useState({});
   const SS = swbStyles();
   const addItem = (key, val) => {
-    if(!val.trim()) return;
-    const hit = reserved.find(r=>r.toLowerCase()===val.trim().toLowerCase());
-    if(hit){ setNotice(n=>({...n,[key]:`${hit} is already built in`})); return; }
+    const r = dropdownAdd((dropdowns&&dropdowns[key])||[], val, reserved);
+    if(r.empty) return;
+    if(r.notice){ setNotice(n=>({...n,[key]:r.notice})); return; }
     setNotice(n=>({...n,[key]:""}));
-    setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));
+    setDropdowns(d=>({...d,[key]:r.items}));
     setNewVals(v=>({...v,[key]:""}));
   };
   const removeItem = (key, val) => setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
@@ -12605,8 +12636,8 @@ function IRTManageView({project,onUpdateProject,onBack}){
 
 // ─── Dropdowns view — mirrors SWBDropdownsView ────────────────────────────
 function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
-  const [newVals,setNewVals]=React.useState({});const SS=irtStyles();
-  const addItem=(key,val)=>{if(!val.trim())return;setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));setNewVals(v=>({...v,[key]:""}));};
+  const [newVals,setNewVals]=React.useState({});const [notice,setNotice]=React.useState({});const SS=irtStyles();
+  const addItem=(key,val)=>{const r=dropdownAdd((dropdowns&&dropdowns[key])||[],val);if(r.empty)return;if(r.notice){setNotice(n=>({...n,[key]:r.notice}));return;}setNotice(n=>({...n,[key]:""}));setDropdowns(d=>({...d,[key]:r.items}));setNewVals(v=>({...v,[key]:""}));};
   const removeItem=(key,val)=>setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
   const resetKey=(key,def)=>setDropdowns(d=>({...d,[key]:def}));
   const setDefault=(key,val)=>setDropdowns(d=>({...d,[key]:[val,...(d[key]||[]).filter(x=>x!==val)]}));
@@ -12636,7 +12667,7 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
             );
           })
         ),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"))
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}},React.createElement("input",{style:{flex:1,background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"),React.createElement(DropdownNotice,{text:notice[key]}))
       );
     })
   );
@@ -14252,5 +14283,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
