@@ -4381,6 +4381,17 @@ function tatGetStatus(results, siteId, areaId, itemId) {
   return tatGetItem(results,siteId,areaId,itemId).status || TAT_STATUS.UNTESTED;
 }
 
+// The default test frequency is STORED (tatDefaults.freq, and per area area.defaultFreq) but the options list is user-editable, so a stored default can
+// point at an option that was reset away or deleted. Every place that needs "the default for a NEW item / the ★" goes through this: the area's default if it
+// is still an option, else the site default if it is, else the factory default ("3") if it is an option, else the first remaining option, else "3".
+// (Existing items keep their own stored frequency untouched.)
+function tatDefaultFreq(freqOptions, tatDefaults, area) {
+  const opts = freqOptions || TAT_DEFAULT_FREQS; const has = v => opts.some(f => f.value === v);
+  if (area && has(area.defaultFreq)) return area.defaultFreq;
+  const v = (tatDefaults || {}).freq; if (has(v)) return v;
+  if (has(TAT_FACTORY_DEFAULTS.freq)) return TAT_FACTORY_DEFAULTS.freq;
+  return opts[0] ? opts[0].value : TAT_FACTORY_DEFAULTS.freq;
+}
 function tatAreaSummary(results, siteId, areaId, items) {
   let pass=0,fail=0,na=0,untested=0;
   (items||[]).forEach(id=>{
@@ -5264,7 +5275,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const upd=u=>onUpdateProject(u);
   const addArea=()=>{
     if(!newAreaName.trim())return;
-    const defaultFreq=(tatDefaults||{}).freq||"3";
+    const defaultFreq=tatDefaultFreq(freqOptions,tatDefaults);
     upd({...project,areas:[...project.areas,{id:tatSlug(newAreaName),name:newAreaName.trim(),defaultFreq,items:[],itemNames:{},itemTags:{},itemEquipTypes:{},itemFreqs:{}}]});
     setNewAreaName("");
   };
@@ -5285,7 +5296,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     if(!isNaN(numericTag)&&tagExists(rawTag)&&!newItemTag[areaId])tag=nextTag();
     const eType=(newItemEquip[areaId]||(equipOpts[0]||"")).trim();
     const area=project.areas.find(a=>a.id===areaId);
-    const freq=(newItemFreq[areaId]||(area&&area.defaultFreq)||((tatDefaults||{}).freq)||"3").trim();
+    const freq=String(newItemFreq[areaId]||tatDefaultFreq(freqOptions,tatDefaults,area)).trim();
     const itemId=tatUid();
     const displayName=tag?`${tag} — ${n}`:n;
     upd({...project,areas:project.areas.map(a=>a.id===areaId?{
@@ -5305,7 +5316,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     const names=raw.split(",").map(s=>s.trim()).filter(Boolean);
     const bulkEquip=(newItemEquip[areaId]||(equipOpts[0]||"")).trim();
     const area=project.areas.find(a=>a.id===areaId);
-    const bulkFreq=(newItemFreq[areaId]||(area&&area.defaultFreq)||((tatDefaults||{}).freq)||"3").trim();
+    const bulkFreq=String(newItemFreq[areaId]||tatDefaultFreq(freqOptions,tatDefaults,area)).trim();
     const usedInBulk=new Set();
     project.areas.forEach(a=>{
       Object.values(a.itemTags||{}).forEach(t=>{const m=String(t).match(/(\d+)/);if(m)usedInBulk.add(parseInt(m[1]));});
@@ -5394,7 +5405,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               ,React.createElement('span',{style:{fontSize:10,color:"#52525b",whiteSpace:"nowrap"}},"Default:")
               ,React.createElement('select',{
                 style:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
-                value:area.defaultFreq||(tatDefaults||{}).freq||"3",
+                value:tatDefaultFreq(freqOptions,tatDefaults,area),
                 onClick:e=>e.stopPropagation(),
                 onChange:e=>{e.stopPropagation();setAreaDefaultFreq(area.id,e.target.value);}
               }
@@ -5509,7 +5520,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               )
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
-                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemFreq[area.id]||(area.defaultFreq)||((tatDefaults||{}).freq)||"3",onChange:e=>setNewItemFreq(x=>({...x,[area.id]:e.target.value}))}
+                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemFreq[area.id]||tatDefaultFreq(freqOptions,tatDefaults,area),onChange:e=>setNewItemFreq(x=>({...x,[area.id]:e.target.value}))}
                   ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
                 )
               )
@@ -5695,8 +5706,13 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     setFreqOptions(prev=>[...(prev||[]), {value:val, label}].sort((a,b)=>parseInt(a.value)-parseInt(b.value)));
     setNewFreqMonths("");
   };
-  const removeFreq = val => setFreqOptions(prev=>(prev||[]).filter(f=>f.value!==val));
-  const resetFreq = () => setFreqOptions([...TAT_DEFAULT_FREQS]);
+  const removeFreq = val => {
+    const remaining = (freqOptions||[]).filter(f=>f.value!==val);
+    setFreqOptions(remaining);
+    // deleting the option that is the ★ default hands the ★ to a remaining option (the factory default if still listed, else the first) — never left pointing at a removed one
+    if (tatDefaultFreq(freqOptions,tatDefaults)===val) setTatDefaults(d=>({...(d||{}),freq:tatDefaultFreq(remaining,{})}));
+  };
+  const resetFreq = () => { setFreqOptions([...TAT_DEFAULT_FREQS]); setTatDefaults(d=>({...(d||{}),freq:TAT_FACTORY_DEFAULTS.freq})); };   // Reset restores the list AND its ★
 
   const secStyle={background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px",marginBottom:16};
   const secTitle=t=>React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",marginBottom:12}},t);
@@ -5744,10 +5760,10 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
       ,secTitle("TEST FREQUENCY")
       ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:6}},"Tap ★ to set as default frequency.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${(tatDefaults||{}).freq===f.value?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
-          ,(tatDefaults||{}).freq===f.value&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
+        ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${tatDefaultFreq(freqOptions,tatDefaults)===f.value?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
+          ,tatDefaultFreq(freqOptions,tatDefaults)===f.value&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},f.label)
-          ,(tatDefaults||{}).freq!==f.value&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
+          ,tatDefaultFreq(freqOptions,tatDefaults)!==f.value&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
           ,React.createElement(DeleteButton,{onDelete:()=>removeFreq(f.value),compact:true})
         ))
       )
@@ -14236,5 +14252,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
