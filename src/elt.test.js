@@ -62,19 +62,21 @@ describe('register + summary', () => {
   it('counts only pass/fail assets', () => {
     expect(eltSummary(project, results)).toMatchObject({ total:2, pass:1, fail:1 });
   });
-  it('emits 20 columns in order (Score right after Pass/Fail, then the defect set) and excludes untested assets', () => {
+  it('emits 16 columns in order (# first, Score right after Pass/Fail, no defect columns) and excludes untested assets', () => {
     const rows = eltRegisterRows(project, results, meta);
-    expect(ELT_COLUMNS).toHaveLength(20);
-    expect(ELT_COLUMNS.slice(11)).toEqual(['Pass/Fail','Score','Rectified / Scheduled','Date Rectified / Scheduled','Defect ID','Responsibility','Notes / Recommendations','Priority (L,M,H,U)','Next Test Due']);
+    expect(ELT_COLUMNS).toHaveLength(16);
+    expect(ELT_COLUMNS.slice(12)).toEqual(['Pass/Fail','Score','Notes / Recommendations','Next Test Due']);
+    expect(ELT_COLUMNS[0]).toBe('#');
     expect(rows).toHaveLength(2);
-    expect(rows[0].cells).toHaveLength(20);
-    expect(rows[0].cells.slice(0,6)).toEqual(['Site A','SE Door','','Emergency Exit Sign','Maintained','Clevertronics 24m']);
-    expect(rows[0].cells[11]).toBe('Pass');
-    expect(rows[0].cells[12]).toBe('100.0%');   // 4 / 4
-    expect(rows[1].cells[12]).toBe('75.0%');    // 3 / 4 (discharge failed)
-    expect(rows[1].cells[3]).toBe('Bunker light');
-    expect(rows[1].cells.slice(7,12)).toEqual(['Pass','Fail','Pass','Pass','Fail']);
-    expect(rows[1].cells.slice(13)).toEqual(['Scheduled for Repair','','12','Contractor','Battery dead','M','21/03/2027']);
-    expect(rows[0].cells.slice(13)).toEqual(['','','','','','','21/03/2027']);   // PASS row: defect columns present, blank
+    expect(rows[0].cells).toHaveLength(16);
+    expect(rows[0].cells.slice(0,7)).toEqual([1,'Site A','SE Door','','Emergency Exit Sign','Maintained','Clevertronics 24m']);
+    expect(rows[0].cells[12]).toBe('Pass');
+    expect(rows[0].cells[13]).toBe('100.0%');   // 4 / 4
+    expect(rows[1].cells[13]).toBe('75.0%');    // 3 / 4 (discharge failed)
+    expect(rows[1].cells[4]).toBe('Bunker light');
+    expect(rows[1].cells.slice(8,13)).toEqual(['Pass','Fail','Pass','Pass','Fail']);
+    expect(rows[1].cells.slice(14)).toEqual(['Battery dead','21/03/2027']);                      // main table: notes + next due only
+    expect(rows[1].defect).toEqual([2,'Site A','SW Roof','','12','M','Scheduled for Repair','','Contractor','Battery dead']);   // Defects sheet row, same # as the register
+    expect(rows[0].defect).toBeNull();                                                            // PASS: no defect row
   });
 });

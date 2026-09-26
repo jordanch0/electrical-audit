@@ -210,12 +210,19 @@ Reference: **`exportELTExcel`** (ExcelJS), `exportSWBExcel` (ExcelJS + photos), 
 - [ ] **Defect HEADINGS are always present — even with zero fails.** Column headings come from a static array (or a fixed block, as on the
   per-welder sheet), never from "does any row fail?". Gating only blanks the VALUES. Add the module to `src/export-zero-fail.test.js`
   (an "only passes" and a "nothing tested" dataset). Summary sheets (SWB Register, Welder Register) carry the same defect columns as the detail sheets.
+- [ ] **A wide flat-table export (> ~10 columns) is SPLIT, not shrunk (2026-09-26).** Main table = `#`, identifiers, dates, result, key values, Notes
+  (no FAIL-only columns); a separate `Defects` sheet = FAIL rows only, keyed by the same `#`, always present with its headings and a "No defects
+  recorded" line when empty. Build it with **`xjSplit(wb, {...})`** (ExcelJS; extra sheets go in via `between`, e.g. IRT's Readings) — every export is ExcelJS,
+  never SheetJS (SheetJS drops cell styles and page setup; keep it for import parsing only). Keep the main table the FIRST sheet (importers read sheet 1).
+  Headings wrap, so size columns to content and target >= 85% fit-to-width on landscape A4. **Date columns are forced >= 13 wide** by the builder (dates are
+  `dd/mm/yyyy` text — always `fmtDate` them). Add the module to `src/export-styles.test.js` (borders, result colours, zebra, date widths) and
+  `src/export-print-layout.test.js` (values, `#` cross-reference, page setup, re-import).
 - [ ] **Deliver with `deliverExportFile(base64, filename, mime)`** — never a new mechanism (it handles the iOS native share
   bridge, Blob URLs and surfaces failures instead of failing silently).
-- [ ] **ExcelJS vs SheetJS matters.** The community SheetJS (`xlsx`) build **silently ignores** `s` style objects — RCD, IEL, TAT,
-  Thermo and IRT exports contain no fills/fonts/borders (verified by unzipping a real IEL export). **Only ExcelJS (SWB, ELT)
-  writes real styles and images.** Never copy styling from a SheetJS module's source expecting it to appear; inspect a real file.
-  Choose ExcelJS only if the module needs borders or photos.
+- [ ] **ExcelJS for every export; SheetJS only for reading.** The community SheetJS (`xlsx`) build **silently ignores** cell styles and drops page
+  setup (landscape / fit-to-width / repeating headings), and cannot embed images — that is why RCD, IEL, TAT, Thermo and IRT were converted to ExcelJS
+  (2026-09-26) and every module now exports through ExcelJS. Keep `xlsx` for import parsing and blank import templates only. Never copy styling from
+  a SheetJS snippet expecting it to appear; inspect a real generated file.
 - [ ] **ExcelJS module conventions** (copy from `exportELTExcel`):
   - **Header block is plain — no fill, font or border set:** row 1 title `"<site> — <Module> Test"`; row 2
     `company | ABN: … | Electrical Licence: …` (`company||"SparkCheck"`); row 3 `Auditor:` / `Date Tested:` / `Next Test Due:`;

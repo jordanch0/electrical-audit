@@ -144,7 +144,7 @@ describe.each(Object.values(MODS))('$name: Site -> Area -> Assets', m => {
     await openSite(user, m, 'Report');
     expect(screen.getByText('AREA SUMMARY')).toBeInTheDocument();
     // interleaved input (Shed, Yard, Shed) -> Location column reads Shed, Shed, Yard
-    const locations = [...document.querySelectorAll('tbody tr')].map(tr => tr.querySelector('td').textContent);
+    const locations = [...document.querySelectorAll('tbody tr')].map(tr => tr.querySelectorAll('td')[m.name === 'ELT' ? 1 : 0].textContent);   // ELT's first column is the # cross-reference
     expect(locations).toEqual(['Shed', 'Shed', 'Yard']);
 
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
@@ -171,11 +171,11 @@ describe('export order = area order', () => {
 
   it('ELT register: rows grouped by area (Location column), original order kept within an area', async () => {
     const res = { p1: Object.fromEntries(['a1', 'a2', 'a3', 'a4'].map(id => [id, MODS.elt.tested()])) };
-    expect(eltRegisterRows(interleavedElt, res, {}).map(r => [r.cells[0], r.cells[1]])).toEqual([['North Bay', 'Door 1'], ['North Bay', 'Door 3'], ['Yard', 'Door 2'], ['Yard', 'Door 4']]);
+    expect(eltRegisterRows(interleavedElt, res, {}).map(r => [r.cells[1], r.cells[2]])).toEqual([['North Bay', 'Door 1'], ['North Bay', 'Door 3'], ['Yard', 'Door 2'], ['Yard', 'Door 4']]);
     await exportELTExcel(interleavedElt, res, { auditor: 'J', testDate: '2026-07-13', nextTestDate: '2027-01-13' });
     const ws = (await load()).getWorksheet('Emergency Lighting');
-    expect(col(ws, 'A', 6, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
-    expect(col(ws, 'B', 6, 4)).toEqual(['Door 1', 'Door 3', 'Door 2', 'Door 4']);
+    expect(col(ws, 'B', 6, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
+    expect(col(ws, 'C', 6, 4)).toEqual(['Door 1', 'Door 3', 'Door 2', 'Door 4']);
   });
 
   it('Welder register AND the per-welder sheets follow area order', async () => {

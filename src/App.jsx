@@ -86,6 +86,78 @@ function deliverExportFile(base64, filename, mimeType=XLSX_MIME) {
     alert(`Export failed: ${(err && err.message) || 'unknown error'}. Please try again.`);
   }
 }
+const XJ_DEFECT_TAIL = ["Defect ID", "Priority", "Rectified / Scheduled", "Date Rectified / Scheduled", "Responsibility", "Notes / Recommendations"];
+// ── ExcelJS split-export foundation ────────────────────────────────────────────────────────────────────────────────
+// The print-friendly split exports (narrow main table + Defects sheet) on ExcelJS: real borders, coloured results, zebra rows, wrapped
+// headings and NATIVE page setup — no post-processing (SheetJS silently drops all of these). Used by RCD, IEL, TAT, Thermo and IRT; ELT shares xjPageSetup.
+// (all five now use it). Same row model as before: rows:[{cells, defect}].
+function xjPageSetup(sheet, landscape, titleRow) {
+  sheet.pageSetup = { paperSize: 9, orientation: landscape ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 }, ...(titleRow ? { printTitlesRow: `${titleRow}:${titleRow}` } : {}) };
+  sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
+}
+const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
+// Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
+function xjResultStyle(v) {
+  const k = String(v == null ? "" : v).toUpperCase(); const ctr = { horizontal: "center", vertical: "center" };
+  if (k === "PASS") return swbXCS(SWB_XC.priorityL_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityL_font } }, ctr, swbXAB());
+  if (k === "FAIL") return swbXCS(SWB_XC.priorityH_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityH_font } }, ctr, swbXAB());
+  if (k === "MONITOR") return swbXCS(SWB_XC.priorityM_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityM_font } }, ctr, swbXAB());
+  if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
+  return null;
+}
+// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape }
+function xjSheet(wb, name, o) {
+  const ws = wb.addWorksheet(name); const n = o.headers.length;
+  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  put(1, 1, o.title); put(2, 1, o.coLine);
+  o.meta.forEach((v, i) => { if (v !== "" && v != null) put(3, i + 1, v); });
+  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1, c1, r2, c2));
+  // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
+  o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
+  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
+  o.rows.forEach((cells, ri) => {
+    const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
+    const base = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+    const ctr = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
+    for (let c = 0; c < n; c++) {
+      const v = cells[c] == null ? "" : cells[c]; let st = XJ_CENTER.test(o.headers[c]) ? ctr : base;
+      if (c === resultCol) st = xjResultStyle(v) || ctr;
+      if (c === elecCol && String(v).toUpperCase() === "FAIL") st = xjResultStyle("FAIL");   // a check column: Fail red, Pass plain
+      if (c === priCol) { const pc = swbXPC(v); if (pc) st = swbXCS(pc.bg, { bold: pc.bold, sz: 10, color: { rgb: pc.font } }, { horizontal: "center", vertical: "top" }, swbXAB()); }
+      put(r, c + 1, v, st);
+    }
+  });
+  if (!o.rows.length && o.emptyText) put(6, 1, o.emptyText);
+  (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
+  // A date is written as "dd/mm/yyyy" TEXT in a wrapping cell, and Excel / Sheets break it at a "/" if the column is even slightly tight (their
+  // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
+  // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
+  // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
+  xjPageSetup(ws, o.landscape !== false, 5);
+  return ws;
+}
+// Minimum widths that apply to EVERY export column of that kind (also used by ELT's own sheets)
+function xjColWidth(heading, w) {
+  const h = String(heading);
+  return /^(Date|Test Date|Next Test)/.test(h) ? Math.max(w, XJ_DATE_W) : /^Pass \/ Fail$/.test(h) ? Math.max(w, XJ_RESULT_W) : w;
+}
+const XJ_RESULT_W = 11;  // fits "UNTESTED" / "Untested" (8 characters) and "MONITOR" on ONE line, with a margin
+const XJ_DATE_W = 13;   // fits "21/09/2026" (10 characters) on ONE line with a margin for Excel / Google Sheets metrics
+const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
+// Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
+// o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
+function xjSplit(wb, o) {
+  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
+  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings)
+  const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
+  xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
+    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded" });
+  return defects.length;
+}
+
 // Downscale + JPEG-compress a captured photo before it goes into localStorage / an Excel export.
 function resizeImageToDataUrl(file, maxDim=1280, quality=0.72) {
   return new Promise((resolve, reject) => {
@@ -374,168 +446,61 @@ return { id: slugify(projectName), name: projectName, company: company || "Spark
 // ─────────────────────────────────────────────────────────────────────────
 // Colours matching the defects register image exactly:
 // U=dark maroon bg, H=red/salmon bg, M=yellow bg, L=light green bg, Pass=white (no fill), Fail=red bg
-const C = {
-orange:    "FFE8731A",  // SparkCheck orange header
-white:     "FFFFFFFF",
-darkGrey:  "FF2D2D2D",
-lightGrey: "FFF5F5F5",
-midGrey:   "FFD9D9D9",
-// Row backgrounds — match image
-passWhite: "FFFFFFFF",  // Pass = plain white (no colour)
-failRed:   "FFFFC7CE",  // Fail = light red (Excel standard fail red)
-naGrey:    "FFF2F2F2",
-// Priority row colours — exact match to image
-priorityU_bg:   "FF9B0000",  // Urgent = dark maroon row background
-priorityU_font: "FFFFFFFF",  // white text
-priorityH_bg:   "FFFFC7CE",  // High   = light red/salmon (same as image)
-priorityH_font: "FF9C0006",  // dark red text
-priorityM_bg:   "FFFFD966",  // Medium = yellow (matches image)
-priorityM_font: "FF7F6000",  // dark gold text
-priorityL_bg:   "FFE2EFDA",  // Low    = light green (matches image)
-priorityL_font: "FF375623",  // dark green text
-};
-const border = (style="thin",color=C.midGrey) => ({style,color:{rgb:color}});
-const allBorders = (style="thin",color=C.midGrey) => ({top:border(style,color),bottom:border(style,color),left:border(style,color),right:border(style,color)});
-const btmBorder = (color=C.midGrey) => ({bottom:border("hair",color)});
-function cellStyle(fill,font={},align={},borders={}) {
-return { fill:{patternType:"solid",fgColor:{rgb:fill}}, font:{name:"Calibri",sz:10,...font}, alignment:{vertical:"center",...align}, border:borders };
-}
-const titleStyle    = cellStyle(C.darkGrey,  {bold:true,sz:14,color:{rgb:C.white}},    {horizontal:"left"});
-const subtitleStyle = cellStyle("FF1E1E1E",  {sz:9,color:{rgb:"FFbbbbbb"}},             {horizontal:"left"});
-const metaStyle     = cellStyle("FF262626",  {sz:9,color:{rgb:"FF999999"}},             {horizontal:"left"});
-const spacerStyle   = cellStyle("FF1E1E1E");
-const hdrStyle      = cellStyle(C.orange,    {bold:true,sz:10,color:{rgb:C.white}},    {horizontal:"center",wrapText:true}, allBorders("thin","FFB85A10"));
-// Priority colours for the ENTIRE ROW (used when priority is set and it's a fail/defect)
-function dataStyle(ri, pf) {
-let bg = ri%2===0 ? C.white : C.lightGrey;
-let fontColor = C.darkGrey; let bold = false;
-if (pf === "Pass")    { bg = C.passWhite; }
-if (pf === "Fail")    { bg = C.failRed; fontColor = C.priorityH_font; bold = true; }
-if (pf === "N/A")     { bg = C.naGrey; }
-return cellStyle(bg, {sz:9,color:{rgb:fontColor},bold}, {wrapText:true}, btmBorder(C.midGrey));
-}
-function setCell(ws, ref, value, style) {
-const t = typeof value === "number" ? "n" : "s";
-ws[ref] = { v: _nullishCoalesce(value, () => ( "")), t, s: style };
-}
-function exportExcel(results, project, meta, mode, logoBase64) {
-const wb = XLSX.utils.book_new();
-const testDate = mode==="inject" ? (_optionalChain([meta, 'optionalAccess', _10 => _10.injectDate])||"") : (_optionalChain([meta, 'optionalAccess', _11 => _11.pushDate])||"");
-const nextDue  = mode==="inject" ? (meta&&meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(testDate,1)) : (meta&&meta.nextPushDate?fmtDate(meta.nextPushDate):addMonths(testDate,1));
-const label    = mode==="inject" ? "Injection Test" : "Push Test";
-const isInject = mode === "inject";
-const headers = isInject
-? ["Area","Panel / Asset Name","Device Type","Amp Rating","Date","Injection Test Result + (ms)","Injection Test Result - (ms)","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority\n(L,M,H,U)","Next Test Required"]
-: ["Area","Panel / Asset Name","Device Type","Amp Rating","Date Tested","Pass / Fail","Rectified / Scheduled","Defect ID","Responsibility","Notes / Comments","Priority\n(L,M,H,U)","Next Test Required"];
-const n = headers.length;
-const colLetters = "ABCDEFGHIJKLMNO".slice(0,n).split("");
-// Defect details (Defect ID, Responsibility, Priority, Rectified / Scheduled) are only exported for FAIL rows, so data
-// retained from an earlier FAIL never shows up on a PASS / N/A / untested row.
-const rows = [];
-rows.push([`${project.name}  –  RCD & ELR Test  (${label})`, ...Array(n-1).fill("")]);
-const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-rows.push([coLine, ...Array(n-1).fill("")]);
-rows.push([`Auditor: ${_optionalChain([meta, 'optionalAccess', _12 => _12.auditor])||""}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next ${label} Due: ${nextDue}`, ...Array(Math.max(0,n-5)).fill("")]);
-rows.push(Array(n).fill(""));
-rows.push(headers);
-const dataStart = 6;
-const dataRows  = [];
-project.areas.forEach(area => area.panels.forEach(panel => panel.circuits.forEach(circuit => {
-const d   = getCircuitData(results, project.id, area.id, panel.id, circuit);
-const inj = _nullishCoalesce(d.inject, () => ( {}));
-const push = _nullishCoalesce(d.push, () => ( {}));
-const st  = isInject ? (_nullishCoalesce(_optionalChain([d, 'access', _13 => _13.inject, 'optionalAccess', _14 => _14.status]), () => (STATUS.UNTESTED))) : (_nullishCoalesce(_optionalChain([d, 'access', _15 => _15.push, 'optionalAccess', _16 => _16.status]), () => (STATUS.UNTESTED)));
-// If ms values indicate >300ms, treat as Fail regardless of stored status
-const msOver = isInject && (msIsOver(inj.resultPos) || msIsOver(inj.resultNeg));
-const pf  = msOver ? "Fail" : st===STATUS.PASS?"Pass":st===STATUS.FAIL?"Fail":st===STATUS.NA?"N/A":"Untested";
-const cm  = _optionalChain([panel, 'optionalAccess', _ => _.circuitMeta, 'optionalAccess', _ => _[circuit]]) || {};
-const cbType    = cm.cbType    || "";
-const ampRating = cm.ampRating || "";
-dataRows.push({ area:area.name, panelCircuit:`${panel.name} ${circuit}`, pf, inj, push, cbType, ampRating });
-if (isInject) {
-rows.push([area.name,`${panel.name} ${circuit}`,cbType,ampRating,fmtDate(testDate),
-inj.resultPos||"",inj.resultNeg||"",pf,
-pf==="Fail"?(inj.rectified||""):"",pf==="Fail"&&inj.scheduledDate?fmtDate(inj.scheduledDate):"",
-pf==="Fail"?(inj.defectId||""):"",pf==="Fail"?(inj.responsibility||""):"",inj.comment||"",pf==="Fail"?(inj.priority||""):"",nextDue]);
-} else {
-rows.push([area.name,`${panel.name} ${circuit}`,cbType,ampRating,fmtDate(testDate),pf,
-pf==="Fail"?(push.rectified||""):"",pf==="Fail"?(push.defectId||""):"",pf==="Fail"?(push.responsibility||""):"",push.comment||"",pf==="Fail"?(push.priority||""):"",nextDue]);
-}
-})));
-rows.push(Array(n).fill(""));
-rows.push([`Notes: ${_optionalChain([meta, 'optionalAccess', _17 => _17.notes])||""}`, ...Array(n-1).fill("")]);
-const ws = XLSX.utils.aoa_to_sheet(rows);
-ws["!cols"] = isInject
-? [{wch:20},{wch:24},{wch:14},{wch:9},{wch:11},{wch:16},{wch:16},{wch:10},{wch:20},{wch:14},{wch:10},{wch:16},{wch:34},{wch:12},{wch:16}]
-: [{wch:20},{wch:26},{wch:14},{wch:9},{wch:13},{wch:10},{wch:20},{wch:10},{wch:16},{wch:34},{wch:12},{wch:16}];
-ws["!rows"] = [{hpt:32},{hpt:16},{hpt:16},{hpt:6},{hpt:40}];
-ws["!merges"] = [
-{s:{r:0,c:0},e:{r:0,c:n-1}},
-{s:{r:1,c:0},e:{r:1,c:n-1}},
-{s:{r:2,c:0},e:{r:2,c:1}},
-{s:{r:2,c:2},e:{r:2,c:3}},
-{s:{r:2,c:4},e:{r:2,c:n-1}},
-{s:{r:3,c:0},e:{r:3,c:n-1}},
-];
-// Style header rows
-colLetters.forEach(col => {
-setCell(ws, `${col}1`, _nullishCoalesce(_optionalChain([ws, 'access', _18 => _18[`${col}1`], 'optionalAccess', _19 => _19.v]), () => ( "")), titleStyle);
-setCell(ws, `${col}2`, _nullishCoalesce(_optionalChain([ws, 'access', _20 => _20[`${col}2`], 'optionalAccess', _21 => _21.v]), () => ( "")), subtitleStyle);
-setCell(ws, `${col}3`, _nullishCoalesce(_optionalChain([ws, 'access', _22 => _22[`${col}3`], 'optionalAccess', _23 => _23.v]), () => ( "")), metaStyle);
-setCell(ws, `${col}4`, "", spacerStyle);
-setCell(ws, `${col}5`, _nullishCoalesce(_optionalChain([ws, 'access', _24 => _24[`${col}5`], 'optionalAccess', _25 => _25.v]), () => ( "")), hdrStyle);
-});
-// Style data rows
-let excelRow = dataStart;
-dataRows.forEach((dr, ri) => {
-const pf       = dr.pf;
-const priority = isInject ? (_optionalChain([dr, 'access', _26 => _26.inj, 'optionalAccess', _27 => _27.priority])||"") : "";
-colLetters.forEach(col => {
-const ref = `${col}${excelRow}`;
-const val = _nullishCoalesce(_optionalChain([ws, 'access', _28 => _28[ref], 'optionalAccess', _29 => _29.v]), () => ( ""));
-setCell(ws, ref, val, dataStyle(ri, pf));
-});
-excelRow++;
-});
-XLSX.utils.book_append_sheet(wb, ws, label.slice(0,31));
-// Summary sheet
-const sum = summariseProject(results, project, mode);
-const fails = [];
-project.areas.forEach(a => a.panels.forEach(p => p.circuits.forEach(c => {
-const d  = getCircuitData(results, project.id, a.id, p.id, c);
-const st = isInject?(_nullishCoalesce(_optionalChain([d, 'access', _30 => _30.inject, 'optionalAccess', _31 => _31.status]), () => (STATUS.UNTESTED))):(_nullishCoalesce(_optionalChain([d, 'access', _32 => _32.push, 'optionalAccess', _33 => _33.status]), () => (STATUS.UNTESTED)));
-const pri= isInject?(_optionalChain([d, 'access', _34 => _34.inject, 'optionalAccess', _35 => _35.priority])||""):((d.push&&d.push.priority)||"");
-if (st===STATUS.FAIL) fails.push([a.name,p.name,c,isInject?(_optionalChain([d, 'access', _36 => _36.inject, 'optionalAccess', _37 => _37.comment])||""):(_optionalChain([d, 'access', _38 => _38.push, 'optionalAccess', _39 => _39.comment])||""),pri]);
-})));
-const sumRows=[
-[`${project.name} – RCD Test Summary`,""],["",""],
-["Test Type",label],["Date",fmtDate(testDate)],["Auditor",_optionalChain([meta, 'optionalAccess', _40 => _40.auditor])||""],["",""],
-["Total",sum.total],["Pass",sum.pass],["Fail",sum.fail],["N/A",sum.na],["Untested",sum.untested],["",""],
-["Next Test Due",nextDue],["",""],
-["Failed Circuits","","","",""],
-["Area","Panel","Circuit","Notes","Priority"],
-...fails,
-];
-const ws2=XLSX.utils.aoa_to_sheet(sumRows);
-ws2["!cols"]=[{wch:22},{wch:22},{wch:12},{wch:40},{wch:10}];
-if(ws2["A1"]) ws2["A1"].s=titleStyle;
-["A","B","C","D","E"].forEach(col=>{const ref=`${col}16`;if(ws2[ref])ws2[ref].s=hdrStyle;});
-fails.forEach((f,ri)=>{
-const r=17+ri; const pri=f[4]||"";
-["A","B","C","D"].forEach(col=>{const ref=`${col}${r}`;if(!ws2[ref])ws2[ref]={v:"",t:"s"};ws2[ref].s=dataStyle(ri,"Fail");});
-const ref=`E${r}`;if(!ws2[ref])ws2[ref]={v:pri,t:"s"};ws2[ref].s=dataStyle(ri,"Fail");
-});
-XLSX.utils.book_append_sheet(wb,ws2,"Summary");
-// Write workbook with cellStyles — use base64 data URI which works in sandboxed iframes
-let wbOut;
-  try {
-    wbOut = XLSX.write(wb, {bookType:"xlsx", type:"base64", cellStyles:true, bookSST:false});
-  } catch(xlsxErr) {
-    alert("Export requires internet connection to load the XLSX library.\nPlease connect to WiFi and try again.");
-    return;
-  }
-const filename = `${project.name.replace(/\s+/g,"_")}_RCD_${isInject?"Injection":"Push"}_${testDate||"export"}.xlsx`;
-deliverExportFile(wbOut, filename);
+// RCD export: MAIN results table (narrow — identifiers, dates, result, notes) + a Defects sheet (FAIL rows only, always present) + a
+// Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Page setup is native (xjPageSetup).
+async function exportExcel(results, project, meta, mode, logoBase64) {
+  const isInject = mode === "inject";
+  const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
+  const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
+  const label    = isInject ? "Injection Test" : "Push Test";
+  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  // A defect is only exported for FAIL rows (a >300 ms injection result counts as Fail whatever the stored status), so data
+  // retained from an earlier FAIL never shows up on a PASS / N/A / untested row.
+  const rows = [];
+  project.areas.forEach(area => area.panels.forEach(panel => panel.circuits.forEach(circuit => {
+    const d = getCircuitData(results, project.id, area.id, panel.id, circuit);
+    const inj = d.inject ?? {}; const push = d.push ?? {};
+    const st = isInject ? (inj.status ?? STATUS.UNTESTED) : (push.status ?? STATUS.UNTESTED);
+    const msOver = isInject && (msIsOver(inj.resultPos) || msIsOver(inj.resultNeg));
+    const pf = msOver ? "Fail" : st === STATUS.PASS ? "Pass" : st === STATUS.FAIL ? "Fail" : st === STATUS.NA ? "N/A" : "Untested";
+    const cm = (panel && panel.circuitMeta && panel.circuitMeta[circuit]) || {};
+    const src = isInject ? inj : push;
+    const pc = `${panel.name} ${circuit}`;
+    const cells = isInject
+      ? [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(testDate), inj.resultPos || "", inj.resultNeg || "", pf, inj.comment || "", nextDue]
+      : [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(testDate), pf, push.comment || "", nextDue];
+    rows.push({ cells, pf, defect: pf === "Fail" ? { ids: [area.name, pc], defectId: src.defectId, priority: src.priority, rectified: src.rectified, rectifiedDate: src.scheduledDate, responsibility: src.responsibility, notes: src.comment } : null });
+  })));
+  const wb = new ExcelJS.Workbook();
+  const failCount = xjSplit(wb, {
+    title: `${project.name}  –  RCD & ELR Test  (${label})`, defectTitle: `${project.name}  –  RCD & ELR Test  (${label})  –  Defects`, coLine,
+    meta: [`Auditor: ${(meta && meta.auditor) || ""}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next ${label} Due: ${nextDue}`],
+    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    mainSheet: label.slice(0, 31),
+    headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date", "Injection Test Result + (ms)", "Injection Test Result - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Required"] : ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Required"],
+    widths: isInject ? [16, 22, 12, 8, 10, 11, 11, 9, 24, 11] : [16, 22, 12, 8, 11, 9, 26, 11],
+    idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 22],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+  });
+  // Summary sheet: counts only — the failed-circuit list it used to carry is now the Defects sheet (same rows, more fields)
+  const sum = summariseProject(results, project, mode);
+  const sumRows = [
+    [`${project.name} – RCD Test Summary`, ""], ["", ""],
+    ["Test Type", label], ["Date", fmtDate(testDate)], ["Auditor", (meta && meta.auditor) || ""], ["", ""],
+    ["Total", sum.total], ["Pass", sum.pass], ["Fail", sum.fail], ["N/A", sum.na], ["Untested", sum.untested], ["", ""],
+    ["Next Test Due", nextDue], ["", ""],
+    ["Failed circuits", failCount ? `${failCount} — see the Defects sheet` : "None — Defects sheet is empty"],
+  ];
+  const ss = wb.addWorksheet("Summary");
+  const boxed = swbXCS(SWB_XC.white, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+  sumRows.forEach((r, i) => r.forEach((v, ci) => {
+    const cell = ss.getCell(i + 1, ci + 1); cell.value = v;
+    if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjResultStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjResultStyle("PASS") : boxed);
+  }));
+  ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
+  xjPageSetup(ss, false, null);
+  const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 // ─────────────────────────────────────────────────────────────────────────
 // TEMPLATE DOWNLOAD — gives user a sample import spreadsheet
@@ -2319,79 +2284,47 @@ function ielSiteSummary(results,project,cat){
 }
 
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
-const IEL_C={green:"FF10B981",white:"FFFFFFFF",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",passWhite:"FFFFFFFF",failRed:"FFFFC7CE",naGrey:"FFF2F2F2",priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623"};
-function ielBorder(s="thin",c=IEL_C.midGrey){return{style:s,color:{rgb:c}};}
-function ielAllBorders(){const b=ielBorder();return{top:b,bottom:b,left:b,right:b};}
-function ielBtm(){return{bottom:ielBorder("hair")};}
-function ielCS(fill,font={},align={},borders={}){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...font},alignment:{vertical:"center",...align},border:borders};}
-function ielPriColor(p){if(p==="U")return{bg:IEL_C.priorityU_bg,font:IEL_C.priorityU_font,bold:true};if(p==="H")return{bg:IEL_C.priorityH_bg,font:IEL_C.priorityH_font,bold:false};if(p==="M")return{bg:IEL_C.priorityM_bg,font:IEL_C.priorityM_font,bold:false};if(p==="L")return{bg:IEL_C.priorityL_bg,font:IEL_C.priorityL_font,bold:false};return null;}
-function ielDS(ri,pf,priority=""){if(priority){const pc=ielPriColor(priority);if(pc)return ielCS(pc.bg,{sz:9,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},ielBtm());}let bg=ri%2===0?IEL_C.white:IEL_C.lightGrey,fontColor=IEL_C.darkGrey,bold=false;if(pf==="Pass")bg=IEL_C.passWhite;if(pf==="Fail"){bg=IEL_C.failRed;fontColor=IEL_C.priorityH_font;bold=true;}if(pf==="N/A")bg=IEL_C.naGrey;return ielCS(bg,{sz:9,color:{rgb:fontColor},bold},{wrapText:true},ielBtm());}
-function ielSetCell(ws,ref,value,style){const t=typeof value==="number"?"n":"s";ws[ref]={v:value!=null?value:"",t,s:style};}
 
-function exportIELExcel(project, results, meta) {
-  const wb=XLSX.utils.book_new();
-  const testDate=(meta&&meta.testDate)||"";
-  const auditor=(meta&&meta.auditor)||"";
-  const nextDue=meta&&meta.nextTestDate?fmtDate(meta.nextTestDate):addMonths(testDate,3);
-  const sName=project.name||"Site";
-  const headers=["Location","Type","Machine","Date","Mechanism / Reset Check","Circuit Isolation Verified","Lanyard Tension / Cond.","Pass / Fail","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)","Next Test Due (3 months)"];
-  const n=headers.length;
-  const cols="ABCDEFGHIJKLMNO".slice(0,n).split("");
-  const titleSt=ielCS("FF2D2D2D",{bold:true,sz:14,color:{rgb:"FFFFFFFF"}},{horizontal:"left"});
-  const subSt=ielCS("FF1E1E1E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
-  const metaSt=ielCS("FF262626",{sz:9,color:{rgb:"FF999999"}},{horizontal:"left"});
-  const spaceSt=ielCS("FF1E1E1E");
-  const hdrSt=ielCS(IEL_C.green,{bold:true,sz:10,color:{rgb:"FFFFFFFF"}},{horizontal:"center",wrapText:true},ielAllBorders());
-  const rows=[];
-  rows.push([`${sName} — Isolators, E-Stops & Lanyards Test`,...Array(n-1).fill("")]);
-  rows.push([[project.company||'SparkCheck', project.abn?`ABN: ${project.abn}`:'', project.licence?`Electrical Licence: ${project.licence}`:''].filter(Boolean).join('  |  '),...Array(n-1).fill('')]);
-  rows.push([`Auditor: ${auditor}`,"",`Date Tested: ${fmtDate(testDate)}`,"",`Next Test Due: ${nextDue}`,...Array(Math.max(0,n-5)).fill("")]);
-  rows.push(Array(n).fill(""));
-  rows.push(headers);
-  const dataRows=[];
-  const catOrder=["estops","lanyards","isolators"];
+async function exportIELExcel(project, results, meta) {
+  const testDate = (meta && meta.testDate) || "";
+  const auditor = (meta && meta.auditor) || "";
+  const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
+  const sName = project.name || "Site";
+  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const rows = [];
+  const catOrder = ["estops", "lanyards", "isolators"];
   // Organised by AREA first, then category within each area — no separator rows
-  project.areas.forEach(area=>{
-    catOrder.forEach(catKey=>{
-      const catLabel=IEL_TYPE_LABEL[catKey]||catKey;
-      const catPanel=area.panels.find(p=>p.name===catKey);
-      if(!catPanel||!catPanel.circuits.length)return;
-      catPanel.circuits.forEach(itemId=>{
-        const machineName=(catPanel.machineNames||{})[itemId]||itemId;
-        const item=defectGateByStatus((((results[area.id]||{})[catKey])||{})[itemId]||{status:IEL_STATUS.UNTESTED,mechCheck:false,circuitIso:false,lanyardCond:false,notes:"",priority:"",rectified:"",lastTested:""});
-        const st=item.status||IEL_STATUS.UNTESTED;
-        const pf=st===IEL_STATUS.PASS?"Pass":st===IEL_STATUS.FAIL?"Fail":st===IEL_STATUS.NA?"N/A":"Untested";
-        const dueDate=item.lastTested?addMonths(item.lastTested,3):"";
-        rows.push([
-          area.name,catLabel,machineName,
-          fmtDate(item.lastTested),
-          item.mechCheck?"yes":"",
-          item.circuitIso?"yes":"",
-          catKey==="lanyards"?(item.lanyardCond?"yes":""):"",
-          pf,
-          item.rectified||"",item.scheduledDate?fmtDate(item.scheduledDate):"",
-          item.defectId||"",item.responsibility||"",item.notes||"",item.priority||"",
-          dueDate
-        ]);
-        dataRows.push({pf,priority:item.priority||""});
+  project.areas.forEach(area => {
+    catOrder.forEach(catKey => {
+      const catLabel = IEL_TYPE_LABEL[catKey] || catKey;
+      const catPanel = area.panels.find(p => p.name === catKey);
+      if (!catPanel || !catPanel.circuits.length) return;
+      catPanel.circuits.forEach(itemId => {
+        const machineName = (catPanel.machineNames || {})[itemId] || itemId;
+        const item = defectGateByStatus((((results[area.id] || {})[catKey]) || {})[itemId] || { status: IEL_STATUS.UNTESTED, mechCheck: false, circuitIso: false, lanyardCond: false, notes: "", priority: "", rectified: "", lastTested: "" });
+        const st = item.status || IEL_STATUS.UNTESTED;
+        const pf = st === IEL_STATUS.PASS ? "Pass" : st === IEL_STATUS.FAIL ? "Fail" : st === IEL_STATUS.NA ? "N/A" : "Untested";
+        const dueDate = item.lastTested ? addMonths(item.lastTested, 3) : "";
+        rows.push({
+          cells: [area.name, catLabel, machineName, fmtDate(item.lastTested), item.mechCheck ? "yes" : "", item.circuitIso ? "yes" : "", catKey === "lanyards" ? (item.lanyardCond ? "yes" : "") : "", pf, item.notes || "", dueDate],
+          defect: pf === "Fail" ? { ids: [area.name, machineName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
+        });
       });
     });
   });
-  rows.push(Array(n).fill(""));
-  rows.push([`Notes: ${(meta&&meta.notes)||""}`,...Array(n-1).fill("")]);
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:22},{wch:10},{wch:28},{wch:11},{wch:18},{wch:18},{wch:18},{wch:10},{wch:20},{wch:14},{wch:10},{wch:16},{wch:36},{wch:10},{wch:16}];
-  ws["!rows"]=[{hpt:32},{hpt:16},{hpt:16},{hpt:6},{hpt:40}];
-  ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}];
-  cols.forEach(col=>{ielSetCell(ws,`${col}1`,(ws[`${col}1`]||{}).v||"",titleSt);ielSetCell(ws,`${col}2`,(ws[`${col}2`]||{}).v||"",subSt);ielSetCell(ws,`${col}3`,(ws[`${col}3`]||{}).v||"",metaSt);ielSetCell(ws,`${col}4`,"",spaceSt);ielSetCell(ws,`${col}5`,(ws[`${col}5`]||{}).v||"",hdrSt);});
-  let row=6;dataRows.forEach((dr,ri)=>{
-    cols.forEach(col=>{const ref=`${col}${row}`;ielSetCell(ws,ref,(ws[ref]||{}).v||"",ielDS(ri,dr.pf,dr.priority));});
-    row++;
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
+    title: `${sName} — Isolators, E-Stops & Lanyards Test`, defectTitle: `${sName} — Isolators, E-Stops & Lanyards Test — Defects`, coLine,
+    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${nextDue}`],
+    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    mainSheet: "Isolators EStops Lanyards",
+    headers: ["Location", "Type", "Machine", "Date", "Mechanism / Reset Check", "Circuit Isolation Verified", "Lanyard Tension / Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
+    widths: [16, 10, 20, 11, 12, 12, 12, 9, 22, 11],
+    idHeaders: ["Location", "Machine"], idWidths: [16, 22],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  XLSX.utils.book_append_sheet(wb,ws,"Isolators EStops Lanyards");
-  const filename=`IEL_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
-  const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true,bookSST:false});
-  deliverExportFile(wbOut, filename);
+  const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
 // Import — same format as export
@@ -4413,9 +4346,22 @@ function addTATMonths(dateStr, months) {
   } catch(_) { return ""; }
 }
 
+// Electrical Test (the result shown on the test-and-tag machine): "" = not recorded, "pass" or "fail". An ADDITIVE optional field — a stored record
+// without it reads as "" and is never rewritten by a read, so no storage-key bump is needed and every legacy record / History snapshot is untouched.
+// Overall result rule (the overall result itself stays manual): PASS can only be marked when the Visual Inspection is ticked AND the Electrical Test
+// passed; Electrical FAIL forces the overall result to FAIL. The gate applies when MARKING pass — an item already PASS (e.g. legacy) is never changed.
+const tatCanPass = item => !!(item && item.visualCheck) && (item && item.electricalCheck) === "pass";
+function tatElectricalPatch(item, next, testDate) {
+  const patch = { electricalCheck: next };
+  if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }
+  else if (next !== "pass" && item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;  // pass cleared: the PASS it justified goes
+  return patch;
+}
 function tatGetItem(results, siteId, areaId, itemId) {
-  return(((results[siteId]||{})[areaId]||{})[itemId])||{
-    status:TAT_STATUS.UNTESTED, visualCheck:false,
+  const rec = (((results[siteId]||{})[areaId]||{})[itemId]);
+  if (rec) return "electricalCheck" in rec ? rec : { ...rec, electricalCheck:"" };   // read-time default only (a copy — storage is never touched)
+  return {
+    status:TAT_STATUS.UNTESTED, visualCheck:false, electricalCheck:"",
     equipType:"", freq:"3", lastTested:"", notes:"", priority:"", tag:"", desc:""
   };
 }
@@ -4453,108 +4399,48 @@ function tatSiteSummary(results, project) {
 // ─────────────────────────────────────────────────────────────────────────
 // T&T EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
-const TAT_C = {
-  blue:"FF3B82F6", white:"FFFFFFFF", darkGrey:"FF2D2D2D",
-  lightGrey:"FFF5F5F5", midGrey:"FFD9D9D9",
-  passWhite:"FFFFFFFF", failRed:"FFFFC7CE", naGrey:"FFF2F2F2",
-  priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",
-  priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
-  priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",
-  priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
-};
-function tatBorder(s="thin",c=TAT_C.midGrey){return{style:s,color:{rgb:c}};}
-function tatAllBorders(){const b=tatBorder();return{top:b,bottom:b,left:b,right:b};}
-function tatBtm(){return{bottom:tatBorder("hair")};}
-function tatCS(fill,font={},align={},borders={}){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...font},alignment:{vertical:"center",...align},border:borders};}
-function tatPriColor(p){
-  if(p==="U")return{bg:TAT_C.priorityU_bg,font:TAT_C.priorityU_font,bold:true};
-  if(p==="H")return{bg:TAT_C.priorityH_bg,font:TAT_C.priorityH_font,bold:false};
-  if(p==="M")return{bg:TAT_C.priorityM_bg,font:TAT_C.priorityM_font,bold:false};
-  if(p==="L")return{bg:TAT_C.priorityL_bg,font:TAT_C.priorityL_font,bold:false};
-  return null;
-}
-function tatDS(ri,pf,priority=""){
-  if(priority){const pc=tatPriColor(priority);if(pc)return tatCS(pc.bg,{sz:9,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},tatBtm());}
-  let bg=ri%2===0?TAT_C.white:TAT_C.lightGrey,fontColor=TAT_C.darkGrey,bold=false;
-  if(pf==="Pass")bg=TAT_C.passWhite;
-  if(pf==="Fail"){bg=TAT_C.failRed;fontColor=TAT_C.priorityH_font;bold=true;}
-  if(pf==="N/A")bg=TAT_C.naGrey;
-  return tatCS(bg,{sz:9,color:{rgb:fontColor},bold},{wrapText:true},tatBtm());
-}
-function tatSetCell(ws,ref,value,style){const t=typeof value==="number"?"n":"s";ws[ref]={v:value!=null?value:"",t,s:style};}
 
-function exportTATExcel(project, results, meta) {
-  const wb=XLSX.utils.book_new();
-  const testDate=(meta&&meta.testDate)||"";
-  const auditor=(meta&&meta.auditor)||"";
-  const sName=project.name||"Site";
-  const coLine=[project.company||"SparkCheck",project.abn?`ABN: ${project.abn}`:"",project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-  const headers=["Area","Asset ID / Tag","Description","Equipment Type","Visual Inspection","Pass / Fail","Date Tested","Test Frequency","Next Test Due","Notes / Comments","Priority (L,M,H,U)","Defect ID","Rectified / Scheduled","Responsibility"];
-  const n=headers.length;
-  const cols="ABCDEFGHIJKLMN".slice(0,n).split("");
-  const titleSt=tatCS("FF2D2D2D",{bold:true,sz:14,color:{rgb:"FFFFFFFF"}},{horizontal:"left"});
-  const subSt=tatCS("FF1E1E1E",{sz:9,color:{rgb:"FFbbbbbb"}},{horizontal:"left"});
-  const metaSt=tatCS("FF262626",{sz:9,color:{rgb:"FF999999"}},{horizontal:"left"});
-  const spaceSt=tatCS("FF1E1E1E");
-  const hdrSt=tatCS(TAT_C.blue,{bold:true,sz:10,color:{rgb:"FFFFFFFF"}},{horizontal:"center",wrapText:true},tatAllBorders());
-  const rows=[];
-  rows.push([`${sName} — Test & Tag`,...Array(n-1).fill("")]);
-  rows.push([coLine,...Array(n-1).fill("")]);
-  rows.push([`Auditor: ${auditor}`,"",`Date Tested: ${fmtDate(testDate)}`,...Array(n-3).fill("")]);
-  rows.push(Array(n).fill(""));
-  rows.push(headers);
-  const dataRows=[];
-  project.areas.forEach(area=>{
-    (area.items||[]).forEach(itemId=>{
+// Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
+const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
+async function exportTATExcel(project, results, meta) {
+  const testDate = (meta && meta.testDate) || "";
+  const auditor = (meta && meta.auditor) || "";
+  const sName = project.name || "Site";
+  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const rows = [];
+  project.areas.forEach(area => {
+    (area.items || []).forEach(itemId => {
       // results is pre-stripped of projectId — lookup directly by areaId
-      const item=defectGateByStatus(((results[area.id]||{})[itemId])||{status:TAT_STATUS.UNTESTED,visualCheck:false,equipType:"",freq:"3",lastTested:"",notes:"",priority:""});
+      const item = defectGateByStatus(((results[area.id] || {})[itemId]) || { status: TAT_STATUS.UNTESTED, visualCheck: false, equipType: "", freq: "3", lastTested: "", notes: "", priority: "" });
       // Pull tag, name, equipType, freq from area metadata as source of truth
-      const areaTag=(area.itemTags||{})[itemId]||item.tag||"";
-      const rawName=(area.itemNames||{})[itemId]||"";
-      const cleanName=rawName.replace(/^\d+\s*—\s*/,"");
-      const areaEquip=(area.itemEquipTypes||{})[itemId]||item.equipType||"";
-      const areaFreq=(area.itemFreqs||{})[itemId]||item.freq||"3";
-      const st=item.status||TAT_STATUS.UNTESTED;
-      const pf=st===TAT_STATUS.PASS?"Pass":st===TAT_STATUS.FAIL?"Fail":st===TAT_STATUS.NA?"N/A":"Untested";
-      const freqLabel=TAT_FREQUENCIES.find(f=>f.value===areaFreq)?.label||`${areaFreq} Months`;
-      const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
-      rows.push([
-        area.name, areaTag, cleanName, areaEquip,
-        item.visualCheck?"Yes":"", pf, fmtDate(item.lastTested),
-        freqLabel, nextDue, item.notes||"", item.priority||"",
-        item.defectId||"", item.rectified||"", item.responsibility||""
-      ]);
-      dataRows.push({pf,priority:item.priority||""});
+      const areaTag = (area.itemTags || {})[itemId] || item.tag || "";
+      const rawName = (area.itemNames || {})[itemId] || "";
+      const cleanName = rawName.replace(/^\d+\s*—\s*/, "");
+      const areaEquip = (area.itemEquipTypes || {})[itemId] || item.equipType || "";
+      const areaFreq = (area.itemFreqs || {})[itemId] || item.freq || "3";
+      const st = item.status || TAT_STATUS.UNTESTED;
+      const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
+      const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
+      const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
+      rows.push({
+        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
+        defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
+      });
     });
   });
-  rows.push(Array(n).fill(""));
-  rows.push([`Notes: ${(meta&&meta.notes)||""}`,...Array(n-1).fill("")]);
-  const ws=XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"]=[{wch:20},{wch:14},{wch:30},{wch:16},{wch:14},{wch:10},{wch:12},{wch:14},{wch:14},{wch:36},{wch:10},{wch:12},{wch:20},{wch:22}];
-  ws["!rows"]=[{hpt:32},{hpt:16},{hpt:16},{hpt:6},{hpt:40}];
-  ws["!merges"]=[
-    {s:{r:0,c:0},e:{r:0,c:n-1}},
-    {s:{r:1,c:0},e:{r:1,c:n-1}},
-    {s:{r:2,c:0},e:{r:2,c:1}},
-    {s:{r:2,c:2},e:{r:2,c:n-1}},
-    {s:{r:3,c:0},e:{r:3,c:n-1}},
-  ];
-  cols.forEach(col=>{
-    tatSetCell(ws,`${col}1`,(ws[`${col}1`]||{}).v||"",titleSt);
-    tatSetCell(ws,`${col}2`,(ws[`${col}2`]||{}).v||"",subSt);
-    tatSetCell(ws,`${col}3`,(ws[`${col}3`]||{}).v||"",metaSt);
-    tatSetCell(ws,`${col}4`,"",spaceSt);
-    tatSetCell(ws,`${col}5`,(ws[`${col}5`]||{}).v||"",hdrSt);
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
+    title: `${sName} — Test & Tag`, defectTitle: `${sName} — Test & Tag — Defects`, coLine,
+    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Machine Used: ${(meta && meta.machine) || ""}`],
+    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    mainSheet: "Test & Tag",
+    headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
+    widths: [14, 12, 22, 11, 10, 10, 9, 11, 10, 11, 20],
+    idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  let row=6;
-  dataRows.forEach((dr,ri)=>{
-    cols.forEach(col=>{const ref=`${col}${row}`;tatSetCell(ws,ref,(ws[ref]||{}).v||"",tatDS(ri,dr.pf,dr.priority));});
-    row++;
-  });
-  XLSX.utils.book_append_sheet(wb,ws,"Test & Tag");
-  const filename=`TAT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`;
-  const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true,bookSST:false});
-  deliverExportFile(wbOut, filename);
+  const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -4978,6 +4864,11 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
         ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
+      // the test-and-tag machine used for this audit — site level, entered once (meta.machine; optional, "" when missing)
+      ,React.createElement('div',{style:{marginTop:8}}
+        ,React.createElement('div',{style:ST.metaLabelText},"MACHINE USED")
+        ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:meta.machine||"","aria-label":"Machine used",placeholder:"e.g. Rigel 288 (S/N …), cal. due …",onChange:e=>setMeta({machine:e.target.value})})
+      )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
@@ -5088,6 +4979,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
             ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginBottom:4}},d.equipType)
             ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
               ,React.createElement('span',{style:{color:d.visualCheck?"#16a34a":"#52525b",fontWeight:600}},d.visualCheck?"✓":"○"," Visual")
+              ,React.createElement('span',{style:{color:d.electricalCheck==="pass"?"#16a34a":d.electricalCheck==="fail"?"#dc2626":"#52525b",fontWeight:600}},d.electricalCheck==="pass"?"✓":d.electricalCheck==="fail"?"✕":"○"," Electrical")
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
               ,React.createElement('span',null,freqLabel)
             )
@@ -5108,7 +5000,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
   useFailDefaults(item.status===TAT_STATUS.FAIL,item,{rectified:((dropdowns&&dropdowns.rectified)||DEFAULT_RECTIFIED)[0],responsibility:((dropdowns&&dropdowns.responsibility)||DEFAULT_RESPONSIBILITY)[0]},onPatch);
   const name=(area.itemNames||{})[itemId]||item.tag||item.desc||itemId;
   const sm=TAT_SM[item.status||TAT_STATUS.UNTESTED]||TAT_SM.untested;
-  const canPass=item.visualCheck;
+  const canPass=tatCanPass(item);
   // Read freq and equipType from area metadata as source of truth (overrides results default)
   const areaFreq=(area.itemFreqs||{})[itemId]||item.freq||"3";
   const areaEquip=(area.itemEquipTypes||{})[itemId]||item.equipType||"";
@@ -5119,6 +5011,11 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     if(s===TAT_STATUS.PASS&&!canPass)return;
     const testDate=meta.testDate||new Date().toISOString().slice(0,10);
     onPatch({status:s,...(s===TAT_STATUS.PASS||s===TAT_STATUS.FAIL?{lastTested:testDate}:{})});
+  };
+
+  const setElectrical=v=>{
+    const next=(item.electricalCheck||"")===v?"":v;   // re-tapping the active button clears it back to "not recorded"
+    onPatch(tatElectricalPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
   };
 
   const toggleVisual=()=>{
@@ -5176,10 +5073,22 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         )
       )
 
+      // Electrical test — the pass / fail shown on the test-and-tag machine (FAIL sets the overall result to FAIL)
+      ,React.createElement('div',{style:{marginBottom:16}}
+        ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:2}},"ELECTRICAL TEST")
+        ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:8}},"Result shown on the test-and-tag machine")
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,[["pass",TAT_STATUS.PASS],["fail",TAT_STATUS.FAIL]].map(([v,s])=>{
+            const s2=TAT_SM[s]; const active=(item.electricalCheck||"")===v;
+            return React.createElement('button',{key:v,"data-testid":"tat-electrical-"+v,"aria-label":"Electrical test "+s2.label,"aria-pressed":active,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?s2.border:"#d4d4d8"}`,background:active?s2.bg:"#f7f6f3",color:active?s2.fg:"#52525b"},onClick:()=>setElectrical(v)},s2.label);
+          })
+        )
+      )
+
       // Result
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
-        ,!canPass&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked before marking PASS")
+        ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked and the Electrical Test passed before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
             const sm2=TAT_SM[s]||TAT_SM.untested;
@@ -5264,7 +5173,7 @@ function TATReportView({project,results,meta,onBack}){
       if((v.status||TAT_STATUS.UNTESTED)===TAT_STATUS.FAIL){
         const mn=(area.itemNames||{})[itemId]||itemId;
         const tag=(area.itemTags||{})[itemId]||"";
-        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
+        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,electrical:v.electricalCheck||"",priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
       }
     });
   });
@@ -5275,6 +5184,7 @@ function TATReportView({project,results,meta,onBack}){
     ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{fontSize:12,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
     )
+    ,meta.machine&&meta.machine.trim()&&React.createElement('div',{"data-testid":"tat-report-machine",style:{fontSize:12,color:"#52525b",marginTop:-8,marginBottom:16}},"Machine: ",meta.machine.trim())
     ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:20})
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:TAT_COLOR,letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY")
@@ -5293,7 +5203,7 @@ function TATReportView({project,results,meta,onBack}){
         );
       })
     )
-    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
+    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:f.electrical==="fail"?["Electrical test: FAIL"]:[],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
     ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
@@ -5652,6 +5562,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               )
               ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#52525b",marginTop:3}}
                 ,React.createElement('span',{style:{color:v.visualCheck?"#16a34a":"#52525b"}},v.visualCheck?"✓":"✕"," Visual")
+                ,React.createElement('span',{style:{color:v.electricalCheck==="pass"?"#16a34a":v.electricalCheck==="fail"?"#dc2626":"#52525b"}},v.electricalCheck==="pass"?"✓":v.electricalCheck==="fail"?"✕":"○"," Electrical")
                 ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
               )
               ,v.notes&&React.createElement('div',{style:{fontSize:10,color:"#a3530f",marginTop:2}},"✎ ",v.notes)
@@ -6017,172 +5928,48 @@ function siteMonitor(results, project) {
 // ─────────────────────────────────────────────────────────────────────────
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
-function exportThermoExcel(project, results, meta) {
-  const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
+async function exportThermoExcel(project, results, meta) {
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
   const nextDue = meta && meta.nextTestDate ? meta.nextTestDate : (testDate ? addYearsISO(testDate, 1) : "");
-  const headers = ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Rectified / Scheduled", "Date Rectified / Scheduled", "Defect ID", "Responsibility", "Notes / Recommendations", "Priority (L,M,H,U)"];
-  const n = headers.length;
+  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
   const rows = [];
-  rows.push([`${sName} — Thermographic Test`, ...Array(n - 1).fill("")]);
-  rows.push([[project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  "), ...Array(n - 1).fill("")]);
-  rows.push([`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${fmtDate(nextDue)}`, ...Array(Math.max(0, n - 5)).fill("")]);
-  rows.push(Array(n).fill(""));
-  rows.push(headers);
-  const dataRows = [];
+  // FAIL and MONITOR photos carry defect details (the MONITOR panel collects the same fields on purpose); PASS never does
+  const add = (area, board, cName, photo0) => {
+    if (!photo0) { rows.push({ cells: [area.name, board.name, cName, fmtDate(testDate), "", "", "", ""], defect: null }); return; }
+    const flagged = photo0.result === "FAIL" || photo0.result === "MONITOR";
+    const photo = defectGate(photo0, flagged);
+    rows.push({
+      cells: [area.name, board.name, cName, fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.notes || ""],
+      defect: flagged ? { ids: [area.name, board.name, cName], defectId: photo.defectId, priority: photo.priority, rectified: photo.rectified, rectifiedDate: photo.rectifiedDate, responsibility: photo.responsibility, notes: photo.notes } : null,
+    });
+  };
   (project.areas || []).forEach(area => {
     (area.boards || []).forEach(board => {
-      // If board has circuits, one row per photo per circuit
+      // If board has circuits, one row per photo per circuit; otherwise photos belong directly to the board ("__board__")
       const circuits = board.circuits || [];
-      if (circuits.length > 0) {
-        circuits.forEach(cid => {
-          const cName = (board.circuitNames || {})[cid] || "";
-          const photos = getPhotos(results, area.id, board.id, cid).filter(p => !p.isSkip);
-          if (photos.length === 0) {
-            // Untested circuit — still list it
-            rows.push([area.name, board.name, cName, fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
-            dataRows.push({
-              result: "UNTESTED",
-              priority: ""
-            });
-          } else {
-            photos.forEach(photo0 => { const photo = defectGate(photo0, photo0.result === "FAIL" || photo0.result === "MONITOR");
-              rows.push([area.name, board.name, cName, fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.rectified || "", photo.rectifiedDate ? fmtDate(photo.rectifiedDate) : "", photo.defectId || "", photo.responsibility || "", photo.notes || "", photo.priority || ""]);
-              dataRows.push({
-                result: photo.result || "UNTESTED",
-                priority: photo.priority || ""
-              });
-            });
-          }
-        });
-      } else {
-        // No circuits — photos belong directly to board (circuitId = "__board__")
-        const photos = getPhotos(results, area.id, board.id, "__board__").filter(p => !p.isSkip);
-        if (photos.length === 0) {
-          rows.push([area.name, board.name, "", fmtDate(testDate), "", "", "", "", "", "", "", "", ""]);
-          dataRows.push({
-            result: "UNTESTED",
-            priority: ""
-          });
-        } else {
-          photos.forEach(photo0 => { const photo = defectGate(photo0, photo0.result === "FAIL" || photo0.result === "MONITOR");
-            rows.push([area.name, board.name, "", fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.rectified || "", photo.rectifiedDate ? fmtDate(photo.rectifiedDate) : "", photo.defectId || "", photo.responsibility || "", photo.notes || "", photo.priority || ""]);
-            dataRows.push({
-              result: photo.result || "UNTESTED",
-              priority: photo.priority || ""
-            });
-          });
-        }
-      }
+      const targets = circuits.length > 0 ? circuits.map(cid => [cid, (board.circuitNames || {})[cid] || ""]) : [["__board__", ""]];
+      targets.forEach(([cid, cName]) => {
+        const photos = getPhotos(results, area.id, board.id, cid).filter(p => !p.isSkip);
+        if (photos.length === 0) add(area, board, cName, null);          // untested circuit — still listed
+        else photos.forEach(p => add(area, board, cName, p));
+      });
     });
   });
-  rows.push(Array(n).fill(""));
-  rows.push([`Notes: ${meta && meta.notes || ""}`, ...Array(n - 1).fill("")]);
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = [{
-    wch: 22
-  }, {
-    wch: 28
-  }, {
-    wch: 26
-  }, {
-    wch: 12
-  }, {
-    wch: 14
-  }, {
-    wch: 16
-  }, {
-    wch: 10
-  }, {
-    wch: 22
-  }, {
-    wch: 18
-  }, {
-    wch: 12
-  }, {
-    wch: 16
-  }, {
-    wch: 36
-  }, {
-    wch: 12
-  }];
-  ws["!rows"] = [{
-    hpt: 32
-  }, {
-    hpt: 16
-  }, {
-    hpt: 16
-  }, {
-    hpt: 6
-  }, {
-    hpt: 40
-  }];
-  ws["!merges"] = [{
-    s: {
-      r: 0,
-      c: 0
-    },
-    e: {
-      r: 0,
-      c: n - 1
-    }
-  }, {
-    s: {
-      r: 1,
-      c: 0
-    },
-    e: {
-      r: 1,
-      c: n - 1
-    }
-  }, {
-    s: {
-      r: 2,
-      c: 0
-    },
-    e: {
-      r: 2,
-      c: 1
-    }
-  }, {
-    s: {
-      r: 2,
-      c: 2
-    },
-    e: {
-      r: 2,
-      c: 3
-    }
-  }, {
-    s: {
-      r: 2,
-      c: 4
-    },
-    e: {
-      r: 2,
-      c: n - 1
-    }
-  }, {
-    s: {
-      r: 3,
-      c: 0
-    },
-    e: {
-      r: 3,
-      c: n - 1
-    }
-  }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Thermographic Test");
-  const filename = `Thermo_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`;
-  const wbOut = XLSX.write(wb, {
-    bookType: "xlsx",
-    type: "base64",
-    cellStyles: false
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
+    title: `${sName} — Thermographic Test`, defectTitle: `${sName} — Thermographic Test — Defects`, coLine,
+    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${fmtDate(nextDue)}`],
+    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    mainSheet: "Thermographic Test",
+    headers: ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Notes / Recommendations"],
+    widths: [16, 18, 18, 11, 9, 11, 9, 22],
+    idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  deliverExportFile(wbOut, filename);
+  const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -11301,7 +11088,9 @@ const ELT_CHECKS       = [
   {key:"switching", label:"Automatic Switching Test"},
   {key:"charging",  label:"Charging Circuit Test"},
 ];
-const ELT_COLUMNS = ["Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Score","Rectified / Scheduled","Date Rectified / Scheduled","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)","Next Test Due"];
+const ELT_COLUMNS = ["#","Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Score","Notes / Recommendations","Next Test Due"];
+// Defect detail lives on its own sheet (FAIL rows only, always present), cross-referenced to the register by "#"
+const ELT_DEFECT_COLUMNS = ["#","Location","Asset Location","Asset ID","Defect ID","Priority","Rectified / Scheduled","Date Rectified / Scheduled","Responsibility","Notes / Recommendations"];
 const eltEl = React.createElement;
 
 const eltOtherText = (v, o) => v==="Other" ? ((o||"").trim()||"Other") : (v||"");
@@ -11354,15 +11143,17 @@ function eltRegisterRows(project, allResults, meta) {
   return areaAssets(project).map(a=>{
     const r = eltGetRes(results, project.id, a.id);
     return {asset:a, res:r, overall:eltOverall(r)};
-  }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:raw,overall})=>{
+  }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:raw,overall},idx)=>{
     const r = defectGate(raw, overall===STATUS.FAIL); // defect details are retained after a fitting leaves FAIL — only FAIL rows write them
     const date = (meta&&meta.testDate) || "";
     const nextDue = (meta&&meta.nextTestDate) || "";
+    const loc = a.location||project.name||"";
+    // "#" = position among the TESTED fittings; the Defects sheet repeats it for FAIL rows
     return {asset:a, res:raw, overall, cells:[
-      a.location||project.name||"", a.assetLocation||"", a.assetId||"", eltTypeLabel(a), a.maintained||"", a.fitting||"",
+      idx+1, loc, a.assetLocation||"", a.assetId||"", eltTypeLabel(a), a.maintained||"", a.fitting||"",
       date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(raw[c.key])), eltPF(overall), scoreLabel(eltFittingSummary(raw).score),
-      r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.defectId||"", r.responsibility||"", (raw.notes||"").trim(), r.priority||"", nextDue?fmtDate(nextDue):"",
-    ]};
+      (raw.notes||"").trim(), nextDue?fmtDate(nextDue):"",
+    ], defect: overall===STATUS.FAIL ? [idx+1, loc, a.assetLocation||"", a.assetId||"", r.defectId||"", r.priority||"", r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.responsibility||"", (raw.notes||"").trim()] : null};
   });
 }
 
@@ -11370,7 +11161,7 @@ async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-  const cols = "ABCDEFGHIJKLMNOPQRST".split(""); const n = ELT_COLUMNS.length;
+  const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
   const merges = [];
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
@@ -11384,8 +11175,8 @@ async function exportELTExcel(project, allResults, meta) {
   setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
   setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
   merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
-  ELT_COLUMNS.forEach((t,i)=>setCell(cols[i]+'5',t));
-  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1).height = h;});
+  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+'5',t); ws.getCell(cols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
+  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
   const rows = eltRegisterRows(project, allResults, meta);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
@@ -11396,14 +11187,39 @@ async function exportELTExcel(project, allResults, meta) {
     const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
     row.cells.forEach((v,ci)=>{
       let st = base;
-      if ((ci>=6 && ci<=10) || ci===12 || ci===14 || ci===15 || ci===18 || ci===19) st = ctr;
-      if (ci>=7 && ci<=10 && v==="Fail") st = failSt;
-      if (ci===11) st = v==="Fail" ? failSt : passSt;
+      if (ci===0 || (ci>=7 && ci<=13) || ci===15) st = ctr;
+      if (ci>=8 && ci<=11 && v==="Fail") st = failSt;
+      if (ci===12) st = v==="Fail" ? failSt : passSt;
       setCell(cols[ci]+r,v,st);
     });
   });
   merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  [22,18,14,26,16,26,12,12,14,14,14,10,9,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  // Content-width columns (headings wrap). The import-anchor headings stay exact; date columns get the shared >= 13 minimum.
+  [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});
+  const setup = xjPageSetup;
+  setup(ws,true,5);
+
+  // ── Defects sheet: FAIL fittings only, ALWAYS present (headings even with zero fails), keyed to the register by "#" ──
+  {
+    const ds = wb.addWorksheet("Defects");
+    const dset = (ref,val,st)=>{const c=ds.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
+    const dcols = "ABCDEFGHIJ".split(""); const dn = dcols.length;
+    const defRows = rows.filter(r=>r.defect);
+    dset('A1',`${sName} — Emergency Lighting Test — Defects`); dset('A2',coLine);
+    dset('A3',`Defects recorded: ${defRows.length}`); dset('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`); dset('E3',"Priority: L Low · M Medium · H High · U Urgent");
+    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1,c1+1,r2+1,c2+1));
+    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+'5',t); ds.getCell(dcols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1).height = h;});
+    defRows.forEach((row,i)=>{
+      const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+      const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
+      const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
+      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
+    });
+    if (!defRows.length) dset('A6',"No defects recorded");
+    [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
+    setup(ds,true,5);
+  }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
   // (the register itself only lists tested fittings).
@@ -11429,6 +11245,7 @@ async function exportELTExcel(project, allResults, meta) {
       });
     });
     [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
+    setup(ps,false,1);
   }
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
@@ -11638,8 +11455,8 @@ function downloadELTTemplate() {
     [""],
     ["INSTRUCTIONS: Fill in one row per fitting. Only Asset Location is required; Location defaults to the site name. Type, Maintained/Non-Maintained, Asset ID and Fitting Type/Manufacturer are optional. Leave the test columns (Date onwards) blank — results are recorded in the app. Site and company are read from rows 1-2."],
     [...ELT_COLUMNS],
-    ["", "SE Door", "", "Exit Signs", "Maintained", "Clevertronics 24m"],
-    ["", "SW Roof", "", "Batten Lights", "Non-Maintained", ""],
+    ["", "", "SE Door", "", "Exit Signs", "Maintained", "Clevertronics 24m"],
+    ["", "", "SW Roof", "", "Batten Lights", "Non-Maintained", ""],
   ];
   const ws=XLSX.utils.aoa_to_sheet(rows);
   ws["!cols"]=ELT_COLUMNS.map((c,i)=>({wch:i<6?24:14}));
@@ -12224,7 +12041,7 @@ function parseIRTExcel(data){
     if(hi<0)hi=4;
     const header=rows[hi].map(c=>String(c).toLowerCase().trim());
     const col=s=>header.findIndex(h=>h.includes(s));
-    const cArea=Math.max(0,col("area")||col("location"));
+    const cArea=Math.max(0,col("area")>=0?col("area"):col("location"));
     const cPanel=header.findIndex(h=>h.includes("panel")||h.includes("board")||h.includes("db")||h.includes("mcc"));
     const cItem=header.findIndex(h=>h.includes("equip")||h.includes("motor")||h.includes("circuit")||h.includes("cable")||h.includes("item"));
     const areaMap={};
@@ -12271,28 +12088,42 @@ function downloadIRTTemplate(){
 }
 
 // ─── Excel export ─────────────────────────────────────────────────────────
-function exportIRTExcel(project,results,meta){
-  const XLSX=XLSX_LIB;if(!XLSX){alert("Excel library not loaded");return;}
-  const sName=project.name||"Site";const td=meta.testDate?fmtDate(meta.testDate):"";
-  const rows=[];
-  rows.push([`${sName} \u2014 Insulation Resistance Test \u2014 ${td}`]);
-  rows.push([`${project.company||"Your Company Name"}${project.abn?"  |  ABN: "+project.abn:""}${project.licence?"  |  Electrical Licence: "+project.licence:""}`]);
-  if(meta.auditor)rows.push([`Tested by: ${meta.auditor}`]);
-  if(meta.nextTestDate)rows.push([`Next Test Due: ${fmtDate(meta.nextTestDate)}`]);else if(meta.testDate)rows.push([`Next Test Due: ${irtAddYear(meta.testDate)}`]);
-  rows.push([]);
-  rows.push(["Location","Panel / DB","Equipment / Circuit","Test Date","Test Voltage","L1-E (M\u03a9)","L2-E (M\u03a9)","L3-E (M\u03a9)","N-E (M\u03a9)","L1-L2 (M\u03a9)","L1-L3 (M\u03a9)","L2-L3 (M\u03a9)","L1-N (M\u03a9)","L2-N (M\u03a9)","L3-N (M\u03a9)","Pass / Fail","Rectified / Scheduled","Date Rectified","Defect ID","Responsibility","Notes / Recommendations","Priority (L,M,H,U)"]);
-  (project.areas||[]).forEach(area=>(area.panels||[]).forEach(panel=>(panel.items||[]).forEach(itemId=>{
-    const name=(panel.itemNames||{})[itemId]||itemId;
-    const d0=irtGetItem(results,project.id,area.id,panel.id,itemId);const r=d0.readings||{};
-    const eff=d0.status==="untested"?irtAutoStatus(r):d0.status;
-    const d=defectGate(d0,eff==="fail"); // defect details only for FAIL (auto-detected or manual)
-    rows.push([area.name,panel.name,name,td,d.testVoltage||"500V",r.L1E||"",r.L2E||"",r.L3E||"",r.NE||"",r.L1L2||"",r.L1L3||"",r.L2L3||"",r.L1N||"",r.L2N||"",r.L3N||"",eff.toUpperCase(),d.rectified||"",d.scheduledDate?fmtDate(d.scheduledDate):"",d.defectId||"",d.responsibility||"",d.notes||"",d.priority||""]);
+// IRT export: THREE linked sheets, all keyed by the same "#":  Register (narrow summary — the sheet meant for a client PDF),
+// Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
+async function exportIRTExcel(project, results, meta) {
+  const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
+  const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
+  const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
+  const rows = []; const readingRows = [];
+  (project.areas || []).forEach(area => (area.panels || []).forEach(panel => (panel.items || []).forEach(itemId => {
+    const name = (panel.itemNames || {})[itemId] || itemId;
+    const d0 = irtGetItem(results, project.id, area.id, panel.id, itemId); const r = d0.readings || {};
+    const eff = d0.status === "untested" ? irtAutoStatus(r) : d0.status;
+    const d = defectGate(d0, eff === "fail"); // defect details only for FAIL (auto-detected or manual)
+    rows.push({
+      cells: [area.name, panel.name, name, td, eff.toUpperCase(), d.notes || ""],
+      defect: eff === "fail" ? { ids: [area.name, panel.name, name], defectId: d.defectId, priority: d.priority, rectified: d.rectified, rectifiedDate: d.scheduledDate, responsibility: d.responsibility, notes: d.notes } : null,
+    });
+    readingRows.push([area.name, panel.name, name, d.testVoltage || "500V", r.L1E || "", r.L2E || "", r.L3E || "", r.NE || "", r.L1L2 || "", r.L1L3 || "", r.L2L3 || "", r.L1N || "", r.L2N || "", r.L3N || "", eff.toUpperCase()]);
   })));
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws["!cols"]=[{wch:20},{wch:18},{wch:26},{wch:12},{wch:12},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:9},{wch:12},{wch:20},{wch:16},{wch:10},{wch:16},{wch:36},{wch:14}];
-  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"IR Test");
-  const fname=`IR_Test_${sName.replace(/\s+/g,"_")}_${meta.testDate||"export"}.xlsx`;
-  const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
-  deliverExportFile(out, fname);
+  const metaRow = [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", `Next Test Due: ${nextDue}`];
+  const title = `${sName} — Insulation Resistance Test — ${td}`;
+  // Readings: same "#" (row order identical to the Register); readings are in MΩ, stated once in the header block instead of on every heading
+  const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E", "L2-E", "L3-E", "N-E", "L1-L2", "L1-L3", "L2-L3", "L1-N", "L2-N", "L3-N", "Pass / Fail"];
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
+    title, defectTitle: `${title} — Defects`, coLine, meta: metaRow,
+    defectMeta: [`Date Tested: ${td}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    mainSheet: "Register",
+    headers: ["Location", "Panel / DB", "Equipment / Circuit", "Test Date", "Pass / Fail", "Notes / Recommendations"],
+    widths: [16, 14, 22, 11, 9, 26],
+    idHeaders: ["Location", "Panel / DB", "Equipment / Circuit"], idWidths: [16, 14, 22],
+    rows, footer: [],
+    between: w => xjSheet(w, "Readings", { title: `${title} — Readings`, coLine, meta: [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"],
+      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
+  });
+  const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
 }
 
 // ─── Motor info modal ─────────────────────────────────────────────────────
@@ -14394,5 +14225,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCanPass, tatElectricalPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;

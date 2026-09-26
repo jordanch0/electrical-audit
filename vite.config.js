@@ -29,6 +29,9 @@ export default defineConfig({
         // filenames), so it can never drift from what Vite actually built — and its
         // hash changes on every build, so there's no manual cache-version bump needed.
         globPatterns: ['**/*.{js,css,html,png,svg,webmanifest}'],
+        // The whole app is one JS chunk (~2.2 MB) — over Workbox's 2 MiB default, and a file over the limit is silently NOT precached (= no offline
+        // support), which is a build ERROR in vite-plugin-pwa. Raise the limit rather than lose offline; splitting the chunk is the long-term fix.
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
         cleanupOutdatedCaches: true,
         clientsClaim: true,
       },

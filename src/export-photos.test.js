@@ -59,7 +59,7 @@ describe('photos in exports', () => {
       { id:'a2', location:'E', assetLocation:'SW Roof', assetId:'EL-2', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'Y' },
     ]});
     const zip = await unzipExport(exportELTExcel, project, { e1:{ a1:{ ...pass4, photos:[{id:'1',dataUrl:JPEG_A}] }, a2:{ ...pass4, photos:[{id:'2',dataUrl:JPEG_B}] } } }, { auditor:'J', testDate:'2026-09-21', nextTestDate:'2027-03-21' });
-    const info = await inspect(zip, 'xl/worksheets/sheet2.xml'); // sheet2 = Photos
+    const info = await inspect(zip, 'xl/worksheets/sheet3.xml'); // sheet1 = register, sheet2 = Defects, sheet3 = Photos
     checkPhotos(info, [JPEG_A, JPEG_B]);
     expect(info.anchors.map(a => a.row)).toEqual([1, 2]); // rows 2 and 3, one photo per row
     expect(info.anchors.every(a => a.col === 3)).toBe(true);
