@@ -4351,10 +4351,21 @@ function addTATMonths(dateStr, months) {
 // Overall result rule (the overall result itself stays manual): PASS can only be marked when the Visual Inspection is ticked AND the Electrical Test
 // passed; Electrical FAIL forces the overall result to FAIL. The gate applies when MARKING pass — an item already PASS (e.g. legacy) is never changed.
 const tatCanPass = item => !!(item && item.visualCheck) && (item && item.electricalCheck) === "pass";
+// AUTO-PASS mirrors auto-FAIL: whichever tap COMPLETES the pair (Visual ticked + Electrical PASS) sets the overall result to PASS and stamps the tested date —
+// but ONLY from UNTESTED: a recorded FAIL or N/A is never flipped silently (the auditor changes it deliberately with the RESULT buttons). Trigger-on-tap only;
+// opening an item never changes it.
+const tatAutoPass = (item, testDate) => (item.status || TAT_STATUS.UNTESTED) === TAT_STATUS.UNTESTED ? { status: TAT_STATUS.PASS, lastTested: testDate } : {};
 function tatElectricalPatch(item, next, testDate) {
   const patch = { electricalCheck: next };
   if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }
-  else if (next !== "pass" && item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;  // pass cleared: the PASS it justified goes
+  else if (next === "pass") { if (item.visualCheck) Object.assign(patch, tatAutoPass(item, testDate)); }                               // Visual already ticked -> this tap completes the pair
+  else if (item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;                // pass cleared: the PASS it justified goes
+  return patch;
+}
+function tatVisualPatch(item, ticked, testDate) {
+  const patch = { visualCheck: ticked };
+  if (ticked) { if ((item.electricalCheck || "") === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                         // Electrical already PASS -> this tap completes the pair
+  else if (item.status === TAT_STATUS.PASS) patch.status = TAT_STATUS.UNTESTED;                                                          // un-ticked: the PASS it justified goes
   return patch;
 }
 function tatGetItem(results, siteId, areaId, itemId) {
@@ -5018,11 +5029,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     onPatch(tatElectricalPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
   };
 
-  const toggleVisual=()=>{
-    const newVal=!item.visualCheck;
-    const newStatus=!newVal&&item.status===TAT_STATUS.PASS?TAT_STATUS.UNTESTED:item.status;
-    onPatch({visualCheck:newVal,status:newStatus});
-  };
+  const toggleVisual=()=>onPatch(tatVisualPatch(item,!item.visualCheck,meta.testDate||new Date().toISOString().slice(0,10)));
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
 
@@ -5088,6 +5095,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       // Result
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
+        ,canPass&&item.status===TAT_STATUS.FAIL&&React.createElement('div',{"data-testid":"tat-fail-kept-hint",style:{background:"#e0e7ff",border:"1px solid #a5b4fc",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#3730a3"}},"Both checks passed — result is still FAIL. Tap PASS to change it.")
         ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked and the Electrical Test passed before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
@@ -14225,5 +14233,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCanPass, tatElectricalPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
