@@ -546,27 +546,33 @@ deliverExportFile(tOut, fname);
 // ─────────────────────────────────────────────────────────────────────────
 // SHARED DELETE BUTTON — two-step inline confirmation for all destructive actions
 // ─────────────────────────────────────────────────────────────────────────
-let activeDeleteSetter = null;
+// ONE rule for everything in the app that EXPANDS (delete / reset / complete confirms, editable-dropdown popovers, area pickers, the Calendar card's delete):
+//   1. only ONE thing is expanded at a time — expanding a second collapses the first;
+//   2. a click (or tap) anywhere OUTSIDE the expanded element collapses it back to idle.
+// It listens for "click" in the CAPTURE phase, deliberately NOT pointerdown: collapsing something above a button between finger-down and finger-up can shift the
+// button out from under the finger and lose the tap. A click on the control that opens the NEXT thing therefore collapses this one first and still opens the next.
+// Inline add / edit forms (they hold typed input) and accordions (navigation) are deliberately NOT collapsible.
+let activeExpander = null;
+function useCollapsible(open, close, ref) {
+  const closeRef = React.useRef(close); closeRef.current = close;
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const me = { close: () => closeRef.current() };
+    if (activeExpander && activeExpander !== me) activeExpander.close();
+    activeExpander = me;
+    const onDocClick = e => { const el = ref && ref.current; if (el && !el.contains(e.target)) closeRef.current(); };
+    document.addEventListener("click", onDocClick, true);
+    return () => { document.removeEventListener("click", onDocClick, true); if (activeExpander === me) activeExpander = null; };
+  }, [open]);
+}
 function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
   const [confirming, setConfirming] = React.useState(false);
+  const boxRef = React.useRef(null);
   React.useEffect(() => { if (onOpenChange) onOpenChange(confirming); }, [confirming]);
-  React.useEffect(() => () => { if (activeDeleteSetter === setConfirming) activeDeleteSetter = null; }, []);
-  const open = () => {
-    if (activeDeleteSetter && activeDeleteSetter !== setConfirming) {
-      activeDeleteSetter(false);
-    }
-    activeDeleteSetter = setConfirming;
-    setConfirming(true);
-  };
-  const cancel = () => {
-    activeDeleteSetter = null;
-    setConfirming(false);
-  };
-  const confirm = () => {
-    activeDeleteSetter = null;
-    setConfirming(false);
-    onDelete();
-  };
+  useCollapsible(confirming, () => setConfirming(false), boxRef);
+  const open = () => setConfirming(true);
+  const cancel = () => setConfirming(false);
+  const confirm = () => { setConfirming(false); onDelete(); };
   if (!confirming) {
     return React.createElement('button', {
       onClick: open,
@@ -586,6 +592,7 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChan
   const btnPad = compact ? '3px 10px' : '4px 14px';
   const btnMinH = compact ? '28px' : '36px';
   return React.createElement('div', {
+    ref: boxRef,
     style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }
   },
     !compact && React.createElement('span', {
@@ -648,15 +655,13 @@ const ddListStyle = extra => ({ display: "flex", flexDirection: "column", gap: D
 function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#dc2626" } }, text) : null; }
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
-  const open = () => {
-    if (activeDeleteSetter && activeDeleteSetter !== setConfirming) activeDeleteSetter(false);
-    activeDeleteSetter = setConfirming;
-    setConfirming(true);
-  };
-  const cancel = () => { activeDeleteSetter = null; setConfirming(false); };
-  const confirm = () => { activeDeleteSetter = null; setConfirming(false); onConfirm(); };
+  const boxRef = React.useRef(null);
+  useCollapsible(confirming, () => setConfirming(false), boxRef);
+  const open = () => setConfirming(true);
+  const cancel = () => setConfirming(false);
+  const confirm = () => { setConfirming(false); onConfirm(); };
   if (!confirming) return renderIdle(open);
-  return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
+  return React.createElement('div', { ref: boxRef, style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
     React.createElement('span', { style: { color: '#991b1b', fontSize: '12px' } }, prompt),
     React.createElement('button', { onClick: confirm, style: { background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.5)', color: '#991b1b', borderRadius: '999px', padding: '3px 12px', fontSize: '12px', cursor: 'pointer' } }, 'Reset'),
     React.createElement('button', { onClick: cancel, style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(0,0,0,0.15)', color: '#52525b', borderRadius: '999px', padding: '3px 12px', fontSize: '12px', cursor: 'pointer' } }, 'Keep')
@@ -1660,7 +1665,7 @@ React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca
 function EditableDropdown({ options, value, onChange, placeholder }) {
 const [open, setOpen] = React.useState(false);
 const [custom, setCustom] = React.useState(false);
-const [typedVal, setTypedVal] = React.useState(value||"");
+const [typedVal, setTypedVal] = React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
 const isCustom = value && !options.includes(value);
 // Sync to custom mode on mount if value isn't in list
 React.useEffect(()=>{ if(isCustom){setCustom(true);setTypedVal(value);} },[]);
@@ -1675,7 +1680,7 @@ React.createElement('div', { style: {display:"flex",gap:8},}
 );
 }
 return (
-React.createElement('div', { style: {position:"relative"},}
+React.createElement('div', { ref: boxRef, style: {position:"relative"},}
 , React.createElement('button', { style: {...S.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"}, onClick: ()=>setOpen(x=>!x),}
 , React.createElement('span', { style: {color:value?"#18181b": "#52525b"},}, value||placeholder||"Select…")
 , React.createElement('span', { style: {color:"#6e6a66",fontSize:12},}, "▾")
@@ -3049,7 +3054,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
 function IELEditableDropdown({options,value,onChange,placeholder,color,colorBg}){
   const[open,setOpen]=React.useState(false);
   const[custom,setCustom]=React.useState(false);
-  const[typedVal,setTypedVal]=React.useState(value||"");
+  const[typedVal,setTypedVal]=React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const isCustom=value&&!options.includes(value);
   React.useEffect(()=>{if(isCustom){setCustom(true);setTypedVal(value);}},[]);
   React.useEffect(()=>{if(custom&&value!==typedVal){setTypedVal(value||"");}},[value]);
@@ -3057,7 +3062,7 @@ function IELEditableDropdown({options,value,onChange,placeholder,color,colorBg})
     ,React.createElement('input',{style:{...SI.modalInput,flex:1},value:typedVal,placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
     ,React.createElement('button',{style:{padding:"8px 10px",background:"transparent",border:"1px solid #d4d4d8",borderRadius:8,color:"#6e6a66",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
   );}
-  return React.createElement('div',{style:{position:"relative"}}
+  return React.createElement('div',{ref:boxRef,style:{position:"relative"}}
     ,React.createElement('button',{style:{...SI.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#18181b": "#52525b"},onClick:()=>setOpen(o=>!o)}
       ,React.createElement('span',null,value||placeholder||"Select…")
       ,React.createElement('span',{style:{color:"#52525b",fontSize:12}},open?"▴":"▾")
@@ -3722,9 +3727,11 @@ function urgencyLabel(days){
 // ─────────────────────────────────────────────────────────────────────────
 function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSeries, onStartEdit}) {
   const [del, setDel] = React.useState(false);
-  // Same one-prompt-open-at-a-time rule as DeleteButton (shared activeDeleteSetter), so two cards can never both be asking.
-  const openDel = () => { if (activeDeleteSetter && activeDeleteSetter !== setDel) activeDeleteSetter(false); activeDeleteSetter = setDel; setDel(true); };
-  const closeDel = () => { if (activeDeleteSetter === setDel) activeDeleteSetter = null; setDel(false); };
+  // Same rule as DeleteButton (shared useCollapsible): one prompt open at a time, and a click outside collapses it.
+  const delRef = React.useRef(null);
+  useCollapsible(del, () => setDel(false), delRef);
+  const openDel = () => setDel(true);
+  const closeDel = () => setDel(false);
   const days = daysUntil(ev.dueDate);
   const uc = ev.completed ? "#16a34a" : urgencyColor(days);
   const ul = ev.completed ? "COMPLETED" : urgencyLabel(days);
@@ -3757,7 +3764,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
       ,!compact&&!ev.completed&&React.createElement('div',{style:{display:"flex",gap:6,marginLeft:8,alignItems:"flex-start"}}
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#4338ca",borderColor:"#a5b4fc"},onClick:()=>onStartEdit&&onStartEdit(ev)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         ,del
-          ?React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:4}}
+          ?React.createElement('div',{ref:delRef,style:{display:"flex",flexDirection:"column",gap:4}}
             ,React.createElement('span',{style:{fontSize:10,color:"#991b1b",fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}},"Delete?")
             ,React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",padding:"7px 10px",fontSize:11},onClick:()=>{onDelete&&onDelete(ev.id);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " Delete")
             ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " All ",ev.seriesTotal," in series")
@@ -4262,8 +4269,10 @@ function CalendarApp({ onGoHome }) {
 // ─────────────────────────────────────────────────────────────────────────
 function CompleteAuditBtn({ color, label, onComplete }) {
   const [confirm, setConfirm] = React.useState(false);
+  const boxRef = React.useRef(null);
+  useCollapsible(confirm, () => setConfirm(false), boxRef);
   if (confirm) {
-    return React.createElement('div', {style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
+    return React.createElement('div', {ref:boxRef,style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#18181b",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
         ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#0f766e",color:"#FFFFFF",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},"Yes, Complete")
@@ -6752,7 +6761,7 @@ function SWBCompleteAuditBtn({onComplete}) {
 function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
   const [open, setOpen] = React.useState(false);
   const [custom, setCustom] = React.useState(false);
-  const [typedVal, setTypedVal] = React.useState(value||"");
+  const [typedVal, setTypedVal] = React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const accentColor = color || "#7e22ce";
   const isCustom = value && !(options||[]).includes(value);
   React.useEffect(()=>{ if(isCustom){setCustom(true);setTypedVal(value);} },[]);
@@ -6764,7 +6773,7 @@ function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
       ,React.createElement('button',{style:{...SS.smallBtn,color:"#6e6a66",borderColor:"#d4d4d8",flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
     );
   }
-  return React.createElement('div',{style:{position:"relative"}}
+  return React.createElement('div',{ref:boxRef,style:{position:"relative"}}
     ,React.createElement('button',{style:{...SS.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"},onClick:()=>setOpen(x=>!x)}
       ,React.createElement('span',{style:{color:value?"#18181b": "#52525b"}},value||placeholder||"Select…")
       ,React.createElement('span',{style:{color:"#6e6a66",fontSize:12}},"▾")
@@ -7528,7 +7537,7 @@ function ThermoCircuitView({
 function ThermoEditableDropdown({options,value,onChange,placeholder}){
   const[open,setOpen]=React.useState(false);
   const[custom,setCustom]=React.useState(false);
-  const[typedVal,setTypedVal]=React.useState(value||"");
+  const[typedVal,setTypedVal]=React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const isCustom=value&&!options.includes(value);
   React.useEffect(()=>{if(isCustom){setCustom(true);setTypedVal(value);}},[]);
   React.useEffect(()=>{if(custom&&value!==typedVal){setTypedVal(value||"");}},[value]);
@@ -7536,7 +7545,7 @@ function ThermoEditableDropdown({options,value,onChange,placeholder}){
     ,React.createElement("input",{style:{...STH.modalInput,flex:1},value:typedVal,placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
     ,React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #d4d4d8",borderRadius:8,color:"#6e6a66",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
   );}
-  return React.createElement("div",{style:{position:"relative"}}
+  return React.createElement("div",{ref:boxRef,style:{position:"relative"}}
     ,React.createElement("button",{style:{...STH.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#18181b": "#52525b"},onClick:()=>setOpen(o=>!o)}
       ,React.createElement("span",null,value||placeholder||"Select…")
       ,React.createElement("span",{style:{color:"#52525b",fontSize:12}},open?"▴":"▾")
@@ -12102,12 +12111,12 @@ function irtStyles(){
 function IRTNavBtn(props){return React.createElement(NavBtn,props);}
 
 function IRTEditableDropdown({options,value,onChange,placeholder,color}){
-  const[open,setOpen]=React.useState(false);const[custom,setCustom]=React.useState(false);const[typed,setTyped]=React.useState(value||"");
+  const[open,setOpen]=React.useState(false);const[custom,setCustom]=React.useState(false);const[typed,setTyped]=React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const isCustom=value&&!options.includes(value);
   React.useEffect(()=>{if(isCustom){setCustom(true);setTyped(value);}},[]);
   const mi={width:"100%",background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"};
   if(custom)return React.createElement("div",{style:{display:"flex",gap:8}},React.createElement("input",{style:{...mi,flex:1},value:typed,placeholder,onChange:e=>{setTyped(e.target.value);onChange(e.target.value);}}),React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #d4d4d8",borderRadius:8,color:"#6e6a66",cursor:"pointer",fontSize:11},onClick:()=>{setCustom(false);setTyped("");}},"\u25be List"));
-  return React.createElement("div",{style:{position:"relative"}},
+  return React.createElement("div",{ref:boxRef,style:{position:"relative"}},
     React.createElement("button",{style:{...mi,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#18181b": "#52525b"},onClick:()=>setOpen(o=>!o)},React.createElement("span",null,value||placeholder||"Select\u2026"),React.createElement("span",{style:{color:"#52525b",fontSize:12}},open?"\u25b4":"\u25be")),
     open&&React.createElement("div",{style:{position:"absolute",zIndex:300,width:"100%",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}},
       options.map(o=>React.createElement("div",{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?(color||IRT_COLOR):"#3f3f46",background:o===value?IRT_COLOR_DIM:"transparent",borderBottom:"1px solid #e4e4e7"},onClick:()=>{onChange(o);setOpen(false);}},o)),
@@ -14713,8 +14722,8 @@ function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect
 
 const gsdPill = { padding: "9px 16px", background: GSD_COLOR_DIM, color: GSD_COLOR, border: `1px solid ${GSD_COLOR}`, borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
 // One area picker for BOTH Duplicate and Move: the caller decides which areas are offered and what picking does.
-function GSDAreaPicker({ title, areas, currentId, emptyText, onPick, onCancel }) {
-  return gsdEl("div", { role: "group", "aria-label": title, "data-testid": "gsd-area-picker", style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px", marginBottom: 12 } }
+function GSDAreaPicker({ title, areas, currentId, emptyText, onPick, onCancel, boxRef }) {
+  return gsdEl("div", { ref: boxRef, role: "group", "aria-label": title, "data-testid": "gsd-area-picker", style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px", marginBottom: 12 } }
     , gsdEl("div", { style: { fontSize: 12, fontWeight: 800, color: "#18181b", marginBottom: 8 } }, title)
     , areas.length === 0 && gsdEl("div", { style: { fontSize: 12, color: "#52525b", marginBottom: 8 } }, emptyText)
     , gsdEl("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 } }, areas.map(a => gsdEl("button", { key: a.id, type: "button", style: gsdPill, onClick: () => onPick(a.id) }, a.name + (a.id === currentId ? " (this area)" : ""))))
@@ -14726,6 +14735,8 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
   const [r, setR] = React.useState(item);
   const [picker, setPicker] = React.useState(null);            // null | "duplicate" | "move"
   const [deleting, setDeleting] = React.useState(false);       // the Delete confirm is open
+  const pickerRef = React.useRef(null);
+  useCollapsible(!!picker, () => setPicker(null), pickerRef);
   // Live auto-save (the app-wide standard): every change is written straight to storage — no draft, no Save button.
   const set = patch => { setR(prev => ({ ...prev, ...patch })); onPatch(patch); };
   const photoRef = React.useRef();
@@ -14767,8 +14778,8 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
     , field("FIX BY DATE (informational)", gsdEl("input", { style: SS.modalInput, type: "date", value: r.dueDate || "", "aria-label": "Fix by date", onChange: e => set({ dueDate: e.target.value }) }))
     , gsdEl("div", { ref: bottomRef, "data-testid": "gsd-bottom", style: { paddingBottom: 12 } }
-    , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
-    , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
+    , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", boxRef: pickerRef, onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
+    , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", boxRef: pickerRef, onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
     // ONE row: [Duplicate] [Move] ......... [bin]. ONE-directional rule: an open Delete confirm (~240 px) takes the whole row and Duplicate / Move step aside
     // (and any open picker closes); the bin itself NEVER hides — an open picker (above this row) leaves the row exactly as it is.
     , gsdEl("div", { "data-testid": "gsd-actions", style: { display: "flex", gap: 8, alignItems: "center", minWidth: 0 } }
