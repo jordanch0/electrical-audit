@@ -18,7 +18,8 @@ const readZip = () => JSZip.loadAsync(Buffer.from(payload.base64, 'base64'));
 const readWb = () => XLSX.read(payload.base64, { type: 'base64' });
 const grid = (wb, name) => XLSX.utils.sheet_to_json(wb.Sheets[name], { header: 1, defval: '' }).map(r => r.map(String));
 const sheetNames = async zip => [...(await zip.file('xl/workbook.xml').async('string')).matchAll(/<sheet [^>]*?name="([^"]*)"/g)].map(m => m[1]);
-const widthsOf = xml => [...xml.matchAll(/<col [^>]*?min="(\d+)" max="(\d+)"[^>]*?width="([\d.]+)"/g)].flatMap(m => Array(+m[2] - +m[1] + 1).fill(+m[3]));
+// Column widths by column index. A column with NO <col> entry is at the default width (9) — ExcelJS omits default-width columns and merges equal neighbours.
+const widthsOf = xml => { const w = []; for (const m of xml.matchAll(/<col [^>]*?min="(\d+)" max="(\d+)"[^>]*?width="([\d.]+)"/g)) for (let k = +m[1]; k <= +m[2]; k++) w[k - 1] = +m[3]; return Array.from({ length: w.length }, (_, k) => w[k] == null ? 9 : w[k]); };
 const fitScale = (xml, n) => Math.min(1, LAND_PX / widthsOf(xml).slice(0, n).reduce((a, w) => a + w * 7 + 5, 0));
 const failD = i => ({ defectId: 'D-' + i, rectified: 'Scheduled for Repair', responsibility: 'Client', priority: 'H' });
 
@@ -52,7 +53,7 @@ const MODULES = [
   ['IRT', () => exportIRTExcel(irtProject, irtResults, meta), 'Register', 1],
 ];
 // Modules already converted to ExcelJS (native page setup + real wrapping headings); the rest are SheetJS + xlPrintify until their stage
-const NATIVE = new Set(['IEL', 'Thermo']);
+const NATIVE = new Set(['IEL', 'Thermo', 'TAT']);
 const DEFECT_HEADS = ['Defect ID', 'Rectified / Scheduled', 'Date Rectified / Scheduled', 'Responsibility', 'Priority'];
 
 describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page setup', (name, run, mainSheet, failCount) => {
@@ -232,10 +233,10 @@ describe('TAT Frequency column: the plain interval only', () => {
   it('shows exactly "1 Month" / "3 Months" / "6 Months" / "12 Months" / "2 Months" — no site-type description joined on — and is narrow', async () => {
     const p = { ...tatProject, areas: [{ ...tatProject.areas[0], items: ['a', 'b', 'c', 'd', 'e'], itemNames: { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' }, itemTags: {}, itemFreqs: { a: '1', b: '3', c: '6', d: '12', e: '2' } }] };
     await exportTATExcel(p, {}, meta);
-    const wb = readWb(); const g = grid(wb, wb.SheetNames[0]); const fc = g[4].indexOf('Frequency');
+    const wb = readWb(); const g = grid(wb, wb.SheetNames[0]); const fc = g[4].indexOf('Test Frequency');
     expect(g.slice(5).filter(r => /^\d+$/.test(r[0])).map(r => r[fc])).toEqual(['1 Month', '3 Months', '6 Months', '12 Months', '2 Months']);
     expect(JSON.stringify(g)).not.toMatch(/Construction|Hire|Demolition|Warehouse|Hostile/);
     const zip = await readZip(); const xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
-    expect(widthsOf(xml)[fc]).toBeLessThan(11);                                       // narrowed to fit "12 Months" (heading "Frequency" is 9)
+    expect(widthsOf(xml)[fc]).toBeLessThanOrEqual(10);                                 // narrowed to fit "12 Months" (the heading now wraps)
   });
 });

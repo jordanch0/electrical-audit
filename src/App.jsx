@@ -4542,21 +4542,19 @@ async function exportTATExcel(project, results, meta) {
       });
     });
   });
-  const sheets = xlSplitSheets({
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
     title: `${sName} — Test & Tag`, defectTitle: `${sName} — Test & Tag — Defects`, coLine,
     meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
-    headers: ["Area", "Asset ID / Tag", "Description", "Equip. Type", "Visual Insp.", "Pass / Fail", "Date Tested", "Frequency", "Next Test Due", "Notes / Comments"],
-    widths: [16, 15, 24, 13, 13, 10, 13, 10, 15, 24],
+    mainSheet: "Test & Tag",
+    headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
+    widths: [16, 12, 24, 12, 10, 9, 11, 10, 11, 22],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheets.main, "Test & Tag");
-  XLSX.utils.book_append_sheet(wb, sheets.defects, "Defects");
-  const filename = `TAT_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`;
-  const wbOut = await xlPrintify(XLSX.write(wb, { bookType: "xlsx", type: "base64", bookSST: false }), [{ titleRow: 5 }, { titleRow: 5 }]);
-  deliverExportFile(wbOut, filename);
+  const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

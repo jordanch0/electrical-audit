@@ -3,7 +3,7 @@
 // page setup. Real generated files are loaded back with ExcelJS. Modules are added here as each is converted.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportIELExcel, exportThermoExcel } from './App.jsx';
+import { exportIELExcel, exportThermoExcel, exportTATExcel } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -21,8 +21,11 @@ const ielResults = { a: { estops: { a: { status: 'fail', ...failD(1, 'U') }, b: 
 const thermoProject = { id: 'p', name: 'Site H', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Plant', boards: [{ id: 'b', name: 'MSB', circuits: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'], circuitNames: { c1: 'One', c2: 'Two', c3: 'Three', c4: 'Four', c5: 'Five', c6: 'Six', c7: 'Seven' } }] }] };
 const ph = (id, result, extra) => ({ id, flirFile: '10' + id, temp: '40', result, notes: '', rectifiedDate: '', ...extra });
 const thermoResults = { a: { b: { c1: [ph('1', 'FAIL', failD(1, 'U'))], c2: [ph('2', 'PASS')], c3: [ph('3', 'MONITOR', failD(3, 'M'))], c5: [ph('5', 'FAIL', failD(5, 'H'))], c6: [ph('6', 'FAIL', failD(6, 'L'))], c7: [ph('7', 'PASS')] } } };
+const tatProject = { id: 'p', name: 'Site T', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Workshop', defaultFreq: '3', items: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], itemNames: { a: 'Grinder', b: 'Drill', c: 'Saw', d: 'Lead', e: 'Kettle', f: 'Fan', g: 'Heater' }, itemTags: { a: 'T1', b: 'T2', c: 'T3', d: 'T4', e: 'T5', f: 'T6', g: 'T7' }, itemEquipTypes: {}, itemFreqs: { a: '3', b: '1', c: '6', d: '12', e: '3', f: '2', g: '3' } }] };
+const tatResults = { a: { a: { status: 'fail', ...failD(1, 'U') }, b: { status: 'pass' }, c: { status: 'na' }, d: { status: 'untested' }, e: { status: 'fail', ...failD(2, 'H') }, f: { status: 'fail', ...failD(3, 'M') }, g: { status: 'fail', ...failD(4, 'L') } } };
 const MODULES = [
   ['IEL', () => exportIELExcel(ielProject, ielResults, meta), 'Isolators EStops Lanyards', ['Fail', 'Pass', 'N/A', 'Untested', 'Fail', 'Fail', 'Fail']],
+  ['TAT', () => exportTATExcel(tatProject, tatResults, meta), 'Test & Tag', ['Fail', 'Pass', 'N/A', 'Untested', 'Fail', 'Fail', 'Fail']],
   ['Thermo', () => exportThermoExcel(thermoProject, thermoResults, meta), 'Thermographic Test', ['FAIL', 'PASS', 'MONITOR', '', 'FAIL', 'FAIL', 'PASS']],
 ];
 
@@ -87,5 +90,16 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
       expect(ws.pageSetup, ws.name).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '5:5' });
       expect(ws.headerFooter.oddFooter).toContain('Page &P of &N');
     }
+  });
+});
+
+describe('TAT (ExcelJS): the Frequency column still shows the plain interval only', () => {
+  it('"1 Month" / "3 Months" / "6 Months" / "12 Months" / "2 Months" — no site-type description — in a narrow column', async () => {
+    await exportTATExcel(tatProject, tatResults, meta); const wb = await load(); const ws = wb.getWorksheet('Test & Tag');
+    const col = ws.getRow(5).values.indexOf('Test Frequency');
+    const vals = []; for (let r = 6; r < 13; r++) vals.push(String(ws.getCell(r, col).value));
+    expect(vals).toEqual(['3 Months', '1 Month', '6 Months', '12 Months', '3 Months', '2 Months', '3 Months']);
+    expect(JSON.stringify(vals)).not.toMatch(/Construction|Hire|Demolition|Warehouse|Hostile| — /);
+    expect(ws.getColumn(col).width).toBeLessThanOrEqual(10);
   });
 });
