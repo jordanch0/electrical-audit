@@ -105,6 +105,16 @@ describe('Manage: the item edit form', () => {
 
   const openEdit2 = (user, name) => edit(user, name);
 
+  it('an item stored as the literal "Other" shows NO empty Specify box; choosing Other again shows it; saving is unchanged', async () => {
+    const user = userEvent.setup(); const sel = await openEdit(user, 'Old thing');
+    expect(sel).toHaveValue('Other'); expect(screen.queryByPlaceholderText('Specify…')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i3).toBe('Other'));
+    const sel2 = await openEdit2(user, 'Old thing');
+    await user.selectOptions(sel2, 'Appliance'); await user.selectOptions(sel2, 'Other');
+    expect(await screen.findByPlaceholderText('Specify…')).toHaveValue('');
+  });
+
   it('switching back to a listed type drops the text and stores the listed type', async () => {
     const user = userEvent.setup(); const sel = await openEdit(user, 'Toaster');
     await user.selectOptions(sel, 'Appliance');

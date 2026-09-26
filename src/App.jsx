@@ -637,6 +637,11 @@ function dropdownAdd(items, raw, reserved) {
   const dup = (items || []).find(x => String(x).toLowerCase() === key); if (dup !== undefined) return { notice: `"${dup}" is already in the list` };
   return { items: [...(items || []), v] };
 }
+// The option ROW and LIST style shared by every Dropdowns tab (RCD, IEL, TAT — all six lists, Thermo, SWB, ELT, Welder, IRT). A row is a grey box (#e8e6e2) whatever
+// its origin (shipped or added); the ONE deliberate distinction is the ★ default row's amber border (plus its "★ DEFAULT" badge). Lists space rows 5px apart.
+const DD_ROW_BG = "#e8e6e2", DD_ROW_BORDER = "#f7f6f3", DD_STAR_BORDER = "#fcd34d", DD_LIST_GAP = 5;
+const ddRowStyle = isDefault => ({ display: "flex", alignItems: "center", gap: 8, background: DD_ROW_BG, border: `1px solid ${isDefault ? DD_STAR_BORDER : DD_ROW_BORDER}`, borderRadius: 7, padding: "7px 10px" });
+const ddListStyle = extra => ({ display: "flex", flexDirection: "column", gap: DD_LIST_GAP, ...(extra || {}) });
 function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#dc2626" } }, text) : null; }
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
@@ -1407,10 +1412,10 @@ React.createElement('div', { key: key, style: {...S.addCard,marginBottom:14,bord
 )
 , React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement('button', { style: {...S.smallBtn,fontSize:10,color:"#52525b",borderColor:"#d4d4d8",flexShrink:0}, onClick: open,}, "Reset")})
 )
-, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"},}
+, React.createElement('div', { style: ddListStyle({marginBottom:10,maxHeight:200,overflowY:"auto"}),}
 , items.map((item,i)=>{
 const isDefault=i===0;
-return React.createElement('div', { key: i, style: {display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"},}
+return React.createElement('div', { key: i, style: ddRowStyle(isDefault),}
 , isDefault&&React.createElement('span', { style: {fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0},}, "★ DEFAULT")
 , React.createElement('span', { style: {flex:1,fontSize:12,color:"#3f3f46"},}, item)
 , !isDefault&&React.createElement('button', { style: {background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7}, title:"Set as default", onClick: ()=>{
@@ -2651,10 +2656,10 @@ function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
           )
           ,React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement('button',{style:{...S.smallBtn,fontSize:10,color:"#52525b",borderColor:"#d4d4d8",flexShrink:0},onClick:open},"Reset")})
         )
-        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}}
+        ,React.createElement('div',{style:ddListStyle({marginBottom:10,maxHeight:200,overflowY:"auto"})}
           ,items(key).map((item,i)=>{
             const isDefault=i===0;
-            return React.createElement('div',{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
+            return React.createElement('div',{key:item,style:ddRowStyle(isDefault)}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
               ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -5254,16 +5259,19 @@ function TATReportView({project,results,meta,onBack}){
 // Equipment Type = the list + the built-in, always-last "Other" with a free-text box. Stored as ONE string, as before: a listed type, or the typed text
 // ("Other" when the box is left blank). A stored value that is not in the list (typed text, an import, an option deleted later) shows as Other + that text,
 // so nothing is lost and no duplicate "extra" option appears in the dropdown.
+// The free-text box is shown only when there is something to edit: an unlisted custom type (its text), or right after the user CHOSE Other to type one. An item whose
+// stored type is just the literal "Other" (nothing to specify) shows the select alone — the stored value is identical either way, only the box's visibility differs.
 function TATEquipSelect({options,value,onChange}){
   const v=value||""; const opts=(options||[]).filter(o=>String(o).trim().toLowerCase()!=="other");
   const isOther=v!==""&&!opts.includes(v);
+  const [specifying,setSpecifying]=React.useState(isOther&&v!=="Other");
   return React.createElement('div',null
-    ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:isOther?"Other":v,"aria-label":"Equipment type",onChange:e=>onChange(e.target.value)}
+    ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:isOther?"Other":v,"aria-label":"Equipment type",onChange:e=>{const x=e.target.value;setSpecifying(x==="Other");onChange(x);}}
       ,React.createElement('option',{value:""},"— Optional")
       ,opts.map(t=>React.createElement('option',{key:t,value:t},t))
       ,React.createElement('option',{value:"Other"},"Other")
     )
-    ,isOther&&React.createElement('input',{style:{...ST.smallInput,width:"100%",marginTop:4},type:"text",value:v==="Other"?"":v,placeholder:"Specify…","aria-label":"Equipment type (other)",onChange:e=>onChange(e.target.value.trim()===""?"Other":e.target.value)})
+    ,isOther&&specifying&&React.createElement('input',{style:{...ST.smallInput,width:"100%",marginTop:4},type:"text",value:v==="Other"?"":v,placeholder:"Specify…","aria-label":"Equipment type (other)",onChange:e=>onChange(e.target.value.trim()===""?"Other":e.target.value)})
   );
 }
 function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaults,applianceNames,onBack}){
@@ -5762,8 +5770,8 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     ,React.createElement('div',{style:secStyle}
       ,secTitle("APPLIANCE NAMES")
       ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default. The default is pre-filled when adding a new appliance.")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(applianceNames||TAT_DEFAULT_NAMES).map((n,i)=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
+      ,React.createElement('div',{style:ddListStyle({marginBottom:12})}
+        ,(applianceNames||TAT_DEFAULT_NAMES).map((n,i)=>React.createElement('div',{key:n,style:ddRowStyle(i===0)}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},n)
           ,i!==0&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setApplianceNames(prev=>[n,...(prev||[]).filter(x=>x!==n)])},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -5780,8 +5788,8 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     ,React.createElement('div',{style:secStyle}
       ,secTitle("EQUIPMENT TYPE")
       ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default. \"Other\" (with a free-text box) is always available and is not listed here.")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
+      ,React.createElement('div',{style:ddListStyle({marginBottom:12})}
+        ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:ddRowStyle(i===0)}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},t)
           ,i!==0&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setEquipTypes(prev=>[t,...prev.filter(x=>x!==t)])},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -5799,8 +5807,8 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     ,React.createElement('div',{style:secStyle}
       ,secTitle("TEST FREQUENCY")
       ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:6}},"Tap ★ to set as default frequency.")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${tatDefaultFreq(freqOptions,tatDefaults)===f.value?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
+      ,React.createElement('div',{style:ddListStyle({marginBottom:12})}
+        ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:ddRowStyle(tatDefaultFreq(freqOptions,tatDefaults)===f.value)}
           ,tatDefaultFreq(freqOptions,tatDefaults)===f.value&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},f.label)
           ,tatDefaultFreq(freqOptions,tatDefaults)!==f.value&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -9036,8 +9044,8 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
       return React.createElement("div",{key,style:{background:"#f7f6f3",border:"1px solid #93c5fd",borderRadius:12,padding:"12px 14px",marginBottom:14}}
         ,React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#18181b",letterSpacing:0.8,marginBottom:2}},label)
         ,React.createElement("div",{style:{fontSize:11,color:"#52525b",marginBottom:10}},desc)
-        ,React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}
-          ,items(key).map((item,i)=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
+        ,React.createElement("div",{style:ddListStyle({marginBottom:10})}
+          ,items(key).map((item,i)=>React.createElement("div",{key:item,style:ddRowStyle(i===0)}
             ,i===0&&React.createElement("span",{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
             ,React.createElement("span",{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
             ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -10788,10 +10796,10 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
           )
           ,React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement('button',{style:{...SS.smallBtn,fontSize:10,color:"#52525b",borderColor:"#d4d4d8",flexShrink:0},onClick:open},"Reset")})
         )
-        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:220,overflowY:"auto"}}
+        ,React.createElement('div',{style:ddListStyle({marginBottom:10,maxHeight:220,overflowY:"auto"})}
           ,items.map((item,i)=>{
             const isFirst=i===0;const isDefault=showDef&&isFirst;
-            return React.createElement('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
+            return React.createElement('div',{key:i,style:ddRowStyle(isDefault)}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
               ,!isFirst&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:showDef?"Set as default":"Move to top",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -12668,10 +12676,10 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
           React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement("button",{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline"},onClick:open},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset")})
         ),
         items.length===0?React.createElement("div",{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options \u2014 add one below"):
-        React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}},
+        React.createElement("div",{style:ddListStyle({marginBottom:10,maxHeight:200,overflowY:"auto"})},
           items.map((item,i)=>{
             const isDefault=i===0;
-            return React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}},
+            return React.createElement("div",{key:item,style:ddRowStyle(isDefault)},
               isDefault&&React.createElement("span",{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"\u2605 DEFAULT"),
               React.createElement("span",{style:{flex:1,fontSize:12,color:"#3f3f46"}},item),
               !isDefault&&React.createElement("button",{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"}))),
@@ -14295,5 +14303,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
