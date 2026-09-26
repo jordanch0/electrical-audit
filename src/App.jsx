@@ -4324,7 +4324,10 @@ const TAT_DEFAULT_FREQS = [
   {value:"6",  label:"6 Months — Factory / Warehouse / Production"},
   {value:"12", label:"Annual — Hostile environment"},
 ];
-const TAT_DEFAULT_EQUIP_TYPES = ["Power Tool","Extension Lead","RCD Portable","Appliance","Double Adaptor","Power Board","Transformer","Other"];
+// "Other" is NOT a list entry any more: it is the built-in, reserved, always-last option with a free-text box (ELT's Type pattern). A stored list that still has a
+// literal "Other" (every install before this change) is cleaned at load; items that were typed "Other" keep displaying "Other".
+const TAT_DEFAULT_EQUIP_TYPES = ["Power Tool","Extension Lead","RCD Portable","Appliance","Double Adaptor","Power Board","Transformer"];
+const tatCleanEquipTypes = list => (Array.isArray(list) ? list : TAT_DEFAULT_EQUIP_TYPES).filter(t => String(t).trim().toLowerCase() !== "other");
 const TAT_DEFAULT_NAMES = ["Angle Grinder","Drill","Extension Lead","Power Board","Kettle","Laptop Charger","Vacuum","Heat Gun","Jigsaw","Circular Saw"];
 const K_TAT_RESULTS  = "tat-results-v1";   // { siteId: { areaId: { itemId: {...} } } }
 const K_TAT_META     = "tat-meta-v1";
@@ -4623,7 +4626,7 @@ function TATApp({ onGoHome }) {
     (async()=>{
       try{
         const[p,r,m,h,et,fq,an,td,dd]=await Promise.all([load(K_TAT_PROJECTS,[]),load(K_TAT_RESULTS,{}),load(K_TAT_META,{}),load(K_TAT_HISTORY,[]),load(K_TAT_SETTINGS,TAT_DEFAULT_EQUIP_TYPES),load(K_TAT_FREQS,TAT_DEFAULT_FREQS),load(K_TAT_NAMES,TAT_DEFAULT_NAMES),load(K_TAT_DEFAULTS,TAT_FACTORY_DEFAULTS),load(K_TAT_DROPDOWNS,TAT_DEFAULT_DROPDOWNS)]);
-        clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEquipTypes(et||TAT_DEFAULT_EQUIP_TYPES);setFreqOptions(fq||TAT_DEFAULT_FREQS);setApplianceNames(an||TAT_DEFAULT_NAMES);setTatDefaults(td||TAT_FACTORY_DEFAULTS);setTatDropdowns({...TAT_DEFAULT_DROPDOWNS,...(dd||{})});setLoaded(true);
+        clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEquipTypes(tatCleanEquipTypes(et));setFreqOptions(fq||TAT_DEFAULT_FREQS);setApplianceNames(an||TAT_DEFAULT_NAMES);setTatDefaults(td||TAT_FACTORY_DEFAULTS);setTatDropdowns({...TAT_DEFAULT_DROPDOWNS,...(dd||{})});setLoaded(true);
       }catch(e){clearTimeout(t);setLoaded(true);}
     })();
   },[]);
@@ -5248,6 +5251,21 @@ function TATReportView({project,results,meta,onBack}){
 // ─────────────────────────────────────────────────────────────────────────
 // T&T MANAGE VIEW
 // ─────────────────────────────────────────────────────────────────────────
+// Equipment Type = the list + the built-in, always-last "Other" with a free-text box. Stored as ONE string, as before: a listed type, or the typed text
+// ("Other" when the box is left blank). A stored value that is not in the list (typed text, an import, an option deleted later) shows as Other + that text,
+// so nothing is lost and no duplicate "extra" option appears in the dropdown.
+function TATEquipSelect({options,value,onChange}){
+  const v=value||""; const opts=(options||[]).filter(o=>String(o).trim().toLowerCase()!=="other");
+  const isOther=v!==""&&!opts.includes(v);
+  return React.createElement('div',null
+    ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:isOther?"Other":v,"aria-label":"Equipment type",onChange:e=>onChange(e.target.value)}
+      ,React.createElement('option',{value:""},"— Optional")
+      ,opts.map(t=>React.createElement('option',{key:t,value:t},t))
+      ,React.createElement('option',{value:"Other"},"Other")
+    )
+    ,isOther&&React.createElement('input',{style:{...ST.smallInput,width:"100%",marginTop:4},type:"text",value:v==="Other"?"":v,placeholder:"Specify…","aria-label":"Equipment type (other)",onChange:e=>onChange(e.target.value.trim()===""?"Other":e.target.value)})
+  );
+}
 function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaults,applianceNames,onBack}){
   const[expandedArea,setExpandedArea]=React.useState(null);
   const[newAreaName,setNewAreaName]=React.useState("");
@@ -5464,10 +5482,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                   ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
                     ,React.createElement('div',{style:{flex:1}}
                       ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"EQUIPMENT TYPE")
-                      ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:editEquip,onChange:e=>setEditEquip(e.target.value)}
-                        ,React.createElement('option',{value:""},"— Optional")
-                        ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
-                      )
+                      ,React.createElement(TATEquipSelect,{options:equipOpts,value:editEquip,onChange:setEditEquip})
                     )
                     ,React.createElement('div',{style:{flex:1}}
                       ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
@@ -5531,10 +5546,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"EQUIPMENT TYPE")
-                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemEquip[area.id]||(equipOpts[0]||""),onChange:e=>setNewItemEquip(x=>({...x,[area.id]:e.target.value}))}
-                  ,React.createElement('option',{value:""},"— Optional")
-                  ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
-                )
+                ,React.createElement(TATEquipSelect,{options:equipOpts,value:newItemEquip[area.id]||(equipOpts[0]||""),onChange:v=>setNewItemEquip(x=>({...x,[area.id]:v}))})
               )
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
@@ -5713,7 +5725,7 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
   const resetNames = () => setApplianceNames([...TAT_DEFAULT_NAMES]);
 
   const addEquip = () => {
-    const r = dropdownAdd(equipTypes, newEquip);
+    const r = dropdownAdd(equipTypes, newEquip, ["Other"]);
     if(r.empty) return; if(r.notice){ note("equip",r.notice); return; }
     note("equip","");
     setEquipTypes(r.items); setNewEquip("");
@@ -5767,7 +5779,7 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     )
     ,React.createElement('div',{style:secStyle}
       ,secTitle("EQUIPMENT TYPE")
-      ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default.")
+      ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default. \"Other\" (with a free-text box) is always available and is not listed here.")
       ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
         ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
@@ -14283,5 +14295,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
