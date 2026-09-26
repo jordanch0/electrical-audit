@@ -339,7 +339,7 @@ Remove all of the following when converting a delete action to `DeleteButton`:
     export was fixed to show only the plain interval, this copy was missed) and a generic variant ("Monthly / Every 3 months / Every 6 months / Annual"); (3) the Site select is fed
     from the other modules' projects (fine). To do, INVESTIGATE FIRST: decide which lists are fixed by design and which should be customisable; drop the category wording from the
     TAT recurrence options (or read TAT's freqOptions); keep the STORED recurrence values ("none" / "Monthly" / "3-Monthly" / "6-Monthly" / "Annual") backward compatible so existing
-    events and their generated due dates are untouched; add tests. Search: `CAL_TYPES`, `RECURRENCE`, "1-Monthly — Hire".
+    events and their generated due dates are untouched; add tests. Search: `CAL_TYPES`, `form.recur`, "1-Monthly — Hire".
 
 [ ] ALL · Consolidate the five near-identical EditableDropdown components · The FAIL-panel dropdowns (Rectified / Responsibility) are five copies of the same control:
     `EditableDropdown` (RCD), `IELEditableDropdown` (IEL, and TAT reuses it with its accent colour), `SWBEditableDropdown`, `ThermoEditableDropdown`, `IRTEditableDropdown`. They behave
