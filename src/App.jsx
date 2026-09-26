@@ -561,13 +561,15 @@ async function exportExcel(results, project, meta, mode, logoBase64) {
       : [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(testDate), pf, push.comment || "", nextDue];
     rows.push({ cells, pf, defect: pf === "Fail" ? { ids: [area.name, pc], defectId: src.defectId, priority: src.priority, rectified: src.rectified, rectifiedDate: src.scheduledDate, responsibility: src.responsibility, notes: src.comment } : null });
   })));
-  const sheets = xlSplitSheets({
+  const wb = new ExcelJS.Workbook();
+  const failCount = xjSplit(wb, {
     title: `${project.name}  –  RCD & ELR Test  (${label})`, defectTitle: `${project.name}  –  RCD & ELR Test  (${label})  –  Defects`, coLine,
     meta: [`Auditor: ${(meta && meta.auditor) || ""}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next ${label} Due: ${nextDue}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
-    headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp", "Date", "Inj + (ms)", "Inj - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Due"] : ["Area", "Panel / Asset Name", "Device Type", "Amp", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Due"],
-    widths: isInject ? [16, 20, 13, 6, 11, 10, 10, 10, 26, 15] : [16, 20, 13, 6, 13, 10, 26, 15],
-    idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 20],
+    mainSheet: label.slice(0, 31),
+    headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date", "Injection Test Result + (ms)", "Injection Test Result - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Required"] : ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Required"],
+    widths: isInject ? [16, 22, 12, 8, 10, 11, 11, 9, 24, 11] : [16, 22, 12, 8, 11, 9, 26, 11],
+    idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 22],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   // Summary sheet: counts only — the failed-circuit list it used to carry is now the Defects sheet (same rows, more fields)
@@ -577,20 +579,18 @@ async function exportExcel(results, project, meta, mode, logoBase64) {
     ["Test Type", label], ["Date", fmtDate(testDate)], ["Auditor", (meta && meta.auditor) || ""], ["", ""],
     ["Total", sum.total], ["Pass", sum.pass], ["Fail", sum.fail], ["N/A", sum.na], ["Untested", sum.untested], ["", ""],
     ["Next Test Due", nextDue], ["", ""],
-    ["Failed circuits", sheets.count ? `${sheets.count} — see the Defects sheet` : "None — Defects sheet is empty"],
+    ["Failed circuits", failCount ? `${failCount} — see the Defects sheet` : "None — Defects sheet is empty"],
   ];
-  const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
-  ws2["!cols"] = [{ wch: 18 }, { wch: 40 }];
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheets.main, label.slice(0, 31));
-  XLSX.utils.book_append_sheet(wb, sheets.defects, "Defects");
-  XLSX.utils.book_append_sheet(wb, ws2, "Summary");
-  let wbOut;
-  try { wbOut = XLSX.write(wb, { bookType: "xlsx", type: "base64", bookSST: false }); }
-  catch (xlsxErr) { alert("Export requires internet connection to load the XLSX library.\nPlease connect to WiFi and try again."); return; }
-  wbOut = await xlPrintify(wbOut, [{ titleRow: 5 }, { titleRow: 5 }, { landscape: false }]);
-  const filename = `${project.name.replace(/\s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
-  deliverExportFile(wbOut, filename);
+  const ss = wb.addWorksheet("Summary");
+  const boxed = swbXCS(SWB_XC.white, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+  sumRows.forEach((r, i) => r.forEach((v, ci) => {
+    const cell = ss.getCell(i + 1, ci + 1); cell.value = v;
+    if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjResultStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjResultStyle("PASS") : boxed);
+  }));
+  ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
+  xjPageSetup(ss, false, null);
+  const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 // ─────────────────────────────────────────────────────────────────────────
 // TEMPLATE DOWNLOAD — gives user a sample import spreadsheet

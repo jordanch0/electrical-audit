@@ -3,7 +3,7 @@
 // page setup. Real generated files are loaded back with ExcelJS. Modules are added here as each is converted.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportIELExcel, exportThermoExcel, exportTATExcel } from './App.jsx';
+import { exportIELExcel, exportThermoExcel, exportTATExcel, exportExcel } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -23,7 +23,13 @@ const ph = (id, result, extra) => ({ id, flirFile: '10' + id, temp: '40', result
 const thermoResults = { a: { b: { c1: [ph('1', 'FAIL', failD(1, 'U'))], c2: [ph('2', 'PASS')], c3: [ph('3', 'MONITOR', failD(3, 'M'))], c5: [ph('5', 'FAIL', failD(5, 'H'))], c6: [ph('6', 'FAIL', failD(6, 'L'))], c7: [ph('7', 'PASS')] } } };
 const tatProject = { id: 'p', name: 'Site T', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Workshop', defaultFreq: '3', items: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], itemNames: { a: 'Grinder', b: 'Drill', c: 'Saw', d: 'Lead', e: 'Kettle', f: 'Fan', g: 'Heater' }, itemTags: { a: 'T1', b: 'T2', c: 'T3', d: 'T4', e: 'T5', f: 'T6', g: 'T7' }, itemEquipTypes: {}, itemFreqs: { a: '3', b: '1', c: '6', d: '12', e: '3', f: '2', g: '3' } }] };
 const tatResults = { a: { a: { status: 'fail', ...failD(1, 'U') }, b: { status: 'pass' }, c: { status: 'na' }, d: { status: 'untested' }, e: { status: 'fail', ...failD(2, 'H') }, f: { status: 'fail', ...failD(3, 'M') }, g: { status: 'fail', ...failD(4, 'L') } } };
+const rcdProject = { id: 'p', name: 'Site R', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'pn', name: 'MSB', circuits: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], circuitMeta: {} }] }] };
+const both = (s, extra) => ({ push: { status: s, ...extra }, inject: { status: s, ...(s === 'pass' ? { resultPos: '12', resultNeg: '14' } : {}), ...extra } });
+const rcdResults = { p: { a: { pn: { a: both('fail', failD(1, 'U')), b: both('pass'), c: both('na'), d: both('untested'), e: both('fail', failD(2, 'H')), f: both('fail', failD(3, 'M')), g: both('fail', failD(4, 'L')) } } } };
+const RCD_RESULTS = ['Fail', 'Pass', 'N/A', 'Untested', 'Fail', 'Fail', 'Fail'];
 const MODULES = [
+  ['RCD push', () => exportExcel(rcdResults, rcdProject, meta, 'push', null), 'Push Test', RCD_RESULTS],
+  ['RCD injection', () => exportExcel(rcdResults, rcdProject, meta, 'inject', null), 'Injection Test', RCD_RESULTS],
   ['IEL', () => exportIELExcel(ielProject, ielResults, meta), 'Isolators EStops Lanyards', ['Fail', 'Pass', 'N/A', 'Untested', 'Fail', 'Fail', 'Fail']],
   ['TAT', () => exportTATExcel(tatProject, tatResults, meta), 'Test & Tag', ['Fail', 'Pass', 'N/A', 'Untested', 'Fail', 'Fail', 'Fail']],
   ['Thermo', () => exportThermoExcel(thermoProject, thermoResults, meta), 'Thermographic Test', ['FAIL', 'PASS', 'MONITOR', '', 'FAIL', 'FAIL', 'PASS']],
@@ -65,7 +71,7 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
 
   it('the header block stays PLAIN (no fill / border / bold, like ELT / SWB / Welder); the heading row only wraps and centres; row heights 32/16/16/6/44', async () => {
     await run(); const wb = await load();
-    for (const ws of wb.worksheets) {
+    for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
       for (let r = 1; r <= 5; r++) ws.getRow(r).eachCell({ includeEmpty: true }, (cell, c) => {
         expect(cell.fill === undefined || cell.fill.pattern === 'none', `${ws.name} r${r} c${c} fill`).toBe(true);
         expect(!cell.border || Object.keys(cell.border).length === 0, `${ws.name} r${r} c${c} border`).toBe(true);
@@ -86,7 +92,7 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
 
   it('page setup is NATIVE in the file: A4, landscape, fit to 1 page wide, heading row repeated, footer', async () => {
     await run(); const wb = await load();
-    for (const ws of wb.worksheets) {
+    for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
       expect(ws.pageSetup, ws.name).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '5:5' });
       expect(ws.headerFooter.oddFooter).toContain('Page &P of &N');
     }
@@ -101,5 +107,20 @@ describe('TAT (ExcelJS): the Frequency column still shows the plain interval onl
     expect(vals).toEqual(['3 Months', '1 Month', '6 Months', '12 Months', '3 Months', '2 Months', '3 Months']);
     expect(JSON.stringify(vals)).not.toMatch(/Construction|Hire|Demolition|Warehouse|Hostile| — /);
     expect(ws.getColumn(col).width).toBeLessThanOrEqual(10);
+  });
+});
+
+describe('RCD Summary sheet (ExcelJS): counts only, points to Defects, portrait, boxed', () => {
+  it.each(['push', 'inject'])('%s: sheet order Test / Defects / Summary; Summary is portrait fit-to-width, boxed cells, Fail count red, and says where the failed circuits went', async mode => {
+    await exportExcel(rcdResults, rcdProject, meta, mode, null); const wb = await load();
+    expect(wb.worksheets.map(w => w.name)).toEqual([mode === 'push' ? 'Push Test' : 'Injection Test', 'Defects', 'Summary']);
+    const ss = wb.getWorksheet('Summary');
+    expect(ss.pageSetup).toMatchObject({ paperSize: 9, orientation: 'portrait', fitToPage: true, fitToWidth: 1, fitToHeight: 0 });
+    const val = label => { for (let r = 1; r <= 20; r++) if (ss.getCell(r, 1).value === label) return { cell: ss.getCell(r, 2), r }; };
+    expect(val('Failed circuits').cell.value).toBe('4 — see the Defects sheet');
+    expect(String(val('Fail').cell.value)).toBe('4'); expect(argb(val('Fail').cell)).toBe(PALETTE.fail);   // failures present -> red
+    expect(String(val('Pass').cell.value)).toBe('1'); expect(argb(val('Pass').cell)).toBe(PALETTE.pass);
+    for (const label of ['Total', 'N/A', 'Untested', 'Next Test Due']) { const b = val(label).cell.border || {}; ['top', 'bottom', 'left', 'right'].forEach(s => expect(b[s] && b[s].style, label + ' ' + s).toBe('thin')); }
+    expect(JSON.stringify(ss.getSheetValues())).not.toMatch(/Failed Circuits/);                             // the old list is gone
   });
 });

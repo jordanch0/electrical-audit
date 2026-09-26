@@ -53,7 +53,7 @@ const MODULES = [
   ['IRT', () => exportIRTExcel(irtProject, irtResults, meta), 'Register', 1],
 ];
 // Modules already converted to ExcelJS (native page setup + real wrapping headings); the rest are SheetJS + xlPrintify until their stage
-const NATIVE = new Set(['IEL', 'Thermo', 'TAT']);
+const NATIVE = new Set(['IEL', 'Thermo', 'TAT', 'RCD push', 'RCD injection']);
 const DEFECT_HEADS = ['Defect ID', 'Rectified / Scheduled', 'Date Rectified / Scheduled', 'Responsibility', 'Priority'];
 
 describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page setup', (name, run, mainSheet, failCount) => {

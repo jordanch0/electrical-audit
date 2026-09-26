@@ -331,6 +331,13 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add feature requests here before starting a Claude Code session. Format: module · feature · expected behaviour.
 
 ```
+[ ] TAT · Electrical test result alongside the Visual Inspection · TAT items currently carry only a "Visual Inspection" check. Real test-and-tag auditing also
+    records an ELECTRICAL test result from the test-and-tag machine (earth continuity / insulation resistance / polarity, however the machine reports it). Add it as a
+    second checklist item per TAT item — at minimum "Electrical Test: Pass / Fail" (optionally the measured values). This is a DATA-MODEL change (new stored field on each
+    item, so a migration / versioned storage key per the guide, the item page, the Pass / Fail derivation, Report, History, the export columns, the importer and tests) —
+    it is NOT an export tweak, so do it as its own task, not inside export work. Decide first how it combines with Visual Inspection into the overall Pass / Fail (both
+    must pass?), and confirm what the client's machine actually reports.
+
 [ ] ALL · Code-split the main JS bundle · The whole app is ONE chunk (~2.2 MB, src/App.jsx) and it now exceeds Workbox's 2 MiB precache default, so
     vite.config.js raises workbox.maximumFileSizeToCacheInBytes to 5 MiB (2026-09-26) to keep offline support. That is a stop-gap: a large single chunk means a
     slower first load, especially on phones. Worth doing as its OWN task: lazy-load each module (RCD / IEL / TAT / Thermo / SWB / IRT / ELT / Welder / Calendar)
