@@ -66,7 +66,7 @@ describe('ELT Excel export structure', () => {
     // same merges and row heights as IEL (adjusted for 16 columns)
     const merged = Object.keys(ws._merges).map(k => ws._merges[k].range).sort();
     expect(merged).toEqual(['A1:P1','A2:P2','A3:B3','A4:P4','C3:D3','E3:P3'].sort());
-    expect([1,2,3,4,5].map(r => ws.getRow(r).height)).toEqual([32,16,16,6,40]);
+    expect([1,2,3,4,5].map(r => ws.getRow(r).height)).toEqual([32,16,16,6,44]);
 
     // blank 6pt spacer row 4, then the column headings on row 5; no summary block or sheet
     expect(rowVals(ws, 4).every(v => v === '')).toBe(true);

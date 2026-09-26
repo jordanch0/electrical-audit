@@ -3,7 +3,7 @@
 // page setup. Real generated files are loaded back with ExcelJS. Modules are added here as each is converted.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportIELExcel, exportThermoExcel, exportTATExcel, exportExcel, exportIRTExcel } from './App.jsx';
+import { exportIELExcel, exportThermoExcel, exportTATExcel, exportExcel, exportIRTExcel, exportELTExcel, migrateProjectToAreas } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -194,5 +194,45 @@ describe('IRT (ExcelJS): Register / Readings / Defects — sheet order, styling 
     await exportIRTExcel(irtProject, irtResults, meta); const wb = await load(); const reg = wb.getWorksheet('Register');
     const c = reg.getRow(5).values.indexOf('Test Date'); expect(reg.getColumn(c).width).toBeGreaterThanOrEqual(13);
     expect(String(reg.getCell(6, c).value)).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+  });
+});
+
+// A wrapped heading breaks at spaces, "/" and "-" only, so a single unbreakable word wider than its column is clipped
+const longestSegment = h => Math.max(0, ...String(h).split(/(?<=[\/\- ])/).map(s => s.trim().length));
+const widthOf = (ws, col) => ws.getColumn(col).width || 9;    // ExcelJS omits default-width (9) columns
+
+describe.each(MODULES)('%s: no heading word is wider than its column', (name, run) => {
+  it('every unbreakable heading segment fits its column width (heading wrap can not clip mid-word)', async () => {
+    await run(); const wb = await load();
+    for (const ws of wb.worksheets.filter(s => s.name !== 'Summary'))
+      ws.getRow(5).values.forEach((h, col) => { if (h) expect(longestSegment(h), `${ws.name}: "${h}" in a ${widthOf(ws, col)}-wide column`).toBeLessThanOrEqual(widthOf(ws, col) + 1); });
+  });
+});
+
+describe('ELT (ExcelJS): content-width columns, wrapped headings, shared date-width rule', () => {
+  const eltProject = migrateProjectToAreas({ id: 'p1', name: 'Site E', company: 'Co', abn: '1', licence: 'L', assets: Array.from({ length: 6 }, (_, i) => ({ id: 'a' + i, location: 'Wash Plant', assetLocation: 'Door ' + i, assetId: 'EL-' + (100 + i), type: 'Floodlights / Spotlights', maintained: 'Non-Maintained', fitting: 'Clevertronics 24m' })) });
+  const p4 = { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' };
+  const eltResults = { p1: { a0: { ...p4, discharge: 'fail', ...failD(1, 'H') }, a1: p4, a2: p4, a3: { ...p4, visual: 'fail', ...failD(2, 'M') }, a4: p4, a5: p4 } };
+  const LAND = (11.69 - 0.5) * 96;
+
+  it('date columns >= 13, no heading word clipped, headings wrap, and the main sheet fits >= 80% of a landscape page (was 77%)', async () => {
+    await exportELTExcel(eltProject, eltResults, meta); const wb = await load();
+    for (const ws of wb.worksheets.filter(s => s.name === 'Emergency Lighting' || s.name === 'Defects')) {
+      const head = ws.getRow(5).values; const n = ws.getRow(5).cellCount;
+      head.forEach((h, col) => {
+        if (!h) return;
+        if (/^(Date|Next Test)/.test(String(h))) expect(widthOf(ws, col), `${ws.name} "${h}"`).toBeGreaterThanOrEqual(13);
+        expect(longestSegment(h), `${ws.name}: "${h}" in a ${widthOf(ws, col)}-wide column`).toBeLessThanOrEqual(widthOf(ws, col) + 1);
+        expect(ws.getCell(5, col).alignment).toMatchObject({ wrapText: true });
+      });
+      let px = 0; for (let c = 1; c <= n; c++) px += widthOf(ws, c) * 7 + 5;
+      expect(Math.min(1, LAND / px), ws.name).toBeGreaterThanOrEqual(ws.name === 'Defects' ? 0.95 : 0.8);
+    }
+  });
+
+  it('nothing was dropped: all 16 main columns and 10 Defects columns are still there, in order, with the import-anchor headings exact', async () => {
+    await exportELTExcel(eltProject, eltResults, meta); const wb = await load();
+    expect(wb.getWorksheet('Emergency Lighting').getRow(5).values.slice(1)).toEqual(['#', 'Location', 'Asset Location', 'Asset ID', 'Type', 'Maintained/Non-Maintained', 'Fitting Type/Manufacturer', 'Date', 'Visual Inspection', '90-Min Discharge Test', 'Automatic Switching Test', 'Charging Circuit Test', 'Pass/Fail', 'Score', 'Notes / Recommendations', 'Next Test Due']);
+    expect(wb.getWorksheet('Defects').getRow(5).values.slice(1)).toHaveLength(10);
   });
 });

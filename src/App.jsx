@@ -134,9 +134,14 @@ function xjSheet(wb, name, o) {
   // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
   // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
   // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
-  o.widths.forEach((w, i) => { const h = o.headers[i]; ws.getColumn(i + 1).width = /^(Date|Test Date|Next Test)/.test(h) ? Math.max(w, XJ_DATE_W) : /^Pass \/ Fail$/.test(h) ? Math.max(w, XJ_RESULT_W) : w; });
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
   xjPageSetup(ws, o.landscape !== false, 5);
   return ws;
+}
+// Minimum widths that apply to EVERY export column of that kind (also used by ELT's own sheets)
+function xjColWidth(heading, w) {
+  const h = String(heading);
+  return /^(Date|Test Date|Next Test)/.test(h) ? Math.max(w, XJ_DATE_W) : /^Pass \/ Fail$/.test(h) ? Math.max(w, XJ_RESULT_W) : w;
 }
 const XJ_RESULT_W = 11;  // fits "UNTESTED" / "Untested" (8 characters) and "MONITOR" on ONE line, with a margin
 const XJ_DATE_W = 13;   // fits "21/09/2026" (10 characters) on ONE line with a margin for Excel / Google Sheets metrics
@@ -11132,7 +11137,7 @@ async function exportELTExcel(project, allResults, meta) {
   setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
   merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
   ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+'5',t); ws.getCell(cols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
-  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1).height = h;});
+  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
   const rows = eltRegisterRows(project, allResults, meta);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
@@ -11150,7 +11155,8 @@ async function exportELTExcel(project, allResults, meta) {
     });
   });
   merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  [5,14,16,10,16,15,16,11,9,9,10,9,9,8,20,11].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  // Content-width columns (headings wrap). The import-anchor headings stay exact; date columns get the shared >= 13 minimum.
+  [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});
   const setup = xjPageSetup;
   setup(ws,true,5);
 
@@ -11164,7 +11170,7 @@ async function exportELTExcel(project, allResults, meta) {
     dset('A3',`Defects recorded: ${defRows.length}`); dset('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`); dset('E3',"Priority: L Low · M Medium · H High · U Urgent");
     [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1,c1+1,r2+1,c2+1));
     ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+'5',t); ds.getCell(dcols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
-    [32,16,16,6,40].forEach((h,i)=>{ds.getRow(i+1).height = h;});
+    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1).height = h;});
     defRows.forEach((row,i)=>{
       const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
       const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
@@ -11172,7 +11178,7 @@ async function exportELTExcel(project, allResults, meta) {
       row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
     });
     if (!defRows.length) dset('A6',"No defects recorded");
-    [5,14,16,10,10,9,22,20,16,30].forEach((w,i)=>{ds.getColumn(i+1).width=w;});
+    [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
     setup(ds,true,5);
   }
 
