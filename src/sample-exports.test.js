@@ -56,7 +56,7 @@ it('IRT', async () => {
   const project = { id: 'p', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Plant Room', panels: [{ id: 'pn', name: 'MCC1', items: ids, itemNames: Object.fromEntries(ids.map((x, i) => [x, 'Motor ' + (i + 1)])) }] }] };
   const results = { p: { a: { pn: Object.fromEntries(ids.map((x, i) => [x, isFail(i)
     ? { status: 'untested', testVoltage: '500V', readings: { L1E: '0.4', L2E: '250', L3E: '250', NE: '300' }, notes: 'Wet', ...fd(i) }
-    : { status: 'untested', testVoltage: '500V', readings: { L1E: '>200', L2E: '>200', L3E: '>200', NE: '>200', L1L2: '>200', L1L3: '>200', L2L3: '>200', L1N: '>200', L2N: '>200', L3N: '>200' }, notes: i % 5 === 0 ? 'ok' : '' }])) } } };
+    : i % 17 === 3 ? { status: 'untested', testVoltage: '500V', readings: {}, notes: '' } : { status: 'untested', testVoltage: '500V', readings: { L1E: '>200', L2E: '>200', L3E: '>200', NE: '>200', L1L2: '>200', L1L3: '>200', L2L3: '>200', L1N: '>200', L2N: '>200', L3N: '>200' }, notes: i % 5 === 0 ? 'ok' : '' }])) } } };
   await exportIRTExcel(project, results, meta); save('irt');
 });
 

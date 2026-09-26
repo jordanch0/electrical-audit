@@ -1,7 +1,6 @@
 ﻿import React from 'react';
 import * as XLSX_LIB from 'xlsx';
 import ExcelJS from 'exceljs';
-import JSZip from 'jszip';
 const XLSX = XLSX_LIB;
 function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj; } else { var newObj = {}; if (obj != null) { for (var key in obj) { if (Object.prototype.hasOwnProperty.call(obj, key)) { newObj[key] = obj[key]; } } } newObj.default = obj; return newObj; } } function _nullishCoalesce(lhs, rhsFn) { if (lhs != null) { return lhs; } else { return rhsFn(); } } function _optionalChain(ops) { let lastAccessLHS = undefined; let value = ops[0]; let i = 1; while (i < ops.length) { const op = ops[i]; const fn = ops[i + 1]; i += 2; if ((op === 'optionalAccess' || op === 'optionalCall') && value == null) { return undefined; } if (op === 'access' || op === 'optionalAccess') { lastAccessLHS = value; value = fn(value); } else if (op === 'call' || op === 'optionalCall') { value = fn((...args) => value.call(lastAccessLHS, ...args)); lastAccessLHS = undefined; } } return value; }
 // ─────────────────────────────────────────────────────────────────────────
@@ -87,75 +86,17 @@ function deliverExportFile(base64, filename, mimeType=XLSX_MIME) {
     alert(`Export failed: ${(err && err.message) || 'unknown error'}. Please try again.`);
   }
 }
-// ── Print-friendly SheetJS exports ─────────────────────────────────────────────────────────────────────────────────
-// SheetJS (community) writes margins only — it silently drops orientation, fit-to-width and repeating header rows. So the five
-// SheetJS exports (RCD, IEL, TAT, Thermo, IRT) are post-processed: the finished .xlsx is opened with JSZip and every sheet gets
-//   landscape/portrait A4 · fit to ONE page wide (height free) · 0.25" side margins · printed gridlines (SheetJS drops all cell
-//   borders, so without this a printed table has no lines) · a "Page x of y" footer · the heading row repeated on every page.
-// spec[i] describes workbook sheet i (SheetJS writes sheet i as xl/worksheets/sheet{i+1}.xml): { landscape, titleRow }.
-const XL_FOOTER = "&amp;L&amp;A&amp;RPage &amp;P of &amp;N";
-async function xlPrintify(base64, spec) {
-  const zip = await JSZip.loadAsync(base64, { base64: true });
-  let wbXml = await zip.file("xl/workbook.xml").async("string");
-  const sheetNames = [...wbXml.matchAll(/<sheet [^>]*?name="([^"]*)"/g)].map(m => m[1]);   // already XML-escaped
-  const titles = [];
-  for (let i = 0; i < spec.length; i++) {
-    const path = `xl/worksheets/sheet${i + 1}.xml`;
-    let x = await zip.file(path).async("string");
-    x = x.replace(/<sheetPr[^>]*\/>|<sheetPr[^>]*>[\s\S]*?<\/sheetPr>/, "");
-    x = x.replace(/<worksheet([^>]*)>/, '<worksheet$1><sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
-    x = x.replace(/<printOptions[^>]*\/>|<pageMargins[^>]*\/>|<pageSetup[^>]*\/>|<headerFooter>[\s\S]*?<\/headerFooter>/g, "");
-    x = x.replace("</worksheet>", `<printOptions gridLines="1"/><pageMargins left="0.25" right="0.25" top="0.5" bottom="0.6" header="0.3" footer="0.3"/><pageSetup paperSize="9" orientation="${spec[i].landscape === false ? "portrait" : "landscape"}" fitToWidth="1" fitToHeight="0"/><headerFooter><oddFooter>${XL_FOOTER}</oddFooter></headerFooter></worksheet>`);
-    zip.file(path, x);
-    if (spec[i].titleRow) titles.push(`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${sheetNames[i].replace(/&apos;/g, "'").replace(/'/g, "''")}'!$${spec[i].titleRow}:$${spec[i].titleRow}</definedName>`);
-  }
-  if (titles.length) {
-    if (/<definedNames>/.test(wbXml)) wbXml = wbXml.replace("</definedNames>", titles.join("") + "</definedNames>");
-    else wbXml = wbXml.replace("</sheets>", `</sheets><definedNames>${titles.join("")}</definedNames>`);
-    zip.file("xl/workbook.xml", wbXml);
-  }
-  return zip.generateAsync({ type: "base64", compression: "DEFLATE" });
-}
-// Main results table + a separate Defects sheet (FAIL rows only, always present with its headings), cross-referenced by a "#" column.
-// o = { title, defectTitle, coLine, meta:[cells of row 3 for the main sheet], defectMeta:[cells of row 3], mainSheet, defectSheet,
-//       headers:[main headings WITHOUT #], widths:[main widths WITHOUT #], idHeaders:[identifier headings shown on Defects],
-//       idWidths, rows:[{ cells:[...], defect: null | {ids:[...], defectId, priority, rectified, rectifiedDate, responsibility, notes} }],
-//       footer:[optional extra rows appended under the main table (e.g. the report "Notes:" line)] }
-const XL_DEFECT_TAIL = ["Defect ID", "Priority", "Rectified / Scheduled", "Date Rectified / Scheduled", "Responsibility", "Notes / Recommendations"];
-const XL_DEFECT_TAIL_W = [10, 9, 22, 26, 15, 26];   // each width >= its heading length: SheetJS cannot wrap a heading
-// One sheet with the standard 5-row block (title, company, meta, spacer, headings) then the data rows.
-function xlSheet(coLine, title, meta, headers, widths, dataRows, footer, emptyText) {
-  const n = headers.length;
-  const pad = r => [...r, ...Array(Math.max(0, n - r.length)).fill("")];
-  const rows = [pad([title]), pad([coLine]), pad(meta), Array(n).fill(""), headers];
-  dataRows.forEach(r => rows.push(pad(r)));
-  if (!dataRows.length && emptyText) rows.push(pad([emptyText]));
-  (footer || []).forEach(r => rows.push(pad(r)));
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws["!cols"] = widths.map(wch => ({ wch }));
-  ws["!rows"] = [{ hpt: 32 }, { hpt: 16 }, { hpt: 16 }, { hpt: 6 }, { hpt: 20 }];
-  ws["!merges"] = [{ s: { r: 0, c: 0 }, e: { r: 0, c: n - 1 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: n - 1 } }, { s: { r: 2, c: 0 }, e: { r: 2, c: 1 } }, { s: { r: 2, c: 2 }, e: { r: 2, c: 3 } }, { s: { r: 2, c: 4 }, e: { r: 2, c: n - 1 } }, { s: { r: 3, c: 0 }, e: { r: 3, c: n - 1 } }];
-  return ws;
-}
-function xlSplitSheets(o) {
-  const build = (title, meta, headers, widths, dataRows, footer, emptyText) => xlSheet(o.coLine, title, meta, headers, widths, dataRows, footer, emptyText);
-  const main = build(o.title, o.meta, ["#", ...o.headers], [5, ...o.widths], o.rows.map((r, i) => [i + 1, ...r.cells]), o.footer);
-  const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
-  const meta = [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])];
-  const def = build(o.defectTitle, meta, ["#", ...o.idHeaders, ...XL_DEFECT_TAIL], [5, ...o.idWidths, ...XL_DEFECT_TAIL_W], defects, null, "No defects recorded");
-  return { main, defects: def, count: defects.length };
-}
-
+const XJ_DEFECT_TAIL = ["Defect ID", "Priority", "Rectified / Scheduled", "Date Rectified / Scheduled", "Responsibility", "Notes / Recommendations"];
 // ── ExcelJS split-export foundation ────────────────────────────────────────────────────────────────────────────────
 // The print-friendly split exports (narrow main table + Defects sheet) on ExcelJS: real borders, coloured results, zebra rows, wrapped
-// headings and NATIVE page setup — no post-processing. IEL was converted first; the other SheetJS exports move over stage by stage
-// (until then they still use xlSplitSheets / xlPrintify above). Same row model as before: rows:[{cells, defect}].
+// headings and NATIVE page setup — no post-processing (SheetJS silently drops all of these). Used by RCD, IEL, TAT, Thermo and IRT; ELT shares xjPageSetup.
+// (all five now use it). Same row model as before: rows:[{cells, defect}].
 function xjPageSetup(sheet, landscape, titleRow) {
   sheet.pageSetup = { paperSize: 9, orientation: landscape ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
     margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 }, ...(titleRow ? { printTitlesRow: `${titleRow}:${titleRow}` } : {}) };
   sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
 }
-const XJ_CENTER = /^(#|Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Test Voltage|Score)/;
+const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Test Voltage|Score|L\d|N-E)/;
 // Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
 function xjResultStyle(v) {
   const k = String(v == null ? "" : v).toUpperCase(); const ctr = { horizontal: "center", vertical: "center" };
@@ -191,7 +132,7 @@ function xjSheet(wb, name, o) {
   (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
   // A date is written as "dd/mm/yyyy" TEXT in a wrapping cell, and Excel / Sheets break it at a "/" if the column is even slightly tight (their
   // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
-  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = /^(Date|Next Test)/.test(o.headers[i]) ? Math.max(w, XJ_DATE_W) : w; });
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = /^(Date|Test Date|Next Test)/.test(o.headers[i]) ? Math.max(w, XJ_DATE_W) : w; });
   xjPageSetup(ws, o.landscape !== false, 5);
   return ws;
 }
@@ -201,9 +142,10 @@ const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
 // o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
 function xjSplit(wb, o) {
   xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
+  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings)
   const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
   xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
-    headers: ["#", ...o.idHeaders, ...XL_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded" });
+    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded" });
   return defects.length;
 }
 
@@ -495,52 +437,8 @@ return { id: slugify(projectName), name: projectName, company: company || "Spark
 // ─────────────────────────────────────────────────────────────────────────
 // Colours matching the defects register image exactly:
 // U=dark maroon bg, H=red/salmon bg, M=yellow bg, L=light green bg, Pass=white (no fill), Fail=red bg
-const C = {
-orange:    "FFE8731A",  // SparkCheck orange header
-white:     "FFFFFFFF",
-darkGrey:  "FF2D2D2D",
-lightGrey: "FFF5F5F5",
-midGrey:   "FFD9D9D9",
-// Row backgrounds — match image
-passWhite: "FFFFFFFF",  // Pass = plain white (no colour)
-failRed:   "FFFFC7CE",  // Fail = light red (Excel standard fail red)
-naGrey:    "FFF2F2F2",
-// Priority row colours — exact match to image
-priorityU_bg:   "FF9B0000",  // Urgent = dark maroon row background
-priorityU_font: "FFFFFFFF",  // white text
-priorityH_bg:   "FFFFC7CE",  // High   = light red/salmon (same as image)
-priorityH_font: "FF9C0006",  // dark red text
-priorityM_bg:   "FFFFD966",  // Medium = yellow (matches image)
-priorityM_font: "FF7F6000",  // dark gold text
-priorityL_bg:   "FFE2EFDA",  // Low    = light green (matches image)
-priorityL_font: "FF375623",  // dark green text
-};
-const border = (style="thin",color=C.midGrey) => ({style,color:{rgb:color}});
-const allBorders = (style="thin",color=C.midGrey) => ({top:border(style,color),bottom:border(style,color),left:border(style,color),right:border(style,color)});
-const btmBorder = (color=C.midGrey) => ({bottom:border("hair",color)});
-function cellStyle(fill,font={},align={},borders={}) {
-return { fill:{patternType:"solid",fgColor:{rgb:fill}}, font:{name:"Calibri",sz:10,...font}, alignment:{vertical:"center",...align}, border:borders };
-}
-const titleStyle    = cellStyle(C.darkGrey,  {bold:true,sz:14,color:{rgb:C.white}},    {horizontal:"left"});
-const subtitleStyle = cellStyle("FF1E1E1E",  {sz:9,color:{rgb:"FFbbbbbb"}},             {horizontal:"left"});
-const metaStyle     = cellStyle("FF262626",  {sz:9,color:{rgb:"FF999999"}},             {horizontal:"left"});
-const spacerStyle   = cellStyle("FF1E1E1E");
-const hdrStyle      = cellStyle(C.orange,    {bold:true,sz:10,color:{rgb:C.white}},    {horizontal:"center",wrapText:true}, allBorders("thin","FFB85A10"));
-// Priority colours for the ENTIRE ROW (used when priority is set and it's a fail/defect)
-function dataStyle(ri, pf) {
-let bg = ri%2===0 ? C.white : C.lightGrey;
-let fontColor = C.darkGrey; let bold = false;
-if (pf === "Pass")    { bg = C.passWhite; }
-if (pf === "Fail")    { bg = C.failRed; fontColor = C.priorityH_font; bold = true; }
-if (pf === "N/A")     { bg = C.naGrey; }
-return cellStyle(bg, {sz:9,color:{rgb:fontColor},bold}, {wrapText:true}, btmBorder(C.midGrey));
-}
-function setCell(ws, ref, value, style) {
-const t = typeof value === "number" ? "n" : "s";
-ws[ref] = { v: _nullishCoalesce(value, () => ( "")), t, s: style };
-}
 // RCD export: MAIN results table (narrow — identifiers, dates, result, notes) + a Defects sheet (FAIL rows only, always present) + a
-// Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Print setup is injected by xlPrintify.
+// Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Page setup is native (xjPageSetup).
 async function exportExcel(results, project, meta, mode, logoBase64) {
   const isInject = mode === "inject";
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
@@ -2377,14 +2275,6 @@ function ielSiteSummary(results,project,cat){
 }
 
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
-const IEL_C={green:"FF10B981",white:"FFFFFFFF",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",passWhite:"FFFFFFFF",failRed:"FFFFC7CE",naGrey:"FFF2F2F2",priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623"};
-function ielBorder(s="thin",c=IEL_C.midGrey){return{style:s,color:{rgb:c}};}
-function ielAllBorders(){const b=ielBorder();return{top:b,bottom:b,left:b,right:b};}
-function ielBtm(){return{bottom:ielBorder("hair")};}
-function ielCS(fill,font={},align={},borders={}){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...font},alignment:{vertical:"center",...align},border:borders};}
-function ielPriColor(p){if(p==="U")return{bg:IEL_C.priorityU_bg,font:IEL_C.priorityU_font,bold:true};if(p==="H")return{bg:IEL_C.priorityH_bg,font:IEL_C.priorityH_font,bold:false};if(p==="M")return{bg:IEL_C.priorityM_bg,font:IEL_C.priorityM_font,bold:false};if(p==="L")return{bg:IEL_C.priorityL_bg,font:IEL_C.priorityL_font,bold:false};return null;}
-function ielDS(ri,pf,priority=""){if(priority){const pc=ielPriColor(priority);if(pc)return ielCS(pc.bg,{sz:9,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},ielBtm());}let bg=ri%2===0?IEL_C.white:IEL_C.lightGrey,fontColor=IEL_C.darkGrey,bold=false;if(pf==="Pass")bg=IEL_C.passWhite;if(pf==="Fail"){bg=IEL_C.failRed;fontColor=IEL_C.priorityH_font;bold=true;}if(pf==="N/A")bg=IEL_C.naGrey;return ielCS(bg,{sz:9,color:{rgb:fontColor},bold},{wrapText:true},ielBtm());}
-function ielSetCell(ws,ref,value,style){const t=typeof value==="number"?"n":"s";ws[ref]={v:value!=null?value:"",t,s:style};}
 
 async function exportIELExcel(project, results, meta) {
   const testDate = (meta && meta.testDate) || "";
@@ -4487,35 +4377,6 @@ function tatSiteSummary(results, project) {
 // ─────────────────────────────────────────────────────────────────────────
 // T&T EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
-const TAT_C = {
-  blue:"FF3B82F6", white:"FFFFFFFF", darkGrey:"FF2D2D2D",
-  lightGrey:"FFF5F5F5", midGrey:"FFD9D9D9",
-  passWhite:"FFFFFFFF", failRed:"FFFFC7CE", naGrey:"FFF2F2F2",
-  priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",
-  priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
-  priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",
-  priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
-};
-function tatBorder(s="thin",c=TAT_C.midGrey){return{style:s,color:{rgb:c}};}
-function tatAllBorders(){const b=tatBorder();return{top:b,bottom:b,left:b,right:b};}
-function tatBtm(){return{bottom:tatBorder("hair")};}
-function tatCS(fill,font={},align={},borders={}){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...font},alignment:{vertical:"center",...align},border:borders};}
-function tatPriColor(p){
-  if(p==="U")return{bg:TAT_C.priorityU_bg,font:TAT_C.priorityU_font,bold:true};
-  if(p==="H")return{bg:TAT_C.priorityH_bg,font:TAT_C.priorityH_font,bold:false};
-  if(p==="M")return{bg:TAT_C.priorityM_bg,font:TAT_C.priorityM_font,bold:false};
-  if(p==="L")return{bg:TAT_C.priorityL_bg,font:TAT_C.priorityL_font,bold:false};
-  return null;
-}
-function tatDS(ri,pf,priority=""){
-  if(priority){const pc=tatPriColor(priority);if(pc)return tatCS(pc.bg,{sz:9,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},tatBtm());}
-  let bg=ri%2===0?TAT_C.white:TAT_C.lightGrey,fontColor=TAT_C.darkGrey,bold=false;
-  if(pf==="Pass")bg=TAT_C.passWhite;
-  if(pf==="Fail"){bg=TAT_C.failRed;fontColor=TAT_C.priorityH_font;bold=true;}
-  if(pf==="N/A")bg=TAT_C.naGrey;
-  return tatCS(bg,{sz:9,color:{rgb:fontColor},bold},{wrapText:true},tatBtm());
-}
-function tatSetCell(ws,ref,value,style){const t=typeof value==="number"?"n":"s";ws[ref]={v:value!=null?value:"",t,s:style};}
 
 // Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
 const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
@@ -12182,7 +12043,6 @@ function downloadIRTTemplate(){
 // IRT export: THREE linked sheets, all keyed by the same "#":  Register (narrow summary — the sheet meant for a client PDF),
 // Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
 async function exportIRTExcel(project, results, meta) {
-  const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded"); return; }
   const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
   const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
   const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
@@ -12200,25 +12060,22 @@ async function exportIRTExcel(project, results, meta) {
   })));
   const metaRow = [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", `Next Test Due: ${nextDue}`];
   const title = `${sName} — Insulation Resistance Test — ${td}`;
-  const sheets = xlSplitSheets({
+  // Readings: same "#" (row order identical to the Register); readings are in MΩ, stated once in the header block instead of on every heading
+  const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E", "L2-E", "L3-E", "N-E", "L1-L2", "L1-L3", "L2-L3", "L1-N", "L2-N", "L3-N", "Pass / Fail"];
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
     title, defectTitle: `${title} — Defects`, coLine, meta: metaRow,
     defectMeta: [`Date Tested: ${td}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    mainSheet: "Register",
     headers: ["Location", "Panel / DB", "Equipment / Circuit", "Test Date", "Pass / Fail", "Notes / Recommendations"],
-    widths: [16, 14, 22, 11, 10, 30],
+    widths: [16, 14, 22, 11, 9, 26],
     idHeaders: ["Location", "Panel / DB", "Equipment / Circuit"], idWidths: [16, 14, 22],
     rows, footer: [],
+    between: w => xjSheet(w, "Readings", { title: `${title} — Readings`, coLine, meta: [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"],
+      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
   });
-  // Readings: same "#" (the row order is identical to the Register); readings are in MΩ, stated once here instead of on every heading
-  const readingHeaders = ["#", "Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E", "L2-E", "L3-E", "N-E", "L1-L2", "L1-L3", "L2-L3", "L1-N", "L2-N", "L3-N", "Pass / Fail"];
-  const readings = xlSheet(coLine, `${title} — Readings`, [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"], readingHeaders,
-    [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], readingRows.map((r, i) => [i + 1, ...r]));
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheets.main, "Register");
-  XLSX.utils.book_append_sheet(wb, readings, "Readings");
-  XLSX.utils.book_append_sheet(wb, sheets.defects, "Defects");
-  const fname = `IR_Test_${sName.replace(/\s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
-  const out = await xlPrintify(XLSX.write(wb, { bookType: "xlsx", type: "base64" }), [{ titleRow: 5 }, { titleRow: 5 }, { titleRow: 5 }]);
-  deliverExportFile(out, fname);
+  const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
 }
 
 // ─── Motor info modal ─────────────────────────────────────────────────────
@@ -14320,5 +14177,5 @@ function WelderApp({ onGoHome }) {
 }
 
 export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, xlPrintify, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;

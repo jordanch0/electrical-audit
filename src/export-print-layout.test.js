@@ -1,12 +1,12 @@
 // Print-friendly Excel exports: the wide flat tables (RCD, IEL, TAT, Thermo, IRT, ELT) are split into a NARROW main results table + a
 // separate Defects sheet (FAIL rows only, always present) linked by a "#" column, and every sheet carries real page setup in the file
-// itself (landscape / fit to one page wide / repeating heading row / gridlines / page footer). SheetJS drops page setup, so the five
-// SheetJS exports are post-processed (xlPrintify); ELT (ExcelJS) sets it natively. These tests parse the REAL generated files.
+// itself (landscape / fit to one page wide / repeating heading row / page footer), written natively by ExcelJS. These tests parse the REAL
+// generated files. (Styling — borders, colours, zebra — is in export-styles.test.js.)
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
-import { exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, exportELTExcel, xlPrintify, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, migrateProjectToAreas } from './App.jsx';
+import { exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, exportELTExcel, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, migrateProjectToAreas } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -52,8 +52,6 @@ const MODULES = [
   ['Thermo', () => exportThermoExcel(thermoProject, thermoResults, meta), 'Thermographic Test', 2],   // FAIL + MONITOR
   ['IRT', () => exportIRTExcel(irtProject, irtResults, meta), 'Register', 1],
 ];
-// Modules already converted to ExcelJS (native page setup + real wrapping headings); the rest are SheetJS + xlPrintify until their stage
-const NATIVE = new Set(['IEL', 'Thermo', 'TAT', 'RCD push', 'RCD injection']);
 const DEFECT_HEADS = ['Defect ID', 'Rectified / Scheduled', 'Date Rectified / Scheduled', 'Responsibility', 'Priority'];
 
 describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page setup', (name, run, mainSheet, failCount) => {
@@ -65,7 +63,6 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
       expect(x, names[i]).toContain('<pageSetUpPr fitToPage="1"/>');
       expect(x, names[i]).toMatch(/<pageSetup paperSize="9" orientation="(landscape|portrait)" fitToWidth="1" fitToHeight="0"\/>/);
       expect(x, names[i]).toContain('<pageMargins left="0.25" right="0.25"');
-      if (!NATIVE.has(name)) expect(x, names[i]).toContain('<printOptions gridLines="1"/>');   // ExcelJS sheets have real borders instead
       expect(x, names[i]).toContain('Page &amp;P of &amp;N');
       expect((x.match(/<pageSetup /g) || []).length).toBe(1);                       // never duplicated
       if (names[i] !== 'Summary') {
@@ -96,18 +93,10 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
     expect(g[4].some(h => /Date|Next Test/.test(h))).toBe(true);                     // compliance dates stay in the main table
   });
 
-  it('no heading is cut off: SheetJS cannot wrap a heading, so every heading fits its column (ExcelJS sheets wrap instead)', async () => {
-    await run(); const zip = await readZip(); const wb = readWb();
-    if (NATIVE.has(name)) {
-      const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64'));
-      ej.worksheets.forEach(ws => ws.getRow(5).eachCell(cell => expect(cell.alignment, ws.name + ' ' + cell.value).toMatchObject({ wrapText: true })));
-      return;
-    }
-    for (let i = 0; i < wb.SheetNames.length; i++) {
-      if (wb.SheetNames[i] === 'Summary') continue;
-      const xml = await zip.file(`xl/worksheets/sheet${i + 1}.xml`).async('string'); const w = widthsOf(xml); const head = grid(wb, wb.SheetNames[i])[4];
-      head.forEach((h, c) => expect(h.length, `${wb.SheetNames[i]}: "${h}" in a ${w[c]}-wide column`).toBeLessThanOrEqual(w[c] + 1));
-    }
+  it('headings wrap (ExcelJS), so a narrow column can hold a long heading: every heading cell has wrapText on', async () => {
+    await run();
+    const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64'));
+    ej.worksheets.filter(ws => ws.name !== 'Summary').forEach(ws => ws.getRow(5).eachCell(cell => expect(cell.alignment, ws.name + ' ' + cell.value).toMatchObject({ wrapText: true })));
   });
 
   it('Defects sheet: FAIL rows only, same # as the main table, identifiers repeated, stale data on PASS rows never listed', async () => {
@@ -208,35 +197,5 @@ describe('ELT (ExcelJS): native page setup on every sheet, main + Defects + Phot
       expect(ej.worksheets[i].pageSetup, ej.worksheets[i].name).toMatchObject({ paperSize: 9, orientation: orient, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: title });
       expect(ej.worksheets[i].headerFooter.oddFooter).toContain('Page &P of &N');
     }
-  });
-});
-
-describe('xlPrintify itself', () => {
-  it('handles awkward sheet names (& and apostrophes), leaves cell data untouched, and produces a file both readers accept', async () => {
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['a', 'b'], [1, 'x & y']]), "Bob's & Sons");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['c']]), 'Second');
-    const raw = XLSX.write(wb, { bookType: 'xlsx', type: 'base64' });
-    const out = await xlPrintify(raw, [{ titleRow: 1 }, { landscape: false }]);
-    const back = XLSX.read(out, { type: 'base64' });
-    expect(back.SheetNames).toEqual(["Bob's & Sons", 'Second']);
-    expect(XLSX.utils.sheet_to_json(back.Sheets["Bob's & Sons"], { header: 1 })).toEqual([['a', 'b'], [1, 'x & y']]);
-    const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(out, 'base64'));
-    expect(ej.worksheets[0].pageSetup.printTitlesRow).toBe('1:1');
-    expect(ej.worksheets[1].pageSetup.orientation).toBe('portrait');
-    const zip = await JSZip.loadAsync(out, { base64: true });
-    expect((await zip.file('xl/workbook.xml').async('string')).match(/_xlnm.Print_Titles/g)).toHaveLength(1);
-  });
-});
-
-describe('TAT Frequency column: the plain interval only', () => {
-  it('shows exactly "1 Month" / "3 Months" / "6 Months" / "12 Months" / "2 Months" — no site-type description joined on — and is narrow', async () => {
-    const p = { ...tatProject, areas: [{ ...tatProject.areas[0], items: ['a', 'b', 'c', 'd', 'e'], itemNames: { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' }, itemTags: {}, itemFreqs: { a: '1', b: '3', c: '6', d: '12', e: '2' } }] };
-    await exportTATExcel(p, {}, meta);
-    const wb = readWb(); const g = grid(wb, wb.SheetNames[0]); const fc = g[4].indexOf('Test Frequency');
-    expect(g.slice(5).filter(r => /^\d+$/.test(r[0])).map(r => r[fc])).toEqual(['1 Month', '3 Months', '6 Months', '12 Months', '2 Months']);
-    expect(JSON.stringify(g)).not.toMatch(/Construction|Hire|Demolition|Warehouse|Hostile/);
-    const zip = await readZip(); const xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
-    expect(widthsOf(xml)[fc]).toBeLessThanOrEqual(10);                                 // narrowed to fit "12 Months" (the heading now wraps)
   });
 });
