@@ -289,6 +289,22 @@ describe('duplicate, delete, area removal', () => {
     await user.click(screen.getByText('Back')); const cards = screen.getAllByTestId('gsd-card');
     expect(cards.map(c => c.textContent.replace(/[^A-Za-z#0-9]/g, ''))).toEqual([expect.stringContaining('#1Later'), expect.stringContaining('#2Misplaced')]);
   });
+  it('expanding Duplicate, Move or Delete scrolls the expanded block into view; Delete sits on its own right-aligned row and its confirm stays on that row', async () => {
+    const calls = []; const orig = Element.prototype.scrollIntoView; Element.prototype.scrollIntoView = function (o) { calls.push([this.getAttribute('data-testid'), o]); };
+    try {
+      seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop'); calls.length = 0;
+      await user.click(screen.getByRole('button', { name: 'Duplicate' })); await waitFor(() => expect(calls.length).toBeGreaterThan(0));
+      expect(calls[calls.length - 1][0]).toBe('gsd-bottom'); expect(calls[calls.length - 1][1]).toMatchObject({ block: 'end' });
+      await user.click(screen.getByRole('button', { name: 'Cancel' })); calls.length = 0;
+      await user.click(screen.getByRole('button', { name: 'Move' })); await waitFor(() => expect(calls.length).toBeGreaterThan(0)); expect(calls[calls.length - 1][0]).toBe('gsd-bottom');
+      await user.click(screen.getByRole('button', { name: 'Cancel' })); calls.length = 0;
+      const row = screen.getByTestId('gsd-delete-row'); expect(row).toHaveStyle({ justifyContent: 'flex-end' });
+      expect(within(row).getAllByRole('button')).toHaveLength(1);                                   // the bin — Duplicate and Move are NOT on this row
+      expect(row.contains(screen.getByRole('button', { name: 'Duplicate' }))).toBe(false);
+      await user.click(within(row).getByRole('button')); await waitFor(() => expect(calls.length).toBeGreaterThan(0)); expect(calls[calls.length - 1][0]).toBe('gsd-bottom');
+      expect(within(row).getByText('Delete defect?')).toBeInTheDocument(); expect(within(row).getByRole('button', { name: 'Keep' })).toBeInTheDocument();   // the confirm expands inside the same row
+    } finally { Element.prototype.scrollIntoView = orig; }
+  });
   it('Move with no other area explains why instead of offering nothing silently', async () => {
     seedSite(['Only Area']); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Only Area');
     const picker = await openPicker(user, 'Move'); expect(picker.getByText(/no other area/i)).toBeInTheDocument();
