@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import JSZip from 'jszip';
 import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
-import { exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, exportELTExcel, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, migrateProjectToAreas } from './App.jsx';
+import { exportSWBExcel, exportWelderExcel, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, exportELTExcel, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, migrateProjectToAreas } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -197,5 +197,26 @@ describe('ELT (ExcelJS): native page setup on every sheet, main + Defects + Phot
       expect(ej.worksheets[i].pageSetup, ej.worksheets[i].name).toMatchObject({ paperSize: 9, orientation: orient, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: title });
       expect(ej.worksheets[i].headerFooter.oddFooter).toContain('Page &P of &N');
     }
+  });
+});
+
+describe('SWB and Welder (ExcelJS): native page setup on every sheet, like the other six exports', () => {
+  const want = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
+  async function read() { const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64')); return ej; }
+  it('SWB: the Register repeats its heading row 5; each board form is landscape / fit to width; every sheet has the page footer', async () => {
+    const project = { id: 's1', name: 'Site S', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Area', boards: [{ id: 'b1', name: 'MSB' }, { id: 'b2', name: 'DB1' }] }] };
+    await exportSWBExcel(project, {}, meta); const ej = await read();
+    expect(ej.worksheets.map(w => w.name)).toEqual(['Register', 'MSB', 'DB1']);
+    expect(ej.worksheets[0].pageSetup).toMatchObject({ ...want, printTitlesRow: '5:5' });
+    for (const w of ej.worksheets.slice(1)) expect(w.pageSetup, w.name).toMatchObject(want);
+    for (const w of ej.worksheets) expect(w.headerFooter.oddFooter, w.name).toContain('Page &P of &N');
+  });
+  it('Welder: the Register repeats its heading row 5; each welder form is landscape / fit to width; every sheet has the page footer', async () => {
+    const project = { id: 'w', name: 'Site W', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W001', brand: 'K', model: 'E', serial: '1' }, { id: 'a2', assetId: 'W002', brand: 'K', model: 'E', serial: '2' }] }] };
+    await exportWelderExcel(project, {}, meta); const ej = await read();
+    expect(ej.worksheets.map(w => w.name)).toEqual(['Register', 'W001', 'W002']);
+    expect(ej.worksheets[0].pageSetup).toMatchObject({ ...want, printTitlesRow: '5:5' });
+    for (const w of ej.worksheets.slice(1)) expect(w.pageSetup, w.name).toMatchObject(want);
+    for (const w of ej.worksheets) expect(w.headerFooter.oddFooter, w.name).toContain('Page &P of &N');
   });
 });

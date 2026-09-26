@@ -79,9 +79,12 @@ describe('ELT Dropdowns tab', () => {
     // Type select on the Manage > Add Fitting form
     await user.click(screen.getByRole('button', { name: 'Manage' }));
     await user.click(screen.getByRole('button', { name: '+ Add Fitting' }));
-    const typeOpts = optionsOf(screen.getByRole('combobox'));
+    await user.click(screen.getByRole('button', { name: 'Type' }));
+    const typeOpts = within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent);
     expect(typeOpts).toEqual(['— Select', 'Spitfire', 'Batten Lights', 'Exit Signs', 'Floodlights / Spotlights', 'Bulkhead Light', 'Other']);
-    await user.selectOptions(screen.getByRole('combobox'), 'Other'); // literal Other still reveals the text box
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Other' })); // literal Other is still there, last
+    expect(screen.getByRole('button', { name: 'Type' })).toHaveTextContent('Other');
+    await user.click(screen.getByRole('button', { name: 'Type' })); await user.click(screen.getByText('Type custom…', { exact: false })); // typed text is the free-text case
     expect(screen.getByPlaceholderText('Specify…')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Cancel' }));
 

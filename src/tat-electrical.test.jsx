@@ -5,7 +5,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppRoot, { tatCanPass, tatElectricalPatch, tatGetItem } from './App.jsx';
+import AppRoot, { tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem } from './App.jsx';
 
 const ls = k => JSON.parse(localStorage.getItem(k));
 const rec = () => ls('tat-results-v1').t1.a1.i1;
@@ -28,7 +28,7 @@ describe('tatElectricalPatch — auto-fail and the cleared-pass rule', () => {
   it('FAIL forces the overall result to FAIL and stamps the tested date, whatever it was before', () => {
     for (const status of ['untested', 'pass', 'na', 'fail']) expect(tatElectricalPatch({ status, electricalCheck: '' }, 'fail', D)).toEqual({ electricalCheck: 'fail', status: 'fail', lastTested: D });
   });
-  it('PASS never changes the overall result (a manual FAIL stays FAIL; the PASS button is a separate, gated step)', () => {
+  it('PASS without the Visual tick never changes the overall result (the pair is not complete)', () => {
     for (const status of ['untested', 'pass', 'na', 'fail']) expect(tatElectricalPatch({ status, electricalCheck: '' }, 'pass', D)).toEqual({ electricalCheck: 'pass' });
   });
   it('clearing a passed Electrical while the overall result is PASS drops it to UNTESTED; any other clear leaves the result alone', () => {
@@ -196,5 +196,112 @@ describe('Report tab: an electrical failure is called out', () => {
     await user.click(await screen.findByText('Site T', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: 'Report' }));
     expect(await screen.findAllByText('Electrical test: FAIL')).toHaveLength(1);
+  });
+});
+
+// ── AUTO-PASS: the tap that completes the pair (Visual ticked + Electrical PASS) sets the overall result to PASS — from UNTESTED only ──
+describe('auto-PASS: tatElectricalPatch / tatVisualPatch', () => {
+  const D = '2026-09-21';
+  it('Electrical PASS with Visual already ticked auto-passes from untested (and from a missing status), stamping the date', () => {
+    expect(tatElectricalPatch({ status: 'untested', visualCheck: true, electricalCheck: '' }, 'pass', D)).toEqual({ electricalCheck: 'pass', status: 'pass', lastTested: D });
+    expect(tatElectricalPatch({ visualCheck: true }, 'pass', D)).toEqual({ electricalCheck: 'pass', status: 'pass', lastTested: D });
+  });
+  it('Visual ticked with Electrical already PASS auto-passes from untested, stamping the date', () => {
+    expect(tatVisualPatch({ status: 'untested', visualCheck: false, electricalCheck: 'pass' }, true, D)).toEqual({ visualCheck: true, status: 'pass', lastTested: D });
+    expect(tatVisualPatch({ electricalCheck: 'pass' }, true, D)).toEqual({ visualCheck: true, status: 'pass', lastTested: D });
+  });
+  it('does NOT apply until the pair is complete', () => {
+    expect(tatElectricalPatch({ status: 'untested', visualCheck: false }, 'pass', D)).toEqual({ electricalCheck: 'pass' });
+    expect(tatVisualPatch({ status: 'untested', electricalCheck: '' }, true, D)).toEqual({ visualCheck: true });
+    expect(tatVisualPatch({ status: 'untested', electricalCheck: 'fail' }, true, D)).toEqual({ visualCheck: true });
+  });
+  it('NEVER overrides a recorded FAIL or N/A (only untested is auto-passed); an existing PASS is left as is', () => {
+    for (const status of ['fail', 'na']) {
+      expect(tatElectricalPatch({ status, visualCheck: true }, 'pass', D)).toEqual({ electricalCheck: 'pass' });
+      expect(tatVisualPatch({ status, electricalCheck: 'pass' }, true, D)).toEqual({ visualCheck: true });
+    }
+    expect(tatElectricalPatch({ status: 'pass', visualCheck: true }, 'pass', D)).toEqual({ electricalCheck: 'pass' });
+    expect(tatVisualPatch({ status: 'pass', electricalCheck: 'pass' }, true, D)).toEqual({ visualCheck: true });
+  });
+  it('un-ticking Visual after an auto-PASS drops it to untested; un-ticking with any other status leaves it alone', () => {
+    expect(tatVisualPatch({ status: 'pass', visualCheck: true, electricalCheck: 'pass' }, false, D)).toEqual({ visualCheck: false, status: 'untested' });
+    for (const status of ['fail', 'na', 'untested']) expect(tatVisualPatch({ status, visualCheck: true, electricalCheck: 'pass' }, false, D)).toEqual({ visualCheck: false });
+  });
+});
+
+describe('auto-PASS through the real item page', () => {
+  it('ticking Visual LAST auto-passes: no tap on the RESULT PASS button, date stamped, warning gone', async () => {
+    const user = userEvent.setup(); await openItem(user);
+    await user.click(elec('PASS'));                                                        // Electrical first: the pair is not complete
+    await waitFor(() => expect(rec().electricalCheck).toBe('pass'));
+    expect(rec().status).not.toBe('pass');
+    await user.click(visual());                                                            // completes the pair
+    await waitFor(() => expect(rec()).toMatchObject({ status: 'pass', visualCheck: true, electricalCheck: 'pass', lastTested: '2026-09-21' }));
+    expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument();
+  });
+
+  it('setting Electrical PASS LAST auto-passes', async () => {
+    const user = userEvent.setup(); await openItem(user);
+    await user.click(visual()); await waitFor(() => expect(rec().visualCheck).toBe(true));
+    expect(rec().status).not.toBe('pass');
+    await user.click(elec('PASS'));
+    await waitFor(() => expect(rec()).toMatchObject({ status: 'pass', electricalCheck: 'pass', lastTested: '2026-09-21' }));
+  });
+
+  it('clearing EITHER condition afterwards drops the result back to untested, and re-completing auto-passes again', async () => {
+    const user = userEvent.setup(); await openItem(user);
+    await user.click(visual()); await user.click(elec('PASS'));
+    await waitFor(() => expect(rec().status).toBe('pass'));
+    await user.click(visual());                                                            // un-tick Visual
+    await waitFor(() => expect(rec()).toMatchObject({ visualCheck: false, status: 'untested' }));
+    await user.click(visual());                                                            // re-tick -> completes the pair again
+    await waitFor(() => expect(rec().status).toBe('pass'));
+    await user.click(elec('PASS'));                                                        // clear Electrical
+    await waitFor(() => expect(rec()).toMatchObject({ electricalCheck: '', status: 'untested' }));
+    await user.click(elec('PASS'));                                                        // set it again -> auto-PASS again
+    await waitFor(() => expect(rec().status).toBe('pass'));
+  });
+
+  it('an existing FAIL is NOT overridden: it stays FAIL when both checks later read PASS, the hint explains it, and a manual PASS still works', async () => {
+    const user = userEvent.setup(); await openItem(user);
+    await user.click(elec('FAIL'));                                                        // auto-FAIL
+    await waitFor(() => expect(rec().status).toBe('fail'));
+    await user.click(elec('FAIL'));                                                        // clear it (result stays FAIL)
+    await user.click(visual()); await user.click(elec('PASS'));                            // now both satisfied
+    await waitFor(() => expect(rec()).toMatchObject({ visualCheck: true, electricalCheck: 'pass' }));
+    expect(rec().status).toBe('fail');                                                     // not silently flipped
+    expect(screen.getByTestId('tat-fail-kept-hint')).toHaveTextContent('Both checks passed — result is still FAIL. Tap PASS to change it.');
+    expect(screen.queryByText(BLOCKED)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'PASS' }));                        // the deliberate change
+    await waitFor(() => expect(rec().status).toBe('pass'));
+    expect(screen.queryByTestId('tat-fail-kept-hint')).not.toBeInTheDocument();
+  });
+
+  it('the hint only appears in that exact state (FAIL + Visual ticked + Electrical PASS)', async () => {
+    const user = userEvent.setup(); await openItem(user);
+    expect(screen.queryByTestId('tat-fail-kept-hint')).not.toBeInTheDocument();
+    await user.click(elec('FAIL'));                                                        // FAIL, Electrical FAIL
+    expect(screen.queryByTestId('tat-fail-kept-hint')).not.toBeInTheDocument();
+    await user.click(visual());                                                            // FAIL + Visual only
+    expect(screen.queryByTestId('tat-fail-kept-hint')).not.toBeInTheDocument();
+  });
+
+  it('an N/A is NOT overridden either', async () => {
+    const user = userEvent.setup(); await openItem(user);
+    await user.click(screen.getByRole('button', { name: 'N/A' }));
+    await waitFor(() => expect(rec().status).toBe('na'));
+    await user.click(visual()); await user.click(elec('PASS'));
+    await waitFor(() => expect(rec()).toMatchObject({ visualCheck: true, electricalCheck: 'pass' }));
+    expect(rec().status).toBe('na');
+  });
+
+  it('the manual RESULT buttons still work (PASS once both are met, FAIL) and opening an item never auto-passes', async () => {
+    localStorage.setItem('tat-results-v1', JSON.stringify({ t1: { a1: { i1: { status: 'untested', visualCheck: true, electricalCheck: 'pass', equipType: 'Power Tool', freq: '3' } } } }));
+    const user = userEvent.setup(); await openItem(user);
+    expect(rec().status).toBe('untested');                                                 // both satisfied but nothing tapped: trigger-on-tap only
+    await user.click(screen.getByRole('button', { name: 'PASS' }));
+    await waitFor(() => expect(rec().status).toBe('pass'));
+    await user.click(screen.getByRole('button', { name: 'FAIL' }));
+    await waitFor(() => expect(rec().status).toBe('fail'));
   });
 });

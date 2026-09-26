@@ -49,6 +49,6 @@ describe('Calendar delete confirm', () => {
     await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
     await user.click(screen.getByRole('button', { name: /Add Event/ }));
     expect(await screen.findByText('Emergency Lighting')).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'ELT Site Z' })).toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole('button', { name: 'Site' })); expect(screen.getByRole('option', { name: 'ELT Site Z' })).toBeInTheDocument();   // Site is the styled dropdown
   });
 });

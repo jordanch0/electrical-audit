@@ -67,3 +67,31 @@ it('ELT', async () => {
   const results = { p1: Object.fromEntries(assets.map((a, i) => [a.id, isFail(i) ? { ...pass4, discharge: 'fail', notes: 'Battery flat', ...fd(i) } : { ...pass4, notes: i % 5 === 0 ? 'ok' : '' }])) };
   await exportELTExcel(project, results, meta); save('elt');
 });
+
+// ── General Site Defects: a realistic visit (real PNG "photos" of the right sizes, so the layout can be judged by eye) ──
+import 'fake-indexeddb/auto';
+import zlib from 'zlib';
+import { exportGSDExcel, gsdPhotoIO, gsdPhotoStore } from './App.jsx';
+const crc = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return b => { let c = 0xffffffff; for (const x of b) c = t[(c ^ x) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }; })();
+const chunk = (type, data) => { const len = Buffer.alloc(4); len.writeUInt32BE(data.length); const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td)); return Buffer.concat([len, td, c]); };
+const png = (w, h, seed) => {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) { raw[y * (w * 3 + 1)] = 0; for (let x = 0; x < w; x++) { const o = y * (w * 3 + 1) + 1 + x * 3; raw[o] = Math.min(255, 70 + (seed * 37) % 100 + x * 80 / w); raw[o + 1] = Math.min(255, 90 + (seed * 21) % 90 + y * 70 / h); raw[o + 2] = 60 + (seed * 53) % 120; } }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return 'data:image/png;base64,' + Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]).toString('base64');
+};
+it('General Site Defects (photo report + Register)', async () => {
+  const dims = [[300, 400], [400, 300], [300, 400], [500, 500]];
+  const area = (id, name) => ({ id, name });
+  const project = { id: 'g', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '12 345 678 901', licence: 'EW123456', areas: [area('a1', 'Concrete Plant'), area('a2', 'Workshop'), area('a3', 'Trig Plant'), area('a4', 'Pit 4 CDE Plant')] };
+  const text = [['Fix cabling from isolator on pit pump control board', 'Cabling / Conduit (general)', 'H'], ['Junction box to be remounted on concrete tank', 'Mechanical / Equipment', 'M'], ['Replace light fitting above chute', 'General Lighting (non-emergency)', 'L'],
+    ['Reinstall cable protection for cable going to compressor. The existing protection was removed during the last shutdown and never refitted, and the cable is now rubbing on the steel frame where it passes the walkway.', 'Cabling / Conduit (general)', 'U'], ['Weatherproof door missing on outlet', 'Housekeeping', 'M'],
+    ['Cables dangling beside hopper', 'Cabling / Conduit (general)', 'H'], ['Hopper ramp - fix cabling leading to pole', 'Structural / Building', 'M'], ['Guard missing on tail pulley', 'Guarding', 'H'], ['Install rain hat to avoid mechanical damage', 'Mechanical / Equipment', 'L'], ['Enclosure at top of radial stack should be replaced', 'Structural / Building', ''], ['Blocked walkway at screen deck', 'Access / Egress', 'M'], ['Oil spill under pump', 'Housekeeping', 'L']];
+  const items = text.map(([d, cat, pri], i) => ({ id: 'd' + i, areaId: ['a1', 'a1', 'a1', 'a1', 'a2', 'a3', 'a3', 'a3', 'a4', 'a4', 'a4', 'a4'][i], assetLocation: ['Pit pump', 'Concrete tank', 'Chute', 'Compressor', 'Bay 2', 'Hopper', 'Ramp', 'Tail pulley', 'Isolator AC feed', 'Radial stack', 'Screen deck', 'Pump 2'][i], category: cat, commonDefect: '', description: d, descAuto: '', priority: pri, responsibility: 'Site Manager', dueDate: i % 3 === 0 ? '2026-11-30' : '',
+    photos: Array.from({ length: [1, 2, 1, 7, 1, 2, 1, 1, 2, 1, 3, 1][i] }, (_, k) => ({ id: `d${i}p${k}`, w: dims[(i + k) % 4][0], h: dims[(i + k) % 4][1] })) }));
+  let seed = 0;
+  for (const it of items) for (const p of it.photos) await gsdPhotoStore.put(p.id, { buf: new Uint8Array([p.w >> 8, p.w & 255, p.h >> 8, p.h & 255]).buffer, type: 'image/png' });
+  const orig = gsdPhotoIO.exportCopy;
+  gsdPhotoIO.exportCopy = async rec => { const u = new Uint8Array(rec.buf); return { dataUrl: png((u[0] << 8 | u[1]) / 2, (u[2] << 8 | u[3]) / 2, seed++) }; };
+  try { await exportGSDExcel(project, items, meta); save('gsd-site-defects'); } finally { gsdPhotoIO.exportCopy = orig; }
+});

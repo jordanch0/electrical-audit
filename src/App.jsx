@@ -37,6 +37,7 @@ const ICON_DEFS = {
   irt:        () => [_ip("M3 17a9 9 0 0 1 18 0"),_ip("M12 17l4-6"),_ic(12,17,1),_ip("M3 21h18")],
   elt:        () => [_ir(2,6,20,12,2),_ic(8,9.5,1),_ip("M8 11.5v2l-1.5 2M8 13.5l2 1.5M6 12.5l3-1"),_ip("M14 12h5M17 10l2 2-2 2")],
   welder:     () => [_ip("M4 10a8 8 0 0 1 16 0v5a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3z"),_ir(7,10,10,4,1)],
+  gsd:        () => [_ir(5,4,14,17,2),_ip("M9 2.5h6v3H9z"),_ip("M12 9v4"),_ic(12,16.5,0.6)],
   cal:        () => [_ir(3,4,18,18,2),_il(16,2,16,6),_il(8,2,8,6),_il(3,10,21,10)],
 };
 // CHECKLIST SCORE — one rule for every module that scores a checklist (Welder, ELT, SWB): Pass / (Total items − N/A) × 100, one
@@ -545,25 +546,60 @@ deliverExportFile(tOut, fname);
 // ─────────────────────────────────────────────────────────────────────────
 // SHARED DELETE BUTTON — two-step inline confirmation for all destructive actions
 // ─────────────────────────────────────────────────────────────────────────
-let activeDeleteSetter = null;
-function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
+// ONE rule for everything in the app that EXPANDS (delete / reset / complete confirms, editable-dropdown popovers, area pickers, the Calendar card's delete):
+//   1. only ONE thing is expanded at a time — expanding a second collapses the first;
+//   2. a click (or tap) anywhere OUTSIDE the expanded element collapses it back to idle.
+// It listens for "click" in the CAPTURE phase, deliberately NOT pointerdown: collapsing something above a button between finger-down and finger-up can shift the
+// button out from under the finger and lose the tap. A click on the control that opens the NEXT thing therefore collapses this one first and still opens the next.
+// Inline add / edit forms (they hold typed input) and accordions (navigation) are deliberately NOT collapsible.
+let activeExpander = null;
+function useCollapsible(open, close, ref) {
+  const closeRef = React.useRef(close); closeRef.current = close;
+  React.useEffect(() => {
+    if (!open) return undefined;
+    const me = { close: () => closeRef.current() };
+    if (activeExpander && activeExpander !== me) activeExpander.close();
+    activeExpander = me;
+    const onDocClick = e => { const el = ref && ref.current; if (el && !el.contains(e.target)) closeRef.current(); };
+    document.addEventListener("click", onDocClick, true);
+    return () => { document.removeEventListener("click", onDocClick, true); if (activeExpander === me) activeExpander = null; };
+  }, [open]);
+}
+// StyledSelect — the app's styled dropdown (same look as the EditableDropdown family: a button with a ▾ and a popover list) for fields that used to be a native
+// <select>. Unlike the family it takes { value, label } options (the stored value need not equal the label — TAT's frequency stores "3" and shows "3 Months — …"),
+// is CLOSED by default (only listed values), and offers a typed-text mode only when allowCustom is set. allowEmpty adds a first option that clears the value
+// (its label is the placeholder). A stored value that is not in the list still shows (as its own text) so nothing is ever hidden. Joins useCollapsible.
+function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allowCustom, boxStyle, wrapStyle, ariaLabel, stopClicks, color, colorBg, customHint, textColor, popoverWidth, popoverRight }) {
+  const [open, setOpen] = React.useState(false);
+  const opts = (options || []).map(o => (o !== null && typeof o === "object" ? o : { value: o, label: o }));
+  const cur = opts.find(o => o.value === value);
+  const [custom, setCustom] = React.useState(!!(allowCustom && value && !cur));
+  const boxRef = React.useRef(null); useCollapsible(open, () => setOpen(false), boxRef);
+  const stop = e => { if (stopClicks) e.stopPropagation(); };
+  const box = { ...(boxStyle || SI.modalInput) };
+  if (custom) {
+    return React.createElement("div", { ref: boxRef, style: { display: "flex", gap: 8, minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
+      , React.createElement("input", { style: { ...box, flex: 1, minWidth: 0 }, value: cur ? "" : (value || ""), placeholder: customHint || placeholder || "Type…", "aria-label": ariaLabel ? ariaLabel + " (typed)" : undefined, onChange: e => onChange(e.target.value, { custom: true }) })
+      , React.createElement("button", { type: "button", style: { padding: "8px 10px", background: "transparent", border: "1px solid #d4d4d8", borderRadius: 8, color: "#6e6a66", cursor: "pointer", fontSize: 11, flexShrink: 0 }, onClick: () => setCustom(false) }, "▾ List"));
+  }
+  const shown = cur ? cur.label : (value ? String(value) : (placeholder || "Select…"));
+  const list = [...(allowEmpty ? [{ value: "", label: placeholder || "— None" }] : []), ...opts];
+  return React.createElement("div", { ref: boxRef, style: { position: "relative", minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
+    , React.createElement("button", { type: "button", "aria-label": ariaLabel, "aria-expanded": open, style: { ...box, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left", color: textColor || (value ? "#18181b" : "#52525b") }, onClick: () => setOpen(o => !o) }
+      , React.createElement("span", { style: { flex: "1 1 0", width: 0, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shown)   // width 0 + flex-grow: the label never forces its container wider, so the control shrinks like a native select did
+      , React.createElement("span", { style: { color: "#52525b", fontSize: 12, flexShrink: 0 } }, open ? "▴" : "▾"))
+    , open && React.createElement("div", { role: "listbox", style: { position: "absolute", zIndex: 300, width: popoverWidth || "100%", ...(popoverRight ? { right: 0 } : { left: 0 }), boxSizing: "border-box", background: "#f7f6f3", border: "1px solid #d4d4d8", borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: "auto" } }   // the popover is as wide as its trigger (or an explicit width, right-aligned for a trigger at the right edge), never wider than its container — long labels WRAP
+      , list.map(o => React.createElement("div", { key: o.value === "" ? "__empty" : o.value, role: "option", "aria-selected": o.value === value, style: { padding: "10px 12px", fontSize: 13, cursor: "pointer", whiteSpace: "normal", wordBreak: "break-word", color: o.value === value ? (color || "#047857") : "#3f3f46", background: o.value === value ? (colorBg || "#dcfce7") : "transparent", fontWeight: o.value === value ? 700 : 400 }, onClick: () => { onChange(o.value); setOpen(false); } }, o.label))
+      , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
+}
+function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
   const [confirming, setConfirming] = React.useState(false);
-  const open = () => {
-    if (activeDeleteSetter && activeDeleteSetter !== setConfirming) {
-      activeDeleteSetter(false);
-    }
-    activeDeleteSetter = setConfirming;
-    setConfirming(true);
-  };
-  const cancel = () => {
-    activeDeleteSetter = null;
-    setConfirming(false);
-  };
-  const confirm = () => {
-    activeDeleteSetter = null;
-    setConfirming(false);
-    onDelete();
-  };
+  const boxRef = React.useRef(null);
+  React.useEffect(() => { if (onOpenChange) onOpenChange(confirming); }, [confirming]);
+  useCollapsible(confirming, () => setConfirming(false), boxRef);
+  const open = () => setConfirming(true);
+  const cancel = () => setConfirming(false);
+  const confirm = () => { setConfirming(false); onDelete(); };
   if (!confirming) {
     return React.createElement('button', {
       onClick: open,
@@ -583,6 +619,7 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
   const btnPad = compact ? '3px 10px' : '4px 14px';
   const btnMinH = compact ? '28px' : '36px';
   return React.createElement('div', {
+    ref: boxRef,
     style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'nowrap', minWidth: 0, overflow: 'hidden' }
   },
     !compact && React.createElement('span', {
@@ -627,17 +664,31 @@ function DeleteButton({ onDelete, label = 'Delete?', compact = false }) {
 // Two-step confirm for every "Reset to defaults" button. Resetting a dropdown list silently discarded any customised
 // options, so it now asks first. Same one-prompt-open-at-a-time rule as DeleteButton. renderIdle(open) draws the
 // module's own idle button so its styling is unchanged.
+// ONE rule for "add an option" on every Dropdowns tab: trimmed; an option that ALREADY exists (case-insensitive) is REFUSED with a notice — never silently moved
+// to the end (that used to change the ★ default when the moved option was first) — and a reserved word (ELT's "Other") is refused as "already built in".
+// Returns { empty:true } | { notice } | { items } (the new list). The caller keeps the typed text when refused so it can be edited.
+function dropdownAdd(items, raw, reserved) {
+  const v = String(raw == null ? "" : raw).trim(); if (!v) return { empty: true };
+  const key = v.toLowerCase();
+  const hit = (reserved || []).find(r => r.toLowerCase() === key); if (hit) return { notice: `${hit} is already built in` };
+  const dup = (items || []).find(x => String(x).toLowerCase() === key); if (dup !== undefined) return { notice: `"${dup}" is already in the list` };
+  return { items: [...(items || []), v] };
+}
+// The option ROW and LIST style shared by every Dropdowns tab (RCD, IEL, TAT — all six lists, Thermo, SWB, ELT, Welder, IRT). A row is a grey box (#e8e6e2) whatever
+// its origin (shipped or added); the ONE deliberate distinction is the ★ default row's amber border (plus its "★ DEFAULT" badge). Lists space rows 5px apart.
+const DD_ROW_BG = "#e8e6e2", DD_ROW_BORDER = "#f7f6f3", DD_STAR_BORDER = "#fcd34d", DD_LIST_GAP = 5;
+const ddRowStyle = isDefault => ({ display: "flex", alignItems: "center", gap: 8, background: DD_ROW_BG, border: `1px solid ${isDefault ? DD_STAR_BORDER : DD_ROW_BORDER}`, borderRadius: 7, padding: "7px 10px" });
+const ddListStyle = extra => ({ display: "flex", flexDirection: "column", gap: DD_LIST_GAP, ...(extra || {}) });
+function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#dc2626" } }, text) : null; }
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
-  const open = () => {
-    if (activeDeleteSetter && activeDeleteSetter !== setConfirming) activeDeleteSetter(false);
-    activeDeleteSetter = setConfirming;
-    setConfirming(true);
-  };
-  const cancel = () => { activeDeleteSetter = null; setConfirming(false); };
-  const confirm = () => { activeDeleteSetter = null; setConfirming(false); onConfirm(); };
+  const boxRef = React.useRef(null);
+  useCollapsible(confirming, () => setConfirming(false), boxRef);
+  const open = () => setConfirming(true);
+  const cancel = () => setConfirming(false);
+  const confirm = () => { setConfirming(false); onConfirm(); };
   if (!confirming) return renderIdle(open);
-  return React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
+  return React.createElement('div', { ref: boxRef, style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
     React.createElement('span', { style: { color: '#991b1b', fontSize: '12px' } }, prompt),
     React.createElement('button', { onClick: confirm, style: { background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.5)', color: '#991b1b', borderRadius: '999px', padding: '3px 12px', fontSize: '12px', cursor: 'pointer' } }, 'Reset'),
     React.createElement('button', { onClick: cancel, style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(0,0,0,0.15)', color: '#52525b', borderRadius: '999px', padding: '3px 12px', fontSize: '12px', cursor: 'pointer' } }, 'Keep')
@@ -1075,7 +1126,6 @@ const pushSum=summariseProject(results,project,"push");
 const injectSum=summariseProject(results,project,"inject");
 const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.fail+pushSum.na)/pushSum.total)*100):0;
 const injectPct=injectSum.total>0?Math.round(((injectSum.pass+injectSum.fail+injectSum.na)/injectSum.total)*100):0;
-const [confirmReset,setConfirmReset]=React.useState(false);
 const hasAuditor=!!(meta&&meta.auditor&&meta.auditor.trim());
 return (
 React.createElement('div', { style: S.homeWrap,}
@@ -1133,9 +1183,7 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('div', { style: {fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "COMPLETE ACTIVE AUDIT")
 , React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#a3530f":activeMode==="inject"?"#1d4ed8":"#a3530f", label:activeMode==="push"?"Complete Push Test":activeMode==="inject"?"Complete Injection Test":"Complete RCD Audit", onComplete:onCompleteAudit})
 )
-, confirmReset
-?React.createElement('div', { style: S.confirmRow,}, React.createElement('span', { style: {color:"#dc2626",fontSize:13},}, "Reset all results?"  ), React.createElement('button', { style: S.confirmYes, onClick: ()=>{onReset();setConfirmReset(false);},}, "Yes"), React.createElement('button', { style: S.confirmNo, onClick: ()=>setConfirmReset(false),}, "Cancel"))
-:React.createElement('button', { style: S.resetBtn, onClick: ()=>setConfirmReset(true),}, "Reset all test results"   )
+, React.createElement(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => React.createElement('button', { style: S.resetBtn, onClick: open }, "Reset all test results") })
 )
 );
 }
@@ -1152,8 +1200,9 @@ function ContinueConfirmBtn({onConfirm,styleObj,color}){
   const accentBorder = color ? color+"55" : "#d8b4fe";
   const accentText  = color ? (color==="7c3aed"?"#6b21a8":"#6b21a8") : "#6b21a8";
   const[confirming,setConfirming]=React.useState(false);
+  const boxRef=React.useRef(null); useCollapsible(confirming,()=>setConfirming(false),boxRef);
   if(confirming){
-    return React.createElement('div',{style:{width:"100%",background:accentLight,border:`1px solid ${accentBorder}`,borderRadius:8,padding:"10px 12px",marginTop:4}}
+    return React.createElement('div',{ref:boxRef,style:{width:"100%",background:accentLight,border:`1px solid ${accentBorder}`,borderRadius:8,padding:"10px 12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#6b21a8",fontWeight:600,marginBottom:8}},"This will replace your current audit with the archived snapshot. Continue?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
         ,React.createElement('button',{style:{flex:1,padding:"9px",background:accentColor,color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onConfirm();setConfirming(false);}},"▶ Yes, Continue")
@@ -1353,6 +1402,7 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 // ─────────────────────────────────────────────────────────────────────────
 function SettingsView({ dropdowns, setDropdowns, logo, setLogo, onBack }) {
 const [newVals, setNewVals] = React.useState({});
+const [notice, setNotice] = React.useState({});
 const logoRef = React.useRef();
 const handleLogoUpload = e => {
 const file = e.target.files[0]; if(!file) return;
@@ -1362,8 +1412,11 @@ reader.readAsDataURL(file);
 e.target.value = "";
 };
 const addItem = (key,val) => {
-if(!val.trim()) return;
-setDropdowns(d => ({...d,[key]:[...((_nullishCoalesce(d[key], () => ([]))).filter(x=>x!==val.trim())),val.trim()]}));
+const r = dropdownAdd((dropdowns&&dropdowns[key])||[], val);
+if(r.empty) return;
+if(r.notice){ setNotice(n=>({...n,[key]:r.notice})); return; }
+setNotice(n=>({...n,[key]:""}));
+setDropdowns(d => ({...d,[key]:r.items}));
 setNewVals(v => ({...v,[key]:""}));
 };
 const removeItem = (key,val) => setDropdowns(d => ({...d,[key]:(_nullishCoalesce(d[key], () => ([]))).filter(x=>x!==val)}));
@@ -1392,10 +1445,10 @@ React.createElement('div', { key: key, style: {...S.addCard,marginBottom:14,bord
 )
 , React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement('button', { style: {...S.smallBtn,fontSize:10,color:"#52525b",borderColor:"#d4d4d8",flexShrink:0}, onClick: open,}, "Reset")})
 )
-, React.createElement('div', { style: {display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"},}
+, React.createElement('div', { style: ddListStyle({marginBottom:10,maxHeight:200,overflowY:"auto"}),}
 , items.map((item,i)=>{
 const isDefault=i===0;
-return React.createElement('div', { key: i, style: {display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"},}
+return React.createElement('div', { key: i, style: ddRowStyle(isDefault),}
 , isDefault&&React.createElement('span', { style: {fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0},}, "★ DEFAULT")
 , React.createElement('span', { style: {flex:1,fontSize:12,color:"#3f3f46"},}, item)
 , !isDefault&&React.createElement('button', { style: {background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7}, title:"Set as default", onClick: ()=>{
@@ -1407,12 +1460,13 @@ return React.createElement('div', { key: i, style: {display:"flex",alignItems:"c
 })
 , items.length===0&&React.createElement('div', { style: {fontSize:12,color:"#52525b",padding:"6px 0"},}, "No options — add one below"     )
 )
-, React.createElement('div', { style: {display:"flex",gap:8},}
+, React.createElement('div', { style: {display:"flex",gap:8,flexWrap:"wrap"},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: `Add new ${label.toLowerCase()} option…`,
 value: newVal,
-onChange: e=>setNewVals(v=>({...v,[key]:e.target.value})),
+onChange: e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},
 onKeyDown: e=>{ if(e.key==="Enter"){ addItem(key,newVal); } },})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addItem(key,newVal),}, "+ Add" )
+, React.createElement(DropdownNotice,{text:notice[key]})
 )
 )
 );
@@ -1636,7 +1690,7 @@ React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca
 function EditableDropdown({ options, value, onChange, placeholder }) {
 const [open, setOpen] = React.useState(false);
 const [custom, setCustom] = React.useState(false);
-const [typedVal, setTypedVal] = React.useState(value||"");
+const [typedVal, setTypedVal] = React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
 const isCustom = value && !options.includes(value);
 // Sync to custom mode on mount if value isn't in list
 React.useEffect(()=>{ if(isCustom){setCustom(true);setTypedVal(value);} },[]);
@@ -1651,7 +1705,7 @@ React.createElement('div', { style: {display:"flex",gap:8},}
 );
 }
 return (
-React.createElement('div', { style: {position:"relative"},}
+React.createElement('div', { ref: boxRef, style: {position:"relative"},}
 , React.createElement('button', { style: {...S.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"}, onClick: ()=>setOpen(x=>!x),}
 , React.createElement('span', { style: {color:value?"#18181b": "#52525b"},}, value||placeholder||"Select…")
 , React.createElement('span', { style: {color:"#6e6a66",fontSize:12},}, "▾")
@@ -1893,14 +1947,8 @@ React.createElement('div', { style: {paddingLeft:8},}
         React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingCircuit(null)},"×")
       ),
       React.createElement('input',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%",boxSizing:"border-box"},value:editCircuitName,onChange:e=>setEditCircuitName(e.target.value),placeholder:"Circuit name"}),
-      React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%"},value:editCbType,onChange:e=>setEditCbType(e.target.value)},
-        React.createElement('option',{value:""},"CB/RCD Type"),
-        (editCbType&&!cbOptions.includes(editCbType)?[editCbType,...cbOptions]:cbOptions).map(o=>React.createElement('option',{key:o,value:o},o))
-      ),
-      React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:8,width:"100%"},value:editAmpRating,onChange:e=>setEditAmpRating(e.target.value)},
-        React.createElement('option',{value:""},"Amp Rating"),
-        (editAmpRating&&!ampOptions.includes(editAmpRating)?[editAmpRating,...ampOptions]:ampOptions).map(o=>React.createElement('option',{key:o,value:o},o))
-      ),
+      React.createElement(StyledSelect,{options:(editCbType&&!cbOptions.includes(editCbType)?[editCbType,...cbOptions]:cbOptions),value:editCbType,onChange:setEditCbType,placeholder:"CB/RCD Type",allowEmpty:true,ariaLabel:"CB/RCD type",boxStyle:{...S.smallInput,fontSize:13},wrapStyle:{marginBottom:6}}),
+      React.createElement(StyledSelect,{options:(editAmpRating&&!ampOptions.includes(editAmpRating)?[editAmpRating,...ampOptions]:ampOptions),value:editAmpRating,onChange:setEditAmpRating,placeholder:"Amp Rating",allowEmpty:true,ariaLabel:"Amp rating",boxStyle:{...S.smallInput,fontSize:13},wrapStyle:{marginBottom:8}}),
       React.createElement('div',{style:{display:"flex",gap:8}},
         React.createElement('button',{style:{...S.smallBtn,flex:1,color:"#14532d",borderColor:"#86efac",fontSize:13,padding:"10px 0"},onClick:()=>saveCircuitMeta(area.id,pnl.id,c)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Save"),
         React.createElement('button',{style:{...S.smallBtn,flex:1,fontSize:13,padding:"10px 0"},onClick:()=>setEditingCircuit(null)},"Cancel")
@@ -1924,13 +1972,9 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "Circuit name e.g. CB5", value: newCircuit[pnl.id]||"", onChange: e=>setNewCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addCircuit(area.id,pnl.id),})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%",overflow:"hidden"},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: newCbType[pnl.id]!==undefined?newCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
-  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: newAmpRating[pnl.id]!==undefined?newAmpRating[pnl.id]:(ampOptions[0]||""), onChange: e=>setNewAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
-  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
+, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%"},}
+, React.createElement(StyledSelect, { options: cbOptions, value: newCbType[pnl.id]!==undefined?newCbType[pnl.id]:(cbOptions[0]||""), onChange: v=>setNewCbType(x=>({...x,[pnl.id]:v})), ariaLabel: "New circuit CB type", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:2,minWidth:0} })
+, React.createElement(StyledSelect, { options: ampOptions, value: newAmpRating[pnl.id]!==undefined?newAmpRating[pnl.id]:(ampOptions[0]||""), onChange: v=>setNewAmpRating(x=>({...x,[pnl.id]:v})), ariaLabel: "New circuit amp rating", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:1,minWidth:0} })
 )
 )
 , React.createElement('div', { style: {fontSize:10,color:"#52525b",marginBottom:4},}, "BULK ADD (comma-separated)")
@@ -1938,13 +1982,9 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Add" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6,width:"100%",overflow:"hidden"},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: bulkCbType[pnl.id]!==undefined?bulkCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
-  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: bulkAmpRating[pnl.id]!==undefined?bulkAmpRating[pnl.id]:(ampOptions[0]||""), onChange: e=>setBulkAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
-  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
+, React.createElement('div', { style: {display:"flex",gap:6,width:"100%"},}
+, React.createElement(StyledSelect, { options: cbOptions, value: bulkCbType[pnl.id]!==undefined?bulkCbType[pnl.id]:(cbOptions[0]||""), onChange: v=>setBulkCbType(x=>({...x,[pnl.id]:v})), ariaLabel: "Bulk CB type", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:2,minWidth:0} })
+, React.createElement(StyledSelect, { options: ampOptions, value: bulkAmpRating[pnl.id]!==undefined?bulkAmpRating[pnl.id]:(ampOptions[0]||""), onChange: v=>setBulkAmpRating(x=>({...x,[pnl.id]:v})), ariaLabel: "Bulk amp rating", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:1,minWidth:0} })
 )
 )
 )
@@ -2620,8 +2660,9 @@ function IELApp({ onGoHome }) {
 // Editable Responsibility / Rectified-Scheduled option lists behind the fail-panel dropdowns (IEL and TAT share this).
 function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
   const [newVals,setNewVals]=React.useState({});
+  const [notice,setNotice]=React.useState({});
   const items=(key)=>(dropdowns&&dropdowns[key])||[];
-  const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
+  const addItem=(key,val)=>{const r=dropdownAdd(items(key),val);if(r.empty)return;if(r.notice){setNotice(n=>({...n,[key]:r.notice}));return;}setNotice(n=>({...n,[key]:""}));setDropdowns(d=>({...d,[key]:r.items}));setNewVals(x=>({...x,[key]:""}));};
   const removeItem=(key,item)=>setDropdowns(d=>({...d,[key]:items(key).filter(x=>x!==item)}));
   const resetKey=(key,def)=>setDropdowns(d=>({...d,[key]:def}));
   return React.createElement(React.Fragment,null,sections.map(({key,label,color,desc,defaults})=>{
@@ -2634,10 +2675,10 @@ function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
           )
           ,React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement('button',{style:{...S.smallBtn,fontSize:10,color:"#52525b",borderColor:"#d4d4d8",flexShrink:0},onClick:open},"Reset")})
         )
-        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}}
+        ,React.createElement('div',{style:ddListStyle({marginBottom:10,maxHeight:200,overflowY:"auto"})}
           ,items(key).map((item,i)=>{
             const isDefault=i===0;
-            return React.createElement('div',{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
+            return React.createElement('div',{key:item,style:ddRowStyle(isDefault)}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
               ,!isDefault&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -2646,12 +2687,13 @@ function DefectListCards({dropdowns,setDropdowns,sections,S,cardStyle}){
           })
           ,items(key).length===0&&React.createElement('div',{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options — add one below")
         )
-        ,React.createElement('div',{style:{display:"flex",gap:8}}
+        ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
           ,React.createElement('input',{style:{...S.smallInput,flex:1},
             placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
-            onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
+            onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement(DropdownNotice,{text:notice[key]})
         )
       );
     }));
@@ -2835,7 +2877,6 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
 function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onCompleteAudit,activeCatKey,auditEntered,lastArchivedAt}){
-  const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
@@ -2884,9 +2925,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:"Complete IEL Audit",onComplete:onCompleteAudit})
     )
-    ,confirmReset
-      ?React.createElement('div',{style:SI.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SI.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SI.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
+    ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );
 }
 
@@ -3023,7 +3062,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
 function IELEditableDropdown({options,value,onChange,placeholder,color,colorBg}){
   const[open,setOpen]=React.useState(false);
   const[custom,setCustom]=React.useState(false);
-  const[typedVal,setTypedVal]=React.useState(value||"");
+  const[typedVal,setTypedVal]=React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const isCustom=value&&!options.includes(value);
   React.useEffect(()=>{if(isCustom){setCustom(true);setTypedVal(value);}},[]);
   React.useEffect(()=>{if(custom&&value!==typedVal){setTypedVal(value||"");}},[value]);
@@ -3031,7 +3070,7 @@ function IELEditableDropdown({options,value,onChange,placeholder,color,colorBg})
     ,React.createElement('input',{style:{...SI.modalInput,flex:1},value:typedVal,placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
     ,React.createElement('button',{style:{padding:"8px 10px",background:"transparent",border:"1px solid #d4d4d8",borderRadius:8,color:"#6e6a66",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
   );}
-  return React.createElement('div',{style:{position:"relative"}}
+  return React.createElement('div',{ref:boxRef,style:{position:"relative"}}
     ,React.createElement('button',{style:{...SI.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#18181b": "#52525b"},onClick:()=>setOpen(o=>!o)}
       ,React.createElement('span',null,value||placeholder||"Select…")
       ,React.createElement('span',{style:{color:"#52525b",fontSize:12}},open?"▴":"▾")
@@ -3641,17 +3680,18 @@ const SI={
 const K_CAL_EVENTS = "cal-events-v1";
 
 const CAL_TYPES = [
-  { key:"rcd_push",    label:"RCD Push Test",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
-  { key:"rcd_inject",  label:"RCD Injection Test",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
-  { key:"iel_estop",   label:"IEL E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
-  { key:"iel_lanyard", label:"IEL Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
-  { key:"iel_iso",     label:"IEL Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"rcd_push",    label:"RCD Testing · Push",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
+  { key:"rcd_inject",  label:"RCD Testing · Injection",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
+  { key:"iel_estop",   label:"IEL Testing · E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_lanyard", label:"IEL Testing · Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_iso",     label:"IEL Testing · Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:moduleIcon("tat",15), period:"Variable"   },
-  { key:"thermo",      label:"Thermographic Testing",  color:"#c2410c", icon:moduleIcon("thermo",15), period:"Variable"   },
-  { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:moduleIcon("swb",15), period:"Variable"   },
+  { key:"thermo",      label:"Thermographic",  color:"#c2410c", icon:moduleIcon("thermo",15), period:"Variable"   },
+  { key:"swb",         label:"Switchboard",      color:"#7e22ce", icon:moduleIcon("swb",15), period:"Variable"   },
   { key:"irt",         label:"Insulation Resistance Testing",             color:"#1d4ed8", icon:moduleIcon("irt",15), period:"Variable"   },
   { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:moduleIcon("elt",15), period:"6-Monthly"  },
-  { key:"welder",      label:"Welder Test",      color:"#be185d", icon:moduleIcon("welder",15), period:"3-Monthly"  },
+  { key:"welder",      label:"Welder Testing",      color:"#be185d", icon:moduleIcon("welder",15), period:"3-Monthly"  },
+  { key:"gsd",         label:"General Site Defects", color:"#4d7c0f", icon:moduleIcon("gsd",15), period:"Annual"    },
   { key:"other",       label:"Other / Custom",        color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
 ];
 
@@ -3695,9 +3735,11 @@ function urgencyLabel(days){
 // ─────────────────────────────────────────────────────────────────────────
 function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSeries, onStartEdit}) {
   const [del, setDel] = React.useState(false);
-  // Same one-prompt-open-at-a-time rule as DeleteButton (shared activeDeleteSetter), so two cards can never both be asking.
-  const openDel = () => { if (activeDeleteSetter && activeDeleteSetter !== setDel) activeDeleteSetter(false); activeDeleteSetter = setDel; setDel(true); };
-  const closeDel = () => { if (activeDeleteSetter === setDel) activeDeleteSetter = null; setDel(false); };
+  // Same rule as DeleteButton (shared useCollapsible): one prompt open at a time, and a click outside collapses it.
+  const delRef = React.useRef(null);
+  useCollapsible(del, () => setDel(false), delRef);
+  const openDel = () => setDel(true);
+  const closeDel = () => setDel(false);
   const days = daysUntil(ev.dueDate);
   const uc = ev.completed ? "#16a34a" : urgencyColor(days);
   const ul = ev.completed ? "COMPLETED" : urgencyLabel(days);
@@ -3730,7 +3772,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
       ,!compact&&!ev.completed&&React.createElement('div',{style:{display:"flex",gap:6,marginLeft:8,alignItems:"flex-start"}}
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#4338ca",borderColor:"#a5b4fc"},onClick:()=>onStartEdit&&onStartEdit(ev)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         ,del
-          ?React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:4}}
+          ?React.createElement('div',{ref:delRef,style:{display:"flex",flexDirection:"column",gap:4}}
             ,React.createElement('span',{style:{fontSize:10,color:"#991b1b",fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}},"Delete?")
             ,React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",padding:"7px 10px",fontSize:11},onClick:()=>{onDelete&&onDelete(ev.id);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " Delete")
             ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " All ",ev.seriesTotal," in series")
@@ -3829,7 +3871,7 @@ function CalendarApp({ onGoHome }) {
   React.useEffect(()=>{
     (async()=>{
       try{
-        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs, swbProjs, irtProjs, eltProjs, welderProjs] = await Promise.all([
+        const [ev, rcdProjs, ielProjs, tatProjs, thermoProjs, swbProjs, irtProjs, eltProjs, welderProjs, gsdProjs] = await Promise.all([
           load(K_CAL_EVENTS,[]),
           load(K_PROJECTS,[]),
           load(K_IEL_PROJECTS,[]),
@@ -3839,12 +3881,13 @@ function CalendarApp({ onGoHome }) {
           load(K_IRT_PROJECTS,[]),
           loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),
           loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),
+          load(K_GSD_PROJECTS,[]),
         ]);
         setEvents(ev);
         // Merge site names from all modules, deduplicate by name
         const names = new Set();
         const combined = [];
-        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[]), ...(swbProjs||[]), ...(irtProjs||[]), ...(eltProjs||[]), ...(welderProjs||[])].forEach(p=>{
+        [...(rcdProjs||[]), ...(ielProjs||[]), ...(tatProjs||[]), ...(thermoProjs||[]), ...(swbProjs||[]), ...(irtProjs||[]), ...(eltProjs||[]), ...(welderProjs||[]), ...(gsdProjs||[])].forEach(p=>{
           if(p&&p.name&&!names.has(p.name)){ names.add(p.name); combined.push(p.name); }
         });
         setAllSites(combined);
@@ -4111,34 +4154,8 @@ function CalendarApp({ onGoHome }) {
                 ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginTop:4}},"No sites yet — add one in RCD or IEL, or type a custom name above")
               )
             : React.createElement(React.Fragment,null
-                ,React.createElement('select',{
-                  style:{width:"100%",background:"#f7f6f3",border:`1px solid ${validErr.site?"#dc2626":"#d4d4d8"}`,borderRadius:8,color:form.site||customSite?"#18181b": "#6e6a66",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:6},
-                  value:customSite?"__custom__":form.site,
-                  onChange:e=>{
-                    if(e.target.value==="__custom__"){
-                      setCustomSite("");
-                      setForm(f=>({...f,site:"__custom__"}));
-                    } else {
-                      setCustomSite("");
-                      setForm(f=>({...f,site:e.target.value}));
-                    }
-                    setValidErr(v=>({...v,site:false}));
-                  }}
-                  ,React.createElement('option',{value:""},"— Select a site")
-                  ,allSites.map(s=>React.createElement('option',{key:s,value:s},s))
-                  ,React.createElement('option',{value:"__custom__"},"+ Enter custom site…")
-                )
-                ,(form.site==="__custom__"||customSite)&&React.createElement('input',{
-                  style:{width:"100%",background:"#f7f6f3",border:"1px solid #4338ca",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
-                  placeholder:"Type site name…",
-                  value:customSite,
-                  autoFocus:true,
-                  onChange:e=>{
-                    setCustomSite(e.target.value);
-                    setForm(f=>({...f,site:e.target.value||"__custom__"}));
-                    setValidErr(v=>({...v,site:false}));
-                  }
-                })
+                ,React.createElement(StyledSelect,{options:allSites,value:form.site==="__custom__"?"":form.site,onChange:x=>{setCustomSite("");setForm(f=>({...f,site:x}));setValidErr(v=>({...v,site:false}));},placeholder:"— Select a site",allowEmpty:true,allowCustom:true,customHint:"Type site name…",ariaLabel:"Site",color:"#4338ca",colorBg:"#e0e7ff",
+                  boxStyle:{background:"#f7f6f3",border:`1px solid ${validErr.site?"#dc2626":"#d4d4d8"}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},wrapStyle:{marginBottom:6}})
                 ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginTop:4}},"Sites auto-filled from all modules")
               )
           ,validErr.site&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:4}},"Select or enter a site")
@@ -4180,20 +4197,8 @@ function CalendarApp({ onGoHome }) {
         ,React.createElement('div',{style:{marginBottom:12}}
           ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"RECURRENCE")
           ,form.type==="tat"
-            ? React.createElement('select',{style:{width:"100%",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
-                ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
-                ,React.createElement('option',{value:"Monthly"},"1-Monthly — Hire / Construction")
-                ,React.createElement('option',{value:"3-Monthly"},"3-Monthly — Building / Construction / Demolition")
-                ,React.createElement('option',{value:"6-Monthly"},"6-Monthly — Factory / Warehouse / Production")
-                ,React.createElement('option',{value:"Annual"},"Annual — Hostile environment")
-              )
-            : React.createElement('select',{style:{width:"100%",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
-                ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
-                ,React.createElement('option',{value:"Monthly"},"Monthly")
-                ,React.createElement('option',{value:"3-Monthly"},"Every 3 months")
-                ,React.createElement('option',{value:"6-Monthly"},"Every 6 months")
-                ,React.createElement('option',{value:"Annual"},"Annual")
-              )
+            ? React.createElement(StyledSelect,{options:[{value:"none",label:"No recurrence (one-off)"},{value:"Monthly",label:"1-Monthly — Hire / Construction"},{value:"3-Monthly",label:"3-Monthly — Building / Construction / Demolition"},{value:"6-Monthly",label:"6-Monthly — Factory / Warehouse / Production"},{value:"Annual",label:"Annual — Hostile environment"}],value:form.recur,onChange:v=>setForm(f=>({...f,recur:v})),ariaLabel:"Recurrence",color:"#4338ca",colorBg:"#e0e7ff",boxStyle:{background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}})
+            : React.createElement(StyledSelect,{options:[{value:"none",label:"No recurrence (one-off)"},{value:"Monthly",label:"Monthly"},{value:"3-Monthly",label:"Every 3 months"},{value:"6-Monthly",label:"Every 6 months"},{value:"Annual",label:"Annual"}],value:form.recur,onChange:v=>setForm(f=>({...f,recur:v})),ariaLabel:"Recurrence",color:"#4338ca",colorBg:"#e0e7ff",boxStyle:{background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}})
         )
         // Notes
         ,React.createElement('div',{style:{marginBottom:16}}
@@ -4234,8 +4239,10 @@ function CalendarApp({ onGoHome }) {
 // ─────────────────────────────────────────────────────────────────────────
 function CompleteAuditBtn({ color, label, onComplete }) {
   const [confirm, setConfirm] = React.useState(false);
+  const boxRef = React.useRef(null);
+  useCollapsible(confirm, () => setConfirm(false), boxRef);
   if (confirm) {
-    return React.createElement('div', {style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
+    return React.createElement('div', {ref:boxRef,style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#18181b",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
         ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#0f766e",color:"#FFFFFF",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},"Yes, Complete")
@@ -4306,7 +4313,10 @@ const TAT_DEFAULT_FREQS = [
   {value:"6",  label:"6 Months — Factory / Warehouse / Production"},
   {value:"12", label:"Annual — Hostile environment"},
 ];
-const TAT_DEFAULT_EQUIP_TYPES = ["Power Tool","Extension Lead","RCD Portable","Appliance","Double Adaptor","Power Board","Transformer","Other"];
+// "Other" is NOT a list entry any more: it is the built-in, reserved, always-last option with a free-text box (ELT's Type pattern). A stored list that still has a
+// literal "Other" (every install before this change) is cleaned at load; items that were typed "Other" keep displaying "Other".
+const TAT_DEFAULT_EQUIP_TYPES = ["Power Tool","Extension Lead","RCD Portable","Appliance","Double Adaptor","Power Board","Transformer"];
+const tatCleanEquipTypes = list => (Array.isArray(list) ? list : TAT_DEFAULT_EQUIP_TYPES).filter(t => String(t).trim().toLowerCase() !== "other");
 const TAT_DEFAULT_NAMES = ["Angle Grinder","Drill","Extension Lead","Power Board","Kettle","Laptop Charger","Vacuum","Heat Gun","Jigsaw","Circular Saw"];
 const K_TAT_RESULTS  = "tat-results-v1";   // { siteId: { areaId: { itemId: {...} } } }
 const K_TAT_META     = "tat-meta-v1";
@@ -4351,10 +4361,21 @@ function addTATMonths(dateStr, months) {
 // Overall result rule (the overall result itself stays manual): PASS can only be marked when the Visual Inspection is ticked AND the Electrical Test
 // passed; Electrical FAIL forces the overall result to FAIL. The gate applies when MARKING pass — an item already PASS (e.g. legacy) is never changed.
 const tatCanPass = item => !!(item && item.visualCheck) && (item && item.electricalCheck) === "pass";
+// AUTO-PASS mirrors auto-FAIL: whichever tap COMPLETES the pair (Visual ticked + Electrical PASS) sets the overall result to PASS and stamps the tested date —
+// but ONLY from UNTESTED: a recorded FAIL or N/A is never flipped silently (the auditor changes it deliberately with the RESULT buttons). Trigger-on-tap only;
+// opening an item never changes it.
+const tatAutoPass = (item, testDate) => (item.status || TAT_STATUS.UNTESTED) === TAT_STATUS.UNTESTED ? { status: TAT_STATUS.PASS, lastTested: testDate } : {};
 function tatElectricalPatch(item, next, testDate) {
   const patch = { electricalCheck: next };
   if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }
-  else if (next !== "pass" && item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;  // pass cleared: the PASS it justified goes
+  else if (next === "pass") { if (item.visualCheck) Object.assign(patch, tatAutoPass(item, testDate)); }                               // Visual already ticked -> this tap completes the pair
+  else if (item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;                // pass cleared: the PASS it justified goes
+  return patch;
+}
+function tatVisualPatch(item, ticked, testDate) {
+  const patch = { visualCheck: ticked };
+  if (ticked) { if ((item.electricalCheck || "") === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                         // Electrical already PASS -> this tap completes the pair
+  else if (item.status === TAT_STATUS.PASS) patch.status = TAT_STATUS.UNTESTED;                                                          // un-ticked: the PASS it justified goes
   return patch;
 }
 function tatGetItem(results, siteId, areaId, itemId) {
@@ -4370,6 +4391,17 @@ function tatGetStatus(results, siteId, areaId, itemId) {
   return tatGetItem(results,siteId,areaId,itemId).status || TAT_STATUS.UNTESTED;
 }
 
+// The default test frequency is STORED (tatDefaults.freq, and per area area.defaultFreq) but the options list is user-editable, so a stored default can
+// point at an option that was reset away or deleted. Every place that needs "the default for a NEW item / the ★" goes through this: the area's default if it
+// is still an option, else the site default if it is, else the factory default ("3") if it is an option, else the first remaining option, else "3".
+// (Existing items keep their own stored frequency untouched.)
+function tatDefaultFreq(freqOptions, tatDefaults, area) {
+  const opts = freqOptions || TAT_DEFAULT_FREQS; const has = v => opts.some(f => f.value === v);
+  if (area && has(area.defaultFreq)) return area.defaultFreq;
+  const v = (tatDefaults || {}).freq; if (has(v)) return v;
+  if (has(TAT_FACTORY_DEFAULTS.freq)) return TAT_FACTORY_DEFAULTS.freq;
+  return opts[0] ? opts[0].value : TAT_FACTORY_DEFAULTS.freq;
+}
 function tatAreaSummary(results, siteId, areaId, items) {
   let pass=0,fail=0,na=0,untested=0;
   (items||[]).forEach(id=>{
@@ -4583,7 +4615,7 @@ function TATApp({ onGoHome }) {
     (async()=>{
       try{
         const[p,r,m,h,et,fq,an,td,dd]=await Promise.all([load(K_TAT_PROJECTS,[]),load(K_TAT_RESULTS,{}),load(K_TAT_META,{}),load(K_TAT_HISTORY,[]),load(K_TAT_SETTINGS,TAT_DEFAULT_EQUIP_TYPES),load(K_TAT_FREQS,TAT_DEFAULT_FREQS),load(K_TAT_NAMES,TAT_DEFAULT_NAMES),load(K_TAT_DEFAULTS,TAT_FACTORY_DEFAULTS),load(K_TAT_DROPDOWNS,TAT_DEFAULT_DROPDOWNS)]);
-        clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEquipTypes(et||TAT_DEFAULT_EQUIP_TYPES);setFreqOptions(fq||TAT_DEFAULT_FREQS);setApplianceNames(an||TAT_DEFAULT_NAMES);setTatDefaults(td||TAT_FACTORY_DEFAULTS);setTatDropdowns({...TAT_DEFAULT_DROPDOWNS,...(dd||{})});setLoaded(true);
+        clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEquipTypes(tatCleanEquipTypes(et));setFreqOptions(fq||TAT_DEFAULT_FREQS);setApplianceNames(an||TAT_DEFAULT_NAMES);setTatDefaults(td||TAT_FACTORY_DEFAULTS);setTatDropdowns({...TAT_DEFAULT_DROPDOWNS,...(dd||{})});setLoaded(true);
       }catch(e){clearTimeout(t);setLoaded(true);}
     })();
   },[]);
@@ -4848,7 +4880,6 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // T&T HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
 function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,auditEntered,onCompleteAudit}){
-  const[confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   return React.createElement('div',{style:ST.homeWrap}
@@ -4894,13 +4925,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:"Complete Test & Tag Audit",onComplete:onCompleteAudit})
     )
-    ,confirmReset
-      ?React.createElement('div',{style:{...ST.confirmRow,width:"100%",maxWidth:500}}
-        ,React.createElement('span',{style:{color:"#dc2626",fontSize:13,flex:1}},"Reset all test results?")
-        ,React.createElement('button',{style:ST.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes")
-        ,React.createElement('button',{style:ST.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
-      )
-      :React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:()=>setConfirmReset(true)},"Reset all test results")
+    ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );
 }
 
@@ -5018,11 +5043,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     onPatch(tatElectricalPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
   };
 
-  const toggleVisual=()=>{
-    const newVal=!item.visualCheck;
-    const newStatus=!newVal&&item.status===TAT_STATUS.PASS?TAT_STATUS.UNTESTED:item.status;
-    onPatch({visualCheck:newVal,status:newStatus});
-  };
+  const toggleVisual=()=>onPatch(tatVisualPatch(item,!item.visualCheck,meta.testDate||new Date().toISOString().slice(0,10)));
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
 
@@ -5088,6 +5109,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       // Result
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
+        ,canPass&&item.status===TAT_STATUS.FAIL&&React.createElement('div',{"data-testid":"tat-fail-kept-hint",style:{background:"#e0e7ff",border:"1px solid #a5b4fc",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#3730a3"}},"Both checks passed — result is still FAIL. Tap PASS to change it.")
         ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked and the Electrical Test passed before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
@@ -5211,6 +5233,31 @@ function TATReportView({project,results,meta,onBack}){
 // ─────────────────────────────────────────────────────────────────────────
 // T&T MANAGE VIEW
 // ─────────────────────────────────────────────────────────────────────────
+// Equipment Type = the list + the built-in, always-last "Other" with a free-text box. Stored as ONE string, as before: a listed type, or the typed text
+// ("Other" when the box is left blank). A stored value that is not in the list (typed text, an import, an option deleted later) shows as Other + that text,
+// so nothing is lost and no duplicate "extra" option appears in the dropdown.
+// The free-text box is shown only when there is something to edit: an unlisted custom type (its text), or right after the user CHOSE Other to type one. An item whose
+// stored type is just the literal "Other" (nothing to specify) shows the select alone — the stored value is identical either way, only the box's visibility differs.
+// The appliance-name text box with a ▾ list of names (type to filter, or pick). Its list is one of the app's expandables: it joins useCollapsible (one at a time,
+// a click outside collapses it) instead of the old blur + 150 ms timeout.
+function TATNameCombo({value,onChange,onEnter,names}){
+  const[open,setOpen]=React.useState(false); const ref=React.useRef(null); useCollapsible(open,()=>setOpen(false),ref);
+  const q=(value||"").toLowerCase(); const list=(names||[]).filter(n=>!value||n.toLowerCase().includes(q));
+  return React.createElement('div',{ref,style:{position:"relative"}}
+    ,React.createElement('div',{style:{display:"flex",gap:0}}
+      ,React.createElement('input',{style:{...ST.smallInput,flex:1,borderRadius:"8px 0 0 8px",borderRight:"none"},placeholder:'Type or pick ▾',value:value||"",
+        onChange:e=>{onChange(e.target.value);setOpen(true);},onFocus:()=>setOpen(true),
+        onKeyDown:e=>{if(e.key==="Enter")onEnter();else if(e.key==="Escape"||e.key==="Tab")setOpen(false);}})
+      ,React.createElement('button',{type:"button","aria-label":"Show appliance names",style:{padding:"8px 10px",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:"0 8px 8px 0",color:"#6e6a66",cursor:"pointer",fontSize:12,flexShrink:0},onClick:()=>setOpen(o=>!o)},"▾"))
+    ,open&&React.createElement('div',{style:{position:"absolute",top:"100%",left:0,right:0,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,borderRadius:8,zIndex:50,maxHeight:180,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,0.25)",marginTop:2}}
+      ,list.map(n=>React.createElement('button',{key:n,type:"button",style:{display:"block",width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid #e4e4e7",color:"#18181b",fontSize:13,textAlign:"left",cursor:"pointer"},onClick:()=>{onChange(n);setOpen(false);}},n))
+      ,list.length===0&&React.createElement('div',{style:{padding:"10px 14px",color:"#52525b",fontSize:12}},"No matches — type to add custom")));
+}
+function TATEquipSelect({options,value,onChange}){
+  const v=value||""; const opts=(options||[]).filter(o=>String(o).trim().toLowerCase()!=="other");
+  // a blank TYPED text is the literal "Other"; choosing "— Optional" from the list is a real blank
+  return React.createElement(StyledSelect,{options:[...opts,"Other"],value:v,placeholder:"— Optional",allowEmpty:true,allowCustom:true,customHint:"Specify…",ariaLabel:"Equipment type",boxStyle:ST.smallInput,onChange:(x,meta)=>onChange(meta&&meta.custom&&String(x).trim()===""?"Other":x)});
+}
 function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaults,applianceNames,onBack}){
   const[expandedArea,setExpandedArea]=React.useState(null);
   const[newAreaName,setNewAreaName]=React.useState("");
@@ -5218,7 +5265,6 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[newItemTag,setNewItemTag]=React.useState({});
   const[newItemEquip,setNewItemEquip]=React.useState({});
   const[newItemFreq,setNewItemFreq]=React.useState({});
-  const[showNameDrop,setShowNameDrop]=React.useState({});
   const[bulkItems,setBulkItems]=React.useState({});
   const[editingProject,setEditingProject]=React.useState(false);
   const[projName,setProjName]=React.useState(project.name);
@@ -5256,7 +5302,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const upd=u=>onUpdateProject(u);
   const addArea=()=>{
     if(!newAreaName.trim())return;
-    const defaultFreq=(tatDefaults||{}).freq||"3";
+    const defaultFreq=tatDefaultFreq(freqOptions,tatDefaults);
     upd({...project,areas:[...project.areas,{id:tatSlug(newAreaName),name:newAreaName.trim(),defaultFreq,items:[],itemNames:{},itemTags:{},itemEquipTypes:{},itemFreqs:{}}]});
     setNewAreaName("");
   };
@@ -5277,7 +5323,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     if(!isNaN(numericTag)&&tagExists(rawTag)&&!newItemTag[areaId])tag=nextTag();
     const eType=(newItemEquip[areaId]||(equipOpts[0]||"")).trim();
     const area=project.areas.find(a=>a.id===areaId);
-    const freq=(newItemFreq[areaId]||(area&&area.defaultFreq)||((tatDefaults||{}).freq)||"3").trim();
+    const freq=String(newItemFreq[areaId]||tatDefaultFreq(freqOptions,tatDefaults,area)).trim();
     const itemId=tatUid();
     const displayName=tag?`${tag} — ${n}`:n;
     upd({...project,areas:project.areas.map(a=>a.id===areaId?{
@@ -5297,7 +5343,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
     const names=raw.split(",").map(s=>s.trim()).filter(Boolean);
     const bulkEquip=(newItemEquip[areaId]||(equipOpts[0]||"")).trim();
     const area=project.areas.find(a=>a.id===areaId);
-    const bulkFreq=(newItemFreq[areaId]||(area&&area.defaultFreq)||((tatDefaults||{}).freq)||"3").trim();
+    const bulkFreq=String(newItemFreq[areaId]||tatDefaultFreq(freqOptions,tatDefaults,area)).trim();
     const usedInBulk=new Set();
     project.areas.forEach(a=>{
       Object.values(a.itemTags||{}).forEach(t=>{const m=String(t).match(/(\d+)/);if(m)usedInBulk.add(parseInt(m[1]));});
@@ -5384,14 +5430,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             )
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
               ,React.createElement('span',{style:{fontSize:10,color:"#52525b",whiteSpace:"nowrap"}},"Default:")
-              ,React.createElement('select',{
-                style:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
-                value:area.defaultFreq||(tatDefaults||{}).freq||"3",
-                onClick:e=>e.stopPropagation(),
-                onChange:e=>{e.stopPropagation();setAreaDefaultFreq(area.id,e.target.value);}
-              }
-                ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"))
-              )
+              ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"})),value:tatDefaultFreq(freqOptions,tatDefaults,area),onChange:v=>setAreaDefaultFreq(area.id,v),ariaLabel:"Area default frequency",stopClicks:true,popoverWidth:170,popoverRight:true,textColor:TAT_COLOR,color:TAT_COLOR,colorBg:"#dbeafe",boxStyle:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,fontSize:12,padding:"4px 6px"},wrapStyle:{flexShrink:0,width:92}})
             )
             ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#1d4ed8",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#1d4ed8",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
             ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
@@ -5427,16 +5466,11 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                   ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
                     ,React.createElement('div',{style:{flex:1}}
                       ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"EQUIPMENT TYPE")
-                      ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:editEquip,onChange:e=>setEditEquip(e.target.value)}
-                        ,React.createElement('option',{value:""},"— Optional")
-                        ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
-                      )
+                      ,React.createElement(TATEquipSelect,{options:equipOpts,value:editEquip,onChange:setEditEquip})
                     )
                     ,React.createElement('div',{style:{flex:1}}
                       ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
-                      ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:editFreq,onChange:e=>setEditFreq(e.target.value)}
-                        ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
-                      )
+                      ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.label})),value:editFreq,onChange:setEditFreq,ariaLabel:"Test frequency",boxStyle:ST.smallInput})
                     )
                   )
                   ,React.createElement('div',{style:{display:"flex",gap:8}}
@@ -5466,44 +5500,17 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               )
               ,React.createElement('div',{style:{flex:2,position:"relative"}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"APPLIANCE NAME *")
-                ,React.createElement('div',{style:{display:"flex",gap:0}}
-                  ,React.createElement('input',{
-                    style:{...ST.smallInput,flex:1,borderRadius:"8px 0 0 8px",borderRight:"none"},
-                    placeholder:'Type or pick ▾',
-                    value:newItemName[area.id]||"",
-                    onChange:e=>{setNewItemName(x=>({...x,[area.id]:e.target.value}));setShowNameDrop(x=>({...x,[area.id]:true}));},
-                    onFocus:()=>setShowNameDrop(x=>({...x,[area.id]:true})),
-                    onBlur:()=>setTimeout(()=>setShowNameDrop(x=>({...x,[area.id]:false})),150),
-                    onKeyDown:e=>e.key==="Enter"&&addItem(area.id)
-                  })
-                  ,React.createElement('button',{
-                    style:{padding:"8px 10px",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:"0 8px 8px 0",color:"#6e6a66",cursor:"pointer",fontSize:12,flexShrink:0},
-                    onMouseDown:e=>{e.preventDefault();setShowNameDrop(x=>({...x,[area.id]:!x[area.id]}));}
-                  },"▾")
-                )
-                ,showNameDrop[area.id]&&React.createElement('div',{style:{position:"absolute",top:"100%",left:0,right:0,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,borderRadius:8,zIndex:50,maxHeight:180,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,0.6)",marginTop:2}}
-                  ,(applianceNames||TAT_DEFAULT_NAMES)
-                    .filter(n=>!newItemName[area.id]||n.toLowerCase().includes((newItemName[area.id]||"").toLowerCase()))
-                    .map(n=>React.createElement('button',{key:n,style:{display:"block",width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid #e4e4e7",color:"#18181b",fontSize:13,textAlign:"left",cursor:"pointer"},onMouseDown:e=>{e.preventDefault();setNewItemName(x=>({...x,[area.id]:n}));setShowNameDrop(x=>({...x,[area.id]:false}));}}
-                      ,n))
-                  ,(applianceNames||TAT_DEFAULT_NAMES).filter(n=>!newItemName[area.id]||n.toLowerCase().includes((newItemName[area.id]||"").toLowerCase())).length===0&&
-                    React.createElement('div',{style:{padding:"10px 14px",color:"#52525b",fontSize:12}},"No matches — type to add custom")
-                )
+                ,React.createElement(TATNameCombo,{value:newItemName[area.id]||"",onChange:v=>setNewItemName(x=>({...x,[area.id]:v})),onEnter:()=>addItem(area.id),names:applianceNames||TAT_DEFAULT_NAMES})
               )
             )
             ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"EQUIPMENT TYPE")
-                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemEquip[area.id]||(equipOpts[0]||""),onChange:e=>setNewItemEquip(x=>({...x,[area.id]:e.target.value}))}
-                  ,React.createElement('option',{value:""},"— Optional")
-                  ,equipOpts.map(t=>React.createElement('option',{key:t,value:t},t))
-                )
+                ,React.createElement(TATEquipSelect,{options:equipOpts,value:newItemEquip[area.id]||(equipOpts[0]||""),onChange:v=>setNewItemEquip(x=>({...x,[area.id]:v}))})
               )
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
-                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemFreq[area.id]||(area.defaultFreq)||((tatDefaults||{}).freq)||"3",onChange:e=>setNewItemFreq(x=>({...x,[area.id]:e.target.value}))}
-                  ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
-                )
+                ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.label})),value:newItemFreq[area.id]||tatDefaultFreq(freqOptions,tatDefaults,area),onChange:v=>setNewItemFreq(x=>({...x,[area.id]:v})),ariaLabel:"New item test frequency",boxStyle:ST.smallInput})
               )
             )
             ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",width:"100%"},onClick:()=>addItem(area.id)},"+ Add")
@@ -5663,17 +5670,23 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
   const [newEquip, setNewEquip] = React.useState("");
   const [newFreqMonths, setNewFreqMonths] = React.useState("");
   const [newName, setNewName] = React.useState("");
+  const [notice, setNotice] = React.useState({});
+  const note = (k,t) => setNotice(n=>({...n,[k]:t}));
   const addName = () => {
-    if(!newName.trim()||(applianceNames||[]).includes(newName.trim())) return;
-    setApplianceNames(prev=>[...(prev||[]), newName.trim()]);
+    const r = dropdownAdd(applianceNames||[], newName);
+    if(r.empty) return; if(r.notice){ note("names",r.notice); return; }
+    note("names","");
+    setApplianceNames(r.items);
     setNewName("");
   };
   const removeName = n => setApplianceNames(prev=>(prev||[]).filter(x=>x!==n));
   const resetNames = () => setApplianceNames([...TAT_DEFAULT_NAMES]);
 
   const addEquip = () => {
-    if(!newEquip.trim()||equipTypes.includes(newEquip.trim())) return;
-    setEquipTypes(prev=>[...prev, newEquip.trim()]); setNewEquip("");
+    const r = dropdownAdd(equipTypes, newEquip, ["Other"]);
+    if(r.empty) return; if(r.notice){ note("equip",r.notice); return; }
+    note("equip","");
+    setEquipTypes(r.items); setNewEquip("");
   };
   const removeEquip = val => setEquipTypes(prev=>prev.filter(x=>x!==val));
   const resetEquip = () => setEquipTypes([...TAT_DEFAULT_EQUIP_TYPES]);
@@ -5682,13 +5695,20 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     const months = parseInt(newFreqMonths);
     if(!months||isNaN(months)||months<1) return;
     const val = String(months);
-    if((freqOptions||[]).find(f=>f.value===val)) return;
+    const existing = (freqOptions||[]).find(f=>f.value===val);
+    if(existing){ note("freq",`"${existing.label}" is already in the list`); return; }
+    note("freq","");
     const label = months===1?"1 Month":`${months} Months`;
     setFreqOptions(prev=>[...(prev||[]), {value:val, label}].sort((a,b)=>parseInt(a.value)-parseInt(b.value)));
     setNewFreqMonths("");
   };
-  const removeFreq = val => setFreqOptions(prev=>(prev||[]).filter(f=>f.value!==val));
-  const resetFreq = () => setFreqOptions([...TAT_DEFAULT_FREQS]);
+  const removeFreq = val => {
+    const remaining = (freqOptions||[]).filter(f=>f.value!==val);
+    setFreqOptions(remaining);
+    // deleting the option that is the ★ default hands the ★ to a remaining option (the factory default if still listed, else the first) — never left pointing at a removed one
+    if (tatDefaultFreq(freqOptions,tatDefaults)===val) setTatDefaults(d=>({...(d||{}),freq:tatDefaultFreq(remaining,{})}));
+  };
+  const resetFreq = () => { setFreqOptions([...TAT_DEFAULT_FREQS]); setTatDefaults(d=>({...(d||{}),freq:TAT_FACTORY_DEFAULTS.freq})); };   // Reset restores the list AND its ★
 
   const secStyle={background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px",marginBottom:16};
   const secTitle=t=>React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",marginBottom:12}},t);
@@ -5700,34 +5720,36 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     ,React.createElement('div',{style:secStyle}
       ,secTitle("APPLIANCE NAMES")
       ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default. The default is pre-filled when adding a new appliance.")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(applianceNames||TAT_DEFAULT_NAMES).map((n,i)=>React.createElement('div',{key:n,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
+      ,React.createElement('div',{style:ddListStyle({marginBottom:12})}
+        ,(applianceNames||TAT_DEFAULT_NAMES).map((n,i)=>React.createElement('div',{key:n,style:ddRowStyle(i===0)}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},n)
           ,i!==0&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setApplianceNames(prev=>[n,...(prev||[]).filter(x=>x!==n)])},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
           ,React.createElement(DeleteButton,{onDelete:()=>removeName(n),compact:true})
         ))
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>setNewName(e.target.value),onKeyDown:e=>e.key==="Enter"&&addName()})
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add appliance name…",value:newName,onChange:e=>{setNewName(e.target.value);note("names","");},onKeyDown:e=>e.key==="Enter"&&addName()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addName},"+ Add")
+        ,React.createElement(DropdownNotice,{text:notice.names})
       )
       ,React.createElement(ConfirmReset,{onConfirm:resetNames,renderIdle:open=>React.createElement('button',{style:{...ST.smallBtn,color:"#52525b",fontSize:11},onClick:open},"Reset to defaults")})
     )
     ,React.createElement('div',{style:secStyle}
       ,secTitle("EQUIPMENT TYPE")
-      ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default.")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
+      ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:8}},"Tap ★ on any item to make it the default. \"Other\" (with a free-text box) is always available and is not listed here.")
+      ,React.createElement('div',{style:ddListStyle({marginBottom:12})}
+        ,equipTypes.map((t,i)=>React.createElement('div',{key:t,style:ddRowStyle(i===0)}
           ,i===0&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},t)
           ,i!==0&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setEquipTypes(prev=>[t,...prev.filter(x=>x!==t)])},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
           ,React.createElement(DeleteButton,{onDelete:()=>removeEquip(t),compact:true})
         ))
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add equipment type…",value:newEquip,onChange:e=>setNewEquip(e.target.value),onKeyDown:e=>e.key==="Enter"&&addEquip()})
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Add equipment type…",value:newEquip,onChange:e=>{setNewEquip(e.target.value);note("equip","");},onKeyDown:e=>e.key==="Enter"&&addEquip()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:addEquip},"+ Add")
+        ,React.createElement(DropdownNotice,{text:notice.equip})
       )
       ,React.createElement(ConfirmReset,{onConfirm:resetEquip,renderIdle:open=>React.createElement('button',{style:{...ST.smallBtn,color:"#52525b",fontSize:11},onClick:open},"Reset to defaults")})
     )
@@ -5735,17 +5757,18 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
     ,React.createElement('div',{style:secStyle}
       ,secTitle("TEST FREQUENCY")
       ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginBottom:6}},"Tap ★ to set as default frequency.")
-      ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}
-        ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:{display:"flex",alignItems:"center",gap:8,background:"#f7f6f3",border:`1px solid ${(tatDefaults||{}).freq===f.value?"#fcd34d":"#f7f6f3"}`,borderRadius:8,padding:"8px 12px"}}
-          ,(tatDefaults||{}).freq===f.value&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
+      ,React.createElement('div',{style:ddListStyle({marginBottom:12})}
+        ,(freqOptions||TAT_DEFAULT_FREQS).map(f=>React.createElement('div',{key:f.value,style:ddRowStyle(tatDefaultFreq(freqOptions,tatDefaults)===f.value)}
+          ,tatDefaultFreq(freqOptions,tatDefaults)===f.value&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
           ,React.createElement('span',{style:{fontSize:13,color:"#18181b",flex:1}},f.label)
-          ,(tatDefaults||{}).freq!==f.value&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
+          ,tatDefaultFreq(freqOptions,tatDefaults)!==f.value&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setTatDefaults(d=>({...(d||{}),freq:f.value}))},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
           ,React.createElement(DeleteButton,{onDelete:()=>removeFreq(f.value),compact:true})
         ))
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}}
-        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Number of months e.g. 2",type:"number",min:"1",value:newFreqMonths,onChange:e=>setNewFreqMonths(e.target.value),onKeyDown:e=>e.key==="Enter"&&addFreq()})
+      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:8,alignItems:"center",flexWrap:"wrap"}}
+        ,React.createElement('input',{style:{...ST.smallInput,flex:1},placeholder:"Number of months e.g. 2",type:"number",min:"1",value:newFreqMonths,onChange:e=>{setNewFreqMonths(e.target.value);note("freq","");},onKeyDown:e=>e.key==="Enter"&&addFreq()})
         ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:addFreq},"+ Add")
+        ,React.createElement(DropdownNotice,{text:notice.freq})
       )
       ,React.createElement(ConfirmReset,{onConfirm:resetFreq,renderIdle:open=>React.createElement('button',{style:{...ST.smallBtn,color:"#52525b",fontSize:11},onClick:open},"Reset to defaults")})
     )
@@ -6674,7 +6697,7 @@ function SWBCompleteAuditBtn({onComplete}) {
 function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
   const [open, setOpen] = React.useState(false);
   const [custom, setCustom] = React.useState(false);
-  const [typedVal, setTypedVal] = React.useState(value||"");
+  const [typedVal, setTypedVal] = React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const accentColor = color || "#7e22ce";
   const isCustom = value && !(options||[]).includes(value);
   React.useEffect(()=>{ if(isCustom){setCustom(true);setTypedVal(value);} },[]);
@@ -6686,7 +6709,7 @@ function SWBEditableDropdown({ options, value, onChange, placeholder, color }) {
       ,React.createElement('button',{style:{...SS.smallBtn,color:"#6e6a66",borderColor:"#d4d4d8",flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
     );
   }
-  return React.createElement('div',{style:{position:"relative"}}
+  return React.createElement('div',{ref:boxRef,style:{position:"relative"}}
     ,React.createElement('button',{style:{...SS.modalInput,display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",textAlign:"left"},onClick:()=>setOpen(x=>!x)}
       ,React.createElement('span',{style:{color:value?"#18181b": "#52525b"}},value||placeholder||"Select…")
       ,React.createElement('span',{style:{color:"#6e6a66",fontSize:12}},"▾")
@@ -7055,7 +7078,6 @@ function ThermoHomeView({
   auditEntered,
   onCompleteAudit
 }) {
-  const [confirmReset, setConfirmReset] = React.useState(false);
   const photoCount = sitePhotoCount(results, project);
   const hasFail = siteHasFail(results, project);
   const hasAuditor = !!(meta.auditor && meta.auditor.trim());
@@ -7194,41 +7216,21 @@ function ThermoHomeView({
     }
   }, "COMPLETE ACTIVE AUDIT"), /*#__PURE__*/React.createElement(ThermoCompleteAuditBtn, {
     onComplete: onCompleteAudit
-  })), confirmReset ? /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      alignItems: "center",
-      gap: 10,
-      flexWrap: "wrap",
-      width: "100%",
-      maxWidth: 500
-    }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      color: "#dc2626",
-      fontSize: 13,
-      flex: 1
-    }
-  }, "Reset all photo logs?"), /*#__PURE__*/React.createElement("button", {
-    style: STH.confirmYes,
-    onClick: () => {
-      onReset();
-      setConfirmReset(false);
-    }
-  }, "Yes"), /*#__PURE__*/React.createElement("button", {
-    style: STH.confirmNo,
-    onClick: () => setConfirmReset(false)
-  }, "Cancel")) : /*#__PURE__*/React.createElement("button", {
-    style: {
-      background: "transparent",
-      border: "none",
-      color: "#52525b",
-      fontSize: 12,
-      cursor: "pointer",
-      textDecoration: "underline"
-    },
-    onClick: () => setConfirmReset(true)
-  }, "Reset all photo logs"));
+  })), /*#__PURE__*/React.createElement(ConfirmReset, {
+    onConfirm: onReset,
+    prompt: "Reset all photo logs?",
+    renderIdle: open => /*#__PURE__*/React.createElement("button", {
+      style: {
+        background: "transparent",
+        border: "none",
+        color: "#52525b",
+        fontSize: 12,
+        cursor: "pointer",
+        textDecoration: "underline"
+      },
+      onClick: open
+    }, "Reset all photo logs")
+  }));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -7450,7 +7452,7 @@ function ThermoCircuitView({
 function ThermoEditableDropdown({options,value,onChange,placeholder}){
   const[open,setOpen]=React.useState(false);
   const[custom,setCustom]=React.useState(false);
-  const[typedVal,setTypedVal]=React.useState(value||"");
+  const[typedVal,setTypedVal]=React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const isCustom=value&&!options.includes(value);
   React.useEffect(()=>{if(isCustom){setCustom(true);setTypedVal(value);}},[]);
   React.useEffect(()=>{if(custom&&value!==typedVal){setTypedVal(value||"");}},[value]);
@@ -7458,7 +7460,7 @@ function ThermoEditableDropdown({options,value,onChange,placeholder}){
     ,React.createElement("input",{style:{...STH.modalInput,flex:1},value:typedVal,placeholder,onChange:e=>{setTypedVal(e.target.value);onChange(e.target.value);}})
     ,React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #d4d4d8",borderRadius:8,color:"#6e6a66",cursor:"pointer",fontSize:11,flexShrink:0},onClick:()=>{setCustom(false);setTypedVal("");}},"▾ List")
   );}
-  return React.createElement("div",{style:{position:"relative"}}
+  return React.createElement("div",{ref:boxRef,style:{position:"relative"}}
     ,React.createElement("button",{style:{...STH.modalInput,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#18181b": "#52525b"},onClick:()=>setOpen(o=>!o)}
       ,React.createElement("span",null,value||placeholder||"Select…")
       ,React.createElement("span",{style:{color:"#52525b",fontSize:12}},open?"▴":"▾")
@@ -8951,8 +8953,9 @@ function ThermoHistoryView({
 // ─────────────────────────────────────────────────────────────────────────
 function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
   const[newVals,setNewVals]=React.useState({});
+  const[notice,setNotice]=React.useState({});
   const items=key=>(dropdowns&&dropdowns[key])||[];
-  const addItem=(key,val)=>{const v=(val||"").trim();if(!v||items(key).includes(v))return;setDropdowns(d=>({...d,[key]:[...items(key),v]}));setNewVals(x=>({...x,[key]:""}));};
+  const addItem=(key,val)=>{const r=dropdownAdd(items(key),val);if(r.empty)return;if(r.notice){setNotice(n=>({...n,[key]:r.notice}));return;}setNotice(n=>({...n,[key]:""}));setDropdowns(d=>({...d,[key]:r.items}));setNewVals(x=>({...x,[key]:""}));};
   const removeItem=(key,item)=>setDropdowns(d=>({...d,[key]:items(key).filter(x=>x!==item)}));
   const resetItem=(key)=>{
     if(key==="responsibility")setDropdowns(d=>({...d,[key]:[...RESPONSIBILITY_OPTIONS]}));
@@ -8970,8 +8973,8 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
       return React.createElement("div",{key,style:{background:"#f7f6f3",border:"1px solid #93c5fd",borderRadius:12,padding:"12px 14px",marginBottom:14}}
         ,React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#18181b",letterSpacing:0.8,marginBottom:2}},label)
         ,React.createElement("div",{style:{fontSize:11,color:"#52525b",marginBottom:10}},desc)
-        ,React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:10}}
-          ,items(key).map((item,i)=>React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${i===0?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
+        ,React.createElement("div",{style:ddListStyle({marginBottom:10})}
+          ,items(key).map((item,i)=>React.createElement("div",{key:item,style:ddRowStyle(i===0)}
             ,i===0&&React.createElement("span",{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
             ,React.createElement("span",{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
             ,i>0&&React.createElement("button",{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>{const arr=[item,...items(key).filter(x=>x!==item)];setDropdowns(d=>({...d,[key]:arr}));}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -8979,12 +8982,13 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
           ))
           ,items(key).length===0&&React.createElement("div",{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options — add one below")
         )
-        ,React.createElement("div",{style:{display:"flex",gap:8,marginBottom:8}}
+        ,React.createElement("div",{style:{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}
           ,React.createElement("input",{style:{flex:1,background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"8px 10px",fontSize:13,outline:"none"},
             placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,
-            onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),
+            onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},
             onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add")
+          ,React.createElement(DropdownNotice,{text:notice[key]})
         )
         ,React.createElement(ConfirmReset,{onConfirm:()=>resetItem(key),renderIdle:open=>React.createElement("button",{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset to defaults")})
       );
@@ -9429,6 +9433,7 @@ function AppRoot() {
   if (module === "irt") return React.createElement(IRTApp, {onGoHome: ()=>setModule(null)});
   if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
   if (module === "welder") return React.createElement(WelderApp, {onGoHome: ()=>setModule(null)});
+  if (module === "gsd") return React.createElement(GSDApp, {onGoHome: ()=>setModule(null)});
 
   // Home-screen module icons come from the shared registry (moduleIcon) — the Calendar reads the very same definitions.
   const modules = [
@@ -9448,6 +9453,8 @@ function AppRoot() {
       icon:moduleIcon("elt")},
     {key:"welder",color:"#be185d",name:"WELDER TESTING",desc:"Welder electrical safety checks",onClick:()=>setModule("welder"),
       icon:moduleIcon("welder")},
+    {key:"gsd",color:"#4d7c0f",name:"GENERAL SITE DEFECTS",desc:"Punch-list with photos",onClick:()=>setModule("gsd"),
+      icon:moduleIcon("gsd")},
   ];
   // Calendar lives in a fixed pill (not a grid card)
   const calColor = "#4338ca";
@@ -9713,9 +9720,12 @@ function swbRegisterRows(project, allResults, meta) {
     // Defect columns are always present; values come from the FAIL items only (defectGateByStatus is redundant here — fails are already the FAIL items)
     const failItems = fails.map(({key}) => defectGateByStatus(swbGetItem(res, project.id, area.id, board.id, key)));
     const joined = k => [...new Set(failItems.map(it => String(it[k] || "").trim()).filter(Boolean))].join("; ");
+    // SWB has no Priority control: its Risk Rating (L / M / H / U — the SAME scale and labels as Priority) plays that role. The Register's Priority column
+    // therefore reads the item's risk (a stored `priority`, e.g. from an older import, wins if present), most severe first.
+    const priorities = [...new Set(failItems.map(it => (it.priority || it.risk || "").trim()).filter(Boolean))].sort((a, b) => SWB_RISK_ORDER.indexOf(a) - SWB_RISK_ORDER.indexOf(b)).join("; ");
     rows.push({ area, board, summary: bs, overall, cells: [
       area.name, board.name, overall !== "untested" && testDate ? fmtDate(testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
-      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), joined("priority"), nextDue,
+      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), priorities, nextDue,
     ]});
   }));
   return rows;
@@ -9770,6 +9780,7 @@ async function exportSWBExcel(project, allResults, meta) {
     });
   });
   [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
+  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
 
   // ── One sheet per board ──
   const used = new Set();
@@ -9823,6 +9834,7 @@ async function exportSWBExcel(project, allResults, meta) {
       }
     });
     [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+    xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
   });
 
   const buf = await wb.xlsx.writeBuffer();
@@ -10194,7 +10206,6 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditEntered}) {
   const SS=swbStyles();
-  const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round((summary.pass+summary.fail+summary.na)/summary.total*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?swbAddYear(testDate):"";
@@ -10237,9 +10248,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,React.createElement(SWBCompleteAuditBtn,{onComplete:onCompleteAudit})
     )
-    ,confirmReset
-      ?React.createElement('div',{style:SS.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SS.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:SS.resetBtn,onClick:()=>setConfirmReset(true)},"Reset all test results")
+    ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
@@ -10253,7 +10262,6 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
   const SS=swbStyles();
   const bs=swbBoardSummary(results,project.id,area.id,board.id);
   const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
-  const [confirmReset,setConfirmReset]=React.useState(false);
   const [photos,setPhotosL]=React.useState(swbGetBoardPhotos(results,project.id,area.id,board.id));
   const photoInputRef=React.useRef();
   const addPhotos=async e=>{
@@ -10287,13 +10295,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
         )
       )
       ,bs.untested<SWB_CHECKLIST.length&&React.createElement('div',{style:{marginTop:10}}
-        ,confirmReset
-          ?React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8}}
-            ,React.createElement('span',{style:{fontSize:12,color:"#991b1b",flex:1}},"Reset all results for this board?")
-            ,React.createElement('button',{style:SS.confirmYes,onClick:()=>{onResetBoard();setConfirmReset(false);}},"Yes")
-            ,React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel")
-          )
-          :React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:()=>setConfirmReset(true)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")
+        ,React.createElement(ConfirmReset,{onConfirm:onResetBoard,prompt:"Reset all results for this board?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:open},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")})
       )
     )
     ,React.createElement('div',{style:{marginBottom:16}}
@@ -10390,13 +10392,8 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}
           ,React.createElement('label',{style:SS.modalLabel},"RISK RATING")
-          ,React.createElement('select',{style:{...SS.modalInput,cursor:"pointer"},value:risk,onChange:e=>setRisk(e.target.value)}
-            ,React.createElement('option',{value:""},"— Select Risk")
-            ,React.createElement('option',{value:"L"},"L – Low")
-            ,React.createElement('option',{value:"M"},"M – Medium")
-            ,React.createElement('option',{value:"H"},"H – High")
-            ,React.createElement('option',{value:"U"},"U – Urgent")
-          )
+          ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+            ,["",...PRIORITY_OPTIONS].map(p=>React.createElement('button',{key:p||"none",type:"button",style:{padding:"10px 14px",background:(risk||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(risk||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(risk||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>setRisk(p)},p?`${p} — ${PRIORITY_LABELS[p]}`:"None")))
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
@@ -10684,11 +10681,11 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
   const [notice, setNotice] = React.useState({});
   const SS = swbStyles();
   const addItem = (key, val) => {
-    if(!val.trim()) return;
-    const hit = reserved.find(r=>r.toLowerCase()===val.trim().toLowerCase());
-    if(hit){ setNotice(n=>({...n,[key]:`${hit} is already built in`})); return; }
+    const r = dropdownAdd((dropdowns&&dropdowns[key])||[], val, reserved);
+    if(r.empty) return;
+    if(r.notice){ setNotice(n=>({...n,[key]:r.notice})); return; }
     setNotice(n=>({...n,[key]:""}));
-    setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));
+    setDropdowns(d=>({...d,[key]:r.items}));
     setNewVals(v=>({...v,[key]:""}));
   };
   const removeItem = (key, val) => setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
@@ -10718,10 +10715,10 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
           )
           ,React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement('button',{style:{...SS.smallBtn,fontSize:10,color:"#52525b",borderColor:"#d4d4d8",flexShrink:0},onClick:open},"Reset")})
         )
-        ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:220,overflowY:"auto"}}
+        ,React.createElement('div',{style:ddListStyle({marginBottom:10,maxHeight:220,overflowY:"auto"})}
           ,items.map((item,i)=>{
             const isFirst=i===0;const isDefault=showDef&&isFirst;
-            return React.createElement('div',{key:i,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}}
+            return React.createElement('div',{key:i,style:ddRowStyle(isDefault)}
               ,isDefault&&React.createElement('span',{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"★ DEFAULT")
               ,React.createElement('span',{style:{flex:1,fontSize:12,color:"#3f3f46"}},item)
               ,!isFirst&&React.createElement('button',{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:showDef?"Set as default":"Move to top",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"})))
@@ -11258,13 +11255,9 @@ function ELTSelectOther({options, value, other, onChange, placeholder, aliases})
   const opts = [...options];
   const shown = aliases && aliases[value] && opts.includes(aliases[value]) ? aliases[value] : value; // display only — never rewrites the stored type
   if (shown && shown !== "Other" && !opts.includes(shown)) opts.push(shown); // option removed after it was used: keep it visible
-  return eltEl('div',null
-    ,eltEl('select',{style:{...SS.modalInput,cursor:"pointer"},value:shown||"",onChange:e=>onChange(e.target.value,other||"")}
-      ,eltEl('option',{value:""},placeholder||"— Select")
-      ,[...opts,"Other"].map(o=>eltEl('option',{key:o,value:o},o))
-    )
-    ,value==="Other"&&eltEl('input',{style:{...SS.modalInput,marginTop:6},type:"text",value:other||"",placeholder:"Specify…",onChange:e=>onChange("Other",e.target.value)})
-  );
+  // Typed text (the free-text case) is stored as type "Other" + typeOther; a listed type or the built-in "Other" clears typeOther. Same look as every styled dropdown.
+  return eltEl(StyledSelect,{options:[...opts,"Other"],value:(value==="Other"&&(other||"").trim())?other:shown,placeholder:placeholder||"— Select",allowEmpty:true,allowCustom:true,customHint:"Specify…",ariaLabel:"Type",boxStyle:SS.modalInput,
+    onChange:(x,meta)=>{ if(meta&&meta.custom) onChange("Other",x); else onChange(x,""); }});
 }
 function ELTStatusChip({status}) {
   const sm = SM[status];
@@ -11826,7 +11819,7 @@ function ELTAssetForm({initial, typeOptions, areaChoices, areaId, submitLabel, o
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${ELT_COLOR_BORDER}`}}
     ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"AREA")
-      ,eltEl('select',{style:{...SS.metaInput,marginTop:4,width:"100%",minWidth:0},value:target,onChange:e=>setTarget(e.target.value),"aria-label":"Area"},areaChoices.map(c=>eltEl('option',{key:c.id,value:c.id},c.name)))
+      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.modalInput,wrapStyle:{marginTop:4}})
     )
     ,field("ASSET LOCATION","assetLocation","e.g. SE Door")
     ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
@@ -12014,12 +12007,12 @@ function irtStyles(){
 function IRTNavBtn(props){return React.createElement(NavBtn,props);}
 
 function IRTEditableDropdown({options,value,onChange,placeholder,color}){
-  const[open,setOpen]=React.useState(false);const[custom,setCustom]=React.useState(false);const[typed,setTyped]=React.useState(value||"");
+  const[open,setOpen]=React.useState(false);const[custom,setCustom]=React.useState(false);const[typed,setTyped]=React.useState(value||""); const boxRef=React.useRef(null); useCollapsible(open,()=>setOpen(false),boxRef);
   const isCustom=value&&!options.includes(value);
   React.useEffect(()=>{if(isCustom){setCustom(true);setTyped(value);}},[]);
   const mi={width:"100%",background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"};
   if(custom)return React.createElement("div",{style:{display:"flex",gap:8}},React.createElement("input",{style:{...mi,flex:1},value:typed,placeholder,onChange:e=>{setTyped(e.target.value);onChange(e.target.value);}}),React.createElement("button",{style:{padding:"8px 10px",background:"transparent",border:"1px solid #d4d4d8",borderRadius:8,color:"#6e6a66",cursor:"pointer",fontSize:11},onClick:()=>{setCustom(false);setTyped("");}},"\u25be List"));
-  return React.createElement("div",{style:{position:"relative"}},
+  return React.createElement("div",{ref:boxRef,style:{position:"relative"}},
     React.createElement("button",{style:{...mi,display:"flex",justifyContent:"space-between",alignItems:"center",cursor:"pointer",textAlign:"left",color:value?"#18181b": "#52525b"},onClick:()=>setOpen(o=>!o)},React.createElement("span",null,value||placeholder||"Select\u2026"),React.createElement("span",{style:{color:"#52525b",fontSize:12}},open?"\u25b4":"\u25be")),
     open&&React.createElement("div",{style:{position:"absolute",zIndex:300,width:"100%",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,marginTop:2,maxHeight:180,overflowY:"auto"}},
       options.map(o=>React.createElement("div",{key:o,style:{padding:"10px 12px",fontSize:13,cursor:"pointer",color:o===value?(color||IRT_COLOR):"#3f3f46",background:o===value?IRT_COLOR_DIM:"transparent",borderBottom:"1px solid #e4e4e7"},onClick:()=>{onChange(o);setOpen(false);}},o)),
@@ -12357,7 +12350,6 @@ function IRTAreaListView({project,results,onSelect}){
 // ─── Home view — mirrors SWBHomeView exactly ──────────────────────────────
 function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditEntered}){
   const SS=irtStyles();
-  const [confirmReset,setConfirmReset]=React.useState(false);
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   const testDate=meta.testDate||"";const nextDue=testDate?irtAddYear(testDate):"";
@@ -12384,9 +12376,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       React.createElement("div",{style:{fontSize:10,color:"#6e6a66",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT"),
       React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit})
     ),
-    confirmReset
-      ?React.createElement('div',{style:SS.confirmRow},React.createElement('span',{style:{color:"#dc2626",fontSize:13}},"Reset all results?"),React.createElement('button',{style:SS.confirmYes,onClick:()=>{onReset();setConfirmReset(false);}},"Yes"),React.createElement('button',{style:SS.confirmNo,onClick:()=>setConfirmReset(false)},"Cancel"))
-      :React.createElement('button',{style:SS.resetBtn,onClick:()=>setConfirmReset(true)},"Reset all test results")
+    React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
@@ -12578,8 +12568,8 @@ function IRTManageView({project,onUpdateProject,onBack}){
 
 // ─── Dropdowns view — mirrors SWBDropdownsView ────────────────────────────
 function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
-  const [newVals,setNewVals]=React.useState({});const SS=irtStyles();
-  const addItem=(key,val)=>{if(!val.trim())return;setDropdowns(d=>({...d,[key]:[...((d[key]||[]).filter(x=>x!==val.trim())),val.trim()]}));setNewVals(v=>({...v,[key]:""}));};
+  const [newVals,setNewVals]=React.useState({});const [notice,setNotice]=React.useState({});const SS=irtStyles();
+  const addItem=(key,val)=>{const r=dropdownAdd((dropdowns&&dropdowns[key])||[],val);if(r.empty)return;if(r.notice){setNotice(n=>({...n,[key]:r.notice}));return;}setNotice(n=>({...n,[key]:""}));setDropdowns(d=>({...d,[key]:r.items}));setNewVals(v=>({...v,[key]:""}));};
   const removeItem=(key,val)=>setDropdowns(d=>({...d,[key]:(d[key]||[]).filter(x=>x!==val)}));
   const resetKey=(key,def)=>setDropdowns(d=>({...d,[key]:def}));
   const setDefault=(key,val)=>setDropdowns(d=>({...d,[key]:[val,...(d[key]||[]).filter(x=>x!==val)]}));
@@ -12598,10 +12588,10 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
           React.createElement(ConfirmReset,{onConfirm:()=>resetKey(key,defaults),renderIdle:open=>React.createElement("button",{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline"},onClick:open},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset")})
         ),
         items.length===0?React.createElement("div",{style:{fontSize:12,color:"#52525b",padding:"6px 0"}},"No options \u2014 add one below"):
-        React.createElement("div",{style:{display:"flex",flexDirection:"column",gap:5,marginBottom:10,maxHeight:200,overflowY:"auto"}},
+        React.createElement("div",{style:ddListStyle({marginBottom:10,maxHeight:200,overflowY:"auto"})},
           items.map((item,i)=>{
             const isDefault=i===0;
-            return React.createElement("div",{key:item,style:{display:"flex",alignItems:"center",gap:8,background:"#e8e6e2",border:`1px solid ${isDefault?"#fcd34d":"#f7f6f3"}`,borderRadius:7,padding:"7px 10px"}},
+            return React.createElement("div",{key:item,style:ddRowStyle(isDefault)},
               isDefault&&React.createElement("span",{style:{fontSize:9,color:"#92400e",fontWeight:700,letterSpacing:0.5,flexShrink:0}},"\u2605 DEFAULT"),
               React.createElement("span",{style:{flex:1,fontSize:12,color:"#3f3f46"}},item),
               !isDefault&&React.createElement("button",{style:{background:"transparent",border:"none",color:"#92400e",cursor:"pointer",fontSize:12,padding:"0 4px",opacity:0.7},title:"Set as default",onClick:()=>setDefault(key,item)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polygon',{points:"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"}))),
@@ -12609,7 +12599,7 @@ function IRTDropdownsView({dropdowns,setDropdowns,onBack}){
             );
           })
         ),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8}},React.createElement("input",{style:{flex:1,background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>setNewVals(v=>({...v,[key]:e.target.value})),onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"))
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,flexWrap:"wrap"}},React.createElement("input",{style:{flex:1,background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"8px 10px",fontSize:13,outline:"none",boxSizing:"border-box"},placeholder:`Add new ${label.toLowerCase()} option\u2026`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}}),React.createElement("button",{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",flexShrink:0},onClick:()=>addItem(key,newVal)},"+ Add"),React.createElement(DropdownNotice,{text:notice[key]}))
       );
     })
   );
@@ -13900,7 +13890,7 @@ function WelderAssetForm({initial, areaChoices, areaId, submitLabel, onSave, onC
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${WELDER_COLOR_BORDER}`}}
     ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"AREA")
-      ,eltEl('select',{style:{...SS.metaInput,marginTop:4,width:"100%",minWidth:0},value:target,onChange:e=>setTarget(e.target.value),"aria-label":"Area"},areaChoices.map(c=>eltEl('option',{key:c.id,value:c.id},c.name)))
+      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.modalInput,wrapStyle:{marginTop:4}})
     )
     ,field("ASSET ID","assetId","e.g. W001")
     ,field("BRAND","brand","e.g. Kemppi")
@@ -14060,6 +14050,7 @@ async function exportWelderExcel(project, allResults, meta) {
     });
   });
   [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
 
   // ── One sheet per welder ──
   const used = new Set();
@@ -14114,6 +14105,7 @@ async function exportWelderExcel(project, allResults, meta) {
       }
     });
     [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
+    xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
   });
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
@@ -14224,6 +14216,619 @@ function WelderApp({ onGoHome }) {
   );
 }
 
-export { SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, tatCanPass, tatElectricalPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+// GENERAL SITE DEFECTS (GSD) — a single-visit punch-list REPORT tool: Site → Area → Defects, one or more photos per defect, exported as a
+// photo report (area bars, caption above its photos) plus a flat Register. Not a tracker: no status, no resolution, no pass / fail, no score.
+// Photos live in IndexedDB (a punch-list can hold far more photos than localStorage's ~5 MB); the item record only carries {id, w, h}.
+// ═════════════════════════════════════════════════════════════════════════════════════════════════
+const GSD_COLOR = "#4d7c0f", GSD_COLOR_DIM = "#ecfccb", GSD_COLOR_BORDER = "#bef264";
+const K_GSD_PROJECTS = "gsd-projects-v1", K_GSD_ITEMS = "gsd-items-v1", K_GSD_META = "gsd-meta-v1", K_GSD_HISTORY = "gsd-history-v1", K_GSD_DROPDOWNS = "gsd-dropdowns-v1";
+const gsdEl = React.createElement;
+// The default lists deliberately avoid everything another module formally tests (RCD, IEL, TAT, Thermo, SWB, IRT, ELT, Welder): no switchboard covers /
+// labelling / ventilation, no RCDs, e-stops, isolators, lanyards, portable leads / power boards, emergency lighting, hot spots or welders.
+const GSD_DEFAULT_CATEGORIES = ["Cabling / Cable Management","Conduit / Cable Tray","Junction Boxes / Field Enclosures","Outlets / GPOs / Fixed Wiring","General Lighting (non-emergency)","Weatherproofing / Ingress Protection","Mechanical Protection of Electrical Equipment","Motors / Fixed Equipment (visual)","Electrical Warning Signage","Trip / Access Hazard from Electrical Items"];
+const GSD_DEFAULT_COMMON = ["Cable damaged or sheath worn","Cable unsupported or dangling","Cable across walkway (trip hazard)","Cable tray damaged or overloaded","Conduit loose or damaged","Cable protection missing (exposed to damage)","Cable entry not sealed (gland missing)","Junction box damaged or lid missing","Junction box loose / needs remounting","Outlet / GPO damaged","Weatherproof cover or door missing","Light fitting damaged or not working (general)","Exposed or open-ended conductors","Motor terminal box lid missing or damaged","Missing electrical warning signage","Water ingress at electrical equipment"];
+// The first defaults (housekeeping / structural wording) were too general. A stored list that is EXACTLY the old default is replaced by the new default at load
+// (the user never customised it); a customised list is left alone.
+const GSD_LEGACY_CATEGORIES = ["Housekeeping","Cabling / Conduit (general)","Mechanical / Equipment","Guarding","Structural / Building","Signage (safety / warning)","General Lighting (non-emergency)","Access / Egress","Water / Drainage"];
+const GSD_LEGACY_COMMON = ["Cables across walkway (trip hazard)","Unsupported or loose cable / conduit","Cable tray damaged or overloaded","Poor housekeeping / materials in access way","Blocked walkway or exit path","Missing or damaged machine guarding","Missing or faded safety signage","General lighting not working","Damaged handrail / step / platform","Damaged floor grating or cover plate","Corroded or damaged structure / support","Loose or missing fixings","Oil / grease spill","Water pooling or leak (general)"];
+const gsdUpgradeDropdowns = dd => { const o = { ...(dd || {}) }; const same = (a, b) => Array.isArray(a) && JSON.stringify(a) === JSON.stringify(b);
+  if (same(o.categories, GSD_LEGACY_CATEGORIES)) o.categories = GSD_DEFAULT_CATEGORIES; if (same(o.common, GSD_LEGACY_COMMON)) o.common = GSD_DEFAULT_COMMON; return o; };
+const GSD_DEFAULT_RESPONSIBILITY = ["Site Manager","Maintenance","Contractor","Client"];
+const GSD_DEFAULT_DROPDOWNS = { categories: GSD_DEFAULT_CATEGORIES, common: GSD_DEFAULT_COMMON, responsibility: GSD_DEFAULT_RESPONSIBILITY };
+const GSD_DROPDOWN_LISTS = [
+  { key:"categories",     label:"CATEGORY",        defaults:GSD_DEFAULT_CATEGORIES,     desc:"Options in the Category dropdown on a defect", noDefault:true },
+  { key:"common",         label:"COMMON DEFECT",   defaults:GSD_DEFAULT_COMMON,         desc:"Quick-pick issues; choosing one pre-fills the Description (which stays editable)", noDefault:true },
+  { key:"responsibility", label:"RESPONSIBILITY",  defaults:GSD_DEFAULT_RESPONSIBILITY, desc:"Options in the Responsibility dropdown; the top option is pre-filled on a new defect" },
+];
+const GSD_DROPDOWN_HINT = "These lists feed the Site Defects dropdowns. \"Other\" (Common Defect) is always available and is not listed here. Tap ★ to move an option to the top; the top Responsibility is pre-filled on a new defect. Priority is the standard Low / Medium / High / Urgent set and is not listed here.";
+
+// ── Photo storage: IndexedDB. Each photo is two records: the full image (long edge <= 1280) and a small thumbnail (id + "~t"). ─────────
+const GSD_DB_NAME = "sparkcheck-gsd-photos", GSD_DB_STORE = "photos";
+let _gsdDb = null;
+function gsdOpenDb() {
+  if (!_gsdDb) _gsdDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(GSD_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(GSD_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _gsdDb = null; throw e; });
+  return _gsdDb;
+}
+const gsdTx = (mode, fn) => gsdOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(GSD_DB_STORE, mode); const r = fn(tx.objectStore(GSD_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+// records are {buf: ArrayBuffer, type} (plain data — no Blob in the store)
+const gsdPhotoStore = {
+  put: (id, rec) => gsdTx("readwrite", s => s.put(rec, id)),
+  get: id => gsdTx("readonly", s => s.get(id)),
+  del: id => gsdTx("readwrite", s => s.delete(id)),
+  delPhoto: p => Promise.all([gsdPhotoStore.del(p.id), gsdPhotoStore.del(p.id + "~t")]).catch(() => {}),
+  delItems: items => Promise.all((items || []).flatMap(i => (i.photos || []).map(p => gsdPhotoStore.delPhoto(p)))),
+};
+const gsdDataUrlToRec = url => { const m = /^data:([^;]+);base64,(.+)$/.exec(url || ""); if (!m) return null; const bin = atob(m[2]); const buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i); return { buf: buf.buffer, type: m[1] }; };
+const gsdRecToDataUrl = rec => { const u = new Uint8Array(rec.buf); let s = ""; for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return `data:${rec.type||"image/jpeg"};base64,${btoa(s)}`; };
+const gsdImageSize = url => new Promise(res => { const im = new Image(); im.onload = () => res({ w: im.naturalWidth || 4, h: im.naturalHeight || 3 }); im.onerror = () => res({ w: 4, h: 3 }); im.src = url; });
+// The two image operations are behind one object so tests can supply deterministic ones (jsdom has no canvas).
+const gsdPhotoIO = {
+  // picked file -> { full:{buf,type}, thumb:{buf,type}, w, h }  (w / h = the stored full image's pixel size)
+  async resize(file) {
+    const fullUrl = await resizeImageToDataUrl(file); const thumbUrl = await resizeImageToDataUrl(file, 200, 0.6);
+    const { w, h } = await gsdImageSize(fullUrl);
+    return { full: gsdDataUrlToRec(fullUrl), thumb: gsdDataUrlToRec(thumbUrl), w, h };
+  },
+  // stored full image -> a small copy for the export file: { dataUrl } (long edge <= maxSide). Keeps the .xlsx small (~30 KB / photo).
+  async exportCopy(rec, maxSide = 320) {
+    const url = gsdRecToDataUrl(rec); const { w, h } = await gsdImageSize(url); const s = Math.min(1, maxSide / Math.max(w, h));
+    if (s >= 1 || typeof document === "undefined") return { dataUrl: url };
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+    const im = new Image(); await new Promise(r => { im.onload = r; im.onerror = r; im.src = url; });
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.7) };
+  },
+};
+async function gsdStorePhotos(files) {
+  const out = [];
+  for (const f of files) { const r = await gsdPhotoIO.resize(f); const id = uid(); await gsdPhotoStore.put(id, r.full); await gsdPhotoStore.put(id + "~t", r.thumb); out.push({ id, w: r.w, h: r.h }); }
+  return out;
+}
+function useGsdPhotoUrl(id) {
+  const [url, setUrl] = React.useState("");
+  React.useEffect(() => {
+    let alive = true, u = "";
+    if (!id || typeof URL.createObjectURL !== "function") return undefined;
+    gsdPhotoStore.get(id).then(rec => { if (!alive || !rec) return; u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setUrl(u); }).catch(() => {});
+    return () => { alive = false; if (u && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(u); };
+  }, [id]);
+  return url;
+}
+function GSDPhoto({ photo, thumb, style, alt }) {
+  const url = useGsdPhotoUrl(photo ? photo.id + (thumb ? "~t" : "") : "");
+  return url ? gsdEl("img", { src: url, alt: alt || "", style }) : gsdEl("div", { style: { ...style, background: "#d4d4d8" }, "aria-hidden": true });
+}
+
+// ── Data helpers (pure) ───────────────────────────────────────────────────────────────────────────
+const gsdAreaKey = s => String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+const gsdAreaTaken = (project, name, exceptId) => (project.areas || []).some(a => a.id !== exceptId && gsdAreaKey(a.name) === gsdAreaKey(name));
+const gsdBlankItem = (areaId, responsibility) => ({ id: uid(), areaId, assetLocation: "", category: "", commonDefect: "", description: "", descAuto: "", photos: [], priority: "", responsibility: responsibility || "", dueDate: "" });
+const gsdTitle = it => (it.commonDefect && it.commonDefect !== "Other" ? it.commonDefect : (it.description || "").split("\n")[0].trim()) || "Untitled defect";
+// In-app # = export # = Register #: area order, then the item's position within its area.
+function gsdNumbered(project, items) {
+  const out = []; let n = 0;
+  (project.areas || []).forEach(a => (items || []).filter(i => i.areaId === a.id).forEach(i => { n++; out.push({ item: i, n, area: a }); }));
+  return out;
+}
+const gsdDetailLine = it => [it.category, it.priority && PRIORITY_LABELS[it.priority], it.responsibility, it.dueDate && `Fix by ${fmtDate(it.dueDate)}`].filter(Boolean).join(" · ");
+function gsdReportSections(project, items) {
+  const byArea = new Map();
+  gsdNumbered(project, items).forEach(({ item, n, area }) => {
+    if (!byArea.has(area.id)) byArea.set(area.id, { area, entries: [] });
+    const text = (item.description || "").trim() || gsdTitle(item);
+    byArea.get(area.id).entries.push({ n, item, caption: `#${n}  ${item.assetLocation ? item.assetLocation.trim() + " — " : ""}${text}`, detail: gsdDetailLine(item) });
+  });
+  return [...byArea.values()];
+}
+
+// ── Export layout (pure, so it can be tested without a workbook) ───────────────────────────────────────
+// 5 columns x 140 px = 700 px, which fits A4 portrait at 100% (7.77 in = 746 px), so page heights are exact. Photos are scaled to fit a 120 x 160 px box.
+const GSD_COLS = 5, GSD_COL_PX = 140, GSD_BOX_W = 120, GSD_BOX_H = 160, GSD_PAGE_PT = 730, GSD_HEAD_PT = 70, GSD_CHARS_LINE = 105;
+const GSD_H = { bar: 20, gap: 8, detail: 12, spacer: 10 };
+const gsdFit = (w, h) => { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const s = Math.min(GSD_BOX_W / W, GSD_BOX_H / H); return { dw: Math.max(1, Math.round(W * s)), dh: Math.max(1, Math.round(H * s)) }; };
+const gsdCaptionH = text => { const lines = String(text).split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / GSD_CHARS_LINE)), 0); return lines * 12 + 3; };
+// sections: [{name, items:[{caption, detail, photos:[{id, dw, dh}]}]}] -> { rows:[{kind,h,...}], breaks:[row index a page break goes BEFORE] }
+function gsdLayout(sections) {
+  const rows = [], breaks = []; let y = GSD_HEAD_PT;
+  const push = r => { rows.push(r); y += r.h; };
+  const need = h => { if (y > 0 && y + h > GSD_PAGE_PT) { breaks.push(rows.length); y = 0; } };
+  sections.forEach(sec => sec.items.forEach((it, i) => {
+    const cap = { kind: "caption", h: gsdCaptionH(it.caption), text: it.caption }; const det = it.detail ? { kind: "detail", h: GSD_H.detail, text: it.detail } : null;
+    const prow = []; for (let k = 0; k < it.photos.length; k += GSD_COLS) { const ph = it.photos.slice(k, k + GSD_COLS); prow.push({ kind: "photos", h: Math.max(...ph.map(p => p.dh)) * 0.75 + 3, photos: ph }); }
+    const first = cap.h + (det ? det.h : 0) + (prow[0] ? prow[0].h : 0);
+    if (i === 0) { need(GSD_H.bar + GSD_H.gap + first); push({ kind: "bar", h: GSD_H.bar, text: sec.name }); push({ kind: "gap", h: GSD_H.gap }); } else need(first);   // a bar never stands alone at a page bottom
+    push(cap); if (det) push(det);                                                                                                             // a caption never leaves its photos behind
+    prow.forEach((r, k) => { if (k > 0) need(r.h); push(r); });
+    push({ kind: "spacer", h: GSD_H.spacer });
+  }));
+  return { rows, breaks };
+}
+const gsdPageSetupFixed = sheet => {
+  // scale 100 (not fit-to-page): Excel ignores manual page breaks under "fit to N pages", and this sheet needs them to keep a caption with its photos
+  sheet.pageSetup = { paperSize: 9, orientation: "portrait", scale: 100, fitToPage: false, margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 } };
+  sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
+};
+async function exportGSDExcel(project, items, meta) {
+  const wb = new ExcelJS.Workbook(); const m = meta || {};
+  const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
+  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const metaCells = [`Auditor: ${m.auditor || ""}`, "", `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, "", `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
+  const sections = gsdReportSections(project, items);
+  // the export copies of every photo, read from IndexedDB (a missing one is skipped, its space kept)
+  const copies = new Map();
+  for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
+    let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
+  }
+  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })));
+
+  // ── Sheet 1: the photo report ──
+  const ws = wb.addWorksheet("Defects Report"); ws.views = [{ showGridLines: false }];
+  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
+  put(1, 1, `${sName} — General Site Defects`); put(2, 1, coLine);
+  metaCells.forEach((v, i) => { if (v !== "") put(3, i + 1, v); });
+  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, 5], [4, 1, 4, GSD_COLS]].forEach(a => ws.mergeCells(...a));
+  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  const white = SWB_XC.white;
+  const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
+  const capSt = swbXCS(white, { sz: 9, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" });
+  const detSt = swbXCS(white, { sz: 8, color: { rgb: SWB_XC.mutedGrey } }, { vertical: "top" });
+  const breakSet = new Set(layout.breaks);
+  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6, 1, 6, GSD_COLS); }
+  layout.rows.forEach((row, i) => {
+    const r = 5 + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
+    ws.getRow(r).height = row.h;
+    if (row.kind === "photos") {
+      row.photos.forEach((p, k) => {
+        const c = copies.get(p.id); if (!c) return;
+        const ext = /^data:image\/png/.test(c.dataUrl) ? "png" : "jpeg";
+        ws.addImage(wb.addImage({ base64: c.dataUrl, extension: ext }), { tl: { col: k + 4 / GSD_COL_PX, row: r - 1 + 1 / 80 }, ext: { width: p.dw, height: p.dh }, editAs: "oneCell" });
+      });
+      return;
+    }
+    if (row.kind === "bar") put(r, 1, row.text, barSt); else if (row.kind === "caption") put(r, 1, row.text, capSt); else if (row.kind === "detail") put(r, 1, row.text, detSt);
+    if (["bar", "caption", "detail"].includes(row.kind)) { ws.mergeCells(r, 1, r, GSD_COLS); for (let c = 2; c <= GSD_COLS && row.kind === "bar"; c++) swbApplyXlStyle(ws.getCell(r, c), barSt); }
+  });
+  gsdPageSetupFixed(ws);
+
+  // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
+  const numbered = gsdNumbered(project, items);
+  xjSheet(wb, "Register", { title: `${sName} — Site Defects Register`, coLine, meta: metaCells,
+    headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
+    widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
+    rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
+    emptyText: "No defects recorded", landscape: true });
+  const buf = await wb.xlsx.writeBuffer();
+  deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
+}
+
+// ── UI ────────────────────────────────────────────────────────────────────────────────────────────────
+// The app's edit affordance everywhere (AreaManager, ELT / Welder Manage): a small blue-outlined pencil icon button with an accessible name.
+const gsdPencil = (onClick, label) => gsdEl("button", { "aria-label": label, title: label, style: { background: "transparent", border: "1px solid rgba(59,130,246,0.35)", borderRadius: "6px", padding: "4px 8px", fontSize: "13px", lineHeight: 1, cursor: "pointer", flexShrink: 0, color: "#1d4ed8" }, onClick },
+  gsdEl("svg", { viewBox: "0 0 24 24", width: 14, height: 14, fill: "none", stroke: "#1d4ed8", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0 } }, gsdEl("path", { d: "M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" }), gsdEl("path", { d: "M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" })));
+const gsdPriDot = p => p ? gsdEl("span", { "data-testid": "gsd-pri-" + p, title: PRIORITY_LABELS[p], style: { width: 9, height: 9, borderRadius: "50%", background: PRIORITY_COLORS[p], display: "inline-block", flexShrink: 0 } }) : null;
+function GSDApp({ onGoHome }) {
+  const [projects, setProjects] = React.useState([]);
+  const [allItems, setAllItems] = React.useState({});
+  const [allMeta, setAllMeta] = React.useState({});
+  const [history, setHistory] = React.useState([]);
+  const [dropdowns, setDropdowns] = React.useState(GSD_DEFAULT_DROPDOWNS);
+  const [loaded, setLoaded] = React.useState(false);
+  const [activeProject, setActiveProject] = React.useState(null);
+  const [viewSnap, setViewSnap] = React.useState(null);
+  const [view, setView] = React.useState("projects");
+  const [activeItemId, setActiveItemId] = React.useState(null);
+  const [photoError, setPhotoError] = React.useState("");
+  const mainRef = React.useRef(null);
+  React.useLayoutEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view, activeItemId]);
+  React.useEffect(() => {
+    (async () => {
+      try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); setProjects(p); setAllItems(i); setAllMeta(m); setHistory(h); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...gsdUpgradeDropdowns(dd) }); }
+      finally { setLoaded(true); }
+    })();
+  }, []);
+  React.useEffect(() => { if (loaded) save(K_GSD_PROJECTS, projects); }, [projects, loaded]);
+  React.useEffect(() => { if (loaded) save(K_GSD_ITEMS, allItems); }, [allItems, loaded]);
+  React.useEffect(() => { if (loaded) save(K_GSD_META, allMeta); }, [allMeta, loaded]);
+  React.useEffect(() => { if (loaded) save(K_GSD_HISTORY, history); }, [history, loaded]);
+  React.useEffect(() => { if (loaded) save(K_GSD_DROPDOWNS, dropdowns); }, [dropdowns, loaded]);
+
+  const today = () => new Date().toISOString().slice(0, 10);
+  const project = projects.find(p => p.id === activeProject);
+  const items = (allItems[activeProject] || []);
+  const _m = allMeta[activeProject] || { auditor: "", testDate: today() };
+  const meta = { ..._m, nextTestDate: _m.nextTestDate || addYearsISO(_m.testDate, 1) };     // annual audit: default next due = one year on
+  const setMeta = patch => setAllMeta(prev => ({ ...prev, [activeProject]: { ...meta, ...patch } }));
+  const numbered = project ? gsdNumbered(project, items) : [];
+  const activeEntry = numbered.find(e => e.item.id === activeItemId);
+
+  const setItems = fn => setAllItems(prev => ({ ...prev, [activeProject]: fn(prev[activeProject] || []) }));
+  const patchItem = (id, patch) => setItems(list => list.map(i => i.id === id ? { ...i, ...patch } : i));
+  const respDefault = (dropdowns.responsibility || [])[0] || "";
+  // A new defect is created FROM its photos (photo-first), then its detail page opens.
+  const addDefect = async (areaId, files) => {
+    if (!files || !files.length) return;
+    try {
+      const photos = await gsdStorePhotos(Array.from(files)); setPhotoError("");
+      const item = { ...gsdBlankItem(areaId, respDefault), photos };
+      setItems(list => [...list, item]); setActiveItemId(item.id); setView("item");
+    } catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
+  };
+  // Move re-parents the SAME record (its photos and data stay); it goes to the END of the new area, so its # follows the area order
+  const moveItem = (id, areaId) => setItems(list => { const it = list.find(i => i.id === id); return it && it.areaId !== areaId ? [...list.filter(i => i.id !== id), { ...it, areaId }] : list; });
+  const addPhotos = async (id, files) => {
+    if (!files || !files.length) return;
+    try { const photos = await gsdStorePhotos(Array.from(files)); setPhotoError(""); setItems(list => list.map(i => i.id === id ? { ...i, photos: [...(i.photos || []), ...photos] } : i)); }
+    catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
+  };
+  const removePhoto = (id, photo) => { gsdPhotoStore.delPhoto(photo); setItems(list => list.map(i => i.id === id ? { ...i, photos: (i.photos || []).filter(p => p.id !== photo.id) } : i)); };
+  const movePhoto = (id, photoId, dir) => setItems(list => list.map(i => { if (i.id !== id) return i; const a = [...(i.photos || [])]; const k = a.findIndex(p => p.id === photoId); const j = k + dir; if (k < 0 || j < 0 || j >= a.length) return i; [a[k], a[j]] = [a[j], a[k]]; return { ...i, photos: a }; }));
+  const deleteItem = id => { const it = items.find(i => i.id === id); if (it) gsdPhotoStore.delItems([it]); setItems(list => list.filter(i => i.id !== id)); };
+  // Duplicate: every field EXCEPT the photos (a clone is a similar issue somewhere else, so the original's photos would be the wrong evidence)
+  const cloneItem = (id, areaId) => {
+    const src = items.find(i => i.id === id); if (!src) return null;
+    const copy = { ...src, id: uid(), areaId, photos: [] };
+    setItems(list => [...list, copy]); return copy.id;
+  };
+  const [historyError, setHistoryError] = React.useState("");
+  const continueFromSnap = async snap => {
+    const copied = [];
+    try {
+      // areas the snapshot used that no longer exist are restored (by id, or mapped to a same-named area) so no defect ends up in a missing area
+      const areaMap = {}; const addAreas = [];
+      (snap.areas || []).forEach(a => {
+        if ((project.areas || []).some(x => x.id === a.id)) { areaMap[a.id] = a.id; return; }
+        const same = [...(project.areas || []), ...addAreas].find(x => gsdAreaKey(x.name) === gsdAreaKey(a.name));
+        if (same) { areaMap[a.id] = same.id; return; }
+        addAreas.push({ id: a.id, name: a.name }); areaMap[a.id] = a.id;
+      });
+      const newItems = [];
+      for (const it of (snap.items || [])) {
+        const photos = [];
+        for (const p of (it.photos || [])) {
+          const full = await gsdPhotoStore.get(p.id); if (!full) continue;                    // a photo whose record is gone is dropped, never left dangling
+          const thumb = await gsdPhotoStore.get(p.id + "~t"); const nid = uid();
+          copied.push({ id: nid }); await gsdPhotoStore.put(nid, full); if (thumb) await gsdPhotoStore.put(nid + "~t", thumb);
+          photos.push({ id: nid, w: p.w, h: p.h });
+        }
+        newItems.push({ ...JSON.parse(JSON.stringify(it)), areaId: areaMap[it.areaId] || it.areaId, photos });
+      }
+      // only now (everything copied) is the current audit discarded — a failure above leaves it untouched
+      gsdPhotoStore.delItems(items);
+      if (addAreas.length) setProjects(prev => prev.map(p => p.id === project.id ? { ...p, areas: [...(p.areas || []), ...addAreas] } : p));
+      setAllItems(prev => ({ ...prev, [activeProject]: newItems }));
+      setAllMeta(prev => ({ ...prev, [activeProject]: { ...snap.meta } }));
+      setHistoryError(""); setViewSnap(null); setView("audit");
+    } catch (_) {
+      await Promise.all(copied.map(p => gsdPhotoStore.delPhoto(p)));                           // roll back the copies made so far
+      setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");
+    }
+  };
+  const dropSite = pid => { gsdPhotoStore.delItems(allItems[pid] || []); history.filter(h => h.projectId === pid).forEach(h => gsdPhotoStore.delItems(h.items)); };
+  const archiveAudit = () => {
+    const snap = { id: uid(), projectId: activeProject, projectName: (project && project.name) || "", testDate: meta.testDate || "", auditor: meta.auditor || "", archivedAt: new Date().toISOString(), items: JSON.parse(JSON.stringify(items)), areas: JSON.parse(JSON.stringify((project && project.areas) || [])), meta: { ...meta } };
+    setHistory(prev => [snap, ...prev].slice(0, 100));
+  };
+  const freshVisit = () => setAllMeta(prev => ({ ...prev, [activeProject]: { ...prev[activeProject], testDate: today(), nextTestDate: "" } }));
+  const goProjects = () => { setView("projects"); setActiveProject(null); setActiveItemId(null); setViewSnap(null); };
+  const goHome = () => { setView("home"); setActiveItemId(null); setViewSnap(null); };
+  const goAudit = () => { setView("audit"); setActiveItemId(null); setViewSnap(null); };
+  const SS = swbStyles();
+  if (!loaded) return gsdEl("div", { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } }, gsdEl("div", { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GSD_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
+  const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if (view === "item") setView("audit"); else if (view === "audit") goHome(); else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
+  const navTo = v => () => { setViewSnap(null); setView(v); };
+  return gsdEl("div", { style: SS.root }
+    , gsdEl("div", { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
+      , gsdEl("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 } }
+        , gsdEl("div", { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 } }
+          , view !== "projects" && gsdEl("div", { style: { border: "1px solid rgba(0,0,0,0.06)", borderRadius: "10px", padding: "8px 12px", background: "#f0eeea", flexShrink: 0, alignSelf: "flex-start", marginBottom: 10, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }, onClick: goBack }
+            , gsdEl("svg", { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "#52525b", strokeWidth: 2.5, strokeLinecap: "round" }, gsdEl("polyline", { points: "15 18 9 12 15 6" }))
+            , gsdEl("span", { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Back"))
+          , gsdEl("div", { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "General Site Defects")
+          , gsdEl("div", { style: { fontSize: 12, color: "#52525b", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" } }, (project && project.name) || ""))
+        , gsdEl("div", { style: { border: "1px solid rgba(0,0,0,0.06)", borderRadius: "10px", padding: "8px 12px", background: "#f0eeea", flexShrink: 0, marginTop: 2, display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }, onClick: onGoHome }
+          , gsdEl("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "#52525b", strokeWidth: 1.8, strokeLinecap: "round", strokeLinejoin: "round" }, gsdEl("rect", { x: 3, y: 3, width: 7, height: 7, rx: 1 }), gsdEl("rect", { x: 14, y: 3, width: 7, height: 7, rx: 1 }), gsdEl("rect", { x: 3, y: 14, width: 7, height: 7, rx: 1 }), gsdEl("rect", { x: 14, y: 14, width: 7, height: 7, rx: 1 }))
+          , gsdEl("span", { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Modules")))
+      , gsdEl("div", { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GSD_COLOR}, transparent 70%)`, opacity: 0.5 } }))
+    , gsdEl("div", { style: SS.main, ref: mainRef }
+      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); if (activeProject === pid) goProjects(); } })
+      , view === "home" && project && gsdEl(GSDHomeView, { project, meta, setMeta, items, onStartAudit: goAudit,
+          onCompleteAudit: () => { archiveAudit(); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); },
+          onReset: () => { gsdPhotoStore.delItems(items); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); } })
+      , view === "audit" && project && gsdEl(GSDAuditView, { project, numbered, meta, photoError, onOpen: id => { setActiveItemId(id); setView("item"); }, onAddDefect: addDefect })
+      , view === "item" && project && activeEntry && gsdEl(GSDItemPage, { key: activeEntry.item.id, project, item: activeEntry.item, num: activeEntry.n, dropdowns, photoError,
+          onPatch: patch => patchItem(activeEntry.item.id, patch), onAddPhotos: files => addPhotos(activeEntry.item.id, files), onRemovePhoto: p => removePhoto(activeEntry.item.id, p), onMovePhoto: (pid, d) => movePhoto(activeEntry.item.id, pid, d),
+          onMove: areaId => moveItem(activeEntry.item.id, areaId), onDelete: () => { deleteItem(activeEntry.item.id); setActiveItemId(null); setView("audit"); },
+          onClone: areaId => { const nid = cloneItem(activeEntry.item.id, areaId); if (nid) setActiveItemId(nid); }, onClose: () => { setActiveItemId(null); setView("audit"); } })
+      , view === "report" && project && gsdEl(GSDReportView, { project, items, meta })
+      , view === "manage" && project && gsdEl(GSDManageView, { project, items, onUpdateProject: updated => setProjects(prev => prev.map(p => p.id === updated.id ? updated : p)),
+          onRemoveArea: areaId => { gsdPhotoStore.delItems(items.filter(i => i.areaId === areaId)); setItems(list => list.filter(i => i.areaId !== areaId)); } })
+      , view === "dropdowns" && project && gsdEl(SWBDropdownsView, { dropdowns, setDropdowns, onBack: goHome, lists: GSD_DROPDOWN_LISTS, hint: GSD_DROPDOWN_HINT, showDefault: true, reserved: ["Other"] })
+      , view === "history" && project && gsdEl(GSDHistoryView, { history: history.filter(h => h.projectId === activeProject), project, viewSnap, setViewSnap,
+          onDelete: id => { const h = history.find(x => x.id === id); if (h) gsdPhotoStore.delItems(h.items); setHistory(prev => prev.filter(x => x.id !== id)); },
+          onExportSnap: snap => exportGSDExcel({ ...project, areas: snap.areas || project.areas }, snap.items || [], snap.meta || {}), onContinueFromSnap: continueFromSnap, error: historyError }))
+    , view !== "projects" && gsdEl("nav", { style: SS.bottomNav }
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_HOME, label: "Home", active: view === "home", onClick: goHome, color: "#334155" })
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_AUDIT, label: "Audit", active: ["audit", "item"].includes(view), onClick: goAudit, color: "#334155" })
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_REPORT, label: "Report", active: view === "report", onClick: navTo("report"), color: "#334155" })
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_HISTORY, label: "History", active: view === "history", onClick: navTo("history"), color: "#334155" })
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_MANAGE, label: "Manage", active: view === "manage", onClick: navTo("manage"), color: "#334155" })
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_DROPDOWNS, label: "Dropdowns", active: view === "dropdowns", onClick: navTo("dropdowns"), color: "#334155" })));
+}
+
+function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDeleteProject }) {
+  const SS = swbStyles();
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [vals, setVals] = React.useState({ name: "", company: "", abn: "", licence: "" });
+  const close = () => { setShowAdd(false); setVals({ name: "", company: "", abn: "", licence: "" }); };
+  return gsdEl("div", { style: SS.listWrap }
+    , gsdEl("div", { style: { ...SS.listTitle, marginTop: 24 } }, "Sites")
+    , projects.length === 0 && !showAdd && gsdEl("div", { style: { color: "#52525b", fontSize: 14, marginBottom: 16 } }, "No sites yet — add one to start testing.")
+    , projects.map(proj => {
+      const n = (allItems[proj.id] || []).length;
+      return gsdEl("div", { key: proj.id, style: { ...SS.siteCard, flexDirection: "column", gap: 0, padding: 0, overflow: "hidden" } }
+        , gsdEl("button", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "16px 18px", color: "inherit", textAlign: "left" }, onClick: () => onSelect(proj.id) }
+          , gsdEl("div", { style: { flex: 1 } }, gsdEl("div", { style: SS.siteCardName }, proj.name), gsdEl("div", { style: SS.siteCardSub }, `${nw(n, "defect")} · ${nw((proj.areas || []).length, "area")}`))
+          , gsdEl("span", { style: SS.arrow }, "›"))
+        , gsdEl("div", { style: { padding: "6px 18px", borderTop: "1px solid #e4e4e7", display: "flex", justifyContent: "flex-end" } }, gsdEl(DeleteButton, { onDelete: () => onDeleteProject(proj.id), label: "Remove site?" })));
+    })
+    , showAdd
+      ? gsdEl("div", { style: SS.addCard }
+        , gsdEl("div", { style: { fontSize: 14, fontWeight: 800, color: "#18181b", marginBottom: 12 } }, "New Site")
+        , gsdEl(ELTSiteFields, { vals, setVals })
+        , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 4 } }
+          , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: () => { if (!vals.name.trim()) return; onAddProject({ id: slugify(vals.name), name: vals.name.trim(), company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim(), areas: [] }); close(); } }, "Add Site")
+          , gsdEl("button", { style: SS.ctaSecondary, onClick: close }, "Cancel")))
+      : gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR, width: "100%", marginTop: 8 }, onClick: () => setShowAdd(true) }, "+ Add Site"));
+}
+
+function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAudit, onReset }) {
+  const SS = swbStyles();
+  const hasAuditor = !!(meta.auditor && meta.auditor.trim());
+  const photos = items.reduce((n, i) => n + (i.photos || []).length, 0);
+  const dateBox = (val, ph) => gsdEl("div", { style: { ...SS.metaInput, textAlign: "center", cursor: "pointer" } }, val ? fmtDate(val) : ph);
+  const overlay = (val, onChange) => gsdEl("input", { type: "date", value: val || "", onChange: e => onChange(e.target.value), style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" } });
+  return gsdEl("div", { style: SS.homeWrap }
+    , gsdEl("div", { style: SS.siteTitle }, project.name)
+    , gsdEl("div", { style: SS.siteSub }, [project.company, project.abn && `ABN ${project.abn}`, project.licence && `Lic ${project.licence}`].filter(Boolean).join(" · "))
+    , gsdEl("div", { style: SS.metaCard }
+      , gsdEl("div", { style: { marginBottom: 10 } }
+        , gsdEl("div", { style: SS.metaLabelText }, "AUDITOR")
+        , gsdEl("input", { style: { ...SS.metaInput, marginTop: 4, borderColor: "#d4d4d8" }, value: meta.auditor || "", placeholder: "Enter name to begin…", onChange: e => setMeta({ auditor: e.target.value }) })
+        , !hasAuditor && gsdEl("div", { style: { fontSize: 11, color: "#dc2626", marginTop: 4 } }, "⚠ Enter auditor name to begin"))
+      , gsdEl("div", null, gsdEl("div", { style: SS.metaLabelText }, "DATE AUDITED")
+        , gsdEl("div", { style: { position: "relative", marginTop: 4 } }, dateBox(meta.testDate, "Select date…"), overlay(meta.testDate, nd => { const autoPrev = meta.testDate ? addYearsISO(meta.testDate, 1) : ""; const upd = !meta.nextTestDate || meta.nextTestDate === autoPrev; setMeta({ testDate: nd, ...(upd ? { nextTestDate: addYearsISO(nd, 1) } : {}) }); })))
+      , gsdEl("div", { style: { marginTop: 8 } }, gsdEl("div", { style: SS.metaLabelText }, "NEXT AUDIT DUE")
+        , gsdEl("div", { style: { position: "relative", marginTop: 4 } }, dateBox(meta.nextTestDate, "Not set"), overlay(meta.nextTestDate, v => setMeta({ nextTestDate: v })))))
+    , gsdEl("div", { style: { width: "100%", maxWidth: 500, background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 14, padding: "14px", boxSizing: "border-box" } }
+      , gsdEl("div", { style: { display: "flex", justifyContent: "space-between" } }, gsdEl("div", { style: { fontSize: 13, fontWeight: 700, color: "#18181b" } }, "This visit"), gsdEl("div", { style: { fontSize: 12, color: "#52525b" } }, `${nw(items.length, "defect")} · ${nw(photos, "photo")}`)))
+    , gsdEl("button", { style: { width: "100%", maxWidth: 500, padding: "16px", background: hasAuditor ? GSD_COLOR : "#f7f6f3", color: hasAuditor ? "#fff" : "#52525b", border: `2px solid ${hasAuditor ? GSD_COLOR : "#e4e4e7"}`, borderRadius: 16, fontSize: 16, fontWeight: 800, cursor: hasAuditor ? "pointer" : "not-allowed", letterSpacing: 0.5 }, onClick: () => hasAuditor && onStartAudit() }, "Start / Continue Audit")
+    , items.length > 0 && gsdEl("div", { style: { width: "100%", maxWidth: 500, background: "#f0eeea", border: "1px solid #d4d4d8", borderRadius: 12, padding: "10px 14px", boxSizing: "border-box" } }
+      , gsdEl("div", { style: { fontSize: 10, color: "#6e6a66", fontWeight: 700, letterSpacing: 0.8, marginBottom: 8 } }, "COMPLETE ACTIVE AUDIT")
+      , gsdEl(CompleteAuditBtn, { color: GSD_COLOR, label: "Complete Site Defects Audit", onComplete: onCompleteAudit }))
+    , gsdEl(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => gsdEl("button", { style: SS.resetBtn, onClick: open }, "Reset all test results") }));
+}
+
+function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect }) {
+  const SS = swbStyles();
+  const hasAuditor = !!(meta.auditor && meta.auditor.trim());
+  const fileRef = React.useRef(); const pendingArea = React.useRef(null);
+  if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on the Home tab to begin.");
+  const startAdd = areaId => { pendingArea.current = areaId; if (fileRef.current) fileRef.current.click(); };
+  return gsdEl("div", { style: SS.listWrap }
+    , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
+    , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 8 } }, photoError)
+    , (project.areas || []).length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13, marginBottom: 10 } }, "No areas yet — add an area in the Manage tab, then add defects to it.")
+    , gsdEl("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }
+      , (project.areas || []).map(area => {
+        const list = numbered.filter(e => e.area.id === area.id);
+        return gsdEl("div", { key: area.id, "data-area": area.name }
+          , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 8, margin: "0 2px 6px", minWidth: 0 } }
+            , gsdEl("div", { style: { fontSize: 12, fontWeight: 800, color: GSD_COLOR, letterSpacing: 0.6, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", flex: 1, minWidth: 0 } }, area.name)
+            , gsdEl("div", { style: { fontSize: 11, color: "#52525b", flexShrink: 0, whiteSpace: "nowrap" } }, nw(list.length, "defect"))
+            , gsdEl("button", { type: "button", "aria-label": `Add defect to ${area.name}`, style: { flexShrink: 0, padding: "6px 10px", background: GSD_COLOR_DIM, color: GSD_COLOR, border: `1px solid ${GSD_COLOR}`, borderRadius: 8, fontSize: 12, fontWeight: 800, cursor: "pointer" }, onClick: () => startAdd(area.id) }, "+ Add Defect"))
+          , gsdEl("div", { style: { display: "flex", flexDirection: "column", gap: 6 } }, list.map(({ item, n }) =>
+            gsdEl("button", { key: item.id, "data-testid": "gsd-card", style: { display: "flex", alignItems: "center", gap: 12, background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 12, padding: "10px 12px", cursor: "pointer", textAlign: "left", width: "100%", minWidth: 0, overflow: "hidden" }, onClick: () => onOpen(item.id) }
+              , item.photos && item.photos[0] ? gsdEl(GSDPhoto, { photo: item.photos[0], thumb: true, style: { width: 56, height: 56, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: "1px solid #d4d4d8" } }) : gsdEl("div", { style: { width: 56, height: 56, borderRadius: 8, background: "#e4e4e7", flexShrink: 0 } })
+              , gsdEl("div", { style: { flex: 1, minWidth: 0 } }
+                , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } }, gsdEl("span", { style: { fontSize: 11, fontWeight: 800, color: "#52525b", flexShrink: 0 } }, `#${n}`), gsdPriDot(item.priority)
+                  , gsdEl("span", { style: { fontSize: 14, fontWeight: 600, color: "#18181b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, gsdTitle(item)))
+                , gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [area.name, item.assetLocation].filter(Boolean).join(" — ")))
+              , gsdEl("span", { style: { fontSize: 14, color: "#52525b", flexShrink: 0 } }, ">")))));
+      })));
+}
+
+const gsdPill = { padding: "9px 16px", background: GSD_COLOR_DIM, color: GSD_COLOR, border: `1px solid ${GSD_COLOR}`, borderRadius: 999, fontSize: 13, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" };
+// One area picker for BOTH Duplicate and Move: the caller decides which areas are offered and what picking does.
+function GSDAreaPicker({ title, areas, currentId, emptyText, onPick, onCancel, boxRef }) {
+  return gsdEl("div", { ref: boxRef, role: "group", "aria-label": title, "data-testid": "gsd-area-picker", style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px", marginBottom: 12 } }
+    , gsdEl("div", { style: { fontSize: 12, fontWeight: 800, color: "#18181b", marginBottom: 8 } }, title)
+    , areas.length === 0 && gsdEl("div", { style: { fontSize: 12, color: "#52525b", marginBottom: 8 } }, emptyText)
+    , gsdEl("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 } }, areas.map(a => gsdEl("button", { key: a.id, type: "button", style: gsdPill, onClick: () => onPick(a.id) }, a.name + (a.id === currentId ? " (this area)" : ""))))
+    , gsdEl("button", { type: "button", style: { ...gsdPill, background: "transparent", color: "#52525b", border: "1px solid #d4d4d8" }, onClick: onCancel }, "Cancel"));
+}
+
+function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAddPhotos, onRemovePhoto, onMovePhoto, onMove, onDelete, onClone }) {
+  const SS = swbStyles();
+  const [r, setR] = React.useState(item);
+  const [picker, setPicker] = React.useState(null);            // null | "duplicate" | "move"
+  const [deleting, setDeleting] = React.useState(false);       // the Delete confirm is open
+  const pickerRef = React.useRef(null);
+  useCollapsible(!!picker, () => setPicker(null), pickerRef);
+  // Live auto-save (the app-wide standard): every change is written straight to storage — no draft, no Save button.
+  const set = patch => { setR(prev => ({ ...prev, ...patch })); onPatch(patch); };
+  const photoRef = React.useRef();
+  const bottomRef = React.useRef();
+  // Move / Duplicate / Delete all EXPAND at the bottom of the page: bring the expanded block into view instead of leaving it below the fold
+  const revealBottom = () => { const go = () => { const el = bottomRef.current; if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "end", behavior: "smooth" }); }; if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(go)); else go(); };
+  React.useEffect(() => { if (picker || deleting) revealBottom(); }, [picker, deleting]);
+  const area = project.areas.find(a => a.id === item.areaId) || { name: "" };
+  const catOpts = (dropdowns && dropdowns.categories) || GSD_DEFAULT_CATEGORIES;
+  const commonOpts = ((dropdowns && dropdowns.common) || GSD_DEFAULT_COMMON).filter(o => String(o).trim().toLowerCase() !== "other");
+  const respOpts = (dropdowns && dropdowns.responsibility) || GSD_DEFAULT_RESPONSIBILITY;
+  // Common Defect pre-fills the Description ONLY while the description is empty or still the previous auto-filled text — never over the user's own wording
+  const pickCommon = v => {
+    const label = v && v !== "Other" ? v : ""; const patch = { commonDefect: v };
+    if (label && ((r.description || "") === "" || r.description === (r.descAuto || ""))) { patch.description = label; patch.descAuto = label; }
+    set(patch);
+  };
+  const photos = item.photos || [];
+  const arrowBtn = (label, glyph, onClick, disabled) => gsdEl("button", { type: "button", "aria-label": label, disabled, style: { width: 30, height: 30, borderRadius: 6, border: "1px solid #d4d4d8", background: "#f7f6f3", color: disabled ? "#a1a1aa" : "#334155", cursor: disabled ? "default" : "pointer", fontSize: 13, flexShrink: 0 }, onClick }, glyph);
+  const field = (lbl, child) => gsdEl("div", { style: SS.modalField }, gsdEl("label", { style: SS.modalLabel }, lbl), child);
+  return gsdEl("div", { style: { padding: "16px", background: "#e8e6e2", minHeight: "100%" } }
+    , gsdEl("div", { style: { fontSize: 20, fontWeight: 800, color: "#18181b" } }, `#${num} · ${area.name}`)
+    , gsdEl("div", { style: { margin: "14px 0 16px" } }
+      , gsdEl("div", { style: { fontSize: 10, color: "#6e6a66", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 } }, "PHOTOS")
+      , photos.map((p, i) => gsdEl("div", { key: p.id, "data-testid": "gsd-photo-row", style: { display: "flex", alignItems: "center", gap: 10, width: "100%", minWidth: 0, overflow: "hidden", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 10, padding: 8, marginBottom: 8 } }
+        , gsdEl(GSDPhoto, { photo: p, thumb: true, style: { width: 52, height: 52, objectFit: "cover", borderRadius: 6, flexShrink: 0, border: "1px solid #d4d4d8" } })
+        , gsdEl("div", { style: { flex: 1, minWidth: 0, fontSize: 12, color: "#52525b" } }, i === 0 ? "Primary photo" : `Photo ${i + 1}`)
+        , arrowBtn("Move photo up", "▲", () => onMovePhoto(p.id, -1), i === 0), arrowBtn("Move photo down", "▼", () => onMovePhoto(p.id, 1), i === photos.length - 1)
+        , gsdEl(DeleteButton, { onDelete: () => onRemovePhoto(p), compact: true })))
+      , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 6 } }, photoError)
+      , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
+      , gsdEl("button", { type: "button", style: { width: "100%", padding: "10px", background: "transparent", color: GSD_COLOR, border: `1px dashed ${GSD_COLOR_BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => photoRef.current && photoRef.current.click() }, "+ Add Photo"))
+    , field("COMMON DEFECT", gsdEl(IELEditableDropdown, { options: [...commonOpts, "Other"], value: r.commonDefect || "", onChange: pickCommon, placeholder: "Select or type…" }))
+    , field("DESCRIPTION", gsdEl("textarea", { style: { ...SS.modalInput, minHeight: 68, resize: "vertical", fontFamily: "inherit" }, value: r.description || "", placeholder: "Describe the defect…", "aria-label": "Description", onChange: e => set({ description: e.target.value }) }))
+    , field("CATEGORY", gsdEl(IELEditableDropdown, { options: catOpts, value: r.category || "", onChange: v => set({ category: v }), placeholder: "Select or type…" }))
+    , field("PRIORITY", gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
+      , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
+    , field("RESPONSIBILITY", gsdEl(IELEditableDropdown, { options: respOpts, value: r.responsibility || "", onChange: v => set({ responsibility: v }), placeholder: "Select or type…" }))
+    , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
+    , field("FIX BY DATE (informational)", gsdEl("input", { style: SS.modalInput, type: "date", value: r.dueDate || "", "aria-label": "Fix by date", onChange: e => set({ dueDate: e.target.value }) }))
+    , gsdEl("div", { ref: bottomRef, "data-testid": "gsd-bottom", style: { paddingBottom: 12 } }
+    , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", boxRef: pickerRef, onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
+    , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", boxRef: pickerRef, onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
+    // ONE row: [Duplicate] [Move] ......... [bin]. ONE-directional rule: an open Delete confirm (~240 px) takes the whole row and Duplicate / Move step aside
+    // (and any open picker closes); the bin itself NEVER hides — an open picker (above this row) leaves the row exactly as it is.
+    , gsdEl("div", { "data-testid": "gsd-actions", style: { display: "flex", gap: 8, alignItems: "center", minWidth: 0 } }
+      , !deleting && gsdEl("div", { style: { display: "flex", gap: 8, flexShrink: 0 } }
+        , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "duplicate" ? null : "duplicate") }, "Duplicate")
+        , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "move" ? null : "move") }, "Move"))
+      , gsdEl("div", { "data-testid": "gsd-delete", style: { marginLeft: "auto", minWidth: 0 } }
+        , gsdEl(DeleteButton, { onDelete, label: "Delete defect?", onOpenChange: open => { setDeleting(open); if (open) setPicker(null); } })))));
+}
+
+function GSDReportView({ project, items, meta }) {
+  const SS = swbStyles();
+  const sections = gsdReportSections(project, items);
+  const total = items.length; const urgent = items.filter(i => i.priority === "H" || i.priority === "U").length; const photos = items.reduce((n, i) => n + (i.photos || []).length, 0);
+  return gsdEl("div", { style: SS.summaryWrap }
+    , gsdEl("div", { style: SS.summaryTitle }, project.name)
+    , project.company && gsdEl("div", { style: { fontSize: 12, color: "#6e6a66", marginTop: 2, marginBottom: 4 } }, project.company)
+    , gsdEl("div", { style: SS.summaryMeta }, "SITE DEFECTS REPORT" + (meta.auditor ? ` · ${meta.auditor}` : ""))
+    , meta.testDate && gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 8, marginBottom: 16, flexWrap: "wrap" } }
+      , gsdEl("div", { style: { ...SS.duePill, borderColor: GSD_COLOR_BORDER, color: GSD_COLOR, padding: "7px 12px" } }, "Audited: ", fmtDate(meta.testDate), " → next due: ", meta.nextTestDate ? fmtDate(meta.nextTestDate) : "—"))
+    , gsdEl(ReportStatTiles, { rows: [["Defects", total, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Areas", sections.length, "#334155"], ["Photos", photos, "#92400e"]] })
+    , total === 0 && gsdEl(ReportNoDefects)
+    , sections.map(sec => gsdEl("div", { key: sec.area.id, style: { marginBottom: 16 } }
+      , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, letterSpacing: 0.8, marginBottom: 6, textTransform: "uppercase" } }, sec.area.name, " · ", nw(sec.entries.length, "defect"))
+      , sec.entries.map(e => gsdEl("div", { key: e.item.id, style: { background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 10, padding: "8px 12px", marginBottom: 6 } }
+        , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#18181b" } }, gsdEl("span", { style: { flexShrink: 0 } }, `#${e.n}`), gsdPriDot(e.item.priority), gsdEl("span", { style: { minWidth: 0 } }, gsdTitle(e.item)))   // separate flex items: bare adjacent text nodes in a flex row merge into ONE item, so "#1" and the title ran together whenever there was no priority dot between them
+        , (e.item.description || "").trim() && e.item.description.trim() !== gsdTitle(e.item) && gsdEl("div", { style: { fontSize: 12, color: "#3f3f46", marginTop: 2, whiteSpace: "pre-wrap" } }, e.item.description.trim())
+        , e.item.assetLocation && gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, e.item.assetLocation)
+        , e.detail && gsdEl("div", { style: { fontSize: 11, color: "#6e6a66", marginTop: 2 } }, e.detail))))));
+}
+
+function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
+  const SS = swbStyles();
+  const [editingProject, setEditingProject] = React.useState(false);
+  const [vals, setVals] = React.useState({ name: project.name, company: project.company || "", abn: project.abn || "", licence: project.licence || "" });
+  const [newArea, setNewArea] = React.useState(""); const [err, setErr] = React.useState(""); const [renaming, setRenaming] = React.useState(null); const [renameVal, setRenameVal] = React.useState("");
+  const areas = project.areas || [];
+  const addArea = () => { const n = newArea.trim(); if (!n) return; if (gsdAreaTaken(project, n)) { setErr(`"${n}" is already an area`); return; } onUpdateProject({ ...project, areas: [...areas, { id: uid(), name: n }] }); setNewArea(""); setErr(""); };
+  const saveRename = a => { const n = renameVal.trim(); if (!n) return; if (gsdAreaTaken(project, n, a.id)) { setErr(`"${n}" is already an area`); return; } onUpdateProject({ ...project, areas: areas.map(x => x.id === a.id ? { ...x, name: n } : x) }); setRenaming(null); setErr(""); };
+  return gsdEl("div", { style: SS.listWrap }
+    , gsdEl("div", { style: { ...SS.listTitle, color: "#334155" } }, "Manage: ", project.name)
+    , editingProject
+      ? gsdEl("div", { style: { ...SS.addCard, marginBottom: 16, border: `1px solid ${GSD_COLOR_BORDER}` } }
+        , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, marginBottom: 10 } }, "SITE DETAILS")
+        , gsdEl(ELTSiteFields, { vals, setVals })
+        , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 4 } }
+          , gsdEl("button", { style: { padding: "9px 14px", background: GSD_COLOR, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }, onClick: () => { onUpdateProject({ ...project, name: vals.name.trim() || project.name, company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim() }); setEditingProject(false); } }, "Save")
+          , gsdEl("button", { style: { padding: "9px 14px", background: "transparent", color: "#6e6a66", border: "1px solid #d4d4d8", borderRadius: 8, fontSize: 13, cursor: "pointer" }, onClick: () => setEditingProject(false) }, "Cancel")))
+      : gsdEl("div", { style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" } }
+        , gsdEl("div", null, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: "#18181b" } }, project.name), project.company && gsdEl("div", { style: { fontSize: 12, color: "#6e6a66", marginTop: 2 } }, project.company))
+        , gsdPencil(() => { setVals({ name: project.name, company: project.company || "", abn: project.abn || "", licence: project.licence || "" }); setEditingProject(true); }, "Edit site details"))
+    , gsdEl("div", { style: { fontSize: 10, color: "#6e6a66", letterSpacing: 0.8, fontWeight: 700, marginBottom: 8 } }, "AREAS")
+    , areas.map(a => {
+      const n = items.filter(i => i.areaId === a.id).length;
+      return gsdEl("div", { key: a.id, style: { display: "flex", alignItems: "center", gap: 8, background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 10, padding: "8px 12px", marginBottom: 6, minWidth: 0 } }
+        , renaming === a.id
+          ? gsdEl(React.Fragment, null, gsdEl("input", { style: { ...SS.metaInput, flex: 1, minWidth: 0 }, value: renameVal, "aria-label": "Rename area", onChange: e => setRenameVal(e.target.value) }), gsdEl("button", { style: SS.smallBtn, onClick: () => saveRename(a) }, "Save"), gsdEl("button", { style: SS.smallBtn, onClick: () => { setRenaming(null); setErr(""); } }, "Cancel"))
+          : gsdEl(React.Fragment, null, gsdEl("div", { style: { flex: 1, minWidth: 0 } }, gsdEl("div", { style: { fontSize: 14, fontWeight: 600, color: "#18181b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, a.name), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, nw(n, "defect")))
+            , gsdPencil(() => { setRenaming(a.id); setRenameVal(a.name); }, `Rename area ${a.name}`)
+            , gsdEl(DeleteButton, { onDelete: () => { onRemoveArea(a.id); onUpdateProject({ ...project, areas: areas.filter(x => x.id !== a.id) }); }, label: "Remove area and its defects?", compact: true })));
+    })
+    , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10 } }
+      , gsdEl("input", { style: { ...SS.metaInput, flex: 1, minWidth: 0 }, type: "text", value: newArea, placeholder: "Add new area…", "aria-label": "New area name", onChange: e => { setNewArea(e.target.value); setErr(""); } })
+      , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: addArea }, "+ Add Area"))
+    , err && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginTop: 6 } }, err));
+}
+
+const gsdHighUrgent = items => (items || []).filter(i => i.priority === "H" || i.priority === "U").length;
+const gsdPhotoCount = items => (items || []).reduce((n, i) => n + (i.photos || []).length, 0);
+function GSDSummaryPills({ defects, urgent, photos }) {
+  return gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
+    , [["Defects", defects, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Photos", photos, "#92400e"]].map(([l, v, col]) =>
+      gsdEl("div", { key: l, style: { flex: 1, minWidth: 90, background: "#f7f6f3", border: `1px solid ${col}33`, borderRadius: 8, padding: "6px 12px", textAlign: "center" } }
+        , gsdEl("div", { style: { fontSize: 18, fontWeight: 800, color: col } }, v), gsdEl("div", { style: { fontSize: 10, color: "#6e6a66" } }, l))));
+}
+function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error }) {
+  const SS = swbStyles();
+  const [expanded, setExpanded] = React.useState(null);
+  if (viewSnap) {
+    const snap = viewSnap; const proj = { ...project, areas: snap.areas || project.areas || [] }; const sections = gsdReportSections(proj, snap.items || []);
+    return gsdEl("div", { style: SS.listWrap }
+      , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 10 } }
+        , gsdEl("div", { style: { flex: 1 } }, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Snapshot"), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor", " · Read-only"))
+        , gsdEl("button", { style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac" }, onClick: () => onExportSnap(snap) }, "Export"))
+      , gsdEl("div", { style: { marginBottom: 14 } }, gsdEl(GSDSummaryPills, { defects: (snap.items || []).length, urgent: gsdHighUrgent(snap.items), photos: gsdPhotoCount(snap.items) }))
+      , sections.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No defects in this snapshot.")
+      , sections.map(sec => gsdEl("div", { key: sec.area.id, "data-area": sec.area.name }, gsdEl("div", { style: AREA_HDR_STYLE }, sec.area.name)
+        , sec.entries.map(e => gsdEl("div", { key: e.item.id, "data-testid": "gsd-snap-row", style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, marginBottom: 4, minWidth: 0, overflow: "hidden" } }
+          , e.item.photos && e.item.photos[0] ? gsdEl(GSDPhoto, { photo: e.item.photos[0], thumb: true, style: { width: 40, height: 40, objectFit: "cover", borderRadius: 6, flexShrink: 0, border: "1px solid #d4d4d8" } }) : gsdEl("div", { style: { width: 40, height: 40, borderRadius: 6, background: "#e4e4e7", flexShrink: 0 } })
+          , gsdEl("div", { style: { flex: 1, minWidth: 0 } }
+            , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } }, gsdEl("span", { style: { fontSize: 11, fontWeight: 800, color: "#52525b", flexShrink: 0 } }, `#${e.n}`), gsdPriDot(e.item.priority)
+              , gsdEl("span", { style: { fontSize: 13, color: "#3f3f46", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 } }, gsdTitle(e.item)))
+            , (e.item.assetLocation || e.detail) && gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [e.item.assetLocation, e.detail].filter(Boolean).join(" · "))))))));
+  }
+  return gsdEl("div", { style: SS.listWrap }
+    , gsdEl("div", { style: { ...SS.listTitle, color: "#334155" } }, "Audit History")
+    , error && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 8 } }, error)
+    , history.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No archived audits yet. Use “Complete Site Defects Audit” on the Home tab.")
+    , history.map(snap => {
+      const n = (snap.items || []).length, urgent = gsdHighUrgent(snap.items), photos = gsdPhotoCount(snap.items); const open = expanded === snap.id;
+      return gsdEl("div", { key: snap.id, "data-testid": "gsd-history-card", style: { ...SS.siteCard, flexDirection: "column", padding: 0, marginBottom: 10, overflow: "hidden" } }
+        , gsdEl("button", { "aria-expanded": open, style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "14px 16px", color: "inherit", textAlign: "left" }, onClick: () => setExpanded(open ? null : snap.id) }
+          , gsdEl("div", { style: { flex: 1 } }
+            , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }
+              , gsdEl("span", { style: { fontSize: 13, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Audit")
+              , urgent > 0 && gsdEl("span", { style: SS.failBadge }, urgent, " HIGH / URGENT"))
+            , gsdEl("div", { style: { fontSize: 12, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor")
+            , gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, "Archived ", fmtDateTime(snap.archivedAt))
+            , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 6 } }
+              , gsdEl("span", { style: { fontSize: 11, color: "#334155" } }, nw(n, "defect"))
+              , gsdEl("span", { style: { fontSize: 11, color: "#dc2626" } }, urgent, " High / Urgent")
+              , gsdEl("span", { style: { fontSize: 11, color: "#92400e" } }, nw(photos, "photo"))))
+          , gsdEl("span", { style: { ...SS.arrow, color: open ? GSD_COLOR : "#52525b" } }, open ? "▾" : "›"))
+        , open && gsdEl("div", { style: { padding: "0 16px 14px", borderTop: "1px solid #e4e4e7" } }
+          , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" } }
+            , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b", fontWeight: 700 }, onClick: () => setViewSnap(snap) }, "View Results")
+            , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b" }, onClick: () => onExportSnap(snap) }, "Export")
+            , gsdEl(ContinueConfirmBtn, { onConfirm: () => onContinueFromSnap(snap), styleObj: SS.smallBtn, color: GSD_COLOR })
+            , gsdEl(DeleteButton, { onDelete: () => onDelete(snap.id) }))));
+    }));
+}
+
+export { StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;

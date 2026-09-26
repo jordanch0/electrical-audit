@@ -181,6 +181,6 @@ describe('Welder module shell', () => {
     localStorage.setItem('cal-events-v1', JSON.stringify([{ id: 'e1', type: 'welder', site: 'Dixon Quarry Group', dueDate: d, notes: '', seriesId: null }]));
     render(<AppRoot />);
     await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
-    expect(await screen.findByText('Welder Test')).toBeInTheDocument();
+    expect(await screen.findByText('Welder Testing')).toBeInTheDocument();
   });
 });
