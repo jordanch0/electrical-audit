@@ -291,7 +291,7 @@ React.createElement(DeleteButton, { onDelete: () => removeArea(area.id), label: 
 - **Confirming state:** same row expands to show `Delete?  [🗑 Delete]  [Keep]`
 - **Keep:** returns to idle, no action taken
 - **Delete:** calls `onDelete()` immediately, no further prompt
-- **Only one open at a time** — opening any `DeleteButton` auto-closes all others via `activeDeleteSetter`
+- **Only one open at a time, and a click OUTSIDE collapses it** — both come from the shared `useCollapsible(open, close, ref)` hook (module-level `activeExpander`; a document-level `click` listener in the CAPTURE phase, deliberately not `pointerdown`, so a layout shift can never lose a tap). It is used by `DeleteButton`, `ConfirmReset`, `CompleteAuditBtn`, the Calendar event card's delete, the popover of all five editable dropdowns and GSD's area picker; anything new that expands must use it. Deliberately NOT collapsible: inline add / edit forms (they hold typed input) and accordions (navigation). This replaced the old `activeDeleteSetter`. Tests: `src/collapsible.test.jsx`
 - **No layout shift** — row/card dimensions must not jump between idle and confirming states
 - **No modals, no `window.confirm()`** — confirmation always happens inline in the row
 
