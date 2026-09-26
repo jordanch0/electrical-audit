@@ -146,7 +146,7 @@ describe('module registration', () => {
     await user.click(screen.getByTestId('calendar-pill'));
     expect(await screen.findByText('Upcoming')).toBeInTheDocument();
     await user.click(screen.getByText('Add Event'));
-    expect(await screen.findByText('Site Defects Audit')).toBeInTheDocument();
+    expect(await screen.findByText('General Site Defects')).toBeInTheDocument();
     expect(screen.getAllByRole('combobox').some(s => within(s).queryByText('Site G'))).toBe(true);
   });
 });

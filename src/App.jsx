@@ -565,6 +565,33 @@ function useCollapsible(open, close, ref) {
     return () => { document.removeEventListener("click", onDocClick, true); if (activeExpander === me) activeExpander = null; };
   }, [open]);
 }
+// StyledSelect — the app's styled dropdown (same look as the EditableDropdown family: a button with a ▾ and a popover list) for fields that used to be a native
+// <select>. Unlike the family it takes { value, label } options (the stored value need not equal the label — TAT's frequency stores "3" and shows "3 Months — …"),
+// is CLOSED by default (only listed values), and offers a typed-text mode only when allowCustom is set. allowEmpty adds a first option that clears the value
+// (its label is the placeholder). A stored value that is not in the list still shows (as its own text) so nothing is ever hidden. Joins useCollapsible.
+function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allowCustom, boxStyle, wrapStyle, ariaLabel, stopClicks, color, colorBg, customHint }) {
+  const [open, setOpen] = React.useState(false);
+  const opts = (options || []).map(o => (o !== null && typeof o === "object" ? o : { value: o, label: o }));
+  const cur = opts.find(o => o.value === value);
+  const [custom, setCustom] = React.useState(!!(allowCustom && value && !cur));
+  const boxRef = React.useRef(null); useCollapsible(open, () => setOpen(false), boxRef);
+  const stop = e => { if (stopClicks) e.stopPropagation(); };
+  const box = { ...(boxStyle || SI.modalInput) };
+  if (custom) {
+    return React.createElement("div", { ref: boxRef, style: { display: "flex", gap: 8, minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
+      , React.createElement("input", { style: { ...box, flex: 1, minWidth: 0 }, value: cur ? "" : (value || ""), placeholder: customHint || placeholder || "Type…", "aria-label": ariaLabel ? ariaLabel + " (typed)" : undefined, onChange: e => onChange(e.target.value) })
+      , React.createElement("button", { type: "button", style: { padding: "8px 10px", background: "transparent", border: "1px solid #d4d4d8", borderRadius: 8, color: "#6e6a66", cursor: "pointer", fontSize: 11, flexShrink: 0 }, onClick: () => setCustom(false) }, "▾ List"));
+  }
+  const shown = cur ? cur.label : (value ? String(value) : (placeholder || "Select…"));
+  const list = [...(allowEmpty ? [{ value: "", label: placeholder || "— None" }] : []), ...opts];
+  return React.createElement("div", { ref: boxRef, style: { position: "relative", minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
+    , React.createElement("button", { type: "button", "aria-label": ariaLabel, "aria-expanded": open, style: { ...box, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left", color: value ? "#18181b" : "#52525b" }, onClick: () => setOpen(o => !o) }
+      , React.createElement("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shown)
+      , React.createElement("span", { style: { color: "#52525b", fontSize: 12, flexShrink: 0 } }, open ? "▴" : "▾"))
+    , open && React.createElement("div", { role: "listbox", style: { position: "absolute", zIndex: 300, minWidth: "100%", width: "max-content", maxWidth: "min(90vw, 420px)", background: "#f7f6f3", border: "1px solid #d4d4d8", borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: "auto", left: 0 } }
+      , list.map(o => React.createElement("div", { key: o.value === "" ? "__empty" : o.value, role: "option", "aria-selected": o.value === value, style: { padding: "10px 12px", fontSize: 13, cursor: "pointer", color: o.value === value ? (color || "#047857") : "#3f3f46", background: o.value === value ? (colorBg || "#dcfce7") : "transparent", fontWeight: o.value === value ? 700 : 400 }, onClick: () => { onChange(o.value); setOpen(false); } }, o.label))
+      , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
+}
 function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
   const [confirming, setConfirming] = React.useState(false);
   const boxRef = React.useRef(null);
@@ -3666,18 +3693,18 @@ const SI={
 const K_CAL_EVENTS = "cal-events-v1";
 
 const CAL_TYPES = [
-  { key:"rcd_push",    label:"RCD Push Test",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
-  { key:"rcd_inject",  label:"RCD Injection Test",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
-  { key:"iel_estop",   label:"IEL E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
-  { key:"iel_lanyard", label:"IEL Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
-  { key:"iel_iso",     label:"IEL Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"rcd_push",    label:"RCD Testing · Push",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
+  { key:"rcd_inject",  label:"RCD Testing · Injection",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
+  { key:"iel_estop",   label:"IEL Testing · E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_lanyard", label:"IEL Testing · Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_iso",     label:"IEL Testing · Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:moduleIcon("tat",15), period:"Variable"   },
-  { key:"thermo",      label:"Thermographic Testing",  color:"#c2410c", icon:moduleIcon("thermo",15), period:"Variable"   },
-  { key:"swb",         label:"Switchboard Audit",      color:"#7e22ce", icon:moduleIcon("swb",15), period:"Variable"   },
+  { key:"thermo",      label:"Thermographic",  color:"#c2410c", icon:moduleIcon("thermo",15), period:"Variable"   },
+  { key:"swb",         label:"Switchboard",      color:"#7e22ce", icon:moduleIcon("swb",15), period:"Variable"   },
   { key:"irt",         label:"Insulation Resistance Testing",             color:"#1d4ed8", icon:moduleIcon("irt",15), period:"Variable"   },
   { key:"elt",         label:"Emergency Lighting",     color:"#0f766e", icon:moduleIcon("elt",15), period:"6-Monthly"  },
-  { key:"welder",      label:"Welder Test",      color:"#be185d", icon:moduleIcon("welder",15), period:"3-Monthly"  },
-  { key:"gsd",         label:"Site Defects Audit", color:"#4d7c0f", icon:moduleIcon("gsd",15), period:"Annual"    },
+  { key:"welder",      label:"Welder Testing",      color:"#be185d", icon:moduleIcon("welder",15), period:"3-Monthly"  },
+  { key:"gsd",         label:"General Site Defects", color:"#4d7c0f", icon:moduleIcon("gsd",15), period:"Annual"    },
   { key:"other",       label:"Other / Custom",        color:"#7e22ce", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('line',{x1:12,y1:17,x2:12,y2:22}),React.createElement('path',{d:'M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z'})), period:"Custom"     },
 ];
 
@@ -14827,6 +14854,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 }
 
 
-export { useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
