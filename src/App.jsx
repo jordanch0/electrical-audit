@@ -569,7 +569,7 @@ function useCollapsible(open, close, ref) {
 // <select>. Unlike the family it takes { value, label } options (the stored value need not equal the label — TAT's frequency stores "3" and shows "3 Months — …"),
 // is CLOSED by default (only listed values), and offers a typed-text mode only when allowCustom is set. allowEmpty adds a first option that clears the value
 // (its label is the placeholder). A stored value that is not in the list still shows (as its own text) so nothing is ever hidden. Joins useCollapsible.
-function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allowCustom, boxStyle, wrapStyle, ariaLabel, stopClicks, color, colorBg, customHint, textColor }) {
+function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allowCustom, boxStyle, wrapStyle, ariaLabel, stopClicks, color, colorBg, customHint, textColor, popoverWidth, popoverRight }) {
   const [open, setOpen] = React.useState(false);
   const opts = (options || []).map(o => (o !== null && typeof o === "object" ? o : { value: o, label: o }));
   const cur = opts.find(o => o.value === value);
@@ -586,10 +586,10 @@ function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allow
   const list = [...(allowEmpty ? [{ value: "", label: placeholder || "— None" }] : []), ...opts];
   return React.createElement("div", { ref: boxRef, style: { position: "relative", minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
     , React.createElement("button", { type: "button", "aria-label": ariaLabel, "aria-expanded": open, style: { ...box, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left", color: textColor || (value ? "#18181b" : "#52525b") }, onClick: () => setOpen(o => !o) }
-      , React.createElement("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shown)
+      , React.createElement("span", { style: { flex: "1 1 0", width: 0, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shown)   // width 0 + flex-grow: the label never forces its container wider, so the control shrinks like a native select did
       , React.createElement("span", { style: { color: "#52525b", fontSize: 12, flexShrink: 0 } }, open ? "▴" : "▾"))
-    , open && React.createElement("div", { role: "listbox", style: { position: "absolute", zIndex: 300, minWidth: "100%", width: "max-content", maxWidth: "min(90vw, 420px)", background: "#f7f6f3", border: "1px solid #d4d4d8", borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: "auto", left: 0 } }
-      , list.map(o => React.createElement("div", { key: o.value === "" ? "__empty" : o.value, role: "option", "aria-selected": o.value === value, style: { padding: "10px 12px", fontSize: 13, cursor: "pointer", color: o.value === value ? (color || "#047857") : "#3f3f46", background: o.value === value ? (colorBg || "#dcfce7") : "transparent", fontWeight: o.value === value ? 700 : 400 }, onClick: () => { onChange(o.value); setOpen(false); } }, o.label))
+    , open && React.createElement("div", { role: "listbox", style: { position: "absolute", zIndex: 300, width: popoverWidth || "100%", ...(popoverRight ? { right: 0 } : { left: 0 }), boxSizing: "border-box", background: "#f7f6f3", border: "1px solid #d4d4d8", borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: "auto" } }   // the popover is as wide as its trigger (or an explicit width, right-aligned for a trigger at the right edge), never wider than its container — long labels WRAP
+      , list.map(o => React.createElement("div", { key: o.value === "" ? "__empty" : o.value, role: "option", "aria-selected": o.value === value, style: { padding: "10px 12px", fontSize: 13, cursor: "pointer", whiteSpace: "normal", wordBreak: "break-word", color: o.value === value ? (color || "#047857") : "#3f3f46", background: o.value === value ? (colorBg || "#dcfce7") : "transparent", fontWeight: o.value === value ? 700 : 400 }, onClick: () => { onChange(o.value); setOpen(false); } }, o.label))
       , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
 }
 function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
@@ -5429,7 +5429,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             )
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
               ,React.createElement('span',{style:{fontSize:10,color:"#52525b",whiteSpace:"nowrap"}},"Default:")
-              ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"})),value:tatDefaultFreq(freqOptions,tatDefaults,area),onChange:v=>setAreaDefaultFreq(area.id,v),ariaLabel:"Area default frequency",stopClicks:true,textColor:TAT_COLOR,color:TAT_COLOR,colorBg:"#dbeafe",boxStyle:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,fontSize:12,padding:"4px 6px"},wrapStyle:{flexShrink:0}})
+              ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"})),value:tatDefaultFreq(freqOptions,tatDefaults,area),onChange:v=>setAreaDefaultFreq(area.id,v),ariaLabel:"Area default frequency",stopClicks:true,popoverWidth:170,popoverRight:true,textColor:TAT_COLOR,color:TAT_COLOR,colorBg:"#dbeafe",boxStyle:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,fontSize:12,padding:"4px 6px"},wrapStyle:{flexShrink:0,width:92}})
             )
             ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#1d4ed8",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#1d4ed8",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
             ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
@@ -11818,7 +11818,7 @@ function ELTAssetForm({initial, typeOptions, areaChoices, areaId, submitLabel, o
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${ELT_COLOR_BORDER}`}}
     ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"AREA")
-      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.metaInput,wrapStyle:{marginTop:4}})
+      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.modalInput,wrapStyle:{marginTop:4}})
     )
     ,field("ASSET LOCATION","assetLocation","e.g. SE Door")
     ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
@@ -13889,7 +13889,7 @@ function WelderAssetForm({initial, areaChoices, areaId, submitLabel, onSave, onC
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${WELDER_COLOR_BORDER}`}}
     ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"AREA")
-      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.metaInput,wrapStyle:{marginTop:4}})
+      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.modalInput,wrapStyle:{marginTop:4}})
     )
     ,field("ASSET ID","assetId","e.g. W001")
     ,field("BRAND","brand","e.g. Kemppi")
