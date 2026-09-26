@@ -46,8 +46,8 @@ describe('swbRegisterRows / board overall (same rule as Welder)', () => {
     const [msb, mcc, msb2, db] = rows.map(r => r.cells);
     expect(msb).toEqual(['Wash Plant', 'MSB', '13/07/2026', 'Pass', 11, 0, 0, 0, '100.0%', '', '', '', '', '', '', '13/07/2027']);
     // partly answered: Pass/Fail blank, no date, score counts blanks against it (1 pass, 1 fail, 1 N/A: 1 / (11-1)), failed items list only FAIL items
-    expect(mcc).toEqual(['Wash Plant', 'MCC 1', '', '', 1, 1, 1, 8, '10.0%', 'Medium', 'Ventilation', 'Scheduled for Repair', 'D-7', 'Site Electrician', '', '13/07/2027']);   // defect set from the FAIL item only (the passing item's stale D STALE is ignored)
-    expect(msb2).toEqual(['Sub Station', 'MSB', '13/07/2026', 'Fail', 10, 1, 0, 0, '90.9%', 'Urgent', 'Door Earthing', '', 'D-9', '', '', '13/07/2027']);
+    expect(mcc).toEqual(['Wash Plant', 'MCC 1', '', '', 1, 1, 1, 8, '10.0%', 'Medium', 'Ventilation', 'Scheduled for Repair', 'D-7', 'Site Electrician', 'M', '13/07/2027']);   // defect set from the FAIL item only (the passing item's stale D STALE is ignored)
+    expect(msb2).toEqual(['Sub Station', 'MSB', '13/07/2026', 'Fail', 10, 1, 0, 0, '90.9%', 'Urgent', 'Door Earthing', '', 'D-9', '', 'U', '13/07/2027']);
     expect(db).toEqual(['Sub Station', 'DB/1: North?', '', '', 0, 0, 0, 11, '0.0%', '', '', '', '', '', '', '13/07/2027']);
   });
   it('Highest Risk ignores a stale risk on a passing item (only FAIL items count)', () => {
@@ -131,5 +131,31 @@ describe('exportSWBExcel structure', () => {
   it('a site with no boards still exports a valid Register-only workbook', async () => {
     const wb = await build({ id: 'p', name: 'Empty', areas: [] }, {});
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register']);
+  });
+});
+
+describe('SWB Register "Priority (L,M,H,U)" is filled from the Risk Rating (the SWB UI has no Priority control)', () => {
+  const proj = { id: 's1', name: 'S', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Area', boards: [{ id: 'b1', name: 'B1' }, { id: 'b2', name: 'B2' }, { id: 'b3', name: 'B3' }, { id: 'b4', name: 'B4' }] }] };
+  const keys = SWB_CHECKLIST.map(c => c.key);
+  const board = (patterns) => Object.fromEntries(keys.map((k, i) => [k, { status: 'pass', ...(patterns[i] || {}) }]));
+  const res = { s1: { ar: {
+    b1: board({ 0: { status: 'fail', risk: 'L' } }),                                                                  // one fail, Low
+    b2: board({ 0: { status: 'fail', risk: 'L' }, 1: { status: 'fail', risk: 'U' }, 2: { status: 'fail', risk: 'U' }, 3: { status: 'fail', risk: 'H' } }),   // several: distinct, most severe first
+    b3: board({ 0: { status: 'fail', risk: 'M', priority: 'H' } }),                                                   // a stored priority (older import) wins over risk
+    b4: board({ 0: { status: 'pass', risk: 'U' }, 1: { status: 'fail' } }),                                           // stale risk on a PASS item never counts; a fail with no rating is blank
+  } } };
+  const col = SWB_REGISTER_COLUMNS.indexOf('Priority (L,M,H,U)');
+  it('maps risk -> priority one-to-one, distinct and most severe first; a stored priority wins; a passing item\'s stale risk is ignored', () => {
+    expect(swbRegisterRows(proj, res, meta).map(r => r.cells[col])).toEqual(['L', 'U; H; L', 'H', '']);
+  });
+  it('the Priority cell agrees with the Highest Risk column\'s scale (same letters, same labels)', () => {
+    const rows = swbRegisterRows(proj, res, meta);
+    expect(rows[1].cells[SWB_REGISTER_COLUMNS.indexOf('Highest Risk')]).toBe('Urgent');
+    expect(rows[1].cells[col].split('; ')[0]).toBe('U');
+  });
+  it('and it reaches the exported Register sheet', async () => {
+    const wb = await build(proj, res); const reg = wb.getWorksheet('Register');
+    const c = reg.getRow(5).values.indexOf('Priority (L,M,H,U)');
+    expect([6, 7, 8, 9].map(r => String(reg.getCell(r, c).value || ''))).toEqual(['L', 'U; H; L', 'H', '']);
   });
 });

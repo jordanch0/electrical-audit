@@ -9721,9 +9721,12 @@ function swbRegisterRows(project, allResults, meta) {
     // Defect columns are always present; values come from the FAIL items only (defectGateByStatus is redundant here — fails are already the FAIL items)
     const failItems = fails.map(({key}) => defectGateByStatus(swbGetItem(res, project.id, area.id, board.id, key)));
     const joined = k => [...new Set(failItems.map(it => String(it[k] || "").trim()).filter(Boolean))].join("; ");
+    // SWB has no Priority control: its Risk Rating (L / M / H / U — the SAME scale and labels as Priority) plays that role. The Register's Priority column
+    // therefore reads the item's risk (a stored `priority`, e.g. from an older import, wins if present), most severe first.
+    const priorities = [...new Set(failItems.map(it => (it.priority || it.risk || "").trim()).filter(Boolean))].sort((a, b) => SWB_RISK_ORDER.indexOf(a) - SWB_RISK_ORDER.indexOf(b)).join("; ");
     rows.push({ area, board, summary: bs, overall, cells: [
       area.name, board.name, overall !== "untested" && testDate ? fmtDate(testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
-      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), joined("priority"), nextDue,
+      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), priorities, nextDue,
     ]});
   }));
   return rows;
