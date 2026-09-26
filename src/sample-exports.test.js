@@ -33,7 +33,7 @@ it('RCD push + injection', async () => {
 it('IEL', async () => {
   const ids = range(N).map(i => 'm' + i);
   const project = { id: 'p', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Wash Plant', panels: [{ id: 'p1', name: 'estops', circuits: ids, machineNames: Object.fromEntries(ids.map((x, i) => [x, 'Conveyor ' + (i + 1)])) }] }] };
-  const results = { a: { estops: Object.fromEntries(ids.map((x, i) => [x, isFail(i) ? { status: 'fail', notes: 'Lanyard frayed', ...fd(i) } : { status: 'pass', notes: i % 5 === 0 ? 'ok' : '' }])) } };
+  const results = { a: { estops: Object.fromEntries(ids.map((x, i) => [x, isFail(i) ? { status: 'fail', notes: 'Lanyard frayed', ...fd(i) } : i % 13 === 7 ? { status: 'na' } : i % 17 === 3 ? { status: 'untested' } : { status: 'pass', notes: i % 5 === 0 ? 'ok' : '' }])) } };
   await exportIELExcel(project, results, meta); save('iel');
 });
 

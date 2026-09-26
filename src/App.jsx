@@ -146,6 +146,64 @@ function xlSplitSheets(o) {
   return { main, defects: def, count: defects.length };
 }
 
+// ── ExcelJS split-export foundation ────────────────────────────────────────────────────────────────────────────────
+// The print-friendly split exports (narrow main table + Defects sheet) on ExcelJS: real borders, coloured results, zebra rows, wrapped
+// headings and NATIVE page setup — no post-processing. IEL was converted first; the other SheetJS exports move over stage by stage
+// (until then they still use xlSplitSheets / xlPrintify above). Same row model as before: rows:[{cells, defect}].
+function xjPageSetup(sheet, landscape, titleRow) {
+  sheet.pageSetup = { paperSize: 9, orientation: landscape ? "landscape" : "portrait", fitToPage: true, fitToWidth: 1, fitToHeight: 0,
+    margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 }, ...(titleRow ? { printTitlesRow: `${titleRow}:${titleRow}` } : {}) };
+  sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
+}
+const XJ_CENTER = /^(#|Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Test Voltage|Score)/;
+// Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
+function xjResultStyle(v) {
+  const k = String(v == null ? "" : v).toUpperCase(); const ctr = { horizontal: "center", vertical: "center" };
+  if (k === "PASS") return swbXCS(SWB_XC.priorityL_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityL_font } }, ctr, swbXAB());
+  if (k === "FAIL") return swbXCS(SWB_XC.priorityH_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityH_font } }, ctr, swbXAB());
+  if (k === "MONITOR") return swbXCS(SWB_XC.priorityM_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityM_font } }, ctr, swbXAB());
+  if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
+  return null;
+}
+// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape }
+function xjSheet(wb, name, o) {
+  const ws = wb.addWorksheet(name); const n = o.headers.length;
+  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  put(1, 1, o.title); put(2, 1, o.coLine);
+  o.meta.forEach((v, i) => { if (v !== "" && v != null) put(3, i + 1, v); });
+  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1, c1, r2, c2));
+  // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
+  o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
+  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const priCol = o.headers.findIndex(h => h === "Priority");
+  o.rows.forEach((cells, ri) => {
+    const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
+    const base = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+    const ctr = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
+    for (let c = 0; c < n; c++) {
+      const v = cells[c] == null ? "" : cells[c]; let st = XJ_CENTER.test(o.headers[c]) ? ctr : base;
+      if (c === resultCol) st = xjResultStyle(v) || ctr;
+      if (c === priCol) { const pc = swbXPC(v); if (pc) st = swbXCS(pc.bg, { bold: pc.bold, sz: 10, color: { rgb: pc.font } }, { horizontal: "center", vertical: "top" }, swbXAB()); }
+      put(r, c + 1, v, st);
+    }
+  });
+  if (!o.rows.length && o.emptyText) put(6, 1, o.emptyText);
+  (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = w; });
+  xjPageSetup(ws, o.landscape !== false, 5);
+  return ws;
+}
+const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
+// Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
+// o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
+function xjSplit(wb, o) {
+  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
+  const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
+  xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
+    headers: ["#", ...o.idHeaders, ...XL_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded" });
+  return defects.length;
+}
+
 // Downscale + JPEG-compress a captured photo before it goes into localStorage / an Excel export.
 function resizeImageToDataUrl(file, maxDim=1280, quality=0.72) {
   return new Promise((resolve, reject) => {
@@ -2352,21 +2410,19 @@ async function exportIELExcel(project, results, meta) {
       });
     });
   });
-  const sheets = xlSplitSheets({
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
     title: `${sName} — Isolators, E-Stops & Lanyards Test`, defectTitle: `${sName} — Isolators, E-Stops & Lanyards Test — Defects`, coLine,
     meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${nextDue}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
-    headers: ["Location", "Type", "Machine", "Date", "Mech. / Reset", "Circuit Isolation", "Lanyard Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
-    widths: [16, 10, 20, 11, 14, 17, 14, 10, 26, 15],
+    mainSheet: "Isolators EStops Lanyards",
+    headers: ["Location", "Type", "Machine", "Date", "Mechanism / Reset Check", "Circuit Isolation Verified", "Lanyard Tension / Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
+    widths: [16, 10, 20, 11, 12, 12, 12, 9, 22, 11],
     idHeaders: ["Location", "Machine"], idWidths: [16, 22],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheets.main, "Isolators EStops Lanyards");
-  XLSX.utils.book_append_sheet(wb, sheets.defects, "Defects");
-  const filename = `IEL_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`;
-  const wbOut = await xlPrintify(XLSX.write(wb, { bookType: "xlsx", type: "base64", bookSST: false }), [{ titleRow: 5 }, { titleRow: 5 }]);
-  deliverExportFile(wbOut, filename);
+  const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
 // Import — same format as export
@@ -11233,7 +11289,7 @@ async function exportELTExcel(project, allResults, meta) {
   });
   merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
   [5,14,16,10,16,15,16,11,9,9,10,9,9,8,20,11].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-  const setup = (sheet,landscape,titleRow)=>{ sheet.pageSetup = {paperSize:9,orientation:landscape?"landscape":"portrait",fitToPage:true,fitToWidth:1,fitToHeight:0,margins:{left:0.25,right:0.25,top:0.5,bottom:0.6,header:0.3,footer:0.3},printTitlesRow:`${titleRow}:${titleRow}`}; sheet.headerFooter = {oddFooter:"&L&A&RPage &P of &N"}; };
+  const setup = xjPageSetup;
   setup(ws,true,5);
 
   // ── Defects sheet: FAIL fittings only, ALWAYS present (headings even with zero fails), keyed to the register by "#" ──

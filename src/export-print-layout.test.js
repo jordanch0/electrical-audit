@@ -51,6 +51,8 @@ const MODULES = [
   ['Thermo', () => exportThermoExcel(thermoProject, thermoResults, meta), 'Thermographic Test', 2],   // FAIL + MONITOR
   ['IRT', () => exportIRTExcel(irtProject, irtResults, meta), 'Register', 1],
 ];
+// Modules already converted to ExcelJS (native page setup + real wrapping headings); the rest are SheetJS + xlPrintify until their stage
+const NATIVE = new Set(['IEL']);
 const DEFECT_HEADS = ['Defect ID', 'Rectified / Scheduled', 'Date Rectified / Scheduled', 'Responsibility', 'Priority'];
 
 describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page setup', (name, run, mainSheet, failCount) => {
@@ -62,12 +64,12 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
       expect(x, names[i]).toContain('<pageSetUpPr fitToPage="1"/>');
       expect(x, names[i]).toMatch(/<pageSetup paperSize="9" orientation="(landscape|portrait)" fitToWidth="1" fitToHeight="0"\/>/);
       expect(x, names[i]).toContain('<pageMargins left="0.25" right="0.25"');
-      expect(x, names[i]).toContain('<printOptions gridLines="1"/>');
+      if (!NATIVE.has(name)) expect(x, names[i]).toContain('<printOptions gridLines="1"/>');   // ExcelJS sheets have real borders instead
       expect(x, names[i]).toContain('Page &amp;P of &amp;N');
       expect((x.match(/<pageSetup /g) || []).length).toBe(1);                       // never duplicated
       if (names[i] !== 'Summary') {
         expect(x, names[i]).toContain('orientation="landscape"');
-        expect(wbXml, names[i]).toMatch(new RegExp(`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">'${names[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}'!\\$5:\\$5</definedName>`));
+        expect(wbXml, names[i]).toMatch(new RegExp(`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">(?:'|&apos;)${names[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:'|&apos;)!\\$5:\\$5</definedName>`));
       }
     }
   });
@@ -93,8 +95,13 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
     expect(g[4].some(h => /Date|Next Test/.test(h))).toBe(true);                     // compliance dates stay in the main table
   });
 
-  it('no heading is cut off: SheetJS cannot wrap a heading, so every heading fits its column', async () => {
+  it('no heading is cut off: SheetJS cannot wrap a heading, so every heading fits its column (ExcelJS sheets wrap instead)', async () => {
     await run(); const zip = await readZip(); const wb = readWb();
+    if (NATIVE.has(name)) {
+      const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64'));
+      ej.worksheets.forEach(ws => ws.getRow(5).eachCell(cell => expect(cell.alignment, ws.name + ' ' + cell.value).toMatchObject({ wrapText: true })));
+      return;
+    }
     for (let i = 0; i < wb.SheetNames.length; i++) {
       if (wb.SheetNames[i] === 'Summary') continue;
       const xml = await zip.file(`xl/worksheets/sheet${i + 1}.xml`).async('string'); const w = widthsOf(xml); const head = grid(wb, wb.SheetNames[i])[4];
