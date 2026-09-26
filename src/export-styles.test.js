@@ -114,6 +114,17 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
     expect(checked).toBeGreaterThan(0);
   });
 
+  it('the Pass / Fail column is wide enough for its longest value ("UNTESTED" / "Untested" = 8 characters, "MONITOR") on ONE line, on every sheet that has one', async () => {
+    await run(); const wb = await load(); let sheets = 0;
+    for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
+      const col = ws.getRow(5).values.indexOf('Pass / Fail'); if (col < 1) continue; sheets++;
+      let longest = 8;                                                                            // never below "UNTESTED", even if a dataset has none
+      for (let r = 6; r < ws.rowCount + 1; r++) { const v = ws.getCell(r, col).value; if (v != null) longest = Math.max(longest, String(v).length); }
+      expect(ws.getColumn(col).width, `${ws.name} Pass / Fail`).toBeGreaterThanOrEqual(Math.ceil(longest * 1.3));   // +30% for other apps' font metrics (and bold caps)
+    }
+    expect(sheets).toBeGreaterThan(0);
+  });
+
   it('page setup is NATIVE in the file: A4, landscape, fit to 1 page wide, heading row repeated, footer', async () => {
     await run(); const wb = await load();
     for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {

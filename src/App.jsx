@@ -132,10 +132,13 @@ function xjSheet(wb, name, o) {
   (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
   // A date is written as "dd/mm/yyyy" TEXT in a wrapping cell, and Excel / Sheets break it at a "/" if the column is even slightly tight (their
   // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
-  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = /^(Date|Test Date|Next Test)/.test(o.headers[i]) ? Math.max(w, XJ_DATE_W) : w; });
+  // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
+  // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
+  o.widths.forEach((w, i) => { const h = o.headers[i]; ws.getColumn(i + 1).width = /^(Date|Test Date|Next Test)/.test(h) ? Math.max(w, XJ_DATE_W) : /^Pass \/ Fail$/.test(h) ? Math.max(w, XJ_RESULT_W) : w; });
   xjPageSetup(ws, o.landscape !== false, 5);
   return ws;
 }
+const XJ_RESULT_W = 11;  // fits "UNTESTED" / "Untested" (8 characters) and "MONITOR" on ONE line, with a margin
 const XJ_DATE_W = 13;   // fits "21/09/2026" (10 characters) on ONE line with a margin for Excel / Google Sheets metrics
 const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
 // Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
