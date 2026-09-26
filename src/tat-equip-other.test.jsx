@@ -61,66 +61,58 @@ describe('Dropdowns tab', () => {
   });
 });
 
-describe('Manage: the item edit form', () => {
-  // the edit pencil is the first of the two buttons in an item row; the FIRST 'Equipment type' select is then the edit form's (the add-item form has the second)
+describe('Manage: the item edit form (the styled dropdown: listed types + Other + typed text)', () => {
+  // the edit pencil is the first of the two buttons in an item row; the FIRST 'Equipment type' control is then the edit form's (the add-item form has the second)
   async function edit(user, name) {
     let row = await screen.findByText(name, { selector: 'span' }); while (row && within(row).queryAllByRole('button').length < 2) row = row.parentElement;
     await user.click(within(row).getAllByRole('button')[0]);
-    return (await screen.findAllByRole('combobox', { name: 'Equipment type' }))[0];
+    return (await screen.findAllByRole('button', { name: 'Equipment type' }))[0];
   }
-  async function openEdit(user, name) {
-    await openTab(user, 'Manage');
-    await user.click(await screen.findByText('Workshop'));
-    return edit(user, name);
-  }
+  async function openEdit(user, name) { await openTab(user, 'Manage'); await user.click(await screen.findByText('Workshop')); return edit(user, name); }
+  const listed = () => within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent);
+  const typed = () => screen.getByLabelText('Equipment type (typed)');
+  const save = user => user.click(screen.getByRole('button', { name: 'Save' }));
 
-  it('the select lists the types then "Other" LAST (never twice); a listed value has no text box', async () => {
-    const user = userEvent.setup(); const sel = await openEdit(user, 'Drill');
-    expect(options(sel)).toEqual(['— Optional', 'Power Tool', 'Extension Lead', 'RCD Portable', 'Appliance', 'Double Adaptor', 'Power Board', 'Transformer', 'Other']);
-    expect(sel).toHaveValue('Power Tool');
-    expect(screen.queryByPlaceholderText('Specify…')).not.toBeInTheDocument();
+  it('the list shows "— Optional", the types, then "Other" LAST (never twice); a listed value shows as the button text with no text box', async () => {
+    const user = userEvent.setup(); const trigger = await openEdit(user, 'Drill');
+    expect(trigger).toHaveTextContent('Power Tool'); expect(screen.queryByLabelText('Equipment type (typed)')).not.toBeInTheDocument();
+    await user.click(trigger);
+    expect(listed().slice(0, 9)).toEqual(['— Optional', 'Power Tool', 'Extension Lead', 'RCD Portable', 'Appliance', 'Double Adaptor', 'Power Board', 'Transformer', 'Other']);
+    expect(listed().filter(o => o === 'Other')).toHaveLength(1);
   });
 
-  it('a stored value that is not in the list (an import / typed text) shows as Other + that text, with no extra option', async () => {
-    const user = userEvent.setup(); const sel = await openEdit(user, 'Toaster');
-    expect(sel).toHaveValue('Other'); expect(screen.getByPlaceholderText('Specify…')).toHaveValue('Toaster');
-    expect(options(sel).filter(o => o === 'Toaster')).toHaveLength(0);
+  it('a stored value that is not in the list (an import / typed text) opens as that TEXT in the typed box, with no extra option', async () => {
+    const user = userEvent.setup(); await openEdit(user, 'Toaster');
+    expect(typed()).toHaveValue('Toaster');
+    await user.click(screen.getAllByRole('button', { name: '▾ List' })[0]);
+    await user.click(screen.getAllByRole('button', { name: 'Equipment type' })[0]); expect(listed()).not.toContain('Toaster');
   });
 
-  it('choosing Other reveals the text box; the typed text is saved as the type; blank saves "Other"', async () => {
-    const user = userEvent.setup(); const sel = await openEdit(user, 'Drill');
-    await user.selectOptions(sel, 'Other');
-    const box = await screen.findByPlaceholderText('Specify…'); expect(box).toHaveValue('');
-    await user.type(box, 'Hedge Trimmer');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+  it('"Type custom…" reveals the text box; the typed text is saved as the type; blank typed text saves "Other"', async () => {
+    const user = userEvent.setup(); const trigger = await openEdit(user, 'Drill');
+    await user.click(trigger); await user.click(screen.getByText('Type custom…', { exact: false }));
+    expect(typed()).toHaveValue(''); await user.type(typed(), 'Hedge Trimmer'); await save(user);
     await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i1).toBe('Hedge Trimmer'));
-
-    // re-open it, clear the text: blank means the literal "Other"
-    const sel2 = await openEdit2(user, 'Drill');
-    expect(sel2).toHaveValue('Other'); expect(screen.getByPlaceholderText('Specify…')).toHaveValue('Hedge Trimmer');
-    await user.clear(screen.getByPlaceholderText('Specify…'));
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await openEdit2(user, 'Drill');
+    expect(typed()).toHaveValue('Hedge Trimmer'); await user.clear(typed()); await save(user);
     await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i1).toBe('Other'));
   });
-
   const openEdit2 = (user, name) => edit(user, name);
 
-  it('an item stored as the literal "Other" shows NO empty Specify box; choosing Other again shows it; saving is unchanged', async () => {
-    const user = userEvent.setup(); const sel = await openEdit(user, 'Old thing');
-    expect(sel).toHaveValue('Other'); expect(screen.queryByPlaceholderText('Specify…')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i3).toBe('Other'));
-    const sel2 = await openEdit2(user, 'Old thing');
-    await user.selectOptions(sel2, 'Appliance'); await user.selectOptions(sel2, 'Other');
-    expect(await screen.findByPlaceholderText('Specify…')).toHaveValue('');
+  it('an item stored as the literal "Other" shows "Other" and NO empty text box; saving leaves it unchanged; "Type custom…" is how to add text', async () => {
+    const user = userEvent.setup(); const trigger = await openEdit(user, 'Old thing');
+    expect(trigger).toHaveTextContent('Other'); expect(screen.queryByLabelText('Equipment type (typed)')).not.toBeInTheDocument();
+    await save(user); await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i3).toBe('Other'));
+    const t2 = await openEdit2(user, 'Old thing'); await user.click(t2); await user.click(screen.getByText('Type custom…', { exact: false })); expect(typed()).toHaveValue('');
   });
 
-  it('switching back to a listed type drops the text and stores the listed type', async () => {
-    const user = userEvent.setup(); const sel = await openEdit(user, 'Toaster');
-    await user.selectOptions(sel, 'Appliance');
-    expect(screen.queryByPlaceholderText('Specify…')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Save' }));
+  it('switching from a custom text back to a listed type stores the listed type; "— Optional" stores blank', async () => {
+    const user = userEvent.setup(); await openEdit(user, 'Toaster');
+    await user.click(screen.getAllByRole('button', { name: '▾ List' })[0]); await user.click(screen.getAllByRole('button', { name: 'Equipment type' })[0]);
+    await user.click(within(screen.getByRole('listbox')).getByText('Appliance')); await save(user);
     await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i2).toBe('Appliance'));
+    const t2 = await openEdit2(user, 'Toaster'); await user.click(t2); await user.click(within(screen.getByRole('listbox')).getByText('— Optional')); await save(user);
+    await waitFor(() => expect(ls('tat-projects-v1')[0].areas[0].itemEquipTypes.i2).toBe(''));
   });
 });
 

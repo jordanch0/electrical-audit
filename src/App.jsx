@@ -569,7 +569,7 @@ function useCollapsible(open, close, ref) {
 // <select>. Unlike the family it takes { value, label } options (the stored value need not equal the label — TAT's frequency stores "3" and shows "3 Months — …"),
 // is CLOSED by default (only listed values), and offers a typed-text mode only when allowCustom is set. allowEmpty adds a first option that clears the value
 // (its label is the placeholder). A stored value that is not in the list still shows (as its own text) so nothing is ever hidden. Joins useCollapsible.
-function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allowCustom, boxStyle, wrapStyle, ariaLabel, stopClicks, color, colorBg, customHint }) {
+function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allowCustom, boxStyle, wrapStyle, ariaLabel, stopClicks, color, colorBg, customHint, textColor }) {
   const [open, setOpen] = React.useState(false);
   const opts = (options || []).map(o => (o !== null && typeof o === "object" ? o : { value: o, label: o }));
   const cur = opts.find(o => o.value === value);
@@ -579,13 +579,13 @@ function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allow
   const box = { ...(boxStyle || SI.modalInput) };
   if (custom) {
     return React.createElement("div", { ref: boxRef, style: { display: "flex", gap: 8, minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
-      , React.createElement("input", { style: { ...box, flex: 1, minWidth: 0 }, value: cur ? "" : (value || ""), placeholder: customHint || placeholder || "Type…", "aria-label": ariaLabel ? ariaLabel + " (typed)" : undefined, onChange: e => onChange(e.target.value) })
+      , React.createElement("input", { style: { ...box, flex: 1, minWidth: 0 }, value: cur ? "" : (value || ""), placeholder: customHint || placeholder || "Type…", "aria-label": ariaLabel ? ariaLabel + " (typed)" : undefined, onChange: e => onChange(e.target.value, { custom: true }) })
       , React.createElement("button", { type: "button", style: { padding: "8px 10px", background: "transparent", border: "1px solid #d4d4d8", borderRadius: 8, color: "#6e6a66", cursor: "pointer", fontSize: 11, flexShrink: 0 }, onClick: () => setCustom(false) }, "▾ List"));
   }
   const shown = cur ? cur.label : (value ? String(value) : (placeholder || "Select…"));
   const list = [...(allowEmpty ? [{ value: "", label: placeholder || "— None" }] : []), ...opts];
   return React.createElement("div", { ref: boxRef, style: { position: "relative", minWidth: 0, ...(wrapStyle || {}) }, onClick: stop }
-    , React.createElement("button", { type: "button", "aria-label": ariaLabel, "aria-expanded": open, style: { ...box, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left", color: value ? "#18181b" : "#52525b" }, onClick: () => setOpen(o => !o) }
+    , React.createElement("button", { type: "button", "aria-label": ariaLabel, "aria-expanded": open, style: { ...box, width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 6, cursor: "pointer", textAlign: "left", color: textColor || (value ? "#18181b" : "#52525b") }, onClick: () => setOpen(o => !o) }
       , React.createElement("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, shown)
       , React.createElement("span", { style: { color: "#52525b", fontSize: 12, flexShrink: 0 } }, open ? "▴" : "▾"))
     , open && React.createElement("div", { role: "listbox", style: { position: "absolute", zIndex: 300, minWidth: "100%", width: "max-content", maxWidth: "min(90vw, 420px)", background: "#f7f6f3", border: "1px solid #d4d4d8", borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: "auto", left: 0 } }
@@ -1946,14 +1946,8 @@ React.createElement('div', { style: {paddingLeft:8},}
         React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",cursor:"pointer",fontSize:18,lineHeight:1,padding:"2px 6px"},onClick:()=>setEditingCircuit(null)},"×")
       ),
       React.createElement('input',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%",boxSizing:"border-box"},value:editCircuitName,onChange:e=>setEditCircuitName(e.target.value),placeholder:"Circuit name"}),
-      React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:6,width:"100%"},value:editCbType,onChange:e=>setEditCbType(e.target.value)},
-        React.createElement('option',{value:""},"CB/RCD Type"),
-        (editCbType&&!cbOptions.includes(editCbType)?[editCbType,...cbOptions]:cbOptions).map(o=>React.createElement('option',{key:o,value:o},o))
-      ),
-      React.createElement('select',{style:{...S.smallInput,fontSize:13,marginBottom:8,width:"100%"},value:editAmpRating,onChange:e=>setEditAmpRating(e.target.value)},
-        React.createElement('option',{value:""},"Amp Rating"),
-        (editAmpRating&&!ampOptions.includes(editAmpRating)?[editAmpRating,...ampOptions]:ampOptions).map(o=>React.createElement('option',{key:o,value:o},o))
-      ),
+      React.createElement(StyledSelect,{options:(editCbType&&!cbOptions.includes(editCbType)?[editCbType,...cbOptions]:cbOptions),value:editCbType,onChange:setEditCbType,placeholder:"CB/RCD Type",allowEmpty:true,ariaLabel:"CB/RCD type",boxStyle:{...S.smallInput,fontSize:13},wrapStyle:{marginBottom:6}}),
+      React.createElement(StyledSelect,{options:(editAmpRating&&!ampOptions.includes(editAmpRating)?[editAmpRating,...ampOptions]:ampOptions),value:editAmpRating,onChange:setEditAmpRating,placeholder:"Amp Rating",allowEmpty:true,ariaLabel:"Amp rating",boxStyle:{...S.smallInput,fontSize:13},wrapStyle:{marginBottom:8}}),
       React.createElement('div',{style:{display:"flex",gap:8}},
         React.createElement('button',{style:{...S.smallBtn,flex:1,color:"#14532d",borderColor:"#86efac",fontSize:13,padding:"10px 0"},onClick:()=>saveCircuitMeta(area.id,pnl.id,c)},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Save"),
         React.createElement('button',{style:{...S.smallBtn,flex:1,fontSize:13,padding:"10px 0"},onClick:()=>setEditingCircuit(null)},"Cancel")
@@ -1977,13 +1971,9 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "Circuit name e.g. CB5", value: newCircuit[pnl.id]||"", onChange: e=>setNewCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addCircuit(area.id,pnl.id),})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addCircuit(area.id,pnl.id),}, "+ Add" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%",overflow:"hidden"},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: newCbType[pnl.id]!==undefined?newCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setNewCbType(x=>({...x,[pnl.id]:e.target.value})),}
-  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: newAmpRating[pnl.id]!==undefined?newAmpRating[pnl.id]:(ampOptions[0]||""), onChange: e=>setNewAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
-  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
+, React.createElement('div', { style: {display:"flex",gap:6,marginBottom:0,width:"100%"},}
+, React.createElement(StyledSelect, { options: cbOptions, value: newCbType[pnl.id]!==undefined?newCbType[pnl.id]:(cbOptions[0]||""), onChange: v=>setNewCbType(x=>({...x,[pnl.id]:v})), ariaLabel: "New circuit CB type", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:2,minWidth:0} })
+, React.createElement(StyledSelect, { options: ampOptions, value: newAmpRating[pnl.id]!==undefined?newAmpRating[pnl.id]:(ampOptions[0]||""), onChange: v=>setNewAmpRating(x=>({...x,[pnl.id]:v})), ariaLabel: "New circuit amp rating", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:1,minWidth:0} })
 )
 )
 , React.createElement('div', { style: {fontSize:10,color:"#52525b",marginBottom:4},}, "BULK ADD (comma-separated)")
@@ -1991,13 +1981,9 @@ React.createElement('div', { style: {paddingLeft:8},}
 , React.createElement('input', { style: {...S.smallInput,flex:1}, placeholder: "CB1,CB2,CB3", value: bulkCircuit[pnl.id]||"", onChange: e=>setBulkCircuit(x=>({...x,[pnl.id]:e.target.value})), onKeyDown: e=>e.key==="Enter"&&addBulk(area.id,pnl.id),})
 , React.createElement('button', { style: {background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"}, onClick: ()=>addBulk(area.id,pnl.id),}, "+ Add" )
 )
-, React.createElement('div', { style: {display:"flex",gap:6,width:"100%",overflow:"hidden"},}
-, React.createElement('select', { style: {...S.smallInput,flex:2,fontSize:12,minWidth:0}, value: bulkCbType[pnl.id]!==undefined?bulkCbType[pnl.id]:(cbOptions[0]||""), onChange: e=>setBulkCbType(x=>({...x,[pnl.id]:e.target.value})),}
-  , cbOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
-, React.createElement('select', { style: {...S.smallInput,flex:1,fontSize:12,minWidth:0}, value: bulkAmpRating[pnl.id]!==undefined?bulkAmpRating[pnl.id]:(ampOptions[0]||""), onChange: e=>setBulkAmpRating(x=>({...x,[pnl.id]:e.target.value})),}
-  , ampOptions.map(o=>React.createElement('option',{key:o,value:o},o))
-)
+, React.createElement('div', { style: {display:"flex",gap:6,width:"100%"},}
+, React.createElement(StyledSelect, { options: cbOptions, value: bulkCbType[pnl.id]!==undefined?bulkCbType[pnl.id]:(cbOptions[0]||""), onChange: v=>setBulkCbType(x=>({...x,[pnl.id]:v})), ariaLabel: "Bulk CB type", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:2,minWidth:0} })
+, React.createElement(StyledSelect, { options: ampOptions, value: bulkAmpRating[pnl.id]!==undefined?bulkAmpRating[pnl.id]:(ampOptions[0]||""), onChange: v=>setBulkAmpRating(x=>({...x,[pnl.id]:v})), ariaLabel: "Bulk amp rating", boxStyle: {...S.smallInput,fontSize:12}, wrapStyle: {flex:1,minWidth:0} })
 )
 )
 )
@@ -5289,18 +5275,25 @@ function TATReportView({project,results,meta,onBack}){
 // so nothing is lost and no duplicate "extra" option appears in the dropdown.
 // The free-text box is shown only when there is something to edit: an unlisted custom type (its text), or right after the user CHOSE Other to type one. An item whose
 // stored type is just the literal "Other" (nothing to specify) shows the select alone — the stored value is identical either way, only the box's visibility differs.
+// The appliance-name text box with a ▾ list of names (type to filter, or pick). Its list is one of the app's expandables: it joins useCollapsible (one at a time,
+// a click outside collapses it) instead of the old blur + 150 ms timeout.
+function TATNameCombo({value,onChange,onEnter,names}){
+  const[open,setOpen]=React.useState(false); const ref=React.useRef(null); useCollapsible(open,()=>setOpen(false),ref);
+  const q=(value||"").toLowerCase(); const list=(names||[]).filter(n=>!value||n.toLowerCase().includes(q));
+  return React.createElement('div',{ref,style:{position:"relative"}}
+    ,React.createElement('div',{style:{display:"flex",gap:0}}
+      ,React.createElement('input',{style:{...ST.smallInput,flex:1,borderRadius:"8px 0 0 8px",borderRight:"none"},placeholder:'Type or pick ▾',value:value||"",
+        onChange:e=>{onChange(e.target.value);setOpen(true);},onFocus:()=>setOpen(true),
+        onKeyDown:e=>{if(e.key==="Enter")onEnter();else if(e.key==="Escape"||e.key==="Tab")setOpen(false);}})
+      ,React.createElement('button',{type:"button","aria-label":"Show appliance names",style:{padding:"8px 10px",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:"0 8px 8px 0",color:"#6e6a66",cursor:"pointer",fontSize:12,flexShrink:0},onClick:()=>setOpen(o=>!o)},"▾"))
+    ,open&&React.createElement('div',{style:{position:"absolute",top:"100%",left:0,right:0,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,borderRadius:8,zIndex:50,maxHeight:180,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,0.25)",marginTop:2}}
+      ,list.map(n=>React.createElement('button',{key:n,type:"button",style:{display:"block",width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid #e4e4e7",color:"#18181b",fontSize:13,textAlign:"left",cursor:"pointer"},onClick:()=>{onChange(n);setOpen(false);}},n))
+      ,list.length===0&&React.createElement('div',{style:{padding:"10px 14px",color:"#52525b",fontSize:12}},"No matches — type to add custom")));
+}
 function TATEquipSelect({options,value,onChange}){
   const v=value||""; const opts=(options||[]).filter(o=>String(o).trim().toLowerCase()!=="other");
-  const isOther=v!==""&&!opts.includes(v);
-  const [specifying,setSpecifying]=React.useState(isOther&&v!=="Other");
-  return React.createElement('div',null
-    ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:isOther?"Other":v,"aria-label":"Equipment type",onChange:e=>{const x=e.target.value;setSpecifying(x==="Other");onChange(x);}}
-      ,React.createElement('option',{value:""},"— Optional")
-      ,opts.map(t=>React.createElement('option',{key:t,value:t},t))
-      ,React.createElement('option',{value:"Other"},"Other")
-    )
-    ,isOther&&specifying&&React.createElement('input',{style:{...ST.smallInput,width:"100%",marginTop:4},type:"text",value:v==="Other"?"":v,placeholder:"Specify…","aria-label":"Equipment type (other)",onChange:e=>onChange(e.target.value.trim()===""?"Other":e.target.value)})
-  );
+  // a blank TYPED text is the literal "Other"; choosing "— Optional" from the list is a real blank
+  return React.createElement(StyledSelect,{options:[...opts,"Other"],value:v,placeholder:"— Optional",allowEmpty:true,allowCustom:true,customHint:"Specify…",ariaLabel:"Equipment type",boxStyle:ST.smallInput,onChange:(x,meta)=>onChange(meta&&meta.custom&&String(x).trim()===""?"Other":x)});
 }
 function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaults,applianceNames,onBack}){
   const[expandedArea,setExpandedArea]=React.useState(null);
@@ -5309,7 +5302,6 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[newItemTag,setNewItemTag]=React.useState({});
   const[newItemEquip,setNewItemEquip]=React.useState({});
   const[newItemFreq,setNewItemFreq]=React.useState({});
-  const[showNameDrop,setShowNameDrop]=React.useState({});
   const[bulkItems,setBulkItems]=React.useState({});
   const[editingProject,setEditingProject]=React.useState(false);
   const[projName,setProjName]=React.useState(project.name);
@@ -5475,14 +5467,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
             )
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:5,flexShrink:0}}
               ,React.createElement('span',{style:{fontSize:10,color:"#52525b",whiteSpace:"nowrap"}},"Default:")
-              ,React.createElement('select',{
-                style:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,color:TAT_COLOR,fontSize:12,padding:"4px 6px",cursor:"pointer"},
-                value:tatDefaultFreq(freqOptions,tatDefaults,area),
-                onClick:e=>e.stopPropagation(),
-                onChange:e=>{e.stopPropagation();setAreaDefaultFreq(area.id,e.target.value);}
-              }
-                ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"))
-              )
+              ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.value==="12"?"Annual":f.value==="1"?"1 Month":f.value+" Months"})),value:tatDefaultFreq(freqOptions,tatDefaults,area),onChange:v=>setAreaDefaultFreq(area.id,v),ariaLabel:"Area default frequency",stopClicks:true,textColor:TAT_COLOR,color:TAT_COLOR,colorBg:"#dbeafe",boxStyle:{background:"#e8e6e2",border:"1px solid #d4d4d8",borderRadius:6,fontSize:12,padding:"4px 6px"},wrapStyle:{flexShrink:0}})
             )
             ,React.createElement('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,color:"#1d4ed8",cursor:"pointer",flexShrink:0},onClick:()=>startEditArea(area)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"#1d4ed8",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})))
             ,React.createElement(DeleteButton, { onDelete: ()=>delArea(area.id), label: "Delete area?" })
@@ -5522,9 +5507,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
                     )
                     ,React.createElement('div',{style:{flex:1}}
                       ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
-                      ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:editFreq,onChange:e=>setEditFreq(e.target.value)}
-                        ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
-                      )
+                      ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.label})),value:editFreq,onChange:setEditFreq,ariaLabel:"Test frequency",boxStyle:ST.smallInput})
                     )
                   )
                   ,React.createElement('div',{style:{display:"flex",gap:8}}
@@ -5554,29 +5537,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               )
               ,React.createElement('div',{style:{flex:2,position:"relative"}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"APPLIANCE NAME *")
-                ,React.createElement('div',{style:{display:"flex",gap:0}}
-                  ,React.createElement('input',{
-                    style:{...ST.smallInput,flex:1,borderRadius:"8px 0 0 8px",borderRight:"none"},
-                    placeholder:'Type or pick ▾',
-                    value:newItemName[area.id]||"",
-                    onChange:e=>{setNewItemName(x=>({...x,[area.id]:e.target.value}));setShowNameDrop(x=>({...x,[area.id]:true}));},
-                    onFocus:()=>setShowNameDrop(x=>({...x,[area.id]:true})),
-                    onBlur:()=>setTimeout(()=>setShowNameDrop(x=>({...x,[area.id]:false})),150),
-                    onKeyDown:e=>e.key==="Enter"&&addItem(area.id)
-                  })
-                  ,React.createElement('button',{
-                    style:{padding:"8px 10px",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:"0 8px 8px 0",color:"#6e6a66",cursor:"pointer",fontSize:12,flexShrink:0},
-                    onMouseDown:e=>{e.preventDefault();setShowNameDrop(x=>({...x,[area.id]:!x[area.id]}));}
-                  },"▾")
-                )
-                ,showNameDrop[area.id]&&React.createElement('div',{style:{position:"absolute",top:"100%",left:0,right:0,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,borderRadius:8,zIndex:50,maxHeight:180,overflowY:"auto",boxShadow:"0 4px 20px rgba(0,0,0,0.6)",marginTop:2}}
-                  ,(applianceNames||TAT_DEFAULT_NAMES)
-                    .filter(n=>!newItemName[area.id]||n.toLowerCase().includes((newItemName[area.id]||"").toLowerCase()))
-                    .map(n=>React.createElement('button',{key:n,style:{display:"block",width:"100%",padding:"10px 14px",background:"transparent",border:"none",borderBottom:"1px solid #e4e4e7",color:"#18181b",fontSize:13,textAlign:"left",cursor:"pointer"},onMouseDown:e=>{e.preventDefault();setNewItemName(x=>({...x,[area.id]:n}));setShowNameDrop(x=>({...x,[area.id]:false}));}}
-                      ,n))
-                  ,(applianceNames||TAT_DEFAULT_NAMES).filter(n=>!newItemName[area.id]||n.toLowerCase().includes((newItemName[area.id]||"").toLowerCase())).length===0&&
-                    React.createElement('div',{style:{padding:"10px 14px",color:"#52525b",fontSize:12}},"No matches — type to add custom")
-                )
+                ,React.createElement(TATNameCombo,{value:newItemName[area.id]||"",onChange:v=>setNewItemName(x=>({...x,[area.id]:v})),onEnter:()=>addItem(area.id),names:applianceNames||TAT_DEFAULT_NAMES})
               )
             )
             ,React.createElement('div',{style:{display:"flex",gap:6,marginBottom:8}}
@@ -5586,9 +5547,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
               )
               ,React.createElement('div',{style:{flex:1}}
                 ,React.createElement('div',{style:{fontSize:9,color:"#52525b",marginBottom:3}},"TEST FREQUENCY")
-                ,React.createElement('select',{style:{...ST.smallInput,width:"100%"},value:newItemFreq[area.id]||tatDefaultFreq(freqOptions,tatDefaults,area),onChange:e=>setNewItemFreq(x=>({...x,[area.id]:e.target.value}))}
-                  ,freqOpts.map(f=>React.createElement('option',{key:f.value,value:f.value},f.label))
-                )
+                ,React.createElement(StyledSelect,{options:freqOpts.map(f=>({value:f.value,label:f.label})),value:newItemFreq[area.id]||tatDefaultFreq(freqOptions,tatDefaults,area),onChange:v=>setNewItemFreq(x=>({...x,[area.id]:v})),ariaLabel:"New item test frequency",boxStyle:ST.smallInput})
               )
             )
             ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer",width:"100%"},onClick:()=>addItem(area.id)},"+ Add")
