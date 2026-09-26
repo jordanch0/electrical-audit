@@ -315,9 +315,11 @@ describe('duplicate, delete, area removal', () => {
     await user.click(within(actions).getByRole('button', { name: 'Keep' }));
     expect(within(actions).getByRole('button', { name: 'Duplicate' })).toBeInTheDocument(); expect(within(actions).getByRole('button', { name: 'Move' })).toBeInTheDocument(); expect(within(actions).queryByText('Delete defect?')).not.toBeInTheDocument();
     await user.click(within(actions).getByRole('button', { name: 'Duplicate' }));                   // a picker opens above; the bin steps aside
-    expect(screen.getByTestId('gsd-area-picker')).toBeInTheDocument(); expect(screen.queryByTestId('gsd-delete')).not.toBeInTheDocument(); expect(within(actions).getByRole('button', { name: 'Move' })).toBeInTheDocument();
-    await user.click(within(screen.getByTestId('gsd-area-picker')).getByRole('button', { name: 'Cancel' })); expect(screen.getByTestId('gsd-delete')).toBeInTheDocument();
-    await user.click(within(actions).getByRole('button', { name: 'Move' })); expect(screen.queryByTestId('gsd-delete')).not.toBeInTheDocument();
+    expect(screen.getByTestId('gsd-area-picker')).toBeInTheDocument(); expect(screen.getByTestId('gsd-delete')).toBeInTheDocument(); expect(within(screen.getByTestId('gsd-delete')).getAllByRole('button')).toHaveLength(1); expect(within(actions).getByRole('button', { name: 'Move' })).toBeInTheDocument();   // the bin NEVER hides
+    await user.click(within(screen.getByTestId('gsd-area-picker')).getByRole('button', { name: 'Cancel' }));
+    await user.click(within(actions).getByRole('button', { name: 'Move' })); expect(screen.getByTestId('gsd-delete')).toBeInTheDocument();
+    await user.click(within(screen.getByTestId('gsd-delete')).getByRole('button'));                   // Delete opens while a picker is open: the picker closes, Duplicate / Move step aside
+    expect(screen.queryByTestId('gsd-area-picker')).not.toBeInTheDocument(); expect(within(actions).getByText('Delete defect?')).toBeInTheDocument(); expect(within(actions).queryByRole('button', { name: 'Move' })).not.toBeInTheDocument();
   });
   it('expanding Duplicate, Move or Delete scrolls the expanded block into view', async () => {
     const calls = []; const orig = Element.prototype.scrollIntoView; Element.prototype.scrollIntoView = function (o) { calls.push([this.getAttribute('data-testid'), o]); };

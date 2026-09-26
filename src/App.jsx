@@ -14769,13 +14769,13 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     , gsdEl("div", { ref: bottomRef, "data-testid": "gsd-bottom", style: { paddingBottom: 12 } }
     , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
     , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
-    // ONE row: [Duplicate] [Move] ......... [bin]. Only ONE thing is expanded at a time, so whichever is open gets the room: an open Delete confirm
-    // (~240 px) takes the whole row and Duplicate / Move step aside; an open picker (above this row) hides the bin.
+    // ONE row: [Duplicate] [Move] ......... [bin]. ONE-directional rule: an open Delete confirm (~240 px) takes the whole row and Duplicate / Move step aside
+    // (and any open picker closes); the bin itself NEVER hides — an open picker (above this row) leaves the row exactly as it is.
     , gsdEl("div", { "data-testid": "gsd-actions", style: { display: "flex", gap: 8, alignItems: "center", minWidth: 0 } }
       , !deleting && gsdEl("div", { style: { display: "flex", gap: 8, flexShrink: 0 } }
         , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "duplicate" ? null : "duplicate") }, "Duplicate")
         , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "move" ? null : "move") }, "Move"))
-      , !picker && gsdEl("div", { "data-testid": "gsd-delete", style: { marginLeft: "auto", minWidth: 0 } }
+      , gsdEl("div", { "data-testid": "gsd-delete", style: { marginLeft: "auto", minWidth: 0 } }
         , gsdEl(DeleteButton, { onDelete, label: "Delete defect?", onOpenChange: open => { setDeleting(open); if (open) setPicker(null); } })))));
 }
 
