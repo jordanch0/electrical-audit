@@ -6020,7 +6020,6 @@ function siteMonitor(results, project) {
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
 async function exportThermoExcel(project, results, meta) {
-  const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded - please reload the page"); return; }
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
@@ -6049,21 +6048,19 @@ async function exportThermoExcel(project, results, meta) {
       });
     });
   });
-  const sheets = xlSplitSheets({
+  const wb = new ExcelJS.Workbook();
+  xjSplit(wb, {
     title: `${sName} — Thermographic Test`, defectTitle: `${sName} — Thermographic Test — Defects`, coLine,
     meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${fmtDate(nextDue)}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
-    headers: ["Location", "Board", "Circuit", "Date", "Photo No.", "Temp (°C)", "Pass / Fail", "Notes / Recommendations"],
-    widths: [16, 18, 18, 11, 11, 11, 10, 26],
+    mainSheet: "Thermographic Test",
+    headers: ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Notes / Recommendations"],
+    widths: [16, 18, 18, 11, 9, 11, 9, 22],
     idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, sheets.main, "Thermographic Test");
-  XLSX.utils.book_append_sheet(wb, sheets.defects, "Defects");
-  const filename = `Thermo_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`;
-  const wbOut = await xlPrintify(XLSX.write(wb, { bookType: "xlsx", type: "base64" }), [{ titleRow: 5 }, { titleRow: 5 }]);
-  deliverExportFile(wbOut, filename);
+  const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
 // ─────────────────────────────────────────────────────────────────────────

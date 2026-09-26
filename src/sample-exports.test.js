@@ -47,7 +47,7 @@ it('TAT', async () => {
 it('Thermo', async () => {
   const ids = range(N).map(i => 'c' + i);
   const project = { id: 'p', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Wash Plant', boards: [{ id: 'b', name: 'MSB 1', circuits: ids, circuitNames: Object.fromEntries(ids.map((x, i) => [x, 'Circuit ' + (i + 1)])) }] }] };
-  const results = { a: { b: Object.fromEntries(ids.map((x, i) => [x, [{ id: 'ph' + i, flirFile: String(1000 + i), temp: '45', result: isFail(i) ? 'FAIL' : 'PASS', notes: i % 5 === 0 ? 'ok' : '', rectifiedDate: '', ...(isFail(i) ? fd(i) : {}) }]])) } };
+  const results = { a: { b: Object.fromEntries(ids.map((x, i) => [x, [{ id: 'ph' + i, flirFile: String(1000 + i), temp: '45', result: isFail(i) ? 'FAIL' : i % 11 === 6 ? 'MONITOR' : 'PASS', notes: i % 5 === 0 ? 'ok' : '', rectifiedDate: '', ...(isFail(i) || i % 11 === 6 ? fd(i) : {}) }]])) } };
   await exportThermoExcel(project, results, meta); save('thermo');
 });
 

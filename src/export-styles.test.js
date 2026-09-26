@@ -3,7 +3,7 @@
 // page setup. Real generated files are loaded back with ExcelJS. Modules are added here as each is converted.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportIELExcel } from './App.jsx';
+import { exportIELExcel, exportThermoExcel } from './App.jsx';
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
@@ -17,8 +17,13 @@ const failD = (i, priority) => ({ defectId: 'D-' + i, rectified: 'Scheduled for 
 // [module, run(), main sheet, expected result-column heading, [expected Pass/Fail text per data row]]
 const ielProject = { id: 'p', name: 'Site I', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'p1', name: 'estops', circuits: ['a', 'b', 'c', 'd', 'e', 'f', 'g'], machineNames: { a: 'M1', b: 'M2', c: 'M3', d: 'M4', e: 'M5', f: 'M6', g: 'M7' } }] }] };
 const ielResults = { a: { estops: { a: { status: 'fail', ...failD(1, 'U') }, b: { status: 'pass' }, c: { status: 'na' }, d: { status: 'untested' }, e: { status: 'fail', ...failD(2, 'H') }, f: { status: 'fail', ...failD(3, 'M') }, g: { status: 'fail', ...failD(4, 'L') } } } };
+// Thermo: PASS / FAIL / MONITOR (its own amber state) / untested (no photo -> blank result)
+const thermoProject = { id: 'p', name: 'Site H', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a', name: 'Plant', boards: [{ id: 'b', name: 'MSB', circuits: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7'], circuitNames: { c1: 'One', c2: 'Two', c3: 'Three', c4: 'Four', c5: 'Five', c6: 'Six', c7: 'Seven' } }] }] };
+const ph = (id, result, extra) => ({ id, flirFile: '10' + id, temp: '40', result, notes: '', rectifiedDate: '', ...extra });
+const thermoResults = { a: { b: { c1: [ph('1', 'FAIL', failD(1, 'U'))], c2: [ph('2', 'PASS')], c3: [ph('3', 'MONITOR', failD(3, 'M'))], c5: [ph('5', 'FAIL', failD(5, 'H'))], c6: [ph('6', 'FAIL', failD(6, 'L'))], c7: [ph('7', 'PASS')] } } };
 const MODULES = [
   ['IEL', () => exportIELExcel(ielProject, ielResults, meta), 'Isolators EStops Lanyards', ['Fail', 'Pass', 'N/A', 'Untested', 'Fail', 'Fail', 'Fail']],
+  ['Thermo', () => exportThermoExcel(thermoProject, thermoResults, meta), 'Thermographic Test', ['FAIL', 'PASS', 'MONITOR', '', 'FAIL', 'FAIL', 'PASS']],
 ];
 
 describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, expectedResults) => {
@@ -39,13 +44,15 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
     await run(); const wb = await load(); const ws = wb.getWorksheet(mainSheet);
     const col = ws.getRow(5).values.indexOf('Pass / Fail');
     expectedResults.forEach((txt, i) => {
-      const cell = ws.getCell(6 + i, col); expect(String(cell.value), 'row ' + (6 + i)).toBe(txt);
-      const expected = { Pass: PALETTE.pass, Fail: PALETTE.fail, 'N/A': PALETTE.na }[txt];
-      if (expected) { expect(argb(cell), txt).toBe(expected); if (txt !== 'N/A' || true) expect(cell.font.bold, txt).toBe(true); }
-      else expect([PALETTE.white, PALETTE.zebra]).toContain(argb(cell));                                // Untested: zebra, not coloured
+      const cell = ws.getCell(6 + i, col); expect(String(cell.value == null ? '' : cell.value), 'row ' + (6 + i)).toBe(txt);
+      const expected = { PASS: PALETTE.pass, FAIL: PALETTE.fail, 'N/A': PALETTE.na, MONITOR: PALETTE.monitor }[txt.toUpperCase()];
+      if (expected) { expect(argb(cell), txt).toBe(expected); expect(cell.font.bold, txt).toBe(true); }
+      else expect([PALETTE.white, PALETTE.zebra]).toContain(argb(cell));                                // Untested / blank: zebra, not coloured
     });
-    expect(ws.getCell(6, col).font.color.argb).toBe('FF9C0006');                                       // Fail text is dark red
-    expect(ws.getCell(7, col).font.color.argb).toBe('FF375623');                                       // Pass text is dark green
+    const first = word => { const i = expectedResults.findIndex(t => t.toUpperCase() === word); return ws.getCell(6 + i, col); };
+    expect(first('FAIL').font.color.argb).toBe('FF9C0006');                                            // Fail text is dark red
+    expect(first('PASS').font.color.argb).toBe('FF375623');                                            // Pass text is dark green
+    if (expectedResults.includes('MONITOR')) expect(first('MONITOR').font.color.argb).toBe('FF7F6000');   // MONITOR: dark amber text on amber
   });
 
   it('other cells alternate white / light-grey zebra rows', async () => {
