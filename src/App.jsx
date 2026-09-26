@@ -9848,6 +9848,7 @@ async function exportSWBExcel(project, allResults, meta) {
     });
   });
   [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
+  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
 
   // ── One sheet per board ──
   const used = new Set();
@@ -9901,6 +9902,7 @@ async function exportSWBExcel(project, allResults, meta) {
       }
     });
     [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+    xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
   });
 
   const buf = await wb.xlsx.writeBuffer();
@@ -14138,6 +14140,7 @@ async function exportWelderExcel(project, allResults, meta) {
     });
   });
   [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
 
   // ── One sheet per welder ──
   const used = new Set();
@@ -14192,6 +14195,7 @@ async function exportWelderExcel(project, allResults, meta) {
       }
     });
     [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
+    xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
   });
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
