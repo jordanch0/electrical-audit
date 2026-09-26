@@ -14821,7 +14821,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
               , gsdEl("span", { style: { fontSize: 11, color: "#92400e" } }, nw(photos, "photo"))))
           , gsdEl("span", { style: { ...SS.arrow, color: open ? GSD_COLOR : "#52525b" } }, open ? "▾" : "›"))
         , open && gsdEl("div", { style: { padding: "0 16px 14px", borderTop: "1px solid #e4e4e7" } }
-          , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" } }
+          , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" } }
             , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b", fontWeight: 700 }, onClick: () => setViewSnap(snap) }, "View Results")
             , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b" }, onClick: () => onExportSnap(snap) }, "Export")
             , gsdEl(ContinueConfirmBtn, { onConfirm: () => onContinueFromSnap(snap), styleObj: SS.smallBtn, color: GSD_COLOR })

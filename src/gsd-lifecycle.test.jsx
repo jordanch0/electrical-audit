@@ -134,6 +134,20 @@ describe('GSD History matches ELT: accordion cards, View Results / Export / Dele
     await user.click(within(b).getByRole('button', { expanded: false })); expect(within(b).getByRole('button', { name: 'Export' })).toBeInTheDocument(); expect(within(a).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     await user.click(within(b).getByRole('button', { expanded: true })); expect(within(b).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();      // tap again to collapse
   });
+  it('the action row is styled EXACTLY like the ELT History card (same row style and same per-button style), so all four buttons stretch to one height', async () => {
+    const rowStyle = el => { const s = el.style; return { display: s.display, gap: s.gap, marginTop: s.marginTop, flexWrap: s.flexWrap, alignItems: s.alignItems }; };
+    const btnStyle = b => { const s = b.style; return { padding: s.padding, fontSize: s.fontSize, flex: s.flex, background: s.background, color: s.color, borderRadius: s.borderRadius, fontWeight: s.fontWeight }; };
+    const actionRow = card => { const view = within(card).getByRole('button', { name: 'View Results' }); return view.parentElement; };
+    await seedHistory(); const user = userEvent.setup(); await open(user, 'History');
+    await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false }));
+    const gRow = actionRow(screen.getByTestId('gsd-history-card')); const g = { row: rowStyle(gRow), view: btnStyle(within(gRow).getByRole('button', { name: 'View Results' })), exp: btnStyle(within(gRow).getByRole('button', { name: 'Export' })), cont: btnStyle(within(gRow).getByRole('button', { name: /Continue/ })) };
+    cleanup(); localStorage.clear();
+    localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site E', assets: [] }] }]));
+    localStorage.setItem('elt-history-v2', JSON.stringify([{ id: 'h1', projectId: 'p1', projectName: 'Site E', testDate: '2026-09-21', auditor: 'Jane', archivedAt: '2026-09-22T10:00:00.000Z', results: {}, areas: [{ id: 'ar', name: 'Site E', assets: [] }], meta: {} }]));
+    render(<AppRoot />); await user.click(screen.getByText('EMERGENCY LIGHTING')); await user.click(await screen.findByText('Site E', { selector: 'div' })); await user.click(screen.getByRole('button', { name: 'History' })); await user.click(await screen.findByText('Emergency Lighting Audit'));
+    const eRow = actionRow(document.body); const e = { row: rowStyle(eRow), view: btnStyle(within(eRow).getByRole('button', { name: 'View Results' })), exp: btnStyle(within(eRow).getByRole('button', { name: 'Export' })), cont: btnStyle(within(eRow).getByRole('button', { name: /Continue/ })) };
+    expect(g.row).toEqual(e.row); expect(g.row.alignItems).toBe(''); expect(g.view).toEqual(e.view); expect(g.exp).toEqual(e.exp); expect(g.cont).toEqual(e.cont);
+  });
   it('View Results: header, Read-only, summary pills, area groups, and a THUMBNAIL per row (a placeholder when the defect had no photo); Back returns to the list', async () => {
     await seedHistory(); const user = userEvent.setup(); await open(user, 'History');
     await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false })); await user.click(screen.getByRole('button', { name: 'View Results' }));
