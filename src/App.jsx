@@ -1200,8 +1200,9 @@ function ContinueConfirmBtn({onConfirm,styleObj,color}){
   const accentBorder = color ? color+"55" : "#d8b4fe";
   const accentText  = color ? (color==="7c3aed"?"#6b21a8":"#6b21a8") : "#6b21a8";
   const[confirming,setConfirming]=React.useState(false);
+  const boxRef=React.useRef(null); useCollapsible(confirming,()=>setConfirming(false),boxRef);
   if(confirming){
-    return React.createElement('div',{style:{width:"100%",background:accentLight,border:`1px solid ${accentBorder}`,borderRadius:8,padding:"10px 12px",marginTop:4}}
+    return React.createElement('div',{ref:boxRef,style:{width:"100%",background:accentLight,border:`1px solid ${accentBorder}`,borderRadius:8,padding:"10px 12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#6b21a8",fontWeight:600,marginBottom:8}},"This will replace your current audit with the archived snapshot. Continue?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
         ,React.createElement('button',{style:{flex:1,padding:"9px",background:accentColor,color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onConfirm();setConfirming(false);}},"▶ Yes, Continue")
@@ -14739,32 +14740,58 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
     , err && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginTop: 6 } }, err));
 }
 
+const gsdHighUrgent = items => (items || []).filter(i => i.priority === "H" || i.priority === "U").length;
+const gsdPhotoCount = items => (items || []).reduce((n, i) => n + (i.photos || []).length, 0);
+function GSDSummaryPills({ defects, urgent, photos }) {
+  return gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
+    , [["Defects", defects, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Photos", photos, "#92400e"]].map(([l, v, col]) =>
+      gsdEl("div", { key: l, style: { flex: 1, minWidth: 90, background: "#f7f6f3", border: `1px solid ${col}33`, borderRadius: 8, padding: "6px 12px", textAlign: "center" } }
+        , gsdEl("div", { style: { fontSize: 18, fontWeight: 800, color: col } }, v), gsdEl("div", { style: { fontSize: 10, color: "#6e6a66" } }, l))));
+}
 function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onExportSnap }) {
   const SS = swbStyles();
-  const stats = snap => ({ defects: (snap.items || []).length, photos: (snap.items || []).reduce((n, i) => n + (i.photos || []).length, 0) });
+  const [expanded, setExpanded] = React.useState(null);
   if (viewSnap) {
     const snap = viewSnap; const proj = { ...project, areas: snap.areas || project.areas || [] }; const sections = gsdReportSections(proj, snap.items || []);
     return gsdEl("div", { style: SS.listWrap }
       , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 10 } }
         , gsdEl("div", { style: { flex: 1 } }, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Snapshot"), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor", " · Read-only"))
         , gsdEl("button", { style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac" }, onClick: () => onExportSnap(snap) }, "Export"))
+      , gsdEl("div", { style: { marginBottom: 14 } }, gsdEl(GSDSummaryPills, { defects: (snap.items || []).length, urgent: gsdHighUrgent(snap.items), photos: gsdPhotoCount(snap.items) }))
       , sections.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No defects in this snapshot.")
       , sections.map(sec => gsdEl("div", { key: sec.area.id, "data-area": sec.area.name }, gsdEl("div", { style: AREA_HDR_STYLE }, sec.area.name)
-        , sec.entries.map(e => gsdEl("div", { key: e.item.id, style: { padding: "8px 10px", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, marginBottom: 4, fontSize: 13, color: "#3f3f46" } }, e.caption)))));
+        , sec.entries.map(e => gsdEl("div", { key: e.item.id, "data-testid": "gsd-snap-row", style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, marginBottom: 4, minWidth: 0, overflow: "hidden" } }
+          , e.item.photos && e.item.photos[0] ? gsdEl(GSDPhoto, { photo: e.item.photos[0], thumb: true, style: { width: 40, height: 40, objectFit: "cover", borderRadius: 6, flexShrink: 0, border: "1px solid #d4d4d8" } }) : gsdEl("div", { style: { width: 40, height: 40, borderRadius: 6, background: "#e4e4e7", flexShrink: 0 } })
+          , gsdEl("div", { style: { flex: 1, minWidth: 0 } }
+            , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, minWidth: 0 } }, gsdEl("span", { style: { fontSize: 11, fontWeight: 800, color: "#52525b", flexShrink: 0 } }, `#${e.n}`), gsdPriDot(e.item.priority)
+              , gsdEl("span", { style: { fontSize: 13, color: "#3f3f46", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", minWidth: 0 } }, gsdTitle(e.item)))
+            , (e.item.assetLocation || e.detail) && gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, [e.item.assetLocation, e.detail].filter(Boolean).join(" · "))))))));
   }
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("div", { style: { ...SS.listTitle, color: "#334155" } }, "Audit History")
     , history.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No archived audits yet. Use “Complete Site Defects Audit” on the Home tab.")
-    , history.map(snap => { const s = stats(snap);
-      return gsdEl("div", { key: snap.id, style: { background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 12, padding: "10px 14px", marginBottom: 8 } }
-        , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 10 } }
-          , gsdEl("button", { style: { flex: 1, minWidth: 0, background: "transparent", border: "none", textAlign: "left", cursor: "pointer", padding: 0, color: "inherit" }, onClick: () => setViewSnap(snap) }
-            , gsdEl("div", { style: { fontSize: 14, fontWeight: 700, color: "#18181b" } }, fmtDate(snap.testDate)), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, `${snap.auditor || "No auditor"} · ${nw(s.defects, "defect")} · ${nw(s.photos, "photo")}`))
-          , gsdEl("button", { style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac", flexShrink: 0 }, onClick: () => onExportSnap(snap) }, "Export")
-          , gsdEl(DeleteButton, { onDelete: () => onDelete(snap.id), compact: true })));
+    , history.map(snap => {
+      const n = (snap.items || []).length, urgent = gsdHighUrgent(snap.items), photos = gsdPhotoCount(snap.items); const open = expanded === snap.id;
+      return gsdEl("div", { key: snap.id, "data-testid": "gsd-history-card", style: { ...SS.siteCard, flexDirection: "column", padding: 0, marginBottom: 10, overflow: "hidden" } }
+        , gsdEl("button", { "aria-expanded": open, style: { display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%", background: "transparent", border: "none", cursor: "pointer", padding: "14px 16px", color: "inherit", textAlign: "left" }, onClick: () => setExpanded(open ? null : snap.id) }
+          , gsdEl("div", { style: { flex: 1 } }
+            , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 4 } }
+              , gsdEl("span", { style: { fontSize: 13, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Audit")
+              , urgent > 0 && gsdEl("span", { style: SS.failBadge }, urgent, " HIGH / URGENT"))
+            , gsdEl("div", { style: { fontSize: 12, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor")
+            , gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, "Archived ", fmtDateTime(snap.archivedAt))
+            , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 6 } }
+              , gsdEl("span", { style: { fontSize: 11, color: "#334155" } }, nw(n, "defect"))
+              , gsdEl("span", { style: { fontSize: 11, color: "#dc2626" } }, urgent, " High / Urgent")
+              , gsdEl("span", { style: { fontSize: 11, color: "#92400e" } }, nw(photos, "photo"))))
+          , gsdEl("span", { style: { ...SS.arrow, color: open ? GSD_COLOR : "#52525b" } }, open ? "▾" : "›"))
+        , open && gsdEl("div", { style: { padding: "0 16px 14px", borderTop: "1px solid #e4e4e7" } }
+          , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap", alignItems: "center" } }
+            , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b", fontWeight: 700 }, onClick: () => setViewSnap(snap) }, "View Results")
+            , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b" }, onClick: () => onExportSnap(snap) }, "Export")
+            , gsdEl(DeleteButton, { onDelete: () => onDelete(snap.id) }))));
     }));
 }
-
 
 export { StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };

@@ -45,14 +45,15 @@ describe('Complete audit, History, Reset, deletes — photos follow their owner'
     expect(ls('gsd-items-v1').s1).toEqual([]);
     expect((await idbKeys()).length).toBe(6);                                            // 3 photos x (full + thumb): the snapshot still owns them
     await user.click(screen.getByRole('button', { name: 'History' }));
-    expect(await screen.findByText(/Jane · 2 defects · 3 photos/)).toBeInTheDocument();
+    const card = await screen.findByTestId('gsd-history-card'); expect(within(card).getByText('Site Defects Audit')).toBeInTheDocument();
+    expect(within(card).getByText('2 defects')).toBeInTheDocument(); expect(within(card).getByText('3 photos')).toBeInTheDocument(); expect(within(card).getByText(/Jane/)).toBeInTheDocument(); expect(within(card).getByText(/^Archived /)).toBeInTheDocument();
   });
   it('deleting a history snapshot deletes ITS photos', async () => {
     await seedItems(); const user = userEvent.setup(); await open(user, null);
     await user.click(screen.getByRole('button', { name: 'Complete Site Defects Audit' })); await user.click(await screen.findByRole('button', { name: /Yes, Complete/ }));
     await waitFor(() => expect(ls('gsd-history-v1')).toHaveLength(1));
-    await user.click(screen.getByRole('button', { name: 'History' })); await screen.findByText(/2 defects/);
-    await user.click(bins()[bins().length - 1]); await confirmNo(user);
+    await user.click(screen.getByRole('button', { name: 'History' })); await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false }));
+    await user.click(bins()[bins().length - 1]); await screen.findByText('Delete?'); const bs = screen.getAllByRole('button'); await user.click(bs[bs.findIndex(b => b.textContent === 'Keep') - 1]);
     await waitFor(() => expect(ls('gsd-history-v1')).toEqual([])); await waitFor(async () => expect(await idbKeys()).toEqual([]));
   });
   it('Reset all results asks first (Keep leaves everything), then clears the current visit AND its photos, with no snapshot', async () => {
@@ -102,6 +103,61 @@ describe('Complete audit, History, Reset, deletes — photos follow their owner'
     expect(screen.getByText('Defect i1')).toBeInTheDocument(); expect(screen.getAllByText('Guarding · High · Site Manager').length).toBe(2);
     expect(screen.queryAllByText('Defect i1', { exact: false })).toHaveLength(1);       // the description is shown once — it is also the title, so no second line
     cleanup(); localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [] })); await open(userEvent.setup(), 'Report'); expect(await screen.findByText('✓ No defects recorded')).toBeInTheDocument();
+  });
+});
+
+// ── History: the ELT pattern ──
+const seedHistory = async (n = 1) => {
+  seedSite();
+  const items = [mk('i1', 'a1', [[300, 400]], { priority: 'H', description: 'Guard missing' }), mk('i2', 'a2', [], { priority: '', description: 'Loose cable' }), mk('i3', 'a2', [[400, 300], [300, 400]], { priority: 'U', description: 'Exposed conductors' })];
+  await seedPhotos(items);
+  const snap = id => ({ id, projectId: 's1', projectName: 'Site G', testDate: '2026-09-21', auditor: 'Jane', archivedAt: '2026-09-22T10:30:00.000Z', items: JSON.parse(JSON.stringify(items)), areas: [{ id: 'a1', name: 'Concrete Plant' }, { id: 'a2', name: 'Workshop' }], meta: {} });
+  localStorage.setItem('gsd-history-v1', JSON.stringify(Array.from({ length: n }, (_, k) => snap('h' + (k + 1)))));
+  return items;
+};
+describe('GSD History matches ELT: accordion cards, View Results / Export / Delete, summary pills + thumbnail rows', () => {
+  it('a card shows the title, a High / Urgent badge (only when > 0), date · auditor, Archived time and the coloured stats; nothing else until it is expanded', async () => {
+    await seedHistory(); const user = userEvent.setup(); await open(user, 'History');
+    const card = await screen.findByTestId('gsd-history-card');
+    expect(within(card).getByText('Site Defects Audit')).toBeInTheDocument(); expect(within(card).getByText('2 HIGH / URGENT')).toBeInTheDocument();      // the badge, ELT-FAIL-badge style
+    expect(within(card).getByText(/21\/09\/2026 · Jane/)).toBeInTheDocument(); expect(within(card).getByText(/^Archived .*2026/)).toBeInTheDocument();
+    expect(within(card).getByText('3 defects')).toBeInTheDocument(); expect(within(card).getByText('2 High / Urgent')).toHaveStyle({ color: '#dc2626' }); expect(within(card).getByText('3 photos')).toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'View Results' })).not.toBeInTheDocument(); expect(within(card).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+    cleanup(); localStorage.setItem('gsd-history-v1', JSON.stringify([{ ...JSON.parse(localStorage.getItem('gsd-history-v1'))[0], items: [mk('i9', 'a1', [], { priority: 'L' })] }]));
+    await open(userEvent.setup(), 'History'); expect(within(await screen.findByTestId('gsd-history-card')).queryByText(/HIGH \/ URGENT$/)).not.toBeInTheDocument();       // no badge at zero
+  });
+  it('tapping a card expands it (▾) to View Results, Export and the full Delete — and NO Continue; opening another card collapses the first', async () => {
+    await seedHistory(2); const user = userEvent.setup(); await open(user, 'History');
+    const [a, b] = await screen.findAllByTestId('gsd-history-card');
+    await user.click(within(a).getByRole('button', { expanded: false })); expect(within(a).getByRole('button', { name: 'View Results' })).toBeInTheDocument(); expect(within(a).getByRole('button', { name: 'Export' })).toBeInTheDocument();
+    expect(within(a).queryByRole('button', { name: /Continue/ })).not.toBeInTheDocument(); expect(within(a).getAllByRole('button').some(x => x.textContent === '' && x.querySelector('svg'))).toBe(true);   // the bin
+    await user.click(within(b).getByRole('button', { expanded: false })); expect(within(b).getByRole('button', { name: 'Export' })).toBeInTheDocument(); expect(within(a).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
+    await user.click(within(b).getByRole('button', { expanded: true })); expect(within(b).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();      // tap again to collapse
+  });
+  it('View Results: header, Read-only, summary pills, area groups, and a THUMBNAIL per row (a placeholder when the defect had no photo); Back returns to the list', async () => {
+    await seedHistory(); const user = userEvent.setup(); await open(user, 'History');
+    await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false })); await user.click(screen.getByRole('button', { name: 'View Results' }));
+    expect(await screen.findByText('Site Defects Snapshot')).toBeInTheDocument(); expect(screen.getByText(/Read-only/)).toBeInTheDocument();
+    for (const [label, v] of [['Defects', '3'], ['High / Urgent', '2'], ['Photos', '3']]) expect(screen.getByText(label).previousElementSibling).toHaveTextContent(v);
+    const rows = screen.getAllByTestId('gsd-snap-row'); expect(rows).toHaveLength(3);
+    await waitFor(() => expect(rows[0].querySelector('img')).not.toBeNull());                                    // #1 has a photo -> a real thumbnail (from the archived IndexedDB record)
+    expect(rows[1].querySelector('img')).toBeNull();                                                              // #2 (Loose cable) has none -> placeholder
+    await waitFor(() => expect(rows[2].querySelector('img')).not.toBeNull());
+    expect(within(rows[0]).getByText('#1')).toBeInTheDocument(); expect(within(rows[0]).getByText('Guard missing')).toBeInTheDocument(); expect(within(rows[0]).getByTestId('gsd-pri-H')).toBeInTheDocument();
+    await user.click(screen.getByText('Back')); expect(await screen.findByTestId('gsd-history-card')).toBeInTheDocument();
+  });
+  it('ContinueConfirmBtn (every module\'s History) is on the collapse rule: an outside click and opening Delete both collapse it (ELT as the example)', async () => {
+    localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site E', assets: [] }] }]));
+    localStorage.setItem('elt-history-v2', JSON.stringify([{ id: 'h1', projectId: 'p1', projectName: 'Site E', testDate: '2026-09-21', auditor: 'Jane', archivedAt: '2026-09-22T10:00:00.000Z', results: {}, areas: [{ id: 'ar', name: 'Site E', assets: [] }], meta: {} }]));
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText('EMERGENCY LIGHTING')); await user.click(await screen.findByText('Site E', { selector: 'div' })); await user.click(screen.getByRole('button', { name: 'History' }));
+    await user.click(await screen.findByText('Emergency Lighting Audit')); const cont = screen.getByRole('button', { name: /Continue/ });
+    await user.click(cont); expect(screen.getByText(/replace your current audit/i)).toBeInTheDocument();
+    await user.click(screen.getByText(/replace your current audit/i)); expect(screen.getByText(/replace your current audit/i)).toBeInTheDocument();      // inside: stays
+    await user.click(screen.getByText('Audit History')); expect(screen.queryByText(/replace your current audit/i)).not.toBeInTheDocument();                  // outside: collapses
+    await user.click(screen.getByRole('button', { name: /Continue/ })); expect(screen.getByText(/replace your current audit/i)).toBeInTheDocument();
+    const bin = screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg') && !b.getAttribute('aria-label')).pop(); await user.click(bin);
+    expect(screen.queryByText(/replace your current audit/i)).not.toBeInTheDocument(); expect(screen.getByText('Delete?')).toBeInTheDocument();                // opening another prompt collapses it
   });
 });
 
@@ -170,7 +226,7 @@ describe('export: photo report + Register', () => {
     await seedItems(); const user = userEvent.setup(); await open(user, null);
     await user.click(screen.getByRole('button', { name: 'Complete Site Defects Audit' })); await user.click(await screen.findByRole('button', { name: /Yes, Complete/ }));
     await waitFor(() => expect(ls('gsd-history-v1')).toHaveLength(1));
-    await user.click(screen.getByRole('button', { name: 'History' })); await user.click(await screen.findByRole('button', { name: 'Export' }));
+    await user.click(screen.getByRole('button', { name: 'History' })); await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false })); await user.click(await screen.findByRole('button', { name: 'Export' }));
     await waitFor(() => expect(payload).toBeTruthy()); const ws = (await readExport()).getWorksheet('Defects Report');
     expect(String(ws.getCell('A5').value)).toBe('Concrete Plant'); expect(ws.getImages()).toHaveLength(3);
   });
