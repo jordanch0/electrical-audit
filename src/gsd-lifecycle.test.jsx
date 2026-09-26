@@ -85,10 +85,21 @@ describe('Complete audit, History, Reset, deletes — photos follow their owner'
     expect(await screen.findByText('CATEGORY')).toBeInTheDocument(); expect(screen.getByText('COMMON DEFECT')).toBeInTheDocument(); expect(screen.getByText('RESPONSIBILITY')).toBeInTheDocument(); expect(screen.queryByText('PRIORITY')).not.toBeInTheDocument();
     expect(screen.getByText('Site Manager')).toBeInTheDocument();
   });
+  it('Report tab: "#n" and the title are SEPARATE items whether or not a priority dot sits between them (bare adjacent text in a flex row merged into "#1Title")', async () => {
+    seedSite(); const mkr = (id, pri) => mk(id, 'a1', [], { priority: pri, description: 'Title ' + id });
+    localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [mkr('n1', ''), mkr('p1', 'H')] }));
+    const user = userEvent.setup(); await open(user, 'Report');
+    for (const [n, title, dot] of [['#1', 'Title n1', false], ['#2', 'Title p1', true]]) {
+      const num = await screen.findByText(n); const ttl = screen.getByText(title);
+      expect(num).not.toBe(ttl); expect(num.parentElement).toBe(ttl.parentElement);                      // two siblings in the same row
+      expect(num.textContent).toBe(n); expect(ttl.textContent).toBe(title);                              // neither swallows the other's text
+      expect(!!within(num.parentElement).queryByTestId('gsd-pri-H')).toBe(dot);
+    }
+  });
   it('Report tab: tiles, per-area defects with #, and the empty state', async () => {
     await seedItems(); const user = userEvent.setup(); await open(user, 'Report');
     expect(await screen.findByText('SITE DEFECTS REPORT · Jane')).toBeInTheDocument(); expect(screen.getByText(/^defects$/i)).toBeInTheDocument(); expect(screen.getByText('High / Urgent', { exact: false })).toBeInTheDocument();
-    expect(screen.getByText('Defect i1', { exact: false })).toBeInTheDocument(); expect(screen.getAllByText('Guarding · High · Site Manager').length).toBe(2);
+    expect(screen.getByText('Defect i1')).toBeInTheDocument(); expect(screen.getAllByText('Guarding · High · Site Manager').length).toBe(2);
     expect(screen.queryAllByText('Defect i1', { exact: false })).toHaveLength(1);       // the description is shown once — it is also the title, so no second line
     cleanup(); localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [] })); await open(userEvent.setup(), 'Report'); expect(await screen.findByText('✓ No defects recorded')).toBeInTheDocument();
   });

@@ -14697,7 +14697,7 @@ function GSDReportView({ project, items, meta }) {
     , sections.map(sec => gsdEl("div", { key: sec.area.id, style: { marginBottom: 16 } }
       , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, letterSpacing: 0.8, marginBottom: 6, textTransform: "uppercase" } }, sec.area.name, " · ", nw(sec.entries.length, "defect"))
       , sec.entries.map(e => gsdEl("div", { key: e.item.id, style: { background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 10, padding: "8px 12px", marginBottom: 6 } }
-        , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#18181b" } }, `#${e.n}`, gsdPriDot(e.item.priority), gsdTitle(e.item))
+        , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, color: "#18181b" } }, gsdEl("span", { style: { flexShrink: 0 } }, `#${e.n}`), gsdPriDot(e.item.priority), gsdEl("span", { style: { minWidth: 0 } }, gsdTitle(e.item)))   // separate flex items: bare adjacent text nodes in a flex row merge into ONE item, so "#1" and the title ran together whenever there was no priority dot between them
         , (e.item.description || "").trim() && e.item.description.trim() !== gsdTitle(e.item) && gsdEl("div", { style: { fontSize: 12, color: "#3f3f46", marginTop: 2, whiteSpace: "pre-wrap" } }, e.item.description.trim())
         , e.item.assetLocation && gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, e.item.assetLocation)
         , e.detail && gsdEl("div", { style: { fontSize: 11, color: "#6e6a66", marginTop: 2 } }, e.detail))))));
