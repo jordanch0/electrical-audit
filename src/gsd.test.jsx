@@ -147,7 +147,7 @@ describe('module registration', () => {
     expect(await screen.findByText('Upcoming')).toBeInTheDocument();
     await user.click(screen.getByText('Add Event'));
     expect(await screen.findByText('General Site Defects')).toBeInTheDocument();
-    expect(screen.getAllByRole('combobox').some(s => within(s).queryByText('Site G'))).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Site' })); expect(within(screen.getByRole('listbox')).getByRole('option', { name: 'Site G' })).toBeInTheDocument();
   });
 });
 

@@ -107,7 +107,7 @@ describe.each(Object.values(MODS))('$name: Site -> Area -> Assets', m => {
     // move an asset to another area from its edit form — same id, results follow (they are keyed by asset id)
     await user.click(screen.getByText('Shed'));
     await user.click(screen.getByRole('button', { name: `Edit ${m.title(1)}` }));
-    await user.selectOptions(screen.getByLabelText('Area'), 'area-office');
+    await user.click(screen.getByRole('button', { name: 'Area' })); await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Office' }));   // the styled Area selector
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(areas()[0].assets).toHaveLength(0));
     expect(areas()[2].assets.map(a => a.id)).toEqual(['n3', 'n1']);

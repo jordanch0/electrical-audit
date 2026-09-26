@@ -44,8 +44,11 @@ describe('default Type list', () => {
     expect(screen.queryByText('Other')).not.toBeInTheDocument();                       // "Other" is never an editable list item
     await user.click(screen.getByRole('button', { name: 'Manage' }));
     await user.click(screen.getByRole('button', { name: '+ Add Fitting' }));
-    expect(optionsOf(screen.getByRole('combobox'))).toEqual(['— Select', ...NEW_TYPES, 'Other']);
-    await user.selectOptions(screen.getByRole('combobox'), 'Other');
+    await user.click(screen.getByRole('button', { name: 'Type' }));
+    expect(within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent)).toEqual(['— Select', ...NEW_TYPES, 'Other']);
+    await user.click(within(screen.getByRole('listbox')).getByRole('option', { name: 'Other' }));
+    expect(screen.getByRole('button', { name: 'Type' })).toHaveTextContent('Other');
+    await user.click(screen.getByRole('button', { name: 'Type' })); await user.click(screen.getByText('Type custom…', { exact: false }));
     expect(screen.getByPlaceholderText('Specify…')).toBeInTheDocument();
   });
 });
@@ -122,10 +125,11 @@ describe('existing fittings keep their stored type', () => {
     expect(await screen.findByText(/Emergency Exit Sign/)).toBeInTheDocument();          // Audit row still shows the stored text
     await user.click(screen.getByRole('button', { name: 'Manage' }));
     await user.click(await screen.findByRole('button', { name: /Edit SE Door/ }));
-    const select = screen.getByRole('combobox');
-    expect(select).toHaveValue('Exit Signs');                                             // display only
-    expect(optionsOf(select)).toEqual(['— Select', ...NEW_TYPES, 'Other']);
-    expect(optionsOf(select).filter(o => /exit sign/i.test(o))).toHaveLength(1);          // the regression: never two exit-sign options
+    const trigger = screen.getByRole('button', { name: 'Type' });
+    expect(trigger).toHaveTextContent('Exit Signs');                                      // display only
+    await user.click(trigger); const opts = within(screen.getByRole('listbox')).getAllByRole('option').map(o => o.textContent);
+    expect(opts).toEqual(['— Select', ...NEW_TYPES, 'Other']);
+    expect(opts.filter(o => /exit sign/i.test(o))).toHaveLength(1);          // the regression: never two exit-sign options
     cleanup();
     const proj = migrateProjectToAreas({ id: 'p1', name: 'Site A', assets: [{ id: 'a1', location: 'Site A', assetLocation: 'SE Door', assetId: '', type: 'Emergency Exit Sign', typeOther: '', maintained: 'Maintained', fitting: '' }] });
     const rows = eltRegisterRows(proj, { p1: { a1: { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass' } } }, {});

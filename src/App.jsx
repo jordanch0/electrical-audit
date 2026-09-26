@@ -4153,34 +4153,8 @@ function CalendarApp({ onGoHome }) {
                 ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginTop:4}},"No sites yet — add one in RCD or IEL, or type a custom name above")
               )
             : React.createElement(React.Fragment,null
-                ,React.createElement('select',{
-                  style:{width:"100%",background:"#f7f6f3",border:`1px solid ${validErr.site?"#dc2626":"#d4d4d8"}`,borderRadius:8,color:form.site||customSite?"#18181b": "#6e6a66",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",marginBottom:6},
-                  value:customSite?"__custom__":form.site,
-                  onChange:e=>{
-                    if(e.target.value==="__custom__"){
-                      setCustomSite("");
-                      setForm(f=>({...f,site:"__custom__"}));
-                    } else {
-                      setCustomSite("");
-                      setForm(f=>({...f,site:e.target.value}));
-                    }
-                    setValidErr(v=>({...v,site:false}));
-                  }}
-                  ,React.createElement('option',{value:""},"— Select a site")
-                  ,allSites.map(s=>React.createElement('option',{key:s,value:s},s))
-                  ,React.createElement('option',{value:"__custom__"},"+ Enter custom site…")
-                )
-                ,(form.site==="__custom__"||customSite)&&React.createElement('input',{
-                  style:{width:"100%",background:"#f7f6f3",border:"1px solid #4338ca",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},
-                  placeholder:"Type site name…",
-                  value:customSite,
-                  autoFocus:true,
-                  onChange:e=>{
-                    setCustomSite(e.target.value);
-                    setForm(f=>({...f,site:e.target.value||"__custom__"}));
-                    setValidErr(v=>({...v,site:false}));
-                  }
-                })
+                ,React.createElement(StyledSelect,{options:allSites,value:form.site==="__custom__"?"":form.site,onChange:x=>{setCustomSite("");setForm(f=>({...f,site:x}));setValidErr(v=>({...v,site:false}));},placeholder:"— Select a site",allowEmpty:true,allowCustom:true,customHint:"Type site name…",ariaLabel:"Site",color:"#4338ca",colorBg:"#e0e7ff",
+                  boxStyle:{background:"#f7f6f3",border:`1px solid ${validErr.site?"#dc2626":"#d4d4d8"}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},wrapStyle:{marginBottom:6}})
                 ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginTop:4}},"Sites auto-filled from all modules")
               )
           ,validErr.site&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:4}},"Select or enter a site")
@@ -4222,20 +4196,8 @@ function CalendarApp({ onGoHome }) {
         ,React.createElement('div',{style:{marginBottom:12}}
           ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"RECURRENCE")
           ,form.type==="tat"
-            ? React.createElement('select',{style:{width:"100%",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
-                ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
-                ,React.createElement('option',{value:"Monthly"},"1-Monthly — Hire / Construction")
-                ,React.createElement('option',{value:"3-Monthly"},"3-Monthly — Building / Construction / Demolition")
-                ,React.createElement('option',{value:"6-Monthly"},"6-Monthly — Factory / Warehouse / Production")
-                ,React.createElement('option',{value:"Annual"},"Annual — Hostile environment")
-              )
-            : React.createElement('select',{style:{width:"100%",background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},value:form.recur,onChange:e=>setForm(f=>({...f,recur:e.target.value}))}
-                ,React.createElement('option',{value:"none"},"No recurrence (one-off)")
-                ,React.createElement('option',{value:"Monthly"},"Monthly")
-                ,React.createElement('option',{value:"3-Monthly"},"Every 3 months")
-                ,React.createElement('option',{value:"6-Monthly"},"Every 6 months")
-                ,React.createElement('option',{value:"Annual"},"Annual")
-              )
+            ? React.createElement(StyledSelect,{options:[{value:"none",label:"No recurrence (one-off)"},{value:"Monthly",label:"1-Monthly — Hire / Construction"},{value:"3-Monthly",label:"3-Monthly — Building / Construction / Demolition"},{value:"6-Monthly",label:"6-Monthly — Factory / Warehouse / Production"},{value:"Annual",label:"Annual — Hostile environment"}],value:form.recur,onChange:v=>setForm(f=>({...f,recur:v})),ariaLabel:"Recurrence",color:"#4338ca",colorBg:"#e0e7ff",boxStyle:{background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}})
+            : React.createElement(StyledSelect,{options:[{value:"none",label:"No recurrence (one-off)"},{value:"Monthly",label:"Monthly"},{value:"3-Monthly",label:"Every 3 months"},{value:"6-Monthly",label:"Every 6 months"},{value:"Annual",label:"Annual"}],value:form.recur,onChange:v=>setForm(f=>({...f,recur:v})),ariaLabel:"Recurrence",color:"#4338ca",colorBg:"#e0e7ff",boxStyle:{background:"#f7f6f3",border:"1px solid #d4d4d8",borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"}})
         )
         // Notes
         ,React.createElement('div',{style:{marginBottom:16}}
@@ -10429,13 +10391,8 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}
           ,React.createElement('label',{style:SS.modalLabel},"RISK RATING")
-          ,React.createElement('select',{style:{...SS.modalInput,cursor:"pointer"},value:risk,onChange:e=>setRisk(e.target.value)}
-            ,React.createElement('option',{value:""},"— Select Risk")
-            ,React.createElement('option',{value:"L"},"L – Low")
-            ,React.createElement('option',{value:"M"},"M – Medium")
-            ,React.createElement('option',{value:"H"},"H – High")
-            ,React.createElement('option',{value:"U"},"U – Urgent")
-          )
+          ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
+            ,["",...PRIORITY_OPTIONS].map(p=>React.createElement('button',{key:p||"none",type:"button",style:{padding:"10px 14px",background:(risk||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(risk||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(risk||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>setRisk(p)},p?`${p} — ${PRIORITY_LABELS[p]}`:"None")))
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
@@ -11297,13 +11254,9 @@ function ELTSelectOther({options, value, other, onChange, placeholder, aliases})
   const opts = [...options];
   const shown = aliases && aliases[value] && opts.includes(aliases[value]) ? aliases[value] : value; // display only — never rewrites the stored type
   if (shown && shown !== "Other" && !opts.includes(shown)) opts.push(shown); // option removed after it was used: keep it visible
-  return eltEl('div',null
-    ,eltEl('select',{style:{...SS.modalInput,cursor:"pointer"},value:shown||"",onChange:e=>onChange(e.target.value,other||"")}
-      ,eltEl('option',{value:""},placeholder||"— Select")
-      ,[...opts,"Other"].map(o=>eltEl('option',{key:o,value:o},o))
-    )
-    ,value==="Other"&&eltEl('input',{style:{...SS.modalInput,marginTop:6},type:"text",value:other||"",placeholder:"Specify…",onChange:e=>onChange("Other",e.target.value)})
-  );
+  // Typed text (the free-text case) is stored as type "Other" + typeOther; a listed type or the built-in "Other" clears typeOther. Same look as every styled dropdown.
+  return eltEl(StyledSelect,{options:[...opts,"Other"],value:(value==="Other"&&(other||"").trim())?other:shown,placeholder:placeholder||"— Select",allowEmpty:true,allowCustom:true,customHint:"Specify…",ariaLabel:"Type",boxStyle:SS.modalInput,
+    onChange:(x,meta)=>{ if(meta&&meta.custom) onChange("Other",x); else onChange(x,""); }});
 }
 function ELTStatusChip({status}) {
   const sm = SM[status];
@@ -11865,7 +11818,7 @@ function ELTAssetForm({initial, typeOptions, areaChoices, areaId, submitLabel, o
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${ELT_COLOR_BORDER}`}}
     ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"AREA")
-      ,eltEl('select',{style:{...SS.metaInput,marginTop:4,width:"100%",minWidth:0},value:target,onChange:e=>setTarget(e.target.value),"aria-label":"Area"},areaChoices.map(c=>eltEl('option',{key:c.id,value:c.id},c.name)))
+      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.metaInput,wrapStyle:{marginTop:4}})
     )
     ,field("ASSET LOCATION","assetLocation","e.g. SE Door")
     ,field("ASSET ID (optional)","assetId","Barcode / asset tag — blank if none")
@@ -13936,7 +13889,7 @@ function WelderAssetForm({initial, areaChoices, areaId, submitLabel, onSave, onC
   return eltEl('div',{style:{...SS.addCard,border:`1px solid ${WELDER_COLOR_BORDER}`}}
     ,areaChoices&&areaChoices.length>1&&eltEl('div',{style:{marginBottom:8}}
       ,eltEl('div',{style:SS.metaLabelText},"AREA")
-      ,eltEl('select',{style:{...SS.metaInput,marginTop:4,width:"100%",minWidth:0},value:target,onChange:e=>setTarget(e.target.value),"aria-label":"Area"},areaChoices.map(c=>eltEl('option',{key:c.id,value:c.id},c.name)))
+      ,eltEl(StyledSelect,{options:areaChoices.map(c=>({value:c.id,label:c.name})),value:target,onChange:setTarget,ariaLabel:"Area",boxStyle:SS.metaInput,wrapStyle:{marginTop:4}})
     )
     ,field("ASSET ID","assetId","e.g. W001")
     ,field("BRAND","brand","e.g. Kemppi")
