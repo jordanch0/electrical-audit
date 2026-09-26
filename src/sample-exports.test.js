@@ -11,7 +11,7 @@ let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
 afterEach(() => { delete window.webkit; });
 const save = name => { if (!payload) throw new Error('no payload ' + name); fs.mkdirSync(OUT, { recursive: true }); fs.writeFileSync(`${OUT}/${name}.xlsx`, Buffer.from(payload.base64, 'base64')); payload = null; };
-const meta = { auditor: 'Jane Auditor', testDate: '2026-09-21', nextTestDate: '2027-09-21', pushDate: '2026-09-21', injectDate: '2026-09-21' };
+const meta = { machine: 'Rigel 288 (S/N 4471), cal. due 03/2027', auditor: 'Jane Auditor', testDate: '2026-09-21', nextTestDate: '2027-09-21', pushDate: '2026-09-21', injectDate: '2026-09-21' };
 const N = 60;
 const range = n => Array.from({ length: n }, (_, i) => i);
 const isFail = i => i % 9 === 4;

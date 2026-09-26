@@ -4431,7 +4431,7 @@ async function exportTATExcel(project, results, meta) {
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
     title: `${sName} — Test & Tag`, defectTitle: `${sName} — Test & Tag — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`],
+    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Machine Used: ${(meta && meta.machine) || ""}`],
     defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
     mainSheet: "Test & Tag",
     headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
@@ -4864,6 +4864,11 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
         ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...ST.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement('input',{type:"date",value:meta.testDate||"",onChange:e=>setMeta({testDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
+      // the test-and-tag machine used for this audit — site level, entered once (meta.machine; optional, "" when missing)
+      ,React.createElement('div',{style:{marginTop:8}}
+        ,React.createElement('div',{style:ST.metaLabelText},"MACHINE USED")
+        ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:meta.machine||"","aria-label":"Machine used",placeholder:"e.g. Rigel 288 (S/N …), cal. due …",onChange:e=>setMeta({machine:e.target.value})})
+      )
     )
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
@@ -5179,6 +5184,7 @@ function TATReportView({project,results,meta,onBack}){
     ,meta.testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{fontSize:12,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
     )
+    ,meta.machine&&meta.machine.trim()&&React.createElement('div',{"data-testid":"tat-report-machine",style:{fontSize:12,color:"#52525b",marginTop:-8,marginBottom:16}},"Machine: ",meta.machine.trim())
     ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:20})
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:TAT_COLOR,letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY")
