@@ -323,7 +323,7 @@ Remove all of the following when converting a delete action to `DeleteButton`:
 > Add bugs here before starting a Claude Code session. Format: module · symptom · suspected cause.
 
 ```
-[x] FIXED 2026-09-25 — intermittent test failure identified: `src/welder-export.test.jsx` > "Welder photo -> export through the real UI" > "photos on a fully tested welder and on an untested welder reach their own sheets intact" hit vitest's default 5000ms timeout when the whole suite ran in parallel (it drives ~30 UI clicks plus an ExcelJS build; passes alone in ~3s, and the full suite passed with --testTimeout=30000). Fix: a 30000ms timeout on that one test only (not global). Verified 145/145 across 3 isolated runs, 2 parallel full runs and 1 serial full run. If another test ever times out at 5000ms, give it the same per-test timeout rather than raising the global one.
+(none open)
 ```
 
 ---
@@ -339,7 +339,9 @@ Remove all of the following when converting a delete action to `DeleteButton`:
     export was fixed to show only the plain interval, this copy was missed) and a generic variant ("Monthly / Every 3 months / Every 6 months / Annual"); (3) the Site select is fed
     from the other modules' projects (fine). To do, INVESTIGATE FIRST: decide which lists are fixed by design and which should be customisable; drop the category wording from the
     TAT recurrence options (or read TAT's freqOptions); keep the STORED recurrence values ("none" / "Monthly" / "3-Monthly" / "6-Monthly" / "Annual") backward compatible so existing
-    events and their generated due dates are untouched; add tests. Search: `CAL_TYPES`, `form.recur`, "1-Monthly — Hire".
+    events and their generated due dates are untouched; add tests. Search: `CAL_TYPES`, `form.recur` (verified 2026-09-26: the event form state, `blank.recur`, `generateSeries`), "1-Monthly — Hire".
+    NOTE: the same category wording also appears on TAT's OWN Dropdowns tab (frequency labels such as "1 Month — Hire / Construction"). That copy is INTENTIONAL and stays as is —
+    only Calendar's duplicate needs addressing. The Calendar event card also shortens the labels ("3-Monthly (Bldg/Const)", "6-Monthly (Factory/Whs)", ~line 3746); include it in the same pass.
 
 [ ] ALL · Consolidate the five near-identical EditableDropdown components · The FAIL-panel dropdowns (Rectified / Responsibility) are five copies of the same control:
     `EditableDropdown` (RCD), `IELEditableDropdown` (IEL, and TAT reuses it with its accent colour), `SWBEditableDropdown`, `ThermoEditableDropdown`, `IRTEditableDropdown`. They behave
@@ -349,51 +351,16 @@ Remove all of the following when converting a delete action to `DeleteButton`:
     behaviour, ★ defaults being STORED by `useFailDefaults` (not this component), and the tests that exercise them (`src/fail-panels.test.jsx`, `src/fail-panel-parity.test.jsx`,
     `src/elt-dropdowns.test.jsx`, `src/tat-electrical.test.jsx`, `src/dropdown-add.test.jsx`). Not urgent — a maintainability task, no user-visible change intended.
 
-[ ] ALL · Code-split the main JS bundle · The whole app is ONE chunk (~2.2 MB, src/App.jsx) and it now exceeds Workbox's 2 MiB precache default, so
-    vite.config.js raises workbox.maximumFileSizeToCacheInBytes to 5 MiB (2026-09-26) to keep offline support. That is a stop-gap: a large single chunk means a
-    slower first load, especially on phones. Worth doing as its OWN task: lazy-load each module (RCD / IEL / TAT / Thermo / SWB / IRT / ELT / Welder / Calendar)
-    with React.lazy + dynamic import, and lazy-load ExcelJS / SheetJS / JSZip only when an export or import runs. Then lower the limit again. Do not fold this
-    into feature work.
-
-STATUS 2026-09-25: DONE — kept here only as the original spec. The original audit (2026-06-04, block in App.jsx) covered CalendarApp,
-RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp and AppRoot. Since then: the Calendar event-delete confirm was fixed and now shares
-`activeDeleteSetter` (so "CalendarApp: no delete actions" in that block is out of date), and ELT and Welder were built entirely on
-`DeleteButton` / `ConfirmReset`. Verified in the real browser on 2026-09-25 for ELT and Welder: site delete, welder/fitting delete,
-Manage delete, dropdown option delete, list Reset, Home "Reset all results?" and photo delete all need a second step and Keep leaves
-data untouched. See the addendum block in App.jsx. New modules: follow NEW_MODULE_GUIDE.md section 5.
-[ ] ALL MODULES · Delete Consistency Audit · Standardise every destructive action across the entire
-    app to use the shared DeleteButton component defined in the Design System section above.
-
-    Scope — search the entire App.jsx for:
-      • window.confirm() used for any delete/remove action
-      • Home-grown confirm state: deleteConfirm, confirmDelete, confirmId, showConfirm,
-        pendingDelete, deletingId, deleteId, or any similar pattern
-      • Inline ternary "Are you sure?" confirmation rows
-      • Modals or dialogs that exist solely to confirm a delete
-      • Trash icons / ✕ / × buttons that delete without a second step
-      • Any button labelled "Delete" or "Remove" that acts immediately on first click
-
-    Modules to audit: CalendarApp, RCDApp, IELApp, TATApp, ThermoApp, SWBApp, IRTApp, ELTApp, WelderApp, AppRoot
-
-    After completing all replacements, append an audit summary comment block in App.jsx (the existing blocks sit
-    just above the MOUNT section, ~line 12650; the file itself ends with the export list and `export default AppRoot`):
-
-    /*
-    DELETE CONSISTENCY AUDIT — [date]
-    ===========================================
-    STANDARDISED (replaced with DeleteButton):
-      - Module · Component · ~line · was: [old pattern]
-
-    MANUALLY REVIEWED — no change needed:
-      - Module · reason existing pattern was intentionally kept
-
-    REMAINING INCONSISTENCIES:
-      - Anything that could not be refactored automatically
-
-    DUPLICATE IMPLEMENTATIONS REMOVED:
-      - List of deleted state vars / confirm modals / window.confirm calls
-    */
+[ ] ALL · Code-split the main JS bundle · The whole app is ONE chunk (src/App.jsx; ~1.98 MiB / 2,076,719 bytes as of 2026-09-26, just under Workbox's 2 MiB
+    precache default). vite.config.js still raises workbox.maximumFileSizeToCacheInBytes to 5 MiB as a stop-gap (added 2026-09-26 when the bundle briefly crossed 2 MiB) and
+    there is no React.lazy anywhere. A large single chunk means a slower first load, especially on phones, and any new feature can push it back over 2 MiB. Worth doing as
+    its OWN task: lazy-load each module (RCD / IEL / TAT / Thermo / SWB / IRT / ELT / Welder / Calendar) with React.lazy + dynamic import, and lazy-load ExcelJS / SheetJS / JSZip
+    only when an export or import runs. Then lower the limit again. Do not fold this into feature work.
 ```
+
+### Completed
+
+- **[x] ALL MODULES · Delete Consistency Audit — DONE.** Original audit 2026-06-04 (CalendarApp, RCD, IEL, TAT, Thermo, SWB, IRT, AppRoot), re-verified 2026-09-25 (adds Calendar, ELT, Welder). Every destructive action across all ten areas now goes through the shared `DeleteButton` / `ConfirmReset` (see Design System above) with a second step and a working Keep; no `window.confirm()` and no home-grown confirm state remain. Calendar's event-delete confirm shares `activeDeleteSetter`; ELT and Welder were built on the shared components from the start. Real-browser checks 2026-09-25 for ELT and Welder: site / welder / fitting / Manage / dropdown-option delete, list Reset, Home "Reset all results?" and photo delete. The full audit record (STANDARDISED / MANUALLY REVIEWED / DUPLICATES REMOVED lists) is the two comment blocks in `src/App.jsx` just above the MOUNT section (search `DELETE CONSISTENCY AUDIT`). New modules: follow NEW_MODULE_GUIDE.md section 5.
 
 ---
 
