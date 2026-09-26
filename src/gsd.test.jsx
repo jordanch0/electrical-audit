@@ -132,6 +132,8 @@ async function addDefect(user, area, files = [img()]) {
   await screen.findByText(/^#\d+ · /);
 }
 beforeEach(async () => { cleanup(); localStorage.clear(); await clearIdb(); });
+const field = label => screen.getByText(label).parentElement;                                    // a labelled field block on the item page
+const chooseFrom = async (user, label, option) => { await user.click(within(field(label)).getByRole('button')); await user.click(await within(field(label)).findByText(option, { selector: 'div' })); };
 
 describe('module registration', () => {
   it('has a home card with its own accent, and nav is Home, Audit, Report, History, Manage, Dropdowns', async () => {
@@ -178,13 +180,25 @@ describe('Audit: photo-first quick-add, live auto-save, cards', () => {
   });
   it('Common Defect pre-fills the Description — but never over the user\'s own wording, and re-picks replace only its own auto text', async () => {
     seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');
-    const sel = screen.getByLabelText('Common defect'); const desc = screen.getByLabelText('Description');
-    await user.selectOptions(sel, 'Conduit loose or damaged'); expect(desc).toHaveValue('Conduit loose or damaged');
-    await user.selectOptions(sel, 'Outlet / GPO damaged'); expect(desc).toHaveValue('Outlet / GPO damaged');       // still the auto text -> replaced
+    const desc = screen.getByLabelText('Description');
+    await chooseFrom(user, 'COMMON DEFECT', 'Conduit loose or damaged'); expect(desc).toHaveValue('Conduit loose or damaged');
+    await chooseFrom(user, 'COMMON DEFECT', 'Outlet / GPO damaged'); expect(desc).toHaveValue('Outlet / GPO damaged');       // still the auto text -> replaced
     await user.clear(desc); await user.type(desc, 'Bolts sheared at base');
-    await user.selectOptions(sel, 'Conduit loose or damaged'); expect(desc).toHaveValue('Bolts sheared at base');                // user wording is kept
-    await user.selectOptions(sel, 'Other'); expect(desc).toHaveValue('Bolts sheared at base');
+    await chooseFrom(user, 'COMMON DEFECT', 'Conduit loose or damaged'); expect(desc).toHaveValue('Bolts sheared at base');   // user wording is kept
+    await chooseFrom(user, 'COMMON DEFECT', 'Other'); expect(desc).toHaveValue('Bolts sheared at base');
     await waitFor(() => expect(ls('gsd-items-v1').s1[0]).toMatchObject({ commonDefect: 'Other', description: 'Bolts sheared at base' }));
+  });
+  it('Common Defect is the app\'s styled dropdown (the SAME control and look as Category / Responsibility), not a native select; "Type custom…" is the free-text case and pre-fills Description', async () => {
+    seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');
+    expect(screen.queryByLabelText('Common defect')).not.toBeInTheDocument(); expect(document.querySelectorAll('select')).toHaveLength(0);      // no native <select> left on the item page
+    const look = label => { const b = within(field(label)).getByRole('button'); const s = getComputedStyle(b); return [s.backgroundColor, s.borderTopColor, s.borderRadius, s.padding, s.fontSize, s.color, s.display, s.justifyContent]; };
+    expect(look('COMMON DEFECT')).toEqual(look('CATEGORY'));                                     // both empty: identical, including the muted placeholder colour
+    expect(look('COMMON DEFECT').filter((_, i) => i !== 5)).toEqual(look('RESPONSIBILITY').filter((_, i) => i !== 5));   // Responsibility has a value (darker text); everything else identical
+    expect(within(field('COMMON DEFECT')).getByText('Select or type…')).toBeInTheDocument();
+    await user.click(within(field('COMMON DEFECT')).getByRole('button')); await user.click(await within(field('COMMON DEFECT')).findByText('Type custom…', { exact: false }));
+    await user.type(within(field('COMMON DEFECT')).getByPlaceholderText('Select or type…'), 'Cable gland cracked');
+    expect(screen.getByLabelText('Description')).toHaveValue('Cable gland cracked');
+    await waitFor(() => expect(ls('gsd-items-v1').s1[0]).toMatchObject({ commonDefect: 'Cable gland cracked', description: 'Cable gland cracked' }));
   });
   it('a card shows the # , the priority dot, the title, and "Area — Asset Location"; tapping opens the item', async () => {
     seedSite(); localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [
@@ -289,7 +303,23 @@ describe('duplicate, delete, area removal', () => {
     await user.click(screen.getByText('Back')); const cards = screen.getAllByTestId('gsd-card');
     expect(cards.map(c => c.textContent.replace(/[^A-Za-z#0-9]/g, ''))).toEqual([expect.stringContaining('#1Later'), expect.stringContaining('#2Misplaced')]);
   });
-  it('expanding Duplicate, Move or Delete scrolls the expanded block into view; Delete sits on its own right-aligned row and its confirm stays on that row', async () => {
+  it('ONE row: Duplicate, Move and the bin share it; an open Delete confirm takes the whole row (pills step aside); an open picker hides the bin', async () => {
+    seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop');
+    const actions = screen.getByTestId('gsd-actions');
+    expect(within(actions).getByRole('button', { name: 'Duplicate' })).toBeInTheDocument(); expect(within(actions).getByRole('button', { name: 'Move' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('gsd-delete')).getAllByRole('button')).toHaveLength(1);         // the bin, on the same row as the pills
+    expect(screen.getByTestId('gsd-delete')).toHaveStyle({ marginLeft: 'auto' });
+    await user.click(within(screen.getByTestId('gsd-delete')).getByRole('button'));                   // Delete expands INLINE
+    expect(within(actions).getByText('Delete defect?')).toBeInTheDocument(); expect(within(actions).getByRole('button', { name: 'Keep' })).toBeInTheDocument();
+    expect(within(actions).queryByRole('button', { name: 'Duplicate' })).not.toBeInTheDocument(); expect(within(actions).queryByRole('button', { name: 'Move' })).not.toBeInTheDocument();   // stepped aside
+    await user.click(within(actions).getByRole('button', { name: 'Keep' }));
+    expect(within(actions).getByRole('button', { name: 'Duplicate' })).toBeInTheDocument(); expect(within(actions).getByRole('button', { name: 'Move' })).toBeInTheDocument(); expect(within(actions).queryByText('Delete defect?')).not.toBeInTheDocument();
+    await user.click(within(actions).getByRole('button', { name: 'Duplicate' }));                   // a picker opens above; the bin steps aside
+    expect(screen.getByTestId('gsd-area-picker')).toBeInTheDocument(); expect(screen.queryByTestId('gsd-delete')).not.toBeInTheDocument(); expect(within(actions).getByRole('button', { name: 'Move' })).toBeInTheDocument();
+    await user.click(within(screen.getByTestId('gsd-area-picker')).getByRole('button', { name: 'Cancel' })); expect(screen.getByTestId('gsd-delete')).toBeInTheDocument();
+    await user.click(within(actions).getByRole('button', { name: 'Move' })); expect(screen.queryByTestId('gsd-delete')).not.toBeInTheDocument();
+  });
+  it('expanding Duplicate, Move or Delete scrolls the expanded block into view', async () => {
     const calls = []; const orig = Element.prototype.scrollIntoView; Element.prototype.scrollIntoView = function (o) { calls.push([this.getAttribute('data-testid'), o]); };
     try {
       seedSite(); const user = userEvent.setup(); await open(user, 'Audit'); await addDefect(user, 'Workshop'); calls.length = 0;
@@ -298,11 +328,7 @@ describe('duplicate, delete, area removal', () => {
       await user.click(screen.getByRole('button', { name: 'Cancel' })); calls.length = 0;
       await user.click(screen.getByRole('button', { name: 'Move' })); await waitFor(() => expect(calls.length).toBeGreaterThan(0)); expect(calls[calls.length - 1][0]).toBe('gsd-bottom');
       await user.click(screen.getByRole('button', { name: 'Cancel' })); calls.length = 0;
-      const row = screen.getByTestId('gsd-delete-row'); expect(row).toHaveStyle({ justifyContent: 'flex-end' });
-      expect(within(row).getAllByRole('button')).toHaveLength(1);                                   // the bin — Duplicate and Move are NOT on this row
-      expect(row.contains(screen.getByRole('button', { name: 'Duplicate' }))).toBe(false);
-      await user.click(within(row).getByRole('button')); await waitFor(() => expect(calls.length).toBeGreaterThan(0)); expect(calls[calls.length - 1][0]).toBe('gsd-bottom');
-      expect(within(row).getByText('Delete defect?')).toBeInTheDocument(); expect(within(row).getByRole('button', { name: 'Keep' })).toBeInTheDocument();   // the confirm expands inside the same row
+      await user.click(within(screen.getByTestId('gsd-delete')).getByRole('button')); await waitFor(() => expect(calls.length).toBeGreaterThan(0)); expect(calls[calls.length - 1][0]).toBe('gsd-bottom');
     } finally { Element.prototype.scrollIntoView = orig; }
   });
   it('Move with no other area explains why instead of offering nothing silently', async () => {

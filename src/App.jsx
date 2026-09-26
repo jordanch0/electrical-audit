@@ -547,15 +547,16 @@ deliverExportFile(tOut, fname);
 // SHARED DELETE BUTTON — two-step inline confirmation for all destructive actions
 // ─────────────────────────────────────────────────────────────────────────
 let activeDeleteSetter = null;
-function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpen }) {
+function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
   const [confirming, setConfirming] = React.useState(false);
+  React.useEffect(() => { if (onOpenChange) onOpenChange(confirming); }, [confirming]);
+  React.useEffect(() => () => { if (activeDeleteSetter === setConfirming) activeDeleteSetter = null; }, []);
   const open = () => {
     if (activeDeleteSetter && activeDeleteSetter !== setConfirming) {
       activeDeleteSetter(false);
     }
     activeDeleteSetter = setConfirming;
     setConfirming(true);
-    if (onOpen) onOpen();
   };
   const cancel = () => {
     activeDeleteSetter = null;
@@ -14724,13 +14725,14 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
   const SS = swbStyles();
   const [r, setR] = React.useState(item);
   const [picker, setPicker] = React.useState(null);            // null | "duplicate" | "move"
+  const [deleting, setDeleting] = React.useState(false);       // the Delete confirm is open
   // Live auto-save (the app-wide standard): every change is written straight to storage — no draft, no Save button.
   const set = patch => { setR(prev => ({ ...prev, ...patch })); onPatch(patch); };
   const photoRef = React.useRef();
   const bottomRef = React.useRef();
   // Move / Duplicate / Delete all EXPAND at the bottom of the page: bring the expanded block into view instead of leaving it below the fold
   const revealBottom = () => { const go = () => { const el = bottomRef.current; if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "end", behavior: "smooth" }); }; if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(go)); else go(); };
-  React.useEffect(() => { if (picker) revealBottom(); }, [picker]);
+  React.useEffect(() => { if (picker || deleting) revealBottom(); }, [picker, deleting]);
   const area = project.areas.find(a => a.id === item.areaId) || { name: "" };
   const catOpts = (dropdowns && dropdowns.categories) || GSD_DEFAULT_CATEGORIES;
   const commonOpts = ((dropdowns && dropdowns.common) || GSD_DEFAULT_COMMON).filter(o => String(o).trim().toLowerCase() !== "other");
@@ -14756,8 +14758,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
       , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 6 } }, photoError)
       , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
       , gsdEl("button", { type: "button", style: { width: "100%", padding: "10px", background: "transparent", color: GSD_COLOR, border: `1px dashed ${GSD_COLOR_BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => photoRef.current && photoRef.current.click() }, "+ Add Photo"))
-    , field("COMMON DEFECT", gsdEl("select", { style: { ...SS.modalInput, width: "100%", minWidth: 0 }, value: r.commonDefect || "", "aria-label": "Common defect", onChange: e => pickCommon(e.target.value) }
-      , gsdEl("option", { value: "" }, "— None"), commonOpts.map(o => gsdEl("option", { key: o, value: o }, o)), gsdEl("option", { value: "Other" }, "Other")))
+    , field("COMMON DEFECT", gsdEl(IELEditableDropdown, { options: [...commonOpts, "Other"], value: r.commonDefect || "", onChange: pickCommon, placeholder: "Select or type…" }))
     , field("DESCRIPTION", gsdEl("textarea", { style: { ...SS.modalInput, minHeight: 68, resize: "vertical", fontFamily: "inherit" }, value: r.description || "", placeholder: "Describe the defect…", "aria-label": "Description", onChange: e => set({ description: e.target.value }) }))
     , field("CATEGORY", gsdEl(IELEditableDropdown, { options: catOpts, value: r.category || "", onChange: v => set({ category: v }), placeholder: "Select or type…" }))
     , field("PRIORITY", gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
@@ -14768,13 +14769,14 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     , gsdEl("div", { ref: bottomRef, "data-testid": "gsd-bottom", style: { paddingBottom: 12 } }
     , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
     , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
-    // Delete gets its OWN row (right-aligned, like every list delete): its expanded confirm ("Delete defect? [Delete] [Keep]", ~240 px) cannot share a line
-    // with Duplicate + Move (~166 px) inside a phone's ~340 px, so it is always on its own row and simply expands in place — nothing jumps.
-    , gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 } }
-      , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "duplicate" ? null : "duplicate") }, "Duplicate")
-      , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "move" ? null : "move") }, "Move"))
-    , gsdEl("div", { "data-testid": "gsd-delete-row", style: { display: "flex", justifyContent: "flex-end", minWidth: 0 } }
-      , gsdEl(DeleteButton, { onDelete, label: "Delete defect?", onOpen: revealBottom }))));
+    // ONE row: [Duplicate] [Move] ......... [bin]. Only ONE thing is expanded at a time, so whichever is open gets the room: an open Delete confirm
+    // (~240 px) takes the whole row and Duplicate / Move step aside; an open picker (above this row) hides the bin.
+    , gsdEl("div", { "data-testid": "gsd-actions", style: { display: "flex", gap: 8, alignItems: "center", minWidth: 0 } }
+      , !deleting && gsdEl("div", { style: { display: "flex", gap: 8, flexShrink: 0 } }
+        , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "duplicate" ? null : "duplicate") }, "Duplicate")
+        , gsdEl("button", { type: "button", style: gsdPill, onClick: () => setPicker(picker === "move" ? null : "move") }, "Move"))
+      , !picker && gsdEl("div", { "data-testid": "gsd-delete", style: { marginLeft: "auto", minWidth: 0 } }
+        , gsdEl(DeleteButton, { onDelete, label: "Delete defect?", onOpenChange: open => { setDeleting(open); if (open) setPicker(null); } })))));
 }
 
 function GSDReportView({ project, items, meta }) {
