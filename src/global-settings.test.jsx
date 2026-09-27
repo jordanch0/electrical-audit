@@ -155,7 +155,7 @@ describe('Global Settings screen: Home-only gear pill, save, and logo remove', (
     await appLogoStore.put(jpegRec()); saveAppSettings({ businessName: '', abn: '', licence: '', logoId: 'logo' });
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByTestId('settings-pill'));
-    expect(await screen.findByAltText('Company logo')).toBeTruthy();
+    expect(await screen.findByAltText('Logo')).toBeTruthy();
     const bin = screen.getAllByRole('button').find(b => b.textContent === '' && b.querySelector('svg') && !b.getAttribute('aria-label'));
     await user.click(bin);                                              // DeleteButton idle state
     await user.click(await screen.findByRole('button', { name: /Delete$/ }));

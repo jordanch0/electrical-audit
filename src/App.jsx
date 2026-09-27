@@ -1143,6 +1143,7 @@ const [newName,    setNewName]    = React.useState("");
 const [newCo,      setNewCo]      = React.useState(() => loadAppSettings().businessName);
 const [newAbn,     setNewAbn]     = React.useState(() => loadAppSettings().abn);
 const [newLic,     setNewLic]     = React.useState(() => loadAppSettings().licence);
+const [newLogo,    setNewLogo]    = React.useState(null); // a per-site logo override, staged as a data URL until the site actually exists
 
 const [importing,  setImporting]  = React.useState(false);
 const [importPreview, setImportPreview] = React.useState(null); // parsed project before confirming
@@ -1188,11 +1189,13 @@ const finalProject={...importPreview,id:slugify(importName||importPreview.name),
 onAddProject(finalProject);
 setImportPreview(null);setShowAdd(false);setImportName("");setImportError("");
 };
-const addManual=()=>{
+const addManual=async()=>{
 if(!newName.trim()) return;
-onAddProject({id:slugify(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});
+const id=slugify(newName);
+onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});
+if(newLogo) await siteLogoStore.put("rcd",id,gsdDataUrlToRec(newLogo)).catch(()=>{});
 const s=loadAppSettings();
-setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);
+setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);
 };
 return (
 React.createElement('div', { style: S.listWrap,}
@@ -1235,6 +1238,8 @@ React.createElement('div', { style: S.addCard,}
 , React.createElement(LabelInput, { label: "COMPANY (optional)", value: newCo, onChange: setNewCo, placeholder: "Company name" ,})
 , React.createElement(LabelInput, { label: "ABN (optional)", value: newAbn, onChange: setNewAbn, placeholder: "e.g. 12 345 678 901" ,})
 , React.createElement(LabelInput, { label: "ELECTRICAL LICENCE (optional)", value: newLic, onChange: setNewLic, placeholder: "e.g. 123456C" ,})
+, React.createElement('div', { style: S.metaLabelText, }, "LOGO (optional — overrides the global one)")
+, React.createElement('div', { style: {marginTop:4,marginBottom:10}, }, React.createElement(LogoField, { value: newLogo, onUpload: async file=>{ try{ setNewLogo(await resizeImageToDataUrl(file,480,0.9)); }catch(_){} }, onRemove: ()=>setNewLogo(null) }))
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:4},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: addManual,}, "Add Site" )
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setShowAdd(false),}, "Cancel")
@@ -1897,6 +1902,10 @@ const [projName,setProjName]=React.useState(project.name);
 const [projCo,setProjCo]=React.useState(project.company||"");
 const [projAbn,setProjAbn]=React.useState(project.abn||"");
 const [projLic,setProjLic]=React.useState(project.licence||"");
+// Per-site logo override: loaded once, staged locally (like the fields above) and committed together on Save.
+const [projLogoUrl,setProjLogoUrl]=React.useState(null);
+const [projLogoDirty,setProjLogoDirty]=React.useState(false);
+React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("rcd",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
 
 const [editingArea,setEditingArea]=React.useState(null);
 const [editAreaName,setEditAreaName]=React.useState("");
@@ -1974,7 +1983,11 @@ const delCircuit=(aid,pid,c)=>{
     return{...p,circuits:p.circuits.filter(x=>x!==c),circuitMeta:meta};
   })}:a)});
 };
-const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+const saveProj=async()=>{
+  upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});
+  if(projLogoDirty){ if(projLogoUrl) await siteLogoStore.put("rcd",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{}); else await siteLogoStore.del("rcd",project.id).catch(()=>{}); setProjLogoDirty(false); }
+  setEditingProject(false);
+};
 // ── Consolidate panels with shared prefix ────────────────────────────
 // Re-runs the same prefix-merging logic used during import, so projects
 // imported before the fix can be repaired without re-importing.
@@ -2035,6 +2048,8 @@ React.createElement('div', { style: S.listWrap,}
 , React.createElement(LabelInput, { label: "COMPANY",      value: projCo,   onChange: setProjCo,   placeholder: "Company",})
 , React.createElement(LabelInput, { label: "ABN",           value: projAbn,  onChange: setProjAbn,  placeholder: "e.g. 12 345 678 901",})
 , React.createElement(LabelInput, { label: "ELECTRICAL LICENCE", value: projLic, onChange: setProjLic, placeholder: "e.g. 123456C",})
+, React.createElement('div', { style: S.metaLabelText, }, "LOGO (optional — overrides the global one)")
+, React.createElement('div', { style: {marginTop:4,marginBottom:10}, }, React.createElement(LogoField, { value: projLogoUrl, onUpload: async file=>{ try{ setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9)); setProjLogoDirty(true); }catch(_){} }, onRemove: ()=>{setProjLogoUrl(null);setProjLogoDirty(true);} }))
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:8},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: saveProj,}, "Save")
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setEditingProject(false),}, "Cancel")
@@ -2868,6 +2883,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);
   const[newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);
   const[newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
+  const[newLogo,setNewLogo]=React.useState(null);
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
   const[importing,setImporting]=React.useState(false);
@@ -2971,8 +2987,10 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE (optional)")
             ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:newLic,placeholder:"e.g. 123456C",onChange:e=>setNewLic(e.target.value)})
           )
+          ,React.createElement('div',{style:SI.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:10}},React.createElement(LogoField,{value:newLogo,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)}))
           ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{if(!newName.trim())return;onAddProject({id:ielSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:SI.ctaPrimary,onClick:async()=>{if(!newName.trim())return;const id=ielSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});if(newLogo)await siteLogoStore.put("iel",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -3447,6 +3465,9 @@ function IELManageView({project,onUpdateProject,onBack}){
   const[projCo,setProjCo]=React.useState(project.company||"");
   const[projAbn,setProjAbn]=React.useState(project.abn||"");
   const[projLic,setProjLic]=React.useState(project.licence||"");
+  const[projLogoUrl,setProjLogoUrl]=React.useState(null);
+  const[projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("iel",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
   const upd=u=>onUpdateProject(u);
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...project.areas,{id:ielSlug(newAreaName),name:newAreaName.trim(),panels:IEL_CATEGORIES.map(cat=>({id:ielSlug(cat.key+"-"+newAreaName),name:cat.key,circuits:[],machineNames:{}}))}]});setNewAreaName("");};
   const delArea=id=>upd({...project,areas:project.areas.filter(a=>a.id!==id)});
@@ -3486,8 +3507,10 @@ function IELManageView({project,onUpdateProject,onBack}){
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"COMPANY"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projCo,placeholder:"Company name",onChange:e=>setProjCo(e.target.value)}))
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"ABN"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projAbn,placeholder:"e.g. 12 345 678 901",onChange:e=>setProjAbn(e.target.value)}))
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projLic,placeholder:"e.g. 123456C",onChange:e=>setProjLic(e.target.value)}))
+          ,React.createElement('div',{style:SI.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:projLogoUrl,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
           ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);}},"Save")
+            ,React.createElement('button',{style:SI.ctaPrimary,onClick:async()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("iel",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("iel",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);}},"Save")
             ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel")
           )
         )
@@ -4905,6 +4928,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);
   const[newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);
   const[newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
+  const[newLogo,setNewLogo]=React.useState(null);
   const[importing,setImporting]=React.useState(false);
   const[importPreview,setImportPreview]=React.useState(null);
   const[importName,setImportName]=React.useState("");
@@ -4986,8 +5010,10 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
             )
           )
+          ,React.createElement('div',{style:ST.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:newLogo,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)}))
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:tatSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:async()=>{if(!newName.trim())return;const id=tatSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});if(newLogo)await siteLogoStore.put("tat",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -5420,6 +5446,9 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[projCo,setProjCo]=React.useState(project.company||"");
   const[projAbn,setProjAbn]=React.useState(project.abn||"");
   const[projLic,setProjLic]=React.useState(project.licence||"");
+  const[projLogoUrl,setProjLogoUrl]=React.useState(null);
+  const[projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("tat",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
   const[editingArea,setEditingArea]=React.useState(null);
   const[editAreaName,setEditAreaName]=React.useState("");
   const[editingItem,setEditingItem]=React.useState(null); // {areaId, itemId}
@@ -5430,7 +5459,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
 
   const freqOpts=freqOptions||TAT_DEFAULT_FREQS;
   const equipOpts=equipTypes||TAT_DEFAULT_EQUIP_TYPES;
-  const saveProjTAT=()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+  const saveProjTAT=async()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("tat",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("tat",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
 
   // Auto-next tag
   const nextTag=()=>{
@@ -5553,6 +5582,8 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
           ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>
             React.createElement('div',{key:lbl,style:{marginBottom:8}},React.createElement('div',{style:ST.metaLabelText},lbl),React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))
           )
+          ,React.createElement('div',{style:ST.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:projLogoUrl,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}},React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:saveProjTAT},"Save"),React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel"))
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
@@ -6892,6 +6923,7 @@ function ThermoProjectListView({
   const [newCo, setNewCo] = React.useState(() => loadAppSettings().businessName);
   const [newAbn, setNewAbn] = React.useState(() => loadAppSettings().abn);
   const [newLic, setNewLic] = React.useState(() => loadAppSettings().licence);
+  const [newLogo, setNewLogo] = React.useState(null);
   const [importing, setImporting] = React.useState(false);
   const [importPreview, setImportPreview] = React.useState(null);
   const [importName, setImportName] = React.useState("");
@@ -6900,21 +6932,24 @@ function ThermoProjectListView({
   const [importLic, setImportLic] = React.useState("");
   const [importError, setImportError] = React.useState("");
   const fileRef = React.useRef();
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!newName.trim()) return;
+    const id = slugify(newName);
     onAddProject({
-      id: slugify(newName),
+      id,
       name: newName.trim(),
       company: newCo.trim(),
       abn: newAbn.trim(),
       licence: newLic.trim(),
       areas: []
     });
+    if (newLogo) await siteLogoStore.put("thermo", id, gsdDataUrlToRec(newLogo)).catch(() => {});
     const s = loadAppSettings();
     setNewName("");
     setNewCo(s.businessName);
     setNewAbn(s.abn);
     setNewLic(s.licence);
+    setNewLogo(null);
     setShowAdd(false);
   };
   const handleFile = e => {
@@ -7081,6 +7116,10 @@ function ThermoProjectListView({
     onChange: e => setter(e.target.value),
     onKeyDown: e => e.key === "Enter" && handleAdd()
   }))), /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "LOGO (optional — overrides the global one)"), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4, marginBottom: 8 }
+  }, /*#__PURE__*/React.createElement(LogoField, { value: newLogo, onUpload: async file => { try { setNewLogo(await resizeImageToDataUrl(file, 480, 0.9)); } catch (_) {} }, onRemove: () => setNewLogo(null) })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -8236,7 +8275,10 @@ function ThermoManageView({
   const [projCo, setProjCo] = React.useState(project.company||"");
   const [projAbn, setProjAbn] = React.useState(project.abn||"");
   const [projLic, setProjLic] = React.useState(project.licence||"");
-  const saveProj = () => { onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()}); setEditingProject(false); };
+  const [projLogoUrl, setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty, setProjLogoDirty] = React.useState(false);
+  React.useEffect(() => { let alive = true; let url = ""; siteLogoStore.get("thermo", project.id).then(rec => { if (!alive || !rec) return; url = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setProjLogoUrl(url); }).catch(() => {}); return () => { alive = false; if (url) URL.revokeObjectURL(url); }; }, [project.id]);
+  const saveProj = async () => { onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()}); if (projLogoDirty) { if (projLogoUrl) await siteLogoStore.put("thermo", project.id, gsdDataUrlToRec(projLogoUrl)).catch(() => {}); else await siteLogoStore.del("thermo", project.id).catch(() => {}); setProjLogoDirty(false); } setEditingProject(false); };
   return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px"
@@ -8252,6 +8294,10 @@ function ThermoManageView({
               /*#__PURE__*/React.createElement("div",{style:STH.metaLabelText},lbl),
               /*#__PURE__*/React.createElement("input",{style:{...STH.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
             )
+          ),
+          /*#__PURE__*/React.createElement("div",{style:STH.metaLabelText},"LOGO (optional — overrides the global one)"),
+          /*#__PURE__*/React.createElement("div",{style:{marginTop:4,marginBottom:8}},
+            /*#__PURE__*/React.createElement(LogoField,{value:projLogoUrl,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}})
           ),
           /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},
             /*#__PURE__*/React.createElement("button",{style:STH.ctaPrimary,onClick:saveProj},"Save"),
@@ -9557,6 +9603,22 @@ function ThermoApp({
 // drawn on every export. Explicit Save button (a record-editing form, not a live test result — the app's live-autosave rule doesn't apply).
 // ═════════════════════════════════════════════════════════════════════════
 const GS_COLOR = "#475569"; // neutral slate — this isn't tied to any one module
+// Shared logo control (2026-09-27): preview + Upload/Replace + Remove, reused by Global Settings AND every module's Add Site / Manage edit
+// form for the per-site override — built once here instead of nine near-identical copies (the mistake already flagged for the five
+// EditableDropdown components). Purely presentational: `value` is a preview URL (object URL or data URL) or "", `onUpload(file)` gets the
+// raw picked File, `onRemove()` clears it — the caller owns whatever storage (appLogoStore / siteLogoStore / local state) sits behind it.
+function LogoField({ value, onUpload, onRemove, color }) {
+  const handle = e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onUpload(f); };
+  return React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 14 } }
+    , value
+      ? React.createElement('img', { src: value, alt: "Logo", style: { width: 120, height: 70, objectFit: "contain", background: "#fff", border: "1px solid #e4e4e7", borderRadius: 8 } })
+      : React.createElement('div', { style: { width: 120, height: 70, border: "1px dashed #d4d4d8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#a1a1aa", textAlign: "center", padding: 4 } }, "No logo set")
+    , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 8 } }
+      , React.createElement('label', { style: { background: color || GS_COLOR, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center" } }
+        , value ? "Replace" : "Upload"
+        , React.createElement('input', { type: "file", accept: "image/*", style: { display: "none" }, onChange: handle }))
+      , value && React.createElement(DeleteButton, { onDelete: onRemove, label: "Remove logo?" })));
+}
 function GlobalSettingsView({ onGoHome }) {
   const [loaded, setLoaded] = React.useState(false);
   const [businessName, setBusinessName] = React.useState("");
@@ -9580,9 +9642,7 @@ function GlobalSettingsView({ onGoHome }) {
     return () => { alive = false; if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
   }, []);
 
-  const onUpload = async e => {
-    const file = e.target.files && e.target.files[0]; e.target.value = "";
-    if (!file) return;
+  const onUpload = async file => {
     setError("");
     try {
       const dataUrl = await resizeImageToDataUrl(file, 480, 0.9);
@@ -9628,15 +9688,7 @@ function GlobalSettingsView({ onGoHome }) {
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 20 } }, "Pre-fills the \"Add Site\" form in every module. Fully editable there — this never changes a site already created.")
 
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Company Logo")
-      , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 14, marginBottom: 10 } }
-        , logoUrl
-          ? React.createElement('img', { src: logoUrl, alt: "Company logo", style: { width: 120, height: 70, objectFit: "contain", background: "#fff", border: "1px solid #e4e4e7", borderRadius: 8 } })
-          : React.createElement('div', { style: { width: 120, height: 70, border: "1px dashed #d4d4d8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#a1a1aa", textAlign: "center", padding: 4 } }, "No logo set")
-        , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 8 } }
-          , React.createElement('label', { style: { background: GS_COLOR, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center" } }
-            , hasLogo ? "Replace" : "Upload"
-            , React.createElement('input', { type: "file", accept: "image/*", style: { display: "none" }, onChange: onUpload }))
-          , hasLogo && React.createElement(DeleteButton, { onDelete: onRemoveLogo, label: "Remove logo?" })))
+      , React.createElement('div', { style: { marginBottom: 10 } }, React.createElement(LogoField, { value: logoUrl, onUpload, onRemove: onRemoveLogo }))
       , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
 
@@ -10361,7 +10413,7 @@ function SWBApp({ onGoHome }) {
 function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}) {
   const [showAdd,setShowAdd]=React.useState(false);
   const [tab,setTab]=React.useState("manual");
-  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);const [newLogo,setNewLogo]=React.useState(null);
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=swbStyles();
@@ -10429,8 +10481,10 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
             )
           )
+          ,React.createElement('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:newLogo,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)}))
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:()=>{if(!newName.trim())return;onAddProject({id:swbSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:async()=>{if(!newName.trim())return;const id=swbSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});if(newLogo)await siteLogoStore.put("swb",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -10739,10 +10793,12 @@ function SWBManageView({project,onUpdateProject,onBack}) {
   const [projCo,setProjCo]=React.useState(project.company||"");
   const [projAbn,setProjAbn]=React.useState(project.abn||"");
   const [projLic,setProjLic]=React.useState(project.licence||"");
+  const [projLogoUrl,setProjLogoUrl]=React.useState(null);const [projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("swb",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
   const [editingAreaId,setEditingAreaId]=React.useState(null);const [editAreaName,setEditAreaName]=React.useState("");
   const [editingBoard,setEditingBoard]=React.useState(null);const [editBoardName,setEditBoardName]=React.useState("");
   const SS=swbStyles();const upd=u=>onUpdateProject(u);
-  const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+  const saveProj=async()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("swb",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("swb",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...(project.areas||[]),{id:swbSlug(newAreaName),name:newAreaName.trim(),boards:[]}]});setNewAreaName("");};
   const delArea=id=>upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});
   const addBoard=aid=>{const n=(newBoardName[aid]||"").trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:[...(a.boards||[]),{id:swbSlug(n),name:n}]}:a)});setNewBoardName(x=>({...x,[aid]:""}));};
@@ -10755,6 +10811,8 @@ function SWBManageView({project,onUpdateProject,onBack}) {
       ?React.createElement('div',{style:{...SS.addCard,marginBottom:16,border:"1px solid #93c5fd"}}
         ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#7e22ce",marginBottom:10}},"SITE DETAILS")
         ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>React.createElement('div',{key:lbl,style:{marginBottom:8}},React.createElement('div',{style:SS.metaLabelText},lbl),React.createElement('input',{style:{...SS.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})))
+        ,React.createElement('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+        ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:projLogoUrl,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
         ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
           ,React.createElement('button',{style:{padding:"9px 14px",background:"#7e22ce",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:saveProj},"Save")
           ,React.createElement('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
@@ -11729,12 +11787,20 @@ function downloadELTTemplate() {
   deliverExportFile(out,"ELT_Import_Template.xlsx");
 }
 
-function ELTSiteFields({vals, setVals}) {
+// logoUrl/onLogoUpload/onLogoRemove are optional: the two import-preview usages of this component don't pass them, so no logo field
+// shows there (a per-site logo isn't manually entered from an import preview — Stage 3 extracts it from the file itself).
+function ELTSiteFields({vals, setVals, logoUrl, onLogoUpload, onLogoRemove}) {
   const SS = swbStyles();
-  return [["SITE NAME","name","Site name"],["COMPANY (optional)","company","Company name"],["ABN (optional)","abn","e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","licence","e.g. 123456C"]].map(([lbl,k,ph])=>
-    eltEl('div',{key:k,style:{marginBottom:8}}
-      ,eltEl('div',{style:SS.metaLabelText},lbl)
-      ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:vals[k]||"",placeholder:ph,onChange:e=>setVals({...vals,[k]:e.target.value})})
+  return eltEl(React.Fragment, null
+    ,[["SITE NAME","name","Site name"],["COMPANY (optional)","company","Company name"],["ABN (optional)","abn","e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","licence","e.g. 123456C"]].map(([lbl,k,ph])=>
+      eltEl('div',{key:k,style:{marginBottom:8}}
+        ,eltEl('div',{style:SS.metaLabelText},lbl)
+        ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:vals[k]||"",placeholder:ph,onChange:e=>setVals({...vals,[k]:e.target.value})})
+      )
+    )
+    ,onLogoUpload&&eltEl(React.Fragment,null
+      ,eltEl('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+      ,eltEl('div',{style:{marginTop:4,marginBottom:8}},eltEl(LogoField,{value:logoUrl,onUpload:onLogoUpload,onRemove:onLogoRemove}))
     )
   );
 }
@@ -11744,12 +11810,13 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const [showAdd,setShowAdd] = React.useState(false);
   const [tab,setTab] = React.useState("manual");
   const [vals,setVals] = React.useState(()=>{ const s=loadAppSettings(); return {name:"",company:s.businessName,abn:s.abn,licence:s.licence}; });
+  const [newLogo,setNewLogo] = React.useState(null);
   const [importing,setImporting] = React.useState(false);
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
   const [importError,setImportError] = React.useState("");
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setNewLogo(null);setImportPreview(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
@@ -11820,9 +11887,9 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         )
         ,tab==="manual"&&eltEl(React.Fragment,null
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
-          ,eltEl(ELTSiteFields,{vals,setVals})
+          ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:newLogo,onLogoUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setNewLogo(null)})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:async()=>{if(!vals.name.trim())return;const id=slugify(vals.name);onAddProject({id,name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});if(newLogo)await siteLogoStore.put("elt",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -12117,6 +12184,9 @@ function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
+  const [projLogoUrl,setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty,setProjLogoDirty] = React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("elt",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
   const upd = u=>onUpdateProject(u);
   const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
   return eltEl('div',{style:SS.listWrap}
@@ -12124,9 +12194,9 @@ function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
     ,editingProject
       ?eltEl('div',{style:{...SS.addCard,marginBottom:16,border:`1px solid ${ELT_COLOR_BORDER}`}}
         ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:ELT_COLOR,marginBottom:10}},"SITE DETAILS")
-        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:projLogoUrl,onLogoUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onLogoRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}})
         ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-          ,eltEl('button',{style:{padding:"9px 14px",background:ELT_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});setEditingProject(false);}},"Save")
+          ,eltEl('button',{style:{padding:"9px 14px",background:ELT_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:async()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("elt",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("elt",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);}},"Save")
           ,eltEl('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
         )
       )
@@ -12662,7 +12732,7 @@ function IRTCompleteBtn({color,onComplete}){
 // ─── Project list view with Manual + Import tabs ──────────────────────────
 function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}){
   const [showAdd,setShowAdd]=React.useState(false);const [tab,setTab]=React.useState("manual");
-  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);const [newLogo,setNewLogo]=React.useState(null);
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=irtStyles();
@@ -12697,7 +12767,9 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       tab==="manual"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site"),
         [["SITE NAME","text",newName,setNewName,"Site name"],["COMPANY (optional)","text",newCo,setNewCo,"Company name"],["ABN (optional)","text",newAbn,setNewAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",newLic,setNewLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:irtSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
+        React.createElement("div",{style:SS.metaLabelText},"LOGO (optional — overrides the global one)"),
+        React.createElement("div",{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:newLogo,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)})),
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:async()=>{if(!newName.trim())return;const id=irtSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});if(newLogo)await siteLogoStore.put("irt",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
       ),
       tab==="import"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel"),
@@ -12735,9 +12807,11 @@ function IRTManageView({project,onUpdateProject,onBack}){
   const [projCo,setProjCo]=React.useState(project.company||"");
   const [projAbn,setProjAbn]=React.useState(project.abn||"");
   const [projLic,setProjLic]=React.useState(project.licence||"");
+  const [projLogoUrl,setProjLogoUrl]=React.useState(null);const [projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("irt",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
   const SS=irtStyles();
   const upd=areas=>onUpdateProject({...project,areas});
-  const saveProj=()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+  const saveProj=async()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("irt",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("irt",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd([...(project.areas||[]),{id:irtSlug(newAreaName),name:newAreaName.trim(),panels:[]}]);setNewAreaName("");};
   const delArea=id=>upd((project.areas||[]).filter(a=>a.id!==id));
   const startEditArea=(area)=>{setEditingArea(area.id);setEditAreaName(area.name);};
@@ -12766,6 +12840,8 @@ function IRTManageView({project,onUpdateProject,onBack}){
           ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>
             React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))
           )
+          ,React.createElement("div",{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement("div",{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:projLogoUrl,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
           ,React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}}
             ,React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:saveProj},"Save")
             ,React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel")
@@ -13817,9 +13893,10 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const [importing,setImporting] = React.useState(false);
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [newLogo,setNewLogo] = React.useState(null);
   const [importError,setImportError] = React.useState("");
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);setImportPreview(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
@@ -13889,9 +13966,9 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         )
         ,tab==="manual"&&eltEl(React.Fragment,null
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
-          ,eltEl(ELTSiteFields,{vals,setVals})
+          ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:newLogo,onLogoUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setNewLogo(null)})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:async()=>{if(!vals.name.trim())return;const id=slugify(vals.name);onAddProject({id,name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});if(newLogo)await siteLogoStore.put("welder",id,gsdDataUrlToRec(newLogo)).catch(()=>{});closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -14180,6 +14257,9 @@ function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
+  const [projLogoUrl,setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty,setProjLogoDirty] = React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("welder",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
   const upd = u=>onUpdateProject(u);
   const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
   return eltEl('div',{style:SS.listWrap}
@@ -14187,9 +14267,9 @@ function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
     ,editingProject
       ?eltEl('div',{style:{...SS.addCard,marginBottom:16,border:`1px solid ${WELDER_COLOR_BORDER}`}}
         ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:WELDER_COLOR,marginBottom:10}},"SITE DETAILS")
-        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:projLogoUrl,onLogoUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onLogoRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}})
         ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-          ,eltEl('button',{style:{padding:"9px 14px",background:WELDER_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});setEditingProject(false);}},"Save")
+          ,eltEl('button',{style:{padding:"9px 14px",background:WELDER_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:async()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("welder",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("welder",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);}},"Save")
           ,eltEl('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
         )
       )
@@ -14851,7 +14931,8 @@ function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDele
   const SS = swbStyles();
   const [showAdd, setShowAdd] = React.useState(false);
   const [vals, setVals] = React.useState(() => { const s = loadAppSettings(); return { name: "", company: s.businessName, abn: s.abn, licence: s.licence }; });
-  const close = () => { setShowAdd(false); const s = loadAppSettings(); setVals({ name: "", company: s.businessName, abn: s.abn, licence: s.licence }); };
+  const [newLogo, setNewLogo] = React.useState(null);
+  const close = () => { setShowAdd(false); const s = loadAppSettings(); setVals({ name: "", company: s.businessName, abn: s.abn, licence: s.licence }); setNewLogo(null); };
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("div", { style: { ...SS.listTitle, marginTop: 24 } }, "Sites")
     , projects.length === 0 && !showAdd && gsdEl("div", { style: { color: "#52525b", fontSize: 14, marginBottom: 16 } }, "No sites yet — add one to start testing.")
@@ -14866,9 +14947,9 @@ function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDele
     , showAdd
       ? gsdEl("div", { style: SS.addCard }
         , gsdEl("div", { style: { fontSize: 14, fontWeight: 800, color: "#18181b", marginBottom: 12 } }, "New Site")
-        , gsdEl(ELTSiteFields, { vals, setVals })
+        , gsdEl(ELTSiteFields, { vals, setVals, logoUrl: newLogo, onLogoUpload: async file => { try { setNewLogo(await resizeImageToDataUrl(file, 480, 0.9)); } catch (_) {} }, onLogoRemove: () => setNewLogo(null) })
         , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 4 } }
-          , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: () => { if (!vals.name.trim()) return; onAddProject({ id: slugify(vals.name), name: vals.name.trim(), company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim(), areas: [] }); close(); } }, "Add Site")
+          , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: async () => { if (!vals.name.trim()) return; const id = slugify(vals.name); onAddProject({ id, name: vals.name.trim(), company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim(), areas: [] }); if (newLogo) await siteLogoStore.put("gsd", id, gsdDataUrlToRec(newLogo)).catch(() => {}); close(); } }, "Add Site")
           , gsdEl("button", { style: SS.ctaSecondary, onClick: close }, "Cancel")))
       : gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR, width: "100%", marginTop: 8 }, onClick: () => setShowAdd(true) }, "+ Add Site"));
 }
@@ -15024,6 +15105,9 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
   const SS = swbStyles();
   const [editingProject, setEditingProject] = React.useState(false);
   const [vals, setVals] = React.useState({ name: project.name, company: project.company || "", abn: project.abn || "", licence: project.licence || "" });
+  const [projLogoUrl, setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty, setProjLogoDirty] = React.useState(false);
+  React.useEffect(() => { let alive = true; let url = ""; siteLogoStore.get("gsd", project.id).then(rec => { if (!alive || !rec) return; url = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setProjLogoUrl(url); }).catch(() => {}); return () => { alive = false; if (url) URL.revokeObjectURL(url); }; }, [project.id]);
   const [newArea, setNewArea] = React.useState(""); const [err, setErr] = React.useState(""); const [renaming, setRenaming] = React.useState(null); const [renameVal, setRenameVal] = React.useState("");
   const areas = project.areas || [];
   const addArea = () => { const n = newArea.trim(); if (!n) return; if (gsdAreaTaken(project, n)) { setErr(`"${n}" is already an area`); return; } onUpdateProject({ ...project, areas: [...areas, { id: uid(), name: n }] }); setNewArea(""); setErr(""); };
@@ -15033,9 +15117,9 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
     , editingProject
       ? gsdEl("div", { style: { ...SS.addCard, marginBottom: 16, border: `1px solid ${GSD_COLOR_BORDER}` } }
         , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, marginBottom: 10 } }, "SITE DETAILS")
-        , gsdEl(ELTSiteFields, { vals, setVals })
+        , gsdEl(ELTSiteFields, { vals, setVals, logoUrl: projLogoUrl, onLogoUpload: async file => { try { setProjLogoUrl(await resizeImageToDataUrl(file, 480, 0.9)); setProjLogoDirty(true); } catch (_) {} }, onLogoRemove: () => { setProjLogoUrl(null); setProjLogoDirty(true); } })
         , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 4 } }
-          , gsdEl("button", { style: { padding: "9px 14px", background: GSD_COLOR, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }, onClick: () => { onUpdateProject({ ...project, name: vals.name.trim() || project.name, company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim() }); setEditingProject(false); } }, "Save")
+          , gsdEl("button", { style: { padding: "9px 14px", background: GSD_COLOR, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }, onClick: async () => { onUpdateProject({ ...project, name: vals.name.trim() || project.name, company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim() }); if (projLogoDirty) { if (projLogoUrl) await siteLogoStore.put("gsd", project.id, gsdDataUrlToRec(projLogoUrl)).catch(() => {}); else await siteLogoStore.del("gsd", project.id).catch(() => {}); setProjLogoDirty(false); } setEditingProject(false); } }, "Save")
           , gsdEl("button", { style: { padding: "9px 14px", background: "transparent", color: "#6e6a66", border: "1px solid #d4d4d8", borderRadius: 8, fontSize: 13, cursor: "pointer" }, onClick: () => setEditingProject(false) }, "Cancel")))
       : gsdEl("div", { style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" } }
         , gsdEl("div", null, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: "#18181b" } }, project.name), project.company && gsdEl("div", { style: { fontSize: 12, color: "#6e6a66", marginTop: 2 } }, project.company))
