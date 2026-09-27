@@ -6,7 +6,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppRoot, { siteLogoStore } from './App.jsx';
+import AppRoot, { siteLogoStore, appLogoStore, saveAppSettings } from './App.jsx';
 import 'fake-indexeddb/auto';
 
 afterEach(() => cleanup()); beforeEach(() => localStorage.clear());
@@ -16,6 +16,35 @@ beforeAll(() => { URL.createObjectURL = () => 'blob:site-logo-ui-test'; URL.revo
 // Stage 1 already covers the storage/resolution math directly; here we cover the STAGE-UNTIL-SUBMIT wiring — that no write happens before
 // the form's own commit action — using the Remove path (no canvas involved) to prove that, plus the on-load preview from existing storage.
 const bin = () => screen.getAllByRole('button').filter(b => b.textContent === '' && b.querySelector('svg') && !b.getAttribute('aria-label'));
+
+describe('Bug fix (2026-09-27): Add Site\'s logo preview shows the GLOBAL logo as a visual default when no per-site override exists yet — it was previously always showing "No logo set" even though export resolution already fell back to the global one correctly', () => {
+  const rec = { buf: new Uint8Array([1, 2, 3]).buffer, type: 'image/jpeg' };
+  it('RCD: shows the global logo (not "No logo set") and labels it as the default', async () => {
+    await appLogoStore.put(rec); saveAppSettings({ businessName: '', abn: '', licence: '', logoId: 'logo' });
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText('RCD TESTING'));
+    await user.click(await screen.findByText(/\+ Add/));
+    expect(await screen.findByAltText('Logo')).toBeTruthy();                       // the global logo previews, not the dashed placeholder
+    expect(screen.queryByText('No logo set')).not.toBeInTheDocument();
+    expect(await screen.findByText(/Using the global default logo/)).toBeTruthy(); // clearly marked as the default, not a per-site override
+    expect(screen.queryAllByRole('button', { name: /Delete$/ })).toHaveLength(0);  // no per-site value exists yet, so nothing to Remove
+  });
+  it('GSD (object-shaped vals form): same fallback', async () => {
+    await appLogoStore.put(rec); saveAppSettings({ businessName: '', abn: '', licence: '', logoId: 'logo' });
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText('GENERAL SITE DEFECTS'));
+    await user.click(await screen.findByText(/\+ Add/));
+    expect(await screen.findByAltText('Logo')).toBeTruthy();
+    expect(await screen.findByText(/Using the global default logo/)).toBeTruthy();
+  });
+  it('with NO global logo set either, Add Site correctly still shows "No logo set"', async () => {
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText('RCD TESTING'));
+    await user.click(await screen.findByText(/\+ Add/));
+    expect(await screen.findByText('No logo set')).toBeTruthy();
+    expect(screen.queryByText(/Using the global default logo/)).not.toBeInTheDocument();
+  });
+});
 
 describe('Add Site: a logo control is present and does not touch storage before "Add Site" is clicked', () => {
   it('RCD', async () => {
