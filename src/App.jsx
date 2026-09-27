@@ -97,6 +97,59 @@ function xjPageSetup(sheet, landscape, titleRow) {
     margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 }, ...(titleRow ? { printTitlesRow: `${titleRow}:${titleRow}` } : {}) };
   sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
 }
+// ── Row heights & photo sizes (2026-09-27) ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// An .xlsx row with NO stored height is only autofitted by desktop Excel: phone viewers (iOS Files / Quick Look, Sheets / Numbers previews) draw it at the default 15 pt and clip
+// wrapped text; a MERGED row is never autofitted anywhere. So EVERY export gets explicit heights: xjFitRows(wb) runs once before the file is written and sets each row's height from
+// its wrapped text (per cell: font size, bold, the column width — or the merged width) — never SHRINKING a height something already set (photo rows, title rows). Photos are
+// embedded at their NATURAL aspect (read from the image header) inside a box, and their row is sized from the embedded height.
+function xjWrapLines(text, cpl) {
+  let lines = 0;
+  String(text == null ? "" : text).split("\n").forEach(par => {
+    let cur = 0, n = 1;
+    par.split(/\s+/).filter(Boolean).forEach(w => { const L = w.length; if (L > cpl) { n += Math.ceil((cur ? cur + 1 + L : L) / cpl) - 1; cur = (cur ? cur + 1 + L : L) % cpl; } else if (cur + (cur ? 1 : 0) + L <= cpl) cur += (cur ? 1 : 0) + L; else { n++; cur = L; } });
+    lines += n;
+  });
+  return Math.max(1, lines);
+}
+function xjFitRows(wb) {
+  wb.worksheets.forEach(ws => {
+    const merges = {};   // master address -> { cols:[c1,c2], rows:[r1,r2] }
+    (ws.model.merges || []).forEach(m => { const [a, b] = m.split(":"); const pa = ws.getCell(a), pb = ws.getCell(b); merges[a] = { c1: pa.col, c2: pb.col, r1: pa.row, r2: pb.row }; });
+    ws.eachRow({ includeEmpty: false }, row => {
+      let need = 0;
+      row.eachCell({ includeEmpty: false }, cell => {
+        const al = cell.alignment || {}; const v = cell.value; if (!al.wrapText || v == null || v === "") return;
+        const txt = typeof v === "object" ? (v.richText ? v.richText.map(t => t.text).join("") : v.result != null ? String(v.result) : v.text != null ? String(v.text) : v instanceof Date ? "" : "") : String(v);
+        if (txt === "") return;
+        const mg = merges[cell.address]; if (cell.isMerged && !mg) return;                      // a merged SLAVE cell
+        if (mg && mg.r2 > mg.r1) return;                                                           // a multi-row merge: sized by its neighbours
+        let w = 0; for (let k = mg ? mg.c1 : cell.col; k <= (mg ? mg.c2 : cell.col); k++) w += ws.getColumn(k).width || 8.43;
+        const sz = (cell.font && cell.font.size) || 10; const bold = !!(cell.font && cell.font.bold);
+        const cpl = Math.max(1, Math.floor((w * 7) / (sz * (4 / 3) * 0.5 * (bold ? 1.08 : 1))));   // characters per line (conservative: Calibri averages ~0.47 em)
+        need = Math.max(need, xjWrapLines(txt, cpl) * sz * 1.3 + 3);
+      });
+      if (need > 0 && ((row.height == null && need > 16) || (row.height != null && row.height < need))) row.height = Math.ceil(need);   // a one-line row keeps the default height
+    });
+  });
+}
+// natural pixel size of a data-URL image from its header (JPEG SOF / PNG IHDR / GIF) — no decoding, works in Node and browsers; null if unknown
+function xjImageSize(dataUrl) {
+  try {
+    const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || ""); if (!m) return null;
+    const bin = atob(m[2]); const b = i => bin.charCodeAt(i);
+    if (m[1] === "png") return { w: (b(16) << 24) | (b(17) << 16) | (b(18) << 8) | b(19), h: (b(20) << 24) | (b(21) << 16) | (b(22) << 8) | b(23) };
+    if (m[1] === "gif") return { w: b(6) | (b(7) << 8), h: b(8) | (b(9) << 8) };
+    let i = 2; while (i + 9 < bin.length) {
+      if (b(i) !== 0xFF) { i++; continue; }
+      const mk = b(i + 1); if (mk >= 0xC0 && mk <= 0xCF && mk !== 0xC4 && mk !== 0xC8 && mk !== 0xCC) return { h: (b(i + 5) << 8) | b(i + 6), w: (b(i + 7) << 8) | b(i + 8) };
+      i += 2 + ((b(i + 2) << 8) | b(i + 3));
+    }
+  } catch (_) { /* fall through */ }
+  return null;
+}
+const XJ_PHOTO_BOX = 140;   // an embedded photo fits a 140 x 140 px box at its NATURAL aspect (a 4:3 photo is 140 x 105; a portrait one 105 x 140) — never stretched
+function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.w > 0 ? s.w : 4, H = s && s.h > 0 ? s.h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
+const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
 const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
 // Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
 function xjResultStyle(v) {
@@ -501,6 +554,7 @@ async function exportExcel(results, project, meta, mode, logoBase64) {
   ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
   xjPageSetup(ss, false, null);
   const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 // ─────────────────────────────────────────────────────────────────────────
@@ -2382,6 +2436,7 @@ async function exportIELExcel(project, results, meta) {
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -4482,6 +4537,7 @@ async function exportTATExcel(project, results, meta) {
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -6002,6 +6058,7 @@ async function exportThermoExcel(project, results, meta) {
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -9834,19 +9891,20 @@ async function exportSWBExcel(project, allResults, meta) {
     swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      sh.getRow(rr).height = EXPORT_PHOTO_ROW_PT;
+      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
         const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
-        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
     [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
     xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
   });
 
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
@@ -11241,13 +11299,13 @@ async function exportELTExcel(project, allResults, meta) {
       r.photos.forEach(p=>{
         const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
         pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
-        ps.getRow(pr).height = EXPORT_PHOTO_ROW_PT;
+        const bx = xjPhotoBox(p.dataUrl); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
         const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
         if (m) {
           let ext = m[1]==="jpg"?"jpeg":m[1];
           if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
           const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
-          ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+          ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
         }
         pr++;
       });
@@ -11255,6 +11313,7 @@ async function exportELTExcel(project, allResults, meta) {
     [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
     setup(ps,false,1);
   }
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
@@ -12127,6 +12186,7 @@ async function exportIRTExcel(project, results, meta) {
       headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
   });
   const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
 }
 
@@ -14106,18 +14166,19 @@ async function exportWelderExcel(project, allResults, meta) {
     (raw.photos||[]).forEach((p,pi)=>{
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      sh.getRow(rr).height = EXPORT_PHOTO_ROW_PT;
+      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
         const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
-        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
     [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
     xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
   });
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
@@ -14418,6 +14479,7 @@ async function exportGSDExcel(project, items, meta) {
     widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
     rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
     emptyText: "No defects recorded", landscape: true });
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
 }
@@ -14840,6 +14902,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
     }));
 }
 
-export { useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
