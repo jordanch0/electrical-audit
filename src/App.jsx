@@ -10374,7 +10374,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
         ,React.createElement('div',{style:{flex:1,minWidth:0}})
         ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
       ))
-      ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+      ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#7e22ce",border:"1px dashed #d8b4fe",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
     )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
@@ -11763,7 +11763,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
         ,eltEl('div',{style:{flex:1,minWidth:0}})
         ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
       ))
-      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:ELT_COLOR,border:`1px dashed ${ELT_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
     )
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
@@ -13897,7 +13897,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
         ,eltEl('div',{style:{flex:1,minWidth:0}})
         ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
       ))
-      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
+      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:WELDER_COLOR,border:`1px dashed ${WELDER_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
     )
     ,nextDue&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
@@ -14698,7 +14698,7 @@ function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect
   if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on the Home tab to begin.");
   const startAdd = areaId => { pendingArea.current = areaId; if (fileRef.current) fileRef.current.click(); };
   return gsdEl("div", { style: SS.listWrap }
-    , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
+    , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
     , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 8 } }, photoError)
     , (project.areas || []).length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13, marginBottom: 10 } }, "No areas yet — add an area in the Manage tab, then add defects to it.")
     , gsdEl("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }
@@ -14767,7 +14767,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
         , arrowBtn("Move photo up", "▲", () => onMovePhoto(p.id, -1), i === 0), arrowBtn("Move photo down", "▼", () => onMovePhoto(p.id, 1), i === photos.length - 1)
         , gsdEl(DeleteButton, { onDelete: () => onRemovePhoto(p), compact: true })))
       , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 6 } }, photoError)
-      , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
+      , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
       , gsdEl("button", { type: "button", style: { width: "100%", padding: "10px", background: "transparent", color: GSD_COLOR, border: `1px dashed ${GSD_COLOR_BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => photoRef.current && photoRef.current.click() }, "+ Add Photo"))
     , field("COMMON DEFECT", gsdEl(IELEditableDropdown, { options: [...commonOpts, "Other"], value: r.commonDefect || "", onChange: pickCommon, placeholder: "Select or type…" }))
     , field("DESCRIPTION", gsdEl("textarea", { style: { ...SS.modalInput, minHeight: 68, resize: "vertical", fontFamily: "inherit" }, value: r.description || "", placeholder: "Describe the defect…", "aria-label": "Description", onChange: e => set({ description: e.target.value }) }))

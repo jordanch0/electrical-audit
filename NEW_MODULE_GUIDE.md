@@ -237,6 +237,7 @@ Reference: **`exportELTExcel`** (ExcelJS, split main + Defects), `exportSWBExcel
     32 / 16 / 16 / 6 / 40. (All eight exports share this block; `xjSheet` builds it for the split modules.)
   - **Data rows: full four-side thin grid borders via `swbXAB()`** (colour `FFD9D9D9`). `export-borders.test.js` locks SWB and ELT
     to the same border.
+- [ ] **Photo inputs: `type="file" accept="image/*" multiple` and NO `capture` attribute** (confirmed on a real phone: `capture="environment"` opens a camera-only screen with no photo library; without it the OS offers Take Photo / Photo Library / Files). `src/photo-inputs.test.jsx` scans for it.
 - [ ] **Photos** (if the module has them): capture through `resizeImageToDataUrl` (max 1280px, JPEG q 0.72, stored as
   `{id, dataUrl}`); embed with `wb.addImage` / `ws.addImage(..., {ext:{width,height}, editAs:"oneCell"})` using the shared
   `EXPORT_PHOTO_W_PX = 140`, `EXPORT_PHOTO_H_PX = 105` (**4:3, never stretched**) and `EXPORT_PHOTO_ROW_PT = 90` so the row is tall
