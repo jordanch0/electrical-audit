@@ -239,6 +239,26 @@ async function xjGetLogoDataUrl(module, siteId) {
   const s = loadAppSettings(); if (!s.logoId) return null;
   try { const rec = await appLogoStore.get(); return rec ? gsdRecToDataUrl(rec) : null; } catch (_) { return null; }
 }
+// Import extraction (2026-09-27): if the imported file carries an embedded logo (our own export header strip), pull it back out so it
+// becomes the new site's per-site logo override — the same round-trip Company/ABN/Licence already get. SheetJS (the community `xlsx`
+// build used everywhere else for import parsing) cannot read embedded images at all, so this is a SEPARATE ExcelJS read of the same
+// buffer alongside the normal SheetJS parse, not a replacement for it. Our own logo is always anchored inside row 1 of the FIRST
+// worksheet (row 0 in ExcelJS's 0-indexed anchor) — that is the structural sheet every importer already reads (Register / the main
+// results sheet). Returns null (no per-site logo, nothing changes) if there's no image there or the file can't be read as .xlsx (e.g. CSV).
+async function xjExtractLogo(buf) {
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0]; if (!ws) return null;
+    const img = ws.getImages().find(im => im.range && im.range.tl && im.range.tl.row < 2);
+    if (!img) return null;
+    const media = wb.getImage(img.imageId); if (!media || !media.buffer) return null;
+    let ext = media.extension === "jpg" ? "jpeg" : (media.extension || "png");
+    if (!["jpeg", "png", "gif"].includes(ext)) ext = "png";
+    const arrBuf = media.buffer instanceof ArrayBuffer ? media.buffer : new Uint8Array(media.buffer).buffer;
+    return { buf: arrBuf, type: `image/${ext}` };
+  } catch (_) { return null; }
+}
 const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
 // Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
 function xjResultStyle(v) {
@@ -487,9 +507,12 @@ function parseCompanyRow(cellValue) {
 function parseExcelToProject(data, projectName, company, abn, licence) {
 const ws   = data.Sheets[data.SheetNames[0]];
 const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+// A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title. Every fixed-row read below
+// (company/ABN/licence at "row 2") accounts for that with this one offset, same idea as the export side's own `off`.
+const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
 // Auto-detect company/ABN/licence from row 2 only (row 1 is the site title)
-if(rows[1]) {
-  const parsed = parseCompanyRow(rows[1][0]);
+if(rows[1+rowOff]) {
+  const parsed = parseCompanyRow(rows[1+rowOff][0]);
   if(!company && parsed.company) company = parsed.company;
   if(!abn && parsed.abn) abn = parsed.abn;
   if(!licence && parsed.licence) licence = parsed.licence;
@@ -1153,6 +1176,7 @@ const [importAbn,  setImportAbn]  = React.useState("");
 const [importLic,  setImportLic]  = React.useState("");
 
 const [importError,setImportError]= React.useState("");
+const [importLogoRec,setImportLogoRec]= React.useState(null);
 const fileRef = React.useRef();
 const handleFile = e => {
 const file = e.target.files[0]; if(!file) return;
@@ -1160,9 +1184,9 @@ if(!/\.(xlsx|xls|csv)$/i.test(file.name)){
   setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");
   return;
 }
-setImporting(true); setImportError("");
+setImporting(true); setImportError(""); setImportLogoRec(null);
 const reader=new FileReader();
-reader.onload=ev=>{
+reader.onload=async ev=>{
 try {
   const buf=ev.target.result;
   if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
@@ -1176,6 +1200,7 @@ try {
   if(!importCo && proj.company) setImportCo(proj.company);
   if(!importAbn && proj.abn) setImportAbn(proj.abn);
   if(!importLic && proj.licence) setImportLic(proj.licence);
+  xjExtractLogo(buf).then(setImportLogoRec);
 } catch(err){ setImportError("Could not parse file — check it is a valid Excel or CSV file."); }
   finally{ setImporting(false); }
 };
@@ -1187,7 +1212,8 @@ const confirmImport = () => {
 if(!importPreview) return;
 const finalProject={...importPreview,id:slugify(importName||importPreview.name),name:importName||importPreview.name,company:importCo,abn:importAbn.trim(),licence:importLic.trim()};
 onAddProject(finalProject);
-setImportPreview(null);setShowAdd(false);setImportName("");setImportError("");
+if(importLogoRec) siteLogoStore.put("rcd",finalProject.id,importLogoRec).catch(()=>{});
+setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoRec(null);setImportError("");
 };
 const addManual=async()=>{
 if(!newName.trim()) return;
@@ -2541,13 +2567,15 @@ async function exportIELExcel(project, results, meta) {
 function parseIELExcel(data){
   const ws=data.Sheets[data.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+  // A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title.
+  const rowOff0=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
   let headerIdx=-1;
   for(let i=0;i<Math.min(rows.length,10);i++){
     if(rows[i].some(c=>String(c).length>60)) continue;
     const r=rows[i].map(c=>String(c).toLowerCase());
     if(r.some(c=>c==="location"||c==="area")&&r.some(c=>c==="type")){headerIdx=i;break;}
   }
-  if(headerIdx===-1)headerIdx=4;
+  if(headerIdx===-1)headerIdx=4+rowOff0;
   const header=rows[headerIdx].map(c=>String(c).toLowerCase().trim());
   const col=search=>header.findIndex(h=>h.includes(search));
   const cLoc=col("location"),cType=col("type"),cMachine=col("machine"),cDate=col("date");
@@ -2558,13 +2586,14 @@ function parseIELExcel(data){
   const cRect=header.findIndex(h=>h.includes("rectif")||h.includes("schedul"));
   const cDRect=header.findIndex((h,i)=>i>cRect&&(h.includes("date")||h.includes("schedul")));
   const cDef=col("defect"),cResp=col("responsib"),cNotes=header.findIndex(h=>h.includes("note")||h.includes("recommend")),cPri=col("priority");
+  const rowOff=rowOff0;
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[0]&&rows[0][0]){const t=String(rows[0][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
   // Company/ABN/licence live in row 2 (index 1), not the title row
-  if(rows[1]&&rows[1][0]){
-    const p=parseCompanyRow(rows[1][0]);
+  if(rows[1+rowOff]&&rows[1+rowOff][0]){
+    const p=parseCompanyRow(rows[1+rowOff][0]);
     // Only use as company if it doesn't look like a site/test title (no dates, no "test")
-    const raw=String(rows[1][0]).toLowerCase();
+    const raw=String(rows[1+rowOff][0]).toLowerCase();
     const looksLikeTitle=raw.includes(" test")||raw.includes("march")||raw.includes("april")||raw.includes("january")||raw.includes("february")||/\d{4}/.test(raw)&&!raw.includes("abn");
     if(!looksLikeTitle){parsedCompany=p.company||"";}
     parsedAbn=p.abn||"";
@@ -2891,12 +2920,13 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[importName,setImportName]=React.useState("");
   const[importCo,setImportCo]=React.useState("");
   const[importError,setImportError]=React.useState("");
+  const[importLogoRec,setImportLogoRec]=React.useState(null);
   const fileRef=React.useRef();
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoRec(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -2910,6 +2940,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo && parsed.company) setImportCo(parsed.company);
         if(!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if(!importLic && parsed.licence) setImportLic(parsed.licence);
+        xjExtractLogo(buf).then(setImportLogoRec);
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -2923,7 +2954,8 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||importPreview.siteName||"Imported Site";
     const proj={id:importPreview.siteId,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas};
     onAddProject(proj,importPreview.results[importPreview.siteId]||{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportError("");
+    if(importLogoRec) siteLogoStore.put("iel",proj.id,importLogoRec).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportLogoRec(null);setImportError("");
   };
 
   return React.createElement('div',{style:SI.listWrap}
@@ -4659,7 +4691,9 @@ function parseTATExcel(data) {
     const r=rows[i].map(c=>String(c).toLowerCase());
     if(r.some(c=>c==="area")&&r.some(c=>c.includes("asset")||c.includes("tag")||c.includes("desc"))){headerIdx=i;break;}
   }
-  if(headerIdx===-1)headerIdx=4;
+  // A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title.
+  const rowOff=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
+  if(headerIdx===-1)headerIdx=4+rowOff;
   const header=rows[headerIdx].map(c=>String(c).toLowerCase().trim());
   const col=s=>header.findIndex(h=>h.includes(s));
   const cArea=col("area");
@@ -4668,8 +4702,8 @@ function parseTATExcel(data) {
   const cType=col("type")||col("equip");
   const cFreq=col("freq");
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[0]&&rows[0][0]){const t=String(rows[0][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
-  if(rows[1]&&rows[1][0]){const p=parseCompanyRow(rows[1][0]);const raw=String(rows[1][0]).toLowerCase();const looksLikeTitle=raw.includes(" test")||/\d{4}/.test(raw)&&!raw.includes("abn");if(!looksLikeTitle){parsedCompany=p.company||"";}parsedAbn=p.abn||"";parsedLicence=p.licence||"";}
+  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[1+rowOff]&&rows[1+rowOff][0]){const p=parseCompanyRow(rows[1+rowOff][0]);const raw=String(rows[1+rowOff][0]).toLowerCase();const looksLikeTitle=raw.includes(" test")||/\d{4}/.test(raw)&&!raw.includes("abn");if(!looksLikeTitle){parsedCompany=p.company||"";}parsedAbn=p.abn||"";parsedLicence=p.licence||"";}
   const areaMap={};
   for(let i=headerIdx+1;i<rows.length;i++){
     const row=rows[i];
@@ -4936,12 +4970,13 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
   const[importError,setImportError]=React.useState("");
+  const[importLogoRec,setImportLogoRec]=React.useState(null);
   const fileRef=React.useRef();
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoRec(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -4954,6 +4989,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo&&parsed.company)setImportCo(parsed.company);
         if(!importAbn&&parsed.abn)setImportAbn(parsed.abn);
         if(!importLic&&parsed.licence)setImportLic(parsed.licence);
+        xjExtractLogo(buf).then(setImportLogoRec);
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -4967,7 +5003,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||importPreview.siteName||"Imported Site";
     const proj={id:importPreview.siteId,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas};
     onAddProject(proj,importPreview.results[importPreview.siteId]||{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportError("");
+    if(importLogoRec) siteLogoStore.put("tat",proj.id,importLogoRec).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoRec(null);setImportError("");
   };
 
   return React.createElement('div',{style:ST.listWrap}
@@ -6193,10 +6230,13 @@ function parseThermoExcel(data, overrideName, XLSX) {
     defval: ""
   });
 
+  // A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title.
+  const rowOff = (rows[0] || []).every(c => c === "" || c == null) ? 1 : 0;
+
   // ── Auto-detect site name from row 0 ──────────────────────────────────
   let siteName = overrideName || "";
-  if (!siteName && rows[0] && rows[0][0]) {
-    const raw = String(rows[0][0]).trim();
+  if (!siteName && rows[rowOff] && rows[rowOff][0]) {
+    const raw = String(rows[rowOff][0]).trim();
     // Strip "— Thermographic Test — March 2026" suffix patterns
     siteName = raw.split(/\s*[-–]\s*(?:thermographic|thermo)/i)[0].trim() || raw;
   }
@@ -6205,8 +6245,8 @@ function parseThermoExcel(data, overrideName, XLSX) {
   let company = "",
     abn = "",
     licence = "";
-  if (rows[1] && rows[1][0]) {
-    const parts = String(rows[1][0]).split(/\s*\|\s*/);
+  if (rows[1 + rowOff] && rows[1 + rowOff][0]) {
+    const parts = String(rows[1 + rowOff][0]).split(/\s*\|\s*/);
     parts.forEach(p => {
       const l = p.toLowerCase();
       if (l.startsWith("abn:")) abn = p.replace(/^abn:\s*/i, "").trim();else if (l.startsWith("electrical licence:")) licence = p.replace(/^electrical licence:\s*/i, "").trim();else if (!company) company = p.trim();
@@ -6222,7 +6262,7 @@ function parseThermoExcel(data, overrideName, XLSX) {
       break;
     }
   }
-  if (headerIdx === -1) headerIdx = 4; // fallback to row 5 (0-indexed)
+  if (headerIdx === -1) headerIdx = 4 + rowOff; // fallback to row 5 (0-indexed), shifted the same way
 
   const header = rows[headerIdx].map(c => String(c).toLowerCase().trim());
   const col = search => header.findIndex(h => h.includes(search));
@@ -6952,16 +6992,19 @@ function ThermoProjectListView({
     setNewLogo(null);
     setShowAdd(false);
   };
+  const [importLogoRec, setImportLogoRec] = React.useState(null);
   const handleFile = e => {
     const file = e.target.files[0];
     if (!file) return;
     setImporting(true);
     setImportError("");
+    setImportLogoRec(null);
     const reader = new FileReader();
     reader.onload = async ev => {
       try {
         const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded"); return; }
-        const data = XLSX.read(ev.target.result, {
+        const buf = ev.target.result;
+        const data = XLSX.read(buf, {
           type: "array"
         });
         const parsed = parseThermoExcel(data, "", XLSX);
@@ -6971,6 +7014,7 @@ function ThermoProjectListView({
         if (!importCo && parsed.company) setImportCo(parsed.company);
         if (!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if (!importLic && parsed.licence) setImportLic(parsed.licence);
+        xjExtractLogo(buf).then(setImportLogoRec);
       } catch (err) {
         setImportError("Could not parse file: " + err.message);
       }
@@ -6993,12 +7037,14 @@ function ThermoProjectListView({
     };
     // Results always empty — fresh audit, no photos carried over
     onAddProject(proj, {});
+    if (importLogoRec) siteLogoStore.put("thermo", proj.id, importLogoRec).catch(() => {});
     setImportPreview(null);
     setShowAdd(false);
     setImportName("");
     setImportCo("");
     setImportAbn("");
     setImportLic("");
+    setImportLogoRec(null);
     setImportError("");
   };
 
@@ -10185,14 +10231,16 @@ function parseSWBExcel(data) {
     }
     const legacy = !rows;
     if (legacy) rows = sheetRows(sheetNames[0]);
+    // A logo strip (2026-09-27) pushes the title/company rows down by one — row 0 is then blank instead of the title.
+    const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     // ── Site name from row 0 (exact-suffix strip), company / ABN / licence from row 1 ──
     let siteName="",company="",abn="",licence="";
-    if(rows[0]&&rows[0][0]){
-      const t=String(rows[0][0]).trim();
+    if(rows[rowOff]&&rows[rowOff][0]){
+      const t=String(rows[rowOff][0]).trim();
       if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit\s*$/i,"").trim();
     }
-    if(rows[1]&&rows[1][0]){
-      const p=parseCompanyRow(rows[1][0]);
+    if(rows[1+rowOff]&&rows[1+rowOff][0]){
+      const p=parseCompanyRow(rows[1+rowOff][0]);
       const ph=(v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,""))||list.includes(String(v).toLowerCase());
       // older exports wrote "<company> Electrical Audit Software Pty. Ltd." — drop that fixed suffix
       const co=String(p.company||"").replace(/\s*Electrical Audit Software Pty\.? Ltd\.?\s*$/i,"").trim();
@@ -10417,26 +10465,30 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=swbStyles();
+  const [importLogoRec,setImportLogoRec]=React.useState(null);
 
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoRec(null);
     const reader=new FileReader();
     reader.onload=ev=>{
-      try{const data=XLSX.read(ev.target.result,{type:"binary"});const parsed=parseSWBExcel(data);
+      try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseSWBExcel(data);
         if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Area / Board columns. Download the template for the correct format.");setImporting(false);return;}
         setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");
+        xjExtractLogo(buf).then(setImportLogoRec);
       }catch(_){setImportError("Failed to read file.");}
       setImporting(false);
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const confirmImport=()=>{
     if(!importPreview)return;
     const sName=importName.trim()||"Imported Site";
-    onAddProject({id:swbSlug(sName),name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportError("");
+    const id=swbSlug(sName);
+    onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});
+    if(importLogoRec) siteLogoStore.put("swb",id,importLogoRec).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoRec(null);setImportError("");
   };
 
   return React.createElement('div',{style:SS.listWrap}
@@ -11728,11 +11780,13 @@ function parseELTExcel(data, typeOptions) {
     const cell = (row,c)=>c>=0?String(row[c]==null?"":row[c]).trim():"";
     // Site / company: from the title rows above the header. The title is "<site> — Emergency Lighting Test"; strip exactly that
     // suffix (never split on hyphens: "Hearse Road - Firestone" must survive), and ignore template / export placeholders.
+    // A logo strip (2026-09-27) pushes the title/company rows down by one — row 0 is then blank instead of the title.
+    const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
-    const t0 = hi>0 && rows[0] ? String(rows[0][0]||"").trim() : "";
+    const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
     if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test\s*$/i,"").trim();
-    if (hi>1 && rows[1] && rows[1][0]) {
-      const p = parseCompanyRow(rows[1][0]);
+    if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
+      const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
       company = ph(p.company,ELT_IMPORT_PLACEHOLDERS.company)?"":p.company;
       abn = ph(p.abn,ELT_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
@@ -11815,12 +11869,13 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
   const [importError,setImportError] = React.useState("");
+  const [importLogoRec,setImportLogoRec] = React.useState(null);
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setNewLogo(null);setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setNewLogo(null);setImportPreview(null);setImportLogoRec(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoRec(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -11830,6 +11885,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         if(!parsed.ok){setImportError(parsed.error);return;}
         setImportPreview(parsed);
         setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
+        xjExtractLogo(buf).then(setImportLogoRec);
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -11840,8 +11896,10 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const confirmImport = ()=>{
     if(!importPreview) return;
     const name=(importVals.name||"").trim()||"Imported Site";
-    onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
+    const id=slugify(name);
+    onAddProject({id,name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
       areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
+    if(importLogoRec) siteLogoStore.put("elt",id,importLogoRec).catch(()=>{});
     setImportVals({name:"",company:"",abn:"",licence:""});closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as IEL, IRT and SWB, in ELT's accent
@@ -12367,12 +12425,14 @@ function parseIRTExcel(data){
   try{
     const ws=data.Sheets[data.SheetNames[0]];
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+    // A logo strip (2026-09-27) pushes every header row down by one \u2014 row 0 is then blank instead of the title.
+    const rowOff=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
     let siteName="",company="",abn="",licence="";
-    if(rows[0]&&rows[0][0]){const t=String(rows[0][0]).trim();siteName=t.split(/\s*[-\u2013]\s*/)[0].trim()||t;}
-    if(rows[1]&&rows[1][0]){const parts=String(rows[1][0]).split(/\s*\|\s*/);parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});}
+    if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]).trim();siteName=t.split(/\s*[-\u2013]\s*/)[0].trim()||t;}
+    if(rows[1+rowOff]&&rows[1+rowOff][0]){const parts=String(rows[1+rowOff][0]).split(/\s*\|\s*/);parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});}
     let hi=-1;
     for(let i=0;i<Math.min(rows.length,10);i++){if(rows[i].some(c=>String(c).length>60))continue;const r=rows[i].map(c=>String(c).toLowerCase());if(r.some(c=>c==="area"||c==="location")){hi=i;break;}}
-    if(hi<0)hi=4;
+    if(hi<0)hi=4+rowOff;
     const header=rows[hi].map(c=>String(c).toLowerCase().trim());
     const col=s=>header.findIndex(h=>h.includes(s));
     const cArea=Math.max(0,col("area")>=0?col("area"):col("location"));
@@ -12736,14 +12796,15 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=irtStyles();
+  const [importLogoRec,setImportLogoRec]=React.useState(null);
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoRec(null);
     const reader=new FileReader();
-    reader.onload=ev=>{try{const data=XLSX.read(ev.target.result,{type:"binary"});const parsed=parseIRTExcel(data);if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Location / Panel / Item columns. Download the template for the correct format.");setImporting(false);return;}setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");}catch(_){setImportError("Failed to read file.");}setImporting(false);};
-    reader.readAsBinaryString(file);
+    reader.onload=ev=>{try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseIRTExcel(data);if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Location / Panel / Item columns. Download the template for the correct format.");setImporting(false);return;}setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");xjExtractLogo(buf).then(setImportLogoRec);}catch(_){setImportError("Failed to read file.");}setImporting(false);};
+    reader.readAsArrayBuffer(file);
   };
-  const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";onAddProject({id:irtSlug(sName),name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportError("");};
+  const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";const id=irtSlug(sName);onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});if(importLogoRec) siteLogoStore.put("irt",id,importLogoRec).catch(()=>{});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoRec(null);setImportError("");};
   return React.createElement("div",{style:SS.listWrap},
     React.createElement("div",{style:{...SS.listTitle,marginTop:24}},"Sites"),
     projects.length===0&&!showAdd&&React.createElement("div",{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet \u2014 add one or import from Excel."),
@@ -13829,11 +13890,13 @@ function parseWelderExcel(data) {
     const cell = (row,c)=>c>=0?String(row[c]==null?"":row[c]).trim():"";
     // Site / company: title rows above the header. The title is "<site> — Welder Test" (before the rename: "— Welder (VRD) Test");
     // strip exactly that suffix (never split on hyphens) and ignore template / export placeholders.
+    // A logo strip (2026-09-27) pushes the title/company rows down by one — row 0 is then blank instead of the title.
+    const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
-    const t0 = hi>0 && rows[0] ? String(rows[0][0]||"").trim() : "";
+    const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
     if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test\s*$/i,"").trim();
-    if (hi>1 && rows[1] && rows[1][0]) {
-      const p = parseCompanyRow(rows[1][0]);
+    if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
+      const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
       company = ph(p.company,WELDER_IMPORT_PLACEHOLDERS.company)?"":p.company;
       abn = ph(p.abn,WELDER_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
@@ -13842,7 +13905,9 @@ function parseWelderExcel(data) {
     // Per-welder sheets (identity cells only), in workbook order — the export writes them in Register row order.
     const detail = sheets.filter(n=>n!==regName).map(n=>{
       const r = XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:"",raw:false});
-      const grab = (ri,ci,label)=>{ const v=String((r[ri]&&r[ri][ci])||""); const m=v.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; };
+      // A logo strip on this sheet pushes its own rows down by one too.
+      const off = (r[0]||[]).every(c => c===""||c==null) ? 1 : 0;
+      const grab = (ri,ci,label)=>{ const v=String((r[ri+off]&&r[ri+off][ci])||""); const m=v.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; };
       return { assetId:grab(2,2,"Asset ID"), brand:grab(3,0,"Brand"), model:grab(3,2,"Model"), serial:grab(4,0,"Serial Number") };
     });
     const assets=[], seen=new Set(); let skipped=0, duplicates=0, combined=0, exact=0, k=-1;
@@ -13895,12 +13960,13 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
   const [newLogo,setNewLogo] = React.useState(null);
   const [importError,setImportError] = React.useState("");
+  const [importLogoRec,setImportLogoRec] = React.useState(null);
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);setImportPreview(null);setImportLogoRec(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoRec(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -13910,6 +13976,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         if(!parsed.ok){setImportError(parsed.error);return;}
         setImportPreview(parsed);
         setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
+        xjExtractLogo(buf).then(setImportLogoRec);
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -13920,8 +13987,10 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const confirmImport = ()=>{
     if(!importPreview) return;
     const name=(importVals.name||"").trim()||"Imported Site";
-    onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
+    const id=slugify(name);
+    onAddProject({id,name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
       areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
+    if(importLogoRec) siteLogoStore.put("welder",id,importLogoRec).catch(()=>{});
     closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as ELT, IEL, IRT and SWB, in Welder's accent
@@ -15197,5 +15266,5 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjLogo, xjSheet, xjSplit, GlobalSettingsView };
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView };
 export default AppRoot;
