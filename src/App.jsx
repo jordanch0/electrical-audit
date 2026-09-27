@@ -97,6 +97,168 @@ function xjPageSetup(sheet, landscape, titleRow) {
     margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 }, ...(titleRow ? { printTitlesRow: `${titleRow}:${titleRow}` } : {}) };
   sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
 }
+// ── Row heights & photo sizes (2026-09-27) ───────────────────────────────────────────────────────────────────────────────────────────────────────────
+// An .xlsx row with NO stored height is only autofitted by desktop Excel: phone viewers (iOS Files / Quick Look, Sheets / Numbers previews) draw it at the default 15 pt and clip
+// wrapped text; a MERGED row is never autofitted anywhere. So EVERY export gets explicit heights: xjFitRows(wb) runs once before the file is written and sets each row's height from
+// its wrapped text (per cell: font size, bold, the column width — or the merged width) — never SHRINKING a height something already set (photo rows, title rows). Photos are
+// embedded at their NATURAL aspect (read from the image header) inside a box, and their row is sized from the embedded height.
+function xjWrapLines(text, cpl) {
+  let lines = 0;
+  String(text == null ? "" : text).split("\n").forEach(par => {
+    let cur = 0, n = 1;
+    par.split(/\s+/).filter(Boolean).forEach(w => { const L = w.length; if (L > cpl) { n += Math.ceil((cur ? cur + 1 + L : L) / cpl) - 1; cur = (cur ? cur + 1 + L : L) % cpl; } else if (cur + (cur ? 1 : 0) + L <= cpl) cur += (cur ? 1 : 0) + L; else { n++; cur = L; } });
+    lines += n;
+  });
+  return Math.max(1, lines);
+}
+function xjFitRows(wb) {
+  wb.worksheets.forEach(ws => {
+    const merges = {};   // master address -> { cols:[c1,c2], rows:[r1,r2] }
+    (ws.model.merges || []).forEach(m => { const [a, b] = m.split(":"); const pa = ws.getCell(a), pb = ws.getCell(b); merges[a] = { c1: pa.col, c2: pb.col, r1: pa.row, r2: pb.row }; });
+    ws.eachRow({ includeEmpty: false }, row => {
+      let need = 0;
+      row.eachCell({ includeEmpty: false }, cell => {
+        const al = cell.alignment || {}; const v = cell.value; if (!al.wrapText || v == null || v === "") return;
+        const txt = typeof v === "object" ? (v.richText ? v.richText.map(t => t.text).join("") : v.result != null ? String(v.result) : v.text != null ? String(v.text) : v instanceof Date ? "" : "") : String(v);
+        if (txt === "") return;
+        const mg = merges[cell.address]; if (cell.isMerged && !mg) return;                      // a merged SLAVE cell
+        if (mg && mg.r2 > mg.r1) return;                                                           // a multi-row merge: sized by its neighbours
+        let w = 0; for (let k = mg ? mg.c1 : cell.col; k <= (mg ? mg.c2 : cell.col); k++) w += ws.getColumn(k).width || 8.43;
+        const sz = (cell.font && cell.font.size) || 10; const bold = !!(cell.font && cell.font.bold);
+        const cpl = Math.max(1, Math.floor((w * 7) / (sz * (4 / 3) * 0.5 * (bold ? 1.08 : 1))));   // characters per line (conservative: Calibri averages ~0.47 em)
+        need = Math.max(need, xjWrapLines(txt, cpl) * sz * 1.3 + 3);
+      });
+      if (need > 0 && ((row.height == null && need > 16) || (row.height != null && row.height < need))) row.height = Math.ceil(need);   // a one-line row keeps the default height
+    });
+  });
+}
+// natural pixel size of a data-URL image from its header (JPEG SOF / PNG IHDR / GIF) — no decoding, works in Node and browsers; null if unknown
+function xjImageSize(dataUrl) {
+  try {
+    const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || ""); if (!m) return null;
+    const bin = atob(m[2]); const b = i => bin.charCodeAt(i);
+    if (m[1] === "png") return { w: (b(16) << 24) | (b(17) << 16) | (b(18) << 8) | b(19), h: (b(20) << 24) | (b(21) << 16) | (b(22) << 8) | b(23) };
+    if (m[1] === "gif") return { w: b(6) | (b(7) << 8), h: b(8) | (b(9) << 8) };
+    let i = 2; while (i + 9 < bin.length) {
+      if (b(i) !== 0xFF) { i++; continue; }
+      const mk = b(i + 1); if (mk >= 0xC0 && mk <= 0xCF && mk !== 0xC4 && mk !== 0xC8 && mk !== 0xCC) return { h: (b(i + 5) << 8) | b(i + 6), w: (b(i + 7) << 8) | b(i + 8) };
+      i += 2 + ((b(i + 2) << 8) | b(i + 3));
+    }
+  } catch (_) { /* fall through */ }
+  return null;
+}
+const XJ_PHOTO_BOX = 140;   // an embedded photo fits a 140 x 140 px box at its NATURAL aspect (a 4:3 photo is 140 x 105; a portrait one 105 x 140) — never stretched
+function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.w > 0 ? s.w : 4, H = s && s.h > 0 ? s.h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
+const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
+// ── Company logo (Global Settings, 2026-09-27): a centred image strip in row 1, full sheet width, above the existing header block —
+// ONLY when a logo is set in Global Settings (no logo = today's exact output, byte-identical). Every direct-write header sheet reserves
+// row 1 for it by shifting its own rows down by `off` (0 or 1) BEFORE writing anything, then calls xjLogo once every column width is final
+// (centring needs the real widths). xjSheet (the shared builder for RCD/IEL/TAT/Thermo/IRT/GSD-Register/every Defects sheet) does this itself.
+function xjColPx(ws, c) { return (ws.getColumn(c).width || 8.43) * 7 + 5; }
+function xjSheetWidthPx(ws, n) { let w = 0; for (let c = 1; c <= n; c++) w += xjColPx(ws, c); return w; }
+function xjPxToAnchor(ws, px) { let x = 0, c = 1; while (c < 1000) { const w = xjColPx(ws, c); if (x + w > px) return (c - 1) + Math.max(0, px - x) / w; x += w; c++; } return c - 1; }
+const XJ_LOGO_ROW_PT = 46;      // the reserved row's height
+const XJ_LOGO_MAX_H_PX = 50;    // the logo image never taller than this, leaving a margin inside the row
+function xjLogo(ws, wb, dataUrl, n) {
+  if (!dataUrl) return;
+  const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || ""); if (!m) return;
+  let ext = m[1] === "jpg" ? "jpeg" : m[1]; if (!["jpeg", "png", "gif"].includes(ext)) ext = "jpeg";
+  const size = xjImageSize(dataUrl) || { w: 200, h: 60 }; const totalPx = xjSheetWidthPx(ws, n);
+  const k = Math.min(XJ_LOGO_MAX_H_PX / size.h, (totalPx * 0.6) / size.w, 1);
+  const w = Math.max(1, Math.round(size.w * k)), h = Math.max(1, Math.round(size.h * k));
+  ws.getRow(1).height = XJ_LOGO_ROW_PT;
+  for (let c = 1; c <= n; c++) ws.getCell(1, c).border = { bottom: { style: "thin", color: { argb: "FF4472C4" } } };
+  const rowPx = XJ_LOGO_ROW_PT * (96 / 72);
+  const imgId = wb.addImage({ base64: dataUrl, extension: ext });
+  ws.addImage(imgId, { tl: { col: xjPxToAnchor(ws, (totalPx - w) / 2), row: 0 + (rowPx - h) / 2 / rowPx }, ext: { width: w, height: h }, editAs: "oneCell" });
+}
+// ── Global Settings: one app-wide business identity + logo, pre-filling every module's "Add Site" form (2026-09-27) ──────────────────
+// { businessName, abn, licence, logoId }. Purely a PRE-FILL source for NEW sites — saving a site copies whatever's in the form at that
+// moment; already-saved sites are never touched, and there is no migration. logoId is null or a fixed id into appLogoStore below.
+const APP_SETTINGS_KEY = "app-settings-v1";
+function loadAppSettings() {
+  try {
+    const raw = localStorage.getItem(APP_SETTINGS_KEY); if (!raw) return { businessName: "", abn: "", licence: "", logoId: null };
+    const p = JSON.parse(raw); return { businessName: p.businessName || "", abn: p.abn || "", licence: p.licence || "", logoId: p.logoId || null };
+  } catch (_) { return { businessName: "", abn: "", licence: "", logoId: null }; }
+}
+function saveAppSettings(s) { try { localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify({ businessName: s.businessName || "", abn: s.abn || "", licence: s.licence || "", logoId: s.logoId || null })); } catch (_) {} }
+// One logo image in its own IndexedDB store (same record shape as gsdPhotoStore: {buf, type}) — a single fixed-id record, no thumbnail tier.
+const APP_LOGO_DB_NAME = "sparkcheck-app-settings", APP_LOGO_DB_STORE = "logo", APP_LOGO_ID = "logo";
+let _appLogoDb = null;
+function appLogoOpenDb() {
+  if (!_appLogoDb) _appLogoDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(APP_LOGO_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(APP_LOGO_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _appLogoDb = null; throw e; });
+  return _appLogoDb;
+}
+const appLogoTx = (mode, fn) => appLogoOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(APP_LOGO_DB_STORE, mode); const r = fn(tx.objectStore(APP_LOGO_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+const appLogoStore = {
+  put: rec => appLogoTx("readwrite", s => s.put(rec, APP_LOGO_ID)),
+  get: () => appLogoTx("readonly", s => s.get(APP_LOGO_ID)),
+  del: () => appLogoTx("readwrite", s => s.delete(APP_LOGO_ID)),
+};
+// ── Per-site logo override (2026-09-27): a site's OWN logo, overriding the global one, exactly like Company/ABN/Licence already override the
+// global pre-fill per site. Keyed by `${module}:${siteId}` — every module creates sites with `id: slugify(name)` (no random suffix), so two
+// different modules' sites can share an id; the module prefix keeps their logos from colliding. Presence in this store IS the override: there
+// is no flag on the project object, so a site created before this feature (or one whose logo was never set) just falls through to global,
+// with no migration needed — the same shape as Company/ABN/Licence's own fallback story.
+const SITE_LOGO_DB_NAME = "sparkcheck-site-logos", SITE_LOGO_DB_STORE = "logos";
+let _siteLogoDb = null;
+function siteLogoOpenDb() {
+  if (!_siteLogoDb) _siteLogoDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(SITE_LOGO_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(SITE_LOGO_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _siteLogoDb = null; throw e; });
+  return _siteLogoDb;
+}
+const siteLogoTx = (mode, fn) => siteLogoOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(SITE_LOGO_DB_STORE, mode); const r = fn(tx.objectStore(SITE_LOGO_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+const siteLogoKey = (module, siteId) => `${module}:${siteId}`;
+const siteLogoStore = {
+  put: (module, siteId, rec) => siteLogoTx("readwrite", s => s.put(rec, siteLogoKey(module, siteId))),
+  get: (module, siteId) => siteLogoTx("readonly", s => s.get(siteLogoKey(module, siteId))),
+  del: (module, siteId) => siteLogoTx("readwrite", s => s.delete(siteLogoKey(module, siteId))),
+};
+// Every export reads the logo fresh at export time (never cached on the project): a later change in Global Settings or the site's own logo
+// applies to the NEXT export; an already-written file is untouched. Resolution order: this site's own logo, else the global one, else none.
+async function xjGetLogoDataUrl(module, siteId) {
+  try { const site = await siteLogoStore.get(module, siteId); if (site) return gsdRecToDataUrl(site); } catch (_) { /* fall through to global */ }
+  const s = loadAppSettings(); if (!s.logoId) return null;
+  try { const rec = await appLogoStore.get(); return rec ? gsdRecToDataUrl(rec) : null; } catch (_) { return null; }
+}
+// Import extraction (2026-09-27): if the imported file carries an embedded logo (our own export header strip), pull it back out so it
+// becomes the new site's per-site logo override — the same round-trip Company/ABN/Licence already get. SheetJS (the community `xlsx`
+// build used everywhere else for import parsing) cannot read embedded images at all, so this is a SEPARATE ExcelJS read of the same
+// buffer alongside the normal SheetJS parse, not a replacement for it. Our own logo is always anchored inside row 1 of the FIRST
+// worksheet (row 0 in ExcelJS's 0-indexed anchor) — that is the structural sheet every importer already reads (Register / the main
+// results sheet). Returns null (no per-site logo, nothing changes) if there's no image there or the file can't be read as .xlsx (e.g. CSV).
+async function xjExtractLogo(buf) {
+  try {
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    const ws = wb.worksheets[0]; if (!ws) return null;
+    const img = ws.getImages().find(im => im.range && im.range.tl && im.range.tl.row < 2);
+    if (!img) return null;
+    const media = wb.getImage(img.imageId); if (!media || !media.buffer) return null;
+    let ext = media.extension === "jpg" ? "jpeg" : (media.extension || "png");
+    if (!["jpeg", "png", "gif"].includes(ext)) ext = "png";
+    const arrBuf = media.buffer instanceof ArrayBuffer ? media.buffer : new Uint8Array(media.buffer).buffer;
+    return { buf: arrBuf, type: `image/${ext}` };
+  } catch (_) { return null; }
+}
 const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
 // Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
 function xjResultStyle(v) {
@@ -107,16 +269,17 @@ function xjResultStyle(v) {
   if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
   return null;
 }
-// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape }
+// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape, logo }
 function xjSheet(wb, name, o) {
   const ws = wb.addWorksheet(name); const n = o.headers.length;
-  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  const off = o.logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   put(1, 1, o.title); put(2, 1, o.coLine);
   o.meta.forEach((v, i) => { if (v !== "" && v != null) put(3, i + 1, v); });
-  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1, c1, r2, c2));
+  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
   // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
   o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
-  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
   const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
   o.rows.forEach((cells, ri) => {
     const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
@@ -137,7 +300,8 @@ function xjSheet(wb, name, o) {
   // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
   // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
   o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
-  xjPageSetup(ws, o.landscape !== false, 5);
+  xjPageSetup(ws, o.landscape !== false, 5 + off);
+  if (o.logo) xjLogo(ws, wb, o.logo, n);
   return ws;
 }
 // Minimum widths that apply to EVERY export column of that kind (also used by ELT's own sheets)
@@ -151,11 +315,11 @@ const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
 // Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
 // o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
 function xjSplit(wb, o) {
-  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
-  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings)
+  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer, logo: o.logo });
+  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings) — each closure passes its own `logo` through to its xjSheet call
   const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
   xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
-    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded" });
+    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded", logo: o.logo });
   return defects.length;
 }
 
@@ -203,7 +367,6 @@ const K_RESULTS   = "rcd-results-v6";
 const K_META      = "rcd-meta-v6";
 const K_HISTORY   = "rcd-history-v6";
 const K_DROPDOWNS = "rcd-dropdowns-v6";
-const K_LOGO      = "rcd-logo-v6";       // base64 data-URL of uploaded logo
 const K_MODE      = "rcd-mode-v6";        // active audit mode: "push"|"inject"|null
 const load = async (key, fallback) => { try { const r=localStorage.getItem(key); return r?JSON.parse(r):fallback; } catch(_) { return fallback; } };
 let _storageWarnShown = false;
@@ -344,9 +507,12 @@ function parseCompanyRow(cellValue) {
 function parseExcelToProject(data, projectName, company, abn, licence) {
 const ws   = data.Sheets[data.SheetNames[0]];
 const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:""});
+// A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title. Every fixed-row read below
+// (company/ABN/licence at "row 2") accounts for that with this one offset, same idea as the export side's own `off`.
+const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
 // Auto-detect company/ABN/licence from row 2 only (row 1 is the site title)
-if(rows[1]) {
-  const parsed = parseCompanyRow(rows[1][0]);
+if(rows[1+rowOff]) {
+  const parsed = parseCompanyRow(rows[1+rowOff][0]);
   if(!company && parsed.company) company = parsed.company;
   if(!abn && parsed.abn) abn = parsed.abn;
   if(!licence && parsed.licence) licence = parsed.licence;
@@ -449,7 +615,8 @@ return { id: slugify(projectName), name: projectName, company: company || "Spark
 // U=dark maroon bg, H=red/salmon bg, M=yellow bg, L=light green bg, Pass=white (no fill), Fail=red bg
 // RCD export: MAIN results table (narrow — identifiers, dates, result, notes) + a Defects sheet (FAIL rows only, always present) + a
 // Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Page setup is native (xjPageSetup).
-async function exportExcel(results, project, meta, mode, logoBase64) {
+async function exportExcel(results, project, meta, mode) {
+  const logo = await xjGetLogoDataUrl("rcd", project.id);
   const isInject = mode === "inject";
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
   const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
@@ -481,7 +648,7 @@ async function exportExcel(results, project, meta, mode, logoBase64) {
     headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date", "Injection Test Result + (ms)", "Injection Test Result - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Required"] : ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Required"],
     widths: isInject ? [16, 22, 12, 8, 10, 11, 11, 9, 24, 11] : [16, 22, 12, 8, 11, 9, 26, 11],
     idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   // Summary sheet: counts only — the failed-circuit list it used to carry is now the Defects sheet (same rows, more fields)
   const sum = summariseProject(results, project, mode);
@@ -501,6 +668,7 @@ async function exportExcel(results, project, meta, mode, logoBase64) {
   ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
   xjPageSetup(ss, false, null);
   const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 // ─────────────────────────────────────────────────────────────────────────
@@ -591,6 +759,24 @@ function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allow
     , open && React.createElement("div", { role: "listbox", style: { position: "absolute", zIndex: 300, width: popoverWidth || "100%", ...(popoverRight ? { right: 0 } : { left: 0 }), boxSizing: "border-box", background: "#f7f6f3", border: "1px solid #d4d4d8", borderRadius: 8, marginTop: 2, maxHeight: 220, overflowY: "auto" } }   // the popover is as wide as its trigger (or an explicit width, right-aligned for a trigger at the right edge), never wider than its container — long labels WRAP
       , list.map(o => React.createElement("div", { key: o.value === "" ? "__empty" : o.value, role: "option", "aria-selected": o.value === value, style: { padding: "10px 12px", fontSize: 13, cursor: "pointer", whiteSpace: "normal", wordBreak: "break-word", color: o.value === value ? (color || "#047857") : "#3f3f46", background: o.value === value ? (colorBg || "#dcfce7") : "transparent", fontWeight: o.value === value ? 700 : 400 }, onClick: () => { onChange(o.value); setOpen(false); } }, o.label))
       , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
+}
+// useScrollMemory(ref, key, remember): the app's one scroll rule for a module's main scroll container.
+//   - a DRILL-DOWN LIST level (remember = true) keeps its scroll position: leaving it (into an item / test page or down a level) and coming back Back restores where you were;
+//   - everything else (an item / test detail page, Home, Report, History, Manage, Dropdowns) starts at the TOP when entered.
+// key identifies the level (view + the open area / panel / board / item), so each list level has its own remembered position. Positions are tracked with a scroll
+// listener (not read at navigation time — by then the shorter detail page has already clamped the container's scrollTop).
+function useScrollMemory(ref, key, remember) {
+  const mem = React.useRef({}); const cur = React.useRef({ key, remember }); cur.current = { key, remember };
+  const attached = React.useRef(null);
+  React.useEffect(() => {                      // (re)attach whenever the container element changes (it appears once the module has loaded)
+    const el = ref.current; if (!el || attached.current === el) return undefined;
+    attached.current = el;
+    const on = () => { if (cur.current.remember) mem.current[cur.current.key] = el.scrollTop; };
+    el.addEventListener("scroll", on, { passive: true });
+    return undefined;
+  });
+  React.useEffect(() => () => {}, []);
+  React.useLayoutEffect(() => { const el = ref.current; if (!el) return; el.scrollTop = remember ? (mem.current[key] || 0) : 0; }, [key, remember]);
 }
 function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
   const [confirming, setConfirming] = React.useState(false);
@@ -796,7 +982,6 @@ const [allResults,    setAllResults]   = React.useState({});
 const [allMeta,       setAllMeta]      = React.useState({});
 const [history,       setHistory]      = React.useState([]);
 const [dropdowns,     setDropdowns]    = React.useState({ responsibility:DEFAULT_RESPONSIBILITY, rectified:DEFAULT_RECTIFIED });
-const [logo,          setLogo]         = React.useState(null);  // base64 data-URL
 const [activeProject, setActiveProject]= React.useState(null);
 const [mode,          setMode]         = React.useState(null);
 const [view,          setView]         = React.useState("projects");
@@ -809,22 +994,20 @@ const [detailInfo,    setDetailInfo]   = React.useState(null);
 const [viewSnap,      setViewSnap]     = React.useState(null);
 const [viewArea,      setViewArea]     = React.useState(null);
 const rcdMainRef = React.useRef(null);
-React.useLayoutEffect(()=>{ if(detailInfo&&rcdMainRef.current) rcdMainRef.current.scrollTop=0; },[detailInfo]);
 React.useEffect(()=>{
 // Safety: force loaded=true after 3s even if storage fails
 var safetyTimer=setTimeout(()=>setLoaded(true),3000);
 (async()=>{
 try {
-const [p,r,m,h,d,l,mo]=await Promise.all([
+const [p,r,m,h,d,mo]=await Promise.all([
 load(K_PROJECTS,[]),
 load(K_RESULTS,{}),
 load(K_META,{}),
 load(K_HISTORY,[]),
 load(K_DROPDOWNS,{responsibility:DEFAULT_RESPONSIBILITY,rectified:DEFAULT_RECTIFIED,ampRating:DEFAULT_AMP_RATING,cbType:DEFAULT_CB_TYPE}),
-load(K_LOGO,null),
 load(K_MODE,null),
 ]);
-clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setLogo(l);setMode(mo);setLoaded(true);
+clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setMode(mo);setLoaded(true);
 } catch(loadErr) { console.error('Load error:',loadErr); clearTimeout(safetyTimer); setLoaded(true); }
 })();
 },[]);
@@ -833,7 +1016,6 @@ React.useEffect(()=>{ if(loaded){save(K_RESULTS,allResults);setSaveFlash(true);c
 React.useEffect(()=>{ if(loaded){save(K_META,allMeta);} },[allMeta,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_HISTORY,history);} },[history,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_DROPDOWNS,dropdowns);} },[dropdowns,loaded]);
-React.useEffect(()=>{ if(loaded){save(K_LOGO,logo);} },[logo,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_MODE,mode);} },[mode,loaded]);
 const project = projects.find(p=>p.id===activeProject);
 const _rcdMeta = _nullishCoalesce(allMeta[activeProject], () => ({auditor:"",pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),notes:""}));
@@ -885,6 +1067,7 @@ return snap;
 };
 const goProjects=()=>{setView("projects");setActiveProject(null);setMode(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
 const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
+useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
 if(!loaded) return React.createElement('div', { style: S.loader,}, React.createElement('div', { style: S.loaderSpinner,}), React.createElement('p', { style: {color:"#6e6a66",marginTop:16},}, "Loading…"));
 const modeColor=mode==="push"?"#a3530f":"#1d4ed8";
 const modeLabel=mode==="push"?"PUSH TEST":"INJECTION TEST";
@@ -925,15 +1108,15 @@ else goProjects();
 , view==="projects"&&React.createElement(ProjectListView, { projects: projects, allResults: allResults, dropdowns: dropdowns,
 onSelect: id=>{const proj=projects.find(p=>p.id===id);const pushSum=summariseProject(allResults,proj,"push");const injectSum=summariseProject(allResults,proj,"inject");const hasProgress=(pushSum.total>0&&(pushSum.pass+pushSum.fail+pushSum.na)>0)||(injectSum.total>0&&(injectSum.pass+injectSum.fail+injectSum.na)>0);setAuditEntered(hasProgress);setActiveProject(id);setView("home");},
 onAddProject: p=>setProjects(prev=>[...prev,p]),
-onDeleteProject: id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();},})
+onDeleteProject: id=>{siteLogoStore.del("rcd",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();},})
 , view==="home"&&project&&React.createElement(ProjectHomeView, { project: project, meta: meta, setMeta: setMeta, results: allResults,
 onStartPush: ()=>{setMode("push");setView("audit");setAuditEntered(true);},
 onStartInject: ()=>{setMode("inject");setView("audit");setAuditEntered(true);},
 onReport: ()=>setView("report"), onManage: ()=>setView("manage"),
 onHistory: ()=>setView("history"), onSettings: ()=>setView("settings"),
 onReset: ()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),nextPushDate:"",nextInjectDate:""}}));},
-onExportPush: ()=>exportExcel(allResults,project,meta,"push",logo),
-onExportInject: ()=>exportExcel(allResults,project,meta,"inject",logo),
+onExportPush: ()=>exportExcel(allResults,project,meta,"push"),
+onExportInject: ()=>exportExcel(allResults,project,meta,"inject"),
 activeMode: mode,
 auditEntered: auditEntered,
 onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);},})
@@ -947,7 +1130,7 @@ onOpenDetail: c=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,circui
 , detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns, onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch), onClose: ()=>setDetailInfo(null),})
 , !detailInfo&&view==="report"&&project&&React.createElement(ReportView, { project: project, results: allResults, meta: meta, onBack:()=>setView("home"),})
 , !detailInfo&&view==="manage"&&project&&React.createElement(ManageView, { project: project, dropdowns: dropdowns, onUpdateProject: updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)), onBack:()=>setView("home"),})
-, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode,logo),
+, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode),
 onContinueFromSnap: (snap)=>{
   // Deep-copy snap results into active results (does NOT overwrite archived snap)
   setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
@@ -958,7 +1141,7 @@ onContinueFromSnap: (snap)=>{
   setActivePanelId(null);
   setView("audit");
 }, onBack:()=>setView("home"),})
-, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, logo: logo, setLogo: setLogo, onBack:()=>setView("home"),})
+, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, onBack:()=>setView("home"),})
 )
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
@@ -980,9 +1163,11 @@ function ProjectListView({ projects, allResults, dropdowns, onSelect, onAddProje
 const [showAdd,    setShowAdd]    = React.useState(false);
 const [tab,        setTab]        = React.useState("manual"); // manual | import
 const [newName,    setNewName]    = React.useState("");
-const [newCo,      setNewCo]      = React.useState("");
-const [newAbn,     setNewAbn]     = React.useState("");
-const [newLic,     setNewLic]     = React.useState("");
+const [newCo,      setNewCo]      = React.useState(() => loadAppSettings().businessName);
+const [newAbn,     setNewAbn]     = React.useState(() => loadAppSettings().abn);
+const [newLic,     setNewLic]     = React.useState(() => loadAppSettings().licence);
+const [newLogo,    setNewLogo]    = React.useState(null); // a per-site logo override, staged as a data URL until the site actually exists
+const globalLogoUrl = useGlobalLogoPreview(); // shown as the visual default until a per-site logo is staged, like Company/ABN/Licence already are
 
 const [importing,  setImporting]  = React.useState(false);
 const [importPreview, setImportPreview] = React.useState(null); // parsed project before confirming
@@ -992,6 +1177,7 @@ const [importAbn,  setImportAbn]  = React.useState("");
 const [importLic,  setImportLic]  = React.useState("");
 
 const [importError,setImportError]= React.useState("");
+const [importLogoUrl,setImportLogoUrl]= React.useState(null);
 const fileRef = React.useRef();
 const handleFile = e => {
 const file = e.target.files[0]; if(!file) return;
@@ -999,9 +1185,9 @@ if(!/\.(xlsx|xls|csv)$/i.test(file.name)){
   setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");
   return;
 }
-setImporting(true); setImportError("");
+setImporting(true); setImportError(""); setImportLogoUrl(null);
 const reader=new FileReader();
-reader.onload=ev=>{
+reader.onload=async ev=>{
 try {
   const buf=ev.target.result;
   if(!(buf instanceof ArrayBuffer)||buf.byteLength===0){setImportError("File could not be read — it may be empty or corrupted.");return;}
@@ -1015,6 +1201,7 @@ try {
   if(!importCo && proj.company) setImportCo(proj.company);
   if(!importAbn && proj.abn) setImportAbn(proj.abn);
   if(!importLic && proj.licence) setImportLic(proj.licence);
+  xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
 } catch(err){ setImportError("Could not parse file — check it is a valid Excel or CSV file."); }
   finally{ setImporting(false); }
 };
@@ -1026,12 +1213,16 @@ const confirmImport = () => {
 if(!importPreview) return;
 const finalProject={...importPreview,id:slugify(importName||importPreview.name),name:importName||importPreview.name,company:importCo,abn:importAbn.trim(),licence:importLic.trim()};
 onAddProject(finalProject);
-setImportPreview(null);setShowAdd(false);setImportName("");setImportError("");
+if(importLogoUrl) siteLogoStore.put("rcd",finalProject.id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoUrl(null);setImportError("");
 };
-const addManual=()=>{
+const addManual=async()=>{
 if(!newName.trim()) return;
-onAddProject({id:slugify(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});
-setNewName("");setNewAbn("");setNewLic("");setShowAdd(false);
+const id=slugify(newName);
+onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});
+if(newLogo) await siteLogoStore.put("rcd",id,gsdDataUrlToRec(newLogo)).catch(()=>{});
+const s=loadAppSettings();
+setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);
 };
 return (
 React.createElement('div', { style: S.listWrap,}
@@ -1074,6 +1265,8 @@ React.createElement('div', { style: S.addCard,}
 , React.createElement(LabelInput, { label: "COMPANY (optional)", value: newCo, onChange: setNewCo, placeholder: "Company name" ,})
 , React.createElement(LabelInput, { label: "ABN (optional)", value: newAbn, onChange: setNewAbn, placeholder: "e.g. 12 345 678 901" ,})
 , React.createElement(LabelInput, { label: "ELECTRICAL LICENCE (optional)", value: newLic, onChange: setNewLic, placeholder: "e.g. 123456C" ,})
+, React.createElement('div', { style: S.metaLabelText, }, "LOGO (optional — overrides the global one)")
+, React.createElement('div', { style: {marginTop:4,marginBottom:10}, }, React.createElement(LogoField, { value: newLogo || globalLogoUrl, isDefault: !newLogo && !!globalLogoUrl, onUpload: async file=>{ try{ setNewLogo(await resizeImageToDataUrl(file,480,0.9)); }catch(_){} }, onRemove: ()=>setNewLogo(null) }))
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:4},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: addManual,}, "Add Site" )
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setShowAdd(false),}, "Cancel")
@@ -1104,6 +1297,8 @@ React.createElement('div', { key: a.id, style: {fontSize:12,color:"#6e6a66",marg
 ))
 , importPreview.areas.length>5&&React.createElement('div', { style: {fontSize:11,color:"#6e6a66"},}, "…and " , importPreview.areas.length-5, " more areas"  )
 )
+, React.createElement('div', { style: S.metaLabelText, }, "LOGO (optional — overrides the global one)")
+, React.createElement('div', { style: {marginTop:4,marginBottom:10}, }, React.createElement(LogoField, { value: importLogoUrl || globalLogoUrl, isDefault: !importLogoUrl && !!globalLogoUrl, onUpload: async file=>{ try{ setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9)); }catch(_){} }, onRemove: ()=>setImportLogoUrl(null) }))
 , React.createElement('div', { style: {display:"flex",gap:8},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: confirmImport,}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Project"  )
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setImportPreview(null),}, "Re-upload")
@@ -1400,17 +1595,9 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 // ─────────────────────────────────────────────────────────────────────────
 // SETTINGS VIEW — logo + all dropdown lists
 // ─────────────────────────────────────────────────────────────────────────
-function SettingsView({ dropdowns, setDropdowns, logo, setLogo, onBack }) {
+function SettingsView({ dropdowns, setDropdowns, onBack }) {
 const [newVals, setNewVals] = React.useState({});
 const [notice, setNotice] = React.useState({});
-const logoRef = React.useRef();
-const handleLogoUpload = e => {
-const file = e.target.files[0]; if(!file) return;
-const reader = new FileReader();
-reader.onload = ev => setLogo(ev.target.result);
-reader.readAsDataURL(file);
-e.target.value = "";
-};
 const addItem = (key,val) => {
 const r = dropdownAdd((dropdowns&&dropdowns[key])||[], val);
 if(r.empty) return;
@@ -1744,6 +1931,13 @@ const [projName,setProjName]=React.useState(project.name);
 const [projCo,setProjCo]=React.useState(project.company||"");
 const [projAbn,setProjAbn]=React.useState(project.abn||"");
 const [projLic,setProjLic]=React.useState(project.licence||"");
+// Per-site logo override: loaded once, staged locally (like the fields above) and committed together on Save.
+const [projLogoUrl,setProjLogoUrl]=React.useState(null);
+const [projLogoDirty,setProjLogoDirty]=React.useState(false);
+React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("rcd",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
 
 const [editingArea,setEditingArea]=React.useState(null);
 const [editAreaName,setEditAreaName]=React.useState("");
@@ -1821,7 +2015,11 @@ const delCircuit=(aid,pid,c)=>{
     return{...p,circuits:p.circuits.filter(x=>x!==c),circuitMeta:meta};
   })}:a)});
 };
-const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+const saveProj=async()=>{
+  upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});
+  if(projLogoDirty){ if(projLogoUrl) await siteLogoStore.put("rcd",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{}); else await siteLogoStore.del("rcd",project.id).catch(()=>{}); setProjLogoDirty(false); }
+  setEditingProject(false);
+};
 // ── Consolidate panels with shared prefix ────────────────────────────
 // Re-runs the same prefix-merging logic used during import, so projects
 // imported before the fix can be repaired without re-importing.
@@ -1882,6 +2080,8 @@ React.createElement('div', { style: S.listWrap,}
 , React.createElement(LabelInput, { label: "COMPANY",      value: projCo,   onChange: setProjCo,   placeholder: "Company",})
 , React.createElement(LabelInput, { label: "ABN",           value: projAbn,  onChange: setProjAbn,  placeholder: "e.g. 12 345 678 901",})
 , React.createElement(LabelInput, { label: "ELECTRICAL LICENCE", value: projLic, onChange: setProjLic, placeholder: "e.g. 123456C",})
+, React.createElement('div', { style: S.metaLabelText, }, "LOGO (optional — overrides the global one)")
+, React.createElement('div', { style: {marginTop:4,marginBottom:10}, }, React.createElement(LogoField, { value: displayLogoUrl, isDefault: logoIsDefault, onUpload: async file=>{ try{ setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9)); setProjLogoDirty(true); }catch(_){} }, onRemove: ()=>{setProjLogoUrl(null);setProjLogoDirty(true);} }))
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:8},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: saveProj,}, "Save")
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setEditingProject(false),}, "Cancel")
@@ -2326,6 +2526,7 @@ function ielSiteSummary(results,project,cat){
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
 
 async function exportIELExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl("iel", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
@@ -2361,9 +2562,10 @@ async function exportIELExcel(project, results, meta) {
     headers: ["Location", "Type", "Machine", "Date", "Mechanism / Reset Check", "Circuit Isolation Verified", "Lanyard Tension / Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
     widths: [16, 10, 20, 11, 12, 12, 12, 9, 22, 11],
     idHeaders: ["Location", "Machine"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -2371,13 +2573,15 @@ async function exportIELExcel(project, results, meta) {
 function parseIELExcel(data){
   const ws=data.Sheets[data.SheetNames[0]];
   const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+  // A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title.
+  const rowOff0=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
   let headerIdx=-1;
   for(let i=0;i<Math.min(rows.length,10);i++){
     if(rows[i].some(c=>String(c).length>60)) continue;
     const r=rows[i].map(c=>String(c).toLowerCase());
     if(r.some(c=>c==="location"||c==="area")&&r.some(c=>c==="type")){headerIdx=i;break;}
   }
-  if(headerIdx===-1)headerIdx=4;
+  if(headerIdx===-1)headerIdx=4+rowOff0;
   const header=rows[headerIdx].map(c=>String(c).toLowerCase().trim());
   const col=search=>header.findIndex(h=>h.includes(search));
   const cLoc=col("location"),cType=col("type"),cMachine=col("machine"),cDate=col("date");
@@ -2388,13 +2592,14 @@ function parseIELExcel(data){
   const cRect=header.findIndex(h=>h.includes("rectif")||h.includes("schedul"));
   const cDRect=header.findIndex((h,i)=>i>cRect&&(h.includes("date")||h.includes("schedul")));
   const cDef=col("defect"),cResp=col("responsib"),cNotes=header.findIndex(h=>h.includes("note")||h.includes("recommend")),cPri=col("priority");
+  const rowOff=rowOff0;
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[0]&&rows[0][0]){const t=String(rows[0][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
   // Company/ABN/licence live in row 2 (index 1), not the title row
-  if(rows[1]&&rows[1][0]){
-    const p=parseCompanyRow(rows[1][0]);
+  if(rows[1+rowOff]&&rows[1+rowOff][0]){
+    const p=parseCompanyRow(rows[1+rowOff][0]);
     // Only use as company if it doesn't look like a site/test title (no dates, no "test")
-    const raw=String(rows[1][0]).toLowerCase();
+    const raw=String(rows[1+rowOff][0]).toLowerCase();
     const looksLikeTitle=raw.includes(" test")||raw.includes("march")||raw.includes("april")||raw.includes("january")||raw.includes("february")||/\d{4}/.test(raw)&&!raw.includes("abn");
     if(!looksLikeTitle){parsedCompany=p.company||"";}
     parsedAbn=p.abn||"";
@@ -2534,15 +2739,6 @@ function IELApp({ onGoHome }) {
   React.useEffect(()=>{if(loaded)save(K_IEL_DROPDOWNS,ielDropdowns);},[ielDropdowns,loaded]);
 
   const mainElRef = React.useRef(null);
-  const savedScrollRef = React.useRef(0);
-  React.useEffect(()=>{
-    if(!detailInfo&&mainElRef.current&&savedScrollRef.current>0){
-      mainElRef.current.scrollTop=savedScrollRef.current;
-    }
-  },[detailInfo]);
-  React.useLayoutEffect(()=>{
-    if(detailInfo&&mainElRef.current) mainElRef.current.scrollTop=0;
-  },[detailInfo]);
 
   const project  = projects.find(p=>p.id===activeProject);
   const _ielMeta = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
@@ -2574,6 +2770,7 @@ function IELApp({ onGoHome }) {
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveCat(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
 
+  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
   if(!loaded)return React.createElement('div',{style:SI.loader},React.createElement('div',{style:SI.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   const catColor = catInfo?catInfo.color:"#047857";
@@ -2618,12 +2815,12 @@ function IELApp({ onGoHome }) {
 
     // ── Main
     ,React.createElement('main',{style:SI.main,ref:mainElRef}
-      ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
+      ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#047857",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
-      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{if(mainElRef.current)savedScrollRef.current=mainElRef.current.scrollTop;setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
+      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
       ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
@@ -2718,9 +2915,11 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[showAdd,setShowAdd]=React.useState(false);
   const[tab,setTab]=React.useState("manual");
   const[newName,setNewName]=React.useState("");
-  const[newCo,setNewCo]=React.useState("");
-  const[newAbn,setNewAbn]=React.useState("");
-  const[newLic,setNewLic]=React.useState("");
+  const[newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);
+  const[newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);
+  const[newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
+  const[newLogo,setNewLogo]=React.useState(null);
+  const globalLogoUrl=useGlobalLogoPreview();
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
   const[importing,setImporting]=React.useState(false);
@@ -2728,12 +2927,13 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[importName,setImportName]=React.useState("");
   const[importCo,setImportCo]=React.useState("");
   const[importError,setImportError]=React.useState("");
+  const[importLogoUrl,setImportLogoUrl]=React.useState(null);
   const fileRef=React.useRef();
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -2747,6 +2947,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo && parsed.company) setImportCo(parsed.company);
         if(!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if(!importLic && parsed.licence) setImportLic(parsed.licence);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -2760,7 +2961,8 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||importPreview.siteName||"Imported Site";
     const proj={id:importPreview.siteId,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas};
     onAddProject(proj,importPreview.results[importPreview.siteId]||{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportError("");
+    if(importLogoUrl) siteLogoStore.put("iel",proj.id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportLogoUrl(null);setImportError("");
   };
 
   return React.createElement('div',{style:SI.listWrap}
@@ -2824,8 +3026,10 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE (optional)")
             ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:newLic,placeholder:"e.g. 123456C",onChange:e=>setNewLic(e.target.value)})
           )
+          ,React.createElement('div',{style:SI.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:10}},React.createElement(LogoField,{value:newLogo||globalLogoUrl,isDefault:!newLogo&&!!globalLogoUrl,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)}))
           ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{if(!newName.trim())return;onAddProject({id:ielSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:SI.ctaPrimary,onClick:async()=>{if(!newName.trim())return;const id=ielSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});if(newLogo)await siteLogoStore.put("iel",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -2861,6 +3065,8 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE (optional)")
               ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:importLic,placeholder:"e.g. 123456C",onChange:e=>setImportLic(e.target.value)})
             )
+            ,React.createElement('div',{style:SI.metaLabelText},"LOGO (optional — overrides the global one)")
+            ,React.createElement('div',{style:{marginTop:4,marginBottom:10}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)}))
             ,React.createElement('div',{style:{display:"flex",gap:8}}
               ,React.createElement('button',{style:SI.ctaPrimary,onClick:confirmImport},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Import Site")
               ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
@@ -3300,6 +3506,12 @@ function IELManageView({project,onUpdateProject,onBack}){
   const[projCo,setProjCo]=React.useState(project.company||"");
   const[projAbn,setProjAbn]=React.useState(project.abn||"");
   const[projLic,setProjLic]=React.useState(project.licence||"");
+  const[projLogoUrl,setProjLogoUrl]=React.useState(null);
+  const[projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("iel",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
   const upd=u=>onUpdateProject(u);
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...project.areas,{id:ielSlug(newAreaName),name:newAreaName.trim(),panels:IEL_CATEGORIES.map(cat=>({id:ielSlug(cat.key+"-"+newAreaName),name:cat.key,circuits:[],machineNames:{}}))}]});setNewAreaName("");};
   const delArea=id=>upd({...project,areas:project.areas.filter(a=>a.id!==id)});
@@ -3339,8 +3551,10 @@ function IELManageView({project,onUpdateProject,onBack}){
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"COMPANY"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projCo,placeholder:"Company name",onChange:e=>setProjCo(e.target.value)}))
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"ABN"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projAbn,placeholder:"e.g. 12 345 678 901",onChange:e=>setProjAbn(e.target.value)}))
           ,React.createElement('div',{style:{marginBottom:8}},React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE"),React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:projLic,placeholder:"e.g. 123456C",onChange:e=>setProjLic(e.target.value)}))
+          ,React.createElement('div',{style:SI.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:displayLogoUrl,isDefault:logoIsDefault,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
           ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);}},"Save")
+            ,React.createElement('button',{style:SI.ctaPrimary,onClick:async()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("iel",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("iel",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);}},"Save")
             ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel")
           )
         )
@@ -4435,6 +4649,7 @@ function tatSiteSummary(results, project) {
 // Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
 const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
 async function exportTATExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl("tat", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const sName = project.name || "Site";
@@ -4469,9 +4684,10 @@ async function exportTATExcel(project, results, meta) {
     headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
     widths: [14, 12, 22, 11, 10, 10, 9, 11, 10, 11, 20],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -4487,7 +4703,9 @@ function parseTATExcel(data) {
     const r=rows[i].map(c=>String(c).toLowerCase());
     if(r.some(c=>c==="area")&&r.some(c=>c.includes("asset")||c.includes("tag")||c.includes("desc"))){headerIdx=i;break;}
   }
-  if(headerIdx===-1)headerIdx=4;
+  // A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title.
+  const rowOff=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
+  if(headerIdx===-1)headerIdx=4+rowOff;
   const header=rows[headerIdx].map(c=>String(c).toLowerCase().trim());
   const col=s=>header.findIndex(h=>h.includes(s));
   const cArea=col("area");
@@ -4496,8 +4714,8 @@ function parseTATExcel(data) {
   const cType=col("type")||col("equip");
   const cFreq=col("freq");
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[0]&&rows[0][0]){const t=String(rows[0][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
-  if(rows[1]&&rows[1][0]){const p=parseCompanyRow(rows[1][0]);const raw=String(rows[1][0]).toLowerCase();const looksLikeTitle=raw.includes(" test")||/\d{4}/.test(raw)&&!raw.includes("abn");if(!looksLikeTitle){parsedCompany=p.company||"";}parsedAbn=p.abn||"";parsedLicence=p.licence||"";}
+  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[1+rowOff]&&rows[1+rowOff][0]){const p=parseCompanyRow(rows[1+rowOff][0]);const raw=String(rows[1+rowOff][0]).toLowerCase();const looksLikeTitle=raw.includes(" test")||/\d{4}/.test(raw)&&!raw.includes("abn");if(!looksLikeTitle){parsedCompany=p.company||"";}parsedAbn=p.abn||"";parsedLicence=p.licence||"";}
   const areaMap={};
   for(let i=headerIdx+1;i<rows.length;i++){
     const row=rows[i];
@@ -4605,7 +4823,6 @@ function TATApp({ onGoHome }) {
   const [activeAreaId, setActiveAreaId]=React.useState(null);
   const [detailItemId, setDetailItemId]=React.useState(null);
   const tatMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(detailItemId&&tatMainRef.current) tatMainRef.current.scrollTop=0; },[detailItemId]);
   const [auditEntered, setAuditEntered]=React.useState(false);
   const [viewSnap,     setViewSnap]    =React.useState(null);
   const [viewArea,     setViewArea]    =React.useState(null);
@@ -4669,6 +4886,7 @@ function TATApp({ onGoHome }) {
   const summary=project?tatSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0,untested:0};
   const canGoBack=view!=="projects";
 
+  useScrollMemory(tatMainRef,[view,activeAreaId,detailItemId||""].join("|"),view==="audit"&&!detailItemId);
   if(!loaded)return React.createElement('div',{style:ST.loader},React.createElement('div',{style:ST.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   return React.createElement('div',{style:ST.root}
@@ -4696,7 +4914,7 @@ function TATApp({ onGoHome }) {
     ,React.createElement('main',{style:ST.main,ref:tatMainRef}
       ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);const s=tatSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);},
         onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},
-        onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
+        onDeleteProject:id=>{siteLogoStore.del("tat",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(TATHomeView,{project,meta,setMeta,results:allResults,summary,
         onStartAudit:()=>{setAuditEntered(true);setView("audit");},
         onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onSettings:()=>setView("settings"),
@@ -4753,9 +4971,11 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[showAdd,setShowAdd]=React.useState(false);
   const[tab,setTab]=React.useState("manual");
   const[newName,setNewName]=React.useState("");
-  const[newCo,setNewCo]=React.useState("");
-  const[newAbn,setNewAbn]=React.useState("");
-  const[newLic,setNewLic]=React.useState("");
+  const[newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);
+  const[newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);
+  const[newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
+  const[newLogo,setNewLogo]=React.useState(null);
+  const globalLogoUrl=useGlobalLogoPreview();
   const[importing,setImporting]=React.useState(false);
   const[importPreview,setImportPreview]=React.useState(null);
   const[importName,setImportName]=React.useState("");
@@ -4763,12 +4983,13 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
   const[importError,setImportError]=React.useState("");
+  const[importLogoUrl,setImportLogoUrl]=React.useState(null);
   const fileRef=React.useRef();
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -4781,6 +5002,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo&&parsed.company)setImportCo(parsed.company);
         if(!importAbn&&parsed.abn)setImportAbn(parsed.abn);
         if(!importLic&&parsed.licence)setImportLic(parsed.licence);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -4794,7 +5016,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||importPreview.siteName||"Imported Site";
     const proj={id:importPreview.siteId,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas};
     onAddProject(proj,importPreview.results[importPreview.siteId]||{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportError("");
+    if(importLogoUrl) siteLogoStore.put("tat",proj.id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoUrl(null);setImportError("");
   };
 
   return React.createElement('div',{style:ST.listWrap}
@@ -4837,8 +5060,10 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
             )
           )
+          ,React.createElement('div',{style:ST.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:newLogo||globalLogoUrl,isDefault:!newLogo&&!!globalLogoUrl,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)}))
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:tatSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:async()=>{if(!newName.trim())return;const id=tatSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});if(newLogo)await siteLogoStore.put("tat",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -4864,6 +5089,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
                 ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
               )
             )
+            ,React.createElement('div',{style:ST.metaLabelText},"LOGO (optional — overrides the global one)")
+            ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)}))
             ,React.createElement('div',{style:{display:"flex",gap:8}}
               ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:confirmImport},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Site")
               ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
@@ -5271,6 +5498,12 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
   const[projCo,setProjCo]=React.useState(project.company||"");
   const[projAbn,setProjAbn]=React.useState(project.abn||"");
   const[projLic,setProjLic]=React.useState(project.licence||"");
+  const[projLogoUrl,setProjLogoUrl]=React.useState(null);
+  const[projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("tat",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
   const[editingArea,setEditingArea]=React.useState(null);
   const[editAreaName,setEditAreaName]=React.useState("");
   const[editingItem,setEditingItem]=React.useState(null); // {areaId, itemId}
@@ -5281,7 +5514,7 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
 
   const freqOpts=freqOptions||TAT_DEFAULT_FREQS;
   const equipOpts=equipTypes||TAT_DEFAULT_EQUIP_TYPES;
-  const saveProjTAT=()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+  const saveProjTAT=async()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("tat",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("tat",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
 
   // Auto-next tag
   const nextTag=()=>{
@@ -5404,6 +5637,8 @@ function TATManageView({project,onUpdateProject,equipTypes,freqOptions,tatDefaul
           ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>
             React.createElement('div',{key:lbl,style:{marginBottom:8}},React.createElement('div',{style:ST.metaLabelText},lbl),React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))
           )
+          ,React.createElement('div',{style:ST.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:displayLogoUrl,isDefault:logoIsDefault,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}},React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:saveProjTAT},"Save"),React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel"))
         )
         :React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center"}}
@@ -5952,6 +6187,7 @@ function siteMonitor(results, project) {
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
 async function exportThermoExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl("thermo", project.id);
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
@@ -5989,9 +6225,10 @@ async function exportThermoExcel(project, results, meta) {
     headers: ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 18, 18, 11, 9, 11, 9, 22],
     idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -6011,10 +6248,13 @@ function parseThermoExcel(data, overrideName, XLSX) {
     defval: ""
   });
 
+  // A logo strip (2026-09-27) pushes every header row down by one — row 0 is then blank instead of the title.
+  const rowOff = (rows[0] || []).every(c => c === "" || c == null) ? 1 : 0;
+
   // ── Auto-detect site name from row 0 ──────────────────────────────────
   let siteName = overrideName || "";
-  if (!siteName && rows[0] && rows[0][0]) {
-    const raw = String(rows[0][0]).trim();
+  if (!siteName && rows[rowOff] && rows[rowOff][0]) {
+    const raw = String(rows[rowOff][0]).trim();
     // Strip "— Thermographic Test — March 2026" suffix patterns
     siteName = raw.split(/\s*[-–]\s*(?:thermographic|thermo)/i)[0].trim() || raw;
   }
@@ -6023,8 +6263,8 @@ function parseThermoExcel(data, overrideName, XLSX) {
   let company = "",
     abn = "",
     licence = "";
-  if (rows[1] && rows[1][0]) {
-    const parts = String(rows[1][0]).split(/\s*\|\s*/);
+  if (rows[1 + rowOff] && rows[1 + rowOff][0]) {
+    const parts = String(rows[1 + rowOff][0]).split(/\s*\|\s*/);
     parts.forEach(p => {
       const l = p.toLowerCase();
       if (l.startsWith("abn:")) abn = p.replace(/^abn:\s*/i, "").trim();else if (l.startsWith("electrical licence:")) licence = p.replace(/^electrical licence:\s*/i, "").trim();else if (!company) company = p.trim();
@@ -6040,7 +6280,7 @@ function parseThermoExcel(data, overrideName, XLSX) {
       break;
     }
   }
-  if (headerIdx === -1) headerIdx = 4; // fallback to row 5 (0-indexed)
+  if (headerIdx === -1) headerIdx = 4 + rowOff; // fallback to row 5 (0-indexed), shifted the same way
 
   const header = rows[headerIdx].map(c => String(c).toLowerCase().trim());
   const col = search => header.findIndex(h => h.includes(search));
@@ -6738,9 +6978,11 @@ function ThermoProjectListView({
   const [showAdd, setShowAdd] = React.useState(false);
   const [tab, setTab] = React.useState("manual");
   const [newName, setNewName] = React.useState("");
-  const [newCo, setNewCo] = React.useState("");
-  const [newAbn, setNewAbn] = React.useState("");
-  const [newLic, setNewLic] = React.useState("");
+  const [newCo, setNewCo] = React.useState(() => loadAppSettings().businessName);
+  const [newAbn, setNewAbn] = React.useState(() => loadAppSettings().abn);
+  const [newLic, setNewLic] = React.useState(() => loadAppSettings().licence);
+  const [newLogo, setNewLogo] = React.useState(null);
+  const globalLogoUrl = useGlobalLogoPreview();
   const [importing, setImporting] = React.useState(false);
   const [importPreview, setImportPreview] = React.useState(null);
   const [importName, setImportName] = React.useState("");
@@ -6749,32 +6991,39 @@ function ThermoProjectListView({
   const [importLic, setImportLic] = React.useState("");
   const [importError, setImportError] = React.useState("");
   const fileRef = React.useRef();
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!newName.trim()) return;
+    const id = slugify(newName);
     onAddProject({
-      id: slugify(newName),
+      id,
       name: newName.trim(),
       company: newCo.trim(),
       abn: newAbn.trim(),
       licence: newLic.trim(),
       areas: []
     });
+    if (newLogo) await siteLogoStore.put("thermo", id, gsdDataUrlToRec(newLogo)).catch(() => {});
+    const s = loadAppSettings();
     setNewName("");
-    setNewCo("");
-    setNewAbn("");
-    setNewLic("");
+    setNewCo(s.businessName);
+    setNewAbn(s.abn);
+    setNewLic(s.licence);
+    setNewLogo(null);
     setShowAdd(false);
   };
+  const [importLogoUrl, setImportLogoUrl] = React.useState(null);
   const handleFile = e => {
     const file = e.target.files[0];
     if (!file) return;
     setImporting(true);
     setImportError("");
+    setImportLogoUrl(null);
     const reader = new FileReader();
     reader.onload = async ev => {
       try {
         const XLSX = XLSX_LIB; if (!XLSX) { alert("Excel library not loaded"); return; }
-        const data = XLSX.read(ev.target.result, {
+        const buf = ev.target.result;
+        const data = XLSX.read(buf, {
           type: "array"
         });
         const parsed = parseThermoExcel(data, "", XLSX);
@@ -6784,6 +7033,7 @@ function ThermoProjectListView({
         if (!importCo && parsed.company) setImportCo(parsed.company);
         if (!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if (!importLic && parsed.licence) setImportLic(parsed.licence);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       } catch (err) {
         setImportError("Could not parse file: " + err.message);
       }
@@ -6806,12 +7056,14 @@ function ThermoProjectListView({
     };
     // Results always empty — fresh audit, no photos carried over
     onAddProject(proj, {});
+    if (importLogoUrl) siteLogoStore.put("thermo", proj.id, gsdDataUrlToRec(importLogoUrl)).catch(() => {});
     setImportPreview(null);
     setShowAdd(false);
     setImportName("");
     setImportCo("");
     setImportAbn("");
     setImportLic("");
+    setImportLogoUrl(null);
     setImportError("");
   };
 
@@ -6929,6 +7181,10 @@ function ThermoProjectListView({
     onChange: e => setter(e.target.value),
     onKeyDown: e => e.key === "Enter" && handleAdd()
   }))), /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "LOGO (optional — overrides the global one)"), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4, marginBottom: 8 }
+  }, /*#__PURE__*/React.createElement(LogoField, { value: newLogo, onUpload: async file => { try { setNewLogo(await resizeImageToDataUrl(file, 480, 0.9)); } catch (_) {} }, onRemove: () => setNewLogo(null) })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8,
@@ -7038,6 +7294,10 @@ function ThermoProjectListView({
     placeholder: ph,
     onChange: e => setter(e.target.value)
   }))), /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "LOGO (optional — overrides the global one)"), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4, marginBottom: 8 }
+  }, /*#__PURE__*/React.createElement(LogoField, { value: importLogoUrl || globalLogoUrl, isDefault: !importLogoUrl && !!globalLogoUrl, onUpload: async file => { try { setImportLogoUrl(await resizeImageToDataUrl(file, 480, 0.9)); } catch (_) {} }, onRemove: () => setImportLogoUrl(null) })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -8084,7 +8344,13 @@ function ThermoManageView({
   const [projCo, setProjCo] = React.useState(project.company||"");
   const [projAbn, setProjAbn] = React.useState(project.abn||"");
   const [projLic, setProjLic] = React.useState(project.licence||"");
-  const saveProj = () => { onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()}); setEditingProject(false); };
+  const [projLogoUrl, setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty, setProjLogoDirty] = React.useState(false);
+  React.useEffect(() => { let alive = true; let url = ""; siteLogoStore.get("thermo", project.id).then(rec => { if (!alive || !rec) return; url = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setProjLogoUrl(url); }).catch(() => {}); return () => { alive = false; if (url) URL.revokeObjectURL(url); }; }, [project.id]);
+  const globalLogoUrl = useGlobalLogoPreview();
+  const displayLogoUrl = projLogoDirty ? projLogoUrl : (projLogoUrl || globalLogoUrl);
+  const logoIsDefault = !projLogoDirty && !projLogoUrl && !!globalLogoUrl;
+  const saveProj = async () => { onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()}); if (projLogoDirty) { if (projLogoUrl) await siteLogoStore.put("thermo", project.id, gsdDataUrlToRec(projLogoUrl)).catch(() => {}); else await siteLogoStore.del("thermo", project.id).catch(() => {}); setProjLogoDirty(false); } setEditingProject(false); };
   return /*#__PURE__*/React.createElement("div", {
     style: {
       padding: "16px"
@@ -8100,6 +8366,10 @@ function ThermoManageView({
               /*#__PURE__*/React.createElement("div",{style:STH.metaLabelText},lbl),
               /*#__PURE__*/React.createElement("input",{style:{...STH.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
             )
+          ),
+          /*#__PURE__*/React.createElement("div",{style:STH.metaLabelText},"LOGO (optional — overrides the global one)"),
+          /*#__PURE__*/React.createElement("div",{style:{marginTop:4,marginBottom:8}},
+            /*#__PURE__*/React.createElement(LogoField,{value:displayLogoUrl,isDefault:logoIsDefault,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}})
           ),
           /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},
             /*#__PURE__*/React.createElement("button",{style:STH.ctaPrimary,onClick:saveProj},"Save"),
@@ -9018,7 +9288,6 @@ function ThermoApp({
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeCircuitId, setActiveCircuitId] = React.useState(null); // id of circuit open in photo page
   const thermoMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(view==="circuit"&&thermoMainRef.current) thermoMainRef.current.scrollTop=0; },[view,activeCircuitId]);
   const [activeCircuitName, setActiveCircuitName] = React.useState("");
   const [thermoDropdowns, setThermoDropdowns] = React.useState({responsibility:[...RESPONSIBILITY_OPTIONS],rectified:[...RECTIFIED_OPTIONS]});
 
@@ -9181,6 +9450,7 @@ function ThermoApp({
       goHome();
     } else goProjects();
   };
+  useScrollMemory(thermoMainRef,[view,activeAreaId,activeBoardId,activeCircuitId||""].join("|"),["audit","area","board"].includes(view));
   if (!loaded) return /*#__PURE__*/React.createElement("div", {
     style: STH.loader
   }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } }`), /*#__PURE__*/React.createElement("div", {
@@ -9217,6 +9487,7 @@ function ThermoApp({
       }
     },
     onDeleteProject: id => {
+      siteLogoStore.del("thermo", id).catch(() => {});
       setProjects(prev => prev.filter(p => p.id !== id));
       setAllResults(prev => {
         const n = {
@@ -9400,6 +9671,126 @@ function ThermoApp({
   })));
 }
 // ═════════════════════════════════════════════════════════════════════════
+// GLOBAL SETTINGS — one app-wide business identity + logo (2026-09-27); pre-fills every module's "Add Site" form, and the logo is
+// drawn on every export. Explicit Save button (a record-editing form, not a live test result — the app's live-autosave rule doesn't apply).
+// ═════════════════════════════════════════════════════════════════════════
+const GS_COLOR = "#475569"; // neutral slate — this isn't tied to any one module
+// Shared logo control (2026-09-27): preview + Upload/Replace + Remove, reused by Global Settings AND every module's Add Site / Manage edit
+// form for the per-site override — built once here instead of nine near-identical copies (the mistake already flagged for the five
+// EditableDropdown components). Purely presentational: `value` is a preview URL (object URL or data URL) or "", `onUpload(file)` gets the
+// raw picked File, `onRemove()` clears it — the caller owns whatever storage (appLogoStore / siteLogoStore / local state) sits behind it.
+// isDefault: true when `value` is only the GLOBAL logo showing through as a fallback (no per-site override staged/saved yet) — shows a
+// "Using global default" note instead of a Remove button (there is nothing per-site to remove; uploading here creates the override).
+function LogoField({ value, onUpload, onRemove, color, isDefault }) {
+  const handle = e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) onUpload(f); };
+  return React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 6 } }
+    , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 14 } }
+      , value
+        ? React.createElement('img', { src: value, alt: "Logo", style: { width: 120, height: 70, objectFit: "contain", background: "#fff", border: "1px solid #e4e4e7", borderRadius: 8 } })
+        : React.createElement('div', { style: { width: 120, height: 70, border: "1px dashed #d4d4d8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#a1a1aa", textAlign: "center", padding: 4 } }, "No logo set")
+      , React.createElement('div', { style: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 } }
+        , React.createElement('label', { style: { background: color || GS_COLOR, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center", flexShrink: 0 } }
+          , value ? "Replace" : "Upload"
+          , React.createElement('input', { type: "file", accept: "image/*", style: { display: "none" }, onChange: handle }))
+        , value && !isDefault && React.createElement(DeleteButton, { onDelete: onRemove, label: "Remove logo?" })))
+    , isDefault && React.createElement('div', { style: { fontSize: 11, color: "#52525b" } }, "Using the global default logo — upload one here to override it for this site only"));
+}
+// Loads Global Settings' own logo as a preview URL (or null if none set / unreadable) — used to show it as the visual DEFAULT on a
+// site that has no per-site override yet, exactly like Company/ABN/Licence already show the global text as the pre-filled default.
+async function loadGlobalLogoUrl() {
+  const s = loadAppSettings(); if (!s.logoId) return null;
+  try { const rec = await appLogoStore.get(); return rec ? URL.createObjectURL(new Blob([rec.buf], { type: rec.type })) : null; } catch (_) { return null; }
+}
+function useGlobalLogoPreview() {
+  const [url, setUrl] = React.useState(null);
+  React.useEffect(() => {
+    let alive = true, u = null;
+    loadGlobalLogoUrl().then(res => { if (!alive) return; u = res; setUrl(res); });
+    return () => { alive = false; if (u) URL.revokeObjectURL(u); };
+  }, []);
+  return url;
+}
+function GlobalSettingsView({ onGoHome }) {
+  const [loaded, setLoaded] = React.useState(false);
+  const [businessName, setBusinessName] = React.useState("");
+  const [abn, setAbn] = React.useState("");
+  const [licence, setLicence] = React.useState("");
+  const [hasLogo, setHasLogo] = React.useState(false);
+  const [logoUrl, setLogoUrl] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+  const urlRef = React.useRef("");
+
+  React.useEffect(() => {
+    let alive = true;
+    const s = loadAppSettings();
+    setBusinessName(s.businessName); setAbn(s.abn); setLicence(s.licence); setHasLogo(!!s.logoId);
+    if (s.logoId) appLogoStore.get().then(rec => {
+      if (!alive || !rec) return;
+      const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); urlRef.current = u; setLogoUrl(u);
+    }).catch(() => {});
+    setLoaded(true);
+    return () => { alive = false; if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
+  }, []);
+
+  const onUpload = async file => {
+    setError("");
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 480, 0.9);
+      const rec = gsdDataUrlToRec(dataUrl);
+      await appLogoStore.put(rec);
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); urlRef.current = u;
+      setLogoUrl(u); setHasLogo(true); setSaved(false);
+    } catch (_) { setError("Could not read that image."); }
+  };
+  const onRemoveLogo = async () => {
+    await appLogoStore.del().catch(() => {});
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = "";
+    setLogoUrl(""); setHasLogo(false); setSaved(false);
+  };
+  const onSave = () => {
+    saveAppSettings({ businessName: businessName.trim(), abn: abn.trim(), licence: licence.trim(), logoId: hasLogo ? "logo" : null });
+    setSaved(true);
+  };
+
+  const label = { fontSize: 10, color: "#6e6a66", letterSpacing: 0.8, fontWeight: 700 };
+  const input = { background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, color: "#18181b", padding: "12px 16px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box", marginTop: 4, fontFamily: "inherit" };
+  const field = (lbl, val, setter, ph) => React.createElement('div', { style: { marginBottom: 14 } },
+    React.createElement('div', { style: label }, lbl),
+    React.createElement('input', { style: input, value: val, placeholder: ph, onChange: e => { setter(e.target.value); setSaved(false); } }));
+
+  if (!loaded) return React.createElement('div', { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } },
+    React.createElement('div', { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GS_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
+
+  return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
+    , React.createElement('div', { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
+      , React.createElement('div', { style: { border: "1px solid rgba(0,0,0,0.06)", borderRadius: "10px", padding: "8px 12px", background: "#f0eeea", flexShrink: 0, alignSelf: "flex-start", marginBottom: 10, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", width: "fit-content" }, onClick: onGoHome }
+        , React.createElement('svg', { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "#52525b", strokeWidth: 2.5, strokeLinecap: "round" }, React.createElement('polyline', { points: "15 18 9 12 15 6" }))
+        , React.createElement('span', { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Back"))
+      , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
+      , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export")
+      , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
+    , React.createElement('div', { style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
+      , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
+      , field("BUSINESS NAME", businessName, setBusinessName, "Company name")
+      , field("ABN", abn, setAbn, "e.g. 12 345 678 901")
+      , field("ELECTRICAL LICENCE", licence, setLicence, "e.g. 123456C")
+      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 20 } }, "Pre-fills the \"Add Site\" form in every module. Fully editable there — this never changes a site already created.")
+
+      , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Company Logo")
+      , React.createElement('div', { style: { marginBottom: 10 } }, React.createElement(LogoField, { value: logoUrl, onUpload, onRemove: onRemoveLogo }))
+      , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
+      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
+
+      , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
+        , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
+        , saved && React.createElement('span', { style: { fontSize: 12, color: "#16a34a", fontWeight: 600 } }, "Saved"))
+    )
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
 function AppRoot() {
@@ -9434,6 +9825,7 @@ function AppRoot() {
   if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
   if (module === "welder") return React.createElement(WelderApp, {onGoHome: ()=>setModule(null)});
   if (module === "gsd") return React.createElement(GSDApp, {onGoHome: ()=>setModule(null)});
+  if (module === "settings") return React.createElement(GlobalSettingsView, {onGoHome: ()=>setModule(null)});
 
   // Home-screen module icons come from the shared registry (moduleIcon) — the Calendar reads the very same definitions.
   const modules = [
@@ -9544,6 +9936,19 @@ function AppRoot() {
       }
       , moduleIcon("cal",16)
       , "Calendar"
+    )
+    // Fixed Global Settings pill — the opposite corner from Calendar so the two never collide; same scope (Home-screen only)
+    , React.createElement('button',{
+        onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
+        style:{position:"fixed",right:"16px",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
+          display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
+          background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
+          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
+      }
+      , React.createElement('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+          React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
+          React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
+      , "Settings"
     )
   );
 }
@@ -9744,6 +10149,7 @@ function swbSheetName(board, area, used) {
 }
 async function exportSWBExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
+  const logo = await xjGetLogoDataUrl("swb", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
   const nextDue = swbNextDue(meta);
@@ -9760,17 +10166,17 @@ async function exportSWBExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st) => { const c = ws.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = cols.length;
-  setCell('A1',`${sName} — Switchboard / Enclosure Audit`);
-  setCell('A2',coLine);
-  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
-  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
-  setCell('E3',`Next Audit Due: ${nextDue}`);
+  setCell('A'+(1+off),`${sName} — Switchboard / Enclosure Audit`);
+  setCell('A'+(2+off),coLine);
+  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E'+(3+off),`Next Audit Due: ${nextDue}`);
   [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
-    .forEach(m => ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+'5',t));
-  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1).height = h; });
+    .forEach(m => ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
+  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+(5+off),t));
+  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1+off).height = h; });
   rows.forEach((row,i) => {
-    const r = 6 + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
+    const r = 6 + off + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci) => {
       let st = base;
@@ -9780,7 +10186,8 @@ async function exportSWBExcel(project, allResults, meta) {
     });
   });
   [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
-  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  if (logo) xjLogo(ws, wb, logo, n);
 
   // ── One sheet per board ──
   const used = new Set();
@@ -9788,15 +10195,15 @@ async function exportSWBExcel(project, allResults, meta) {
     const { area, board, summary: bs, overall } = row;
     const sh = wb.addWorksheet(swbSheetName(board, area, used));
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
-    put('A1',"Switchboard / Enclosure Audit");
-    put('A2',`${sName}  |  ${coLine}`);
-    put('A3',`Area: ${area.name}`); put('C3',`Board: ${board.name}`);
-    put('A4',`Auditor: ${(meta&&meta.auditor)||""}`); put('C4',`Date Tested: ${testDate?fmtDate(testDate):""}`);
-    put('A5',`Next Audit Due: ${nextDue}`);
-    [[1,1,7],[2,1,7],[3,1,2],[3,3,7],[4,1,2],[4,3,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr,c1,rr,c2));
-    sh.getRow(1).height = 24;
+    put('A'+(1+off),"Switchboard / Enclosure Audit");
+    put('A'+(2+off),`${sName}  |  ${coLine}`);
+    put('A'+(3+off),`Area: ${area.name}`); put('C'+(3+off),`Board: ${board.name}`);
+    put('A'+(4+off),`Auditor: ${(meta&&meta.auditor)||""}`); put('C'+(4+off),`Date Tested: ${testDate?fmtDate(testDate):""}`);
+    put('A'+(5+off),`Next Audit Due: ${nextDue}`);
+    [[1,1,7],[2,1,7],[3,1,2],[3,3,7],[4,1,2],[4,3,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr+off,c1,rr+off,c2));
+    sh.getRow(1+off).height = 24;
     // Audit summary
-    let rr = 7;
+    let rr = 7 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     const overallSt = overall==="pass" ? passSt : overall==="fail" ? failSt : naSt;
     [["Total Items",String(bs.total)],["Pass",String(bs.pass)],["Fail",String(bs.fail)],["N/A",String(bs.na)],["Untested",String(bs.untested)],["Score",scoreLabel(bs.score)],["Overall",overall.toUpperCase()]]
@@ -9824,19 +10231,21 @@ async function exportSWBExcel(project, allResults, meta) {
     swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      sh.getRow(rr).height = EXPORT_PHOTO_ROW_PT;
+      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
         const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
-        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
     [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
     xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
+    if (logo) xjLogo(sh, wb, logo, 7);
   });
 
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
@@ -9867,14 +10276,16 @@ function parseSWBExcel(data) {
     }
     const legacy = !rows;
     if (legacy) rows = sheetRows(sheetNames[0]);
+    // A logo strip (2026-09-27) pushes the title/company rows down by one — row 0 is then blank instead of the title.
+    const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     // ── Site name from row 0 (exact-suffix strip), company / ABN / licence from row 1 ──
     let siteName="",company="",abn="",licence="";
-    if(rows[0]&&rows[0][0]){
-      const t=String(rows[0][0]).trim();
+    if(rows[rowOff]&&rows[rowOff][0]){
+      const t=String(rows[rowOff][0]).trim();
       if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit\s*$/i,"").trim();
     }
-    if(rows[1]&&rows[1][0]){
-      const p=parseCompanyRow(rows[1][0]);
+    if(rows[1+rowOff]&&rows[1+rowOff][0]){
+      const p=parseCompanyRow(rows[1+rowOff][0]);
       const ph=(v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,""))||list.includes(String(v).toLowerCase());
       // older exports wrote "<company> Electrical Audit Software Pty. Ltd." — drop that fixed suffix
       const co=String(p.company||"").replace(/\s*Electrical Audit Software Pty\.? Ltd\.?\s*$/i,"").trim();
@@ -9978,7 +10389,6 @@ function SWBApp({ onGoHome }) {
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeItemKey, setActiveItemKey] = React.useState(null);
   const swbMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(view==="item"&&swbMainRef.current) swbMainRef.current.scrollTop=0; },[view,activeItemKey]);
   const [auditEntered,  setAuditEntered]  = React.useState(false);
   const [swbDropdowns,  setSwbDropdowns]  = React.useState({responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED});
 
@@ -10032,6 +10442,7 @@ function SWBApp({ onGoHome }) {
   // goArea removed - use goAreaList() instead
   const goAreaList=()=>{setView("audit");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
 
+  useScrollMemory(swbMainRef,[view,activeAreaId,activeBoardId,activeItemKey||""].join("|"),["audit","board"].includes(view));
   if(!loaded) return React.createElement('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:"3px solid #7e22ce",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS=swbStyles();
@@ -10047,8 +10458,9 @@ function SWBApp({ onGoHome }) {
             if(view==="item"){setActiveItemKey(null);setView("board");}
             else if(view==="board"){setActiveBoardId(null);setView("audit");}
             else if(view==="audit"&&!auditEntered){goHome();}
+            else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}                       // board list -> area list (this branch was missing: Back fell through to goProjects and skipped a level)
             else if(view==="audit"&&auditEntered&&!activeAreaId){const s=project?swbSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
-            else if(["manage","report","history","dropdowns"].includes(view))goHome();
+            else if(["manage","report","history","dropdowns"].includes(view)||view==="audit")goHome();
             else goProjects();
           }}
             ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
@@ -10065,7 +10477,7 @@ function SWBApp({ onGoHome }) {
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #7e22ce, transparent 70%)',opacity:0.5}})
     )
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
-      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
@@ -10094,30 +10506,34 @@ function SWBApp({ onGoHome }) {
 function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}) {
   const [showAdd,setShowAdd]=React.useState(false);
   const [tab,setTab]=React.useState("manual");
-  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);const [newLogo,setNewLogo]=React.useState(null);const globalLogoUrl=useGlobalLogoPreview();
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=swbStyles();
+  const [importLogoUrl,setImportLogoUrl]=React.useState(null);
 
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
-      try{const data=XLSX.read(ev.target.result,{type:"binary"});const parsed=parseSWBExcel(data);
+      try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseSWBExcel(data);
         if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Area / Board columns. Download the template for the correct format.");setImporting(false);return;}
         setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(_){setImportError("Failed to read file.");}
       setImporting(false);
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const confirmImport=()=>{
     if(!importPreview)return;
     const sName=importName.trim()||"Imported Site";
-    onAddProject({id:swbSlug(sName),name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportError("");
+    const id=swbSlug(sName);
+    onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});
+    if(importLogoUrl) siteLogoStore.put("swb",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoUrl(null);setImportError("");
   };
 
   return React.createElement('div',{style:SS.listWrap}
@@ -10162,8 +10578,10 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
             )
           )
+          ,React.createElement('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:newLogo||globalLogoUrl,isDefault:!newLogo&&!!globalLogoUrl,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)}))
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:()=>{if(!newName.trim())return;onAddProject({id:swbSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:async()=>{if(!newName.trim())return;const id=swbSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});if(newLogo)await siteLogoStore.put("swb",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -10189,6 +10607,8 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
                 ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
               )
             )
+            ,React.createElement('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+            ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)}))
             ,React.createElement('div',{style:{display:"flex",gap:8}}
               ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:confirmImport},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Import Site")
               ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
@@ -10305,7 +10725,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
         ,React.createElement('div',{style:{flex:1,minWidth:0}})
         ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
       ))
-      ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+      ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#7e22ce",border:"1px dashed #d8b4fe",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
     )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
@@ -10472,10 +10892,15 @@ function SWBManageView({project,onUpdateProject,onBack}) {
   const [projCo,setProjCo]=React.useState(project.company||"");
   const [projAbn,setProjAbn]=React.useState(project.abn||"");
   const [projLic,setProjLic]=React.useState(project.licence||"");
+  const [projLogoUrl,setProjLogoUrl]=React.useState(null);const [projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("swb",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
   const [editingAreaId,setEditingAreaId]=React.useState(null);const [editAreaName,setEditAreaName]=React.useState("");
   const [editingBoard,setEditingBoard]=React.useState(null);const [editBoardName,setEditBoardName]=React.useState("");
   const SS=swbStyles();const upd=u=>onUpdateProject(u);
-  const saveProj=()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+  const saveProj=async()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("swb",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("swb",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...(project.areas||[]),{id:swbSlug(newAreaName),name:newAreaName.trim(),boards:[]}]});setNewAreaName("");};
   const delArea=id=>upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});
   const addBoard=aid=>{const n=(newBoardName[aid]||"").trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:[...(a.boards||[]),{id:swbSlug(n),name:n}]}:a)});setNewBoardName(x=>({...x,[aid]:""}));};
@@ -10488,6 +10913,8 @@ function SWBManageView({project,onUpdateProject,onBack}) {
       ?React.createElement('div',{style:{...SS.addCard,marginBottom:16,border:"1px solid #93c5fd"}}
         ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#7e22ce",marginBottom:10}},"SITE DETAILS")
         ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>React.createElement('div',{key:lbl,style:{marginBottom:8}},React.createElement('div',{style:SS.metaLabelText},lbl),React.createElement('input',{style:{...SS.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})))
+        ,React.createElement('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+        ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:displayLogoUrl,isDefault:logoIsDefault,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
         ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
           ,React.createElement('button',{style:{padding:"9px 14px",background:"#7e22ce",color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:saveProj},"Save")
           ,React.createElement('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
@@ -11156,6 +11583,7 @@ function eltRegisterRows(project, allResults, meta) {
 
 async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
+  const logo = await xjGetLogoDataUrl("elt", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
@@ -11166,19 +11594,19 @@ async function exportELTExcel(project, allResults, meta) {
   const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
   // Rows 1–5 are deliberately unstyled (no fill/font/border set), with the same merges and row
   // heights as the real IEL/RCD/TAT/Thermo exports: title, company line, meta line, 6pt spacer, headings.
-  setCell('A1',`${sName} — Emergency Lighting Test`);
-  setCell('A2',coLine);
-  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
-  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
-  setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
+  setCell('A'+(1+off),`${sName} — Emergency Lighting Test`);
+  setCell('A'+(2+off),coLine);
+  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E'+(3+off),`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
   merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
-  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+'5',t); ws.getCell(cols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
-  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
+  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+(5+off),t); ws.getCell(cols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
+  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
   const rows = eltRegisterRows(project, allResults, meta);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
   rows.forEach((row,i)=>{
-    const r = 6+i;
+    const r = 6+off+i;
     const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
     const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());
     const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
@@ -11190,11 +11618,12 @@ async function exportELTExcel(project, allResults, meta) {
       setCell(cols[ci]+r,v,st);
     });
   });
-  merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
+  merges.forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
   // Content-width columns (headings wrap). The import-anchor headings stay exact; date columns get the shared >= 13 minimum.
   [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});
   const setup = xjPageSetup;
-  setup(ws,true,5);
+  setup(ws,true,5+off);
+  if (logo) xjLogo(ws, wb, logo, n);
 
   // ── Defects sheet: FAIL fittings only, ALWAYS present (headings even with zero fails), keyed to the register by "#" ──
   {
@@ -11202,20 +11631,21 @@ async function exportELTExcel(project, allResults, meta) {
     const dset = (ref,val,st)=>{const c=ds.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const dcols = "ABCDEFGHIJ".split(""); const dn = dcols.length;
     const defRows = rows.filter(r=>r.defect);
-    dset('A1',`${sName} — Emergency Lighting Test — Defects`); dset('A2',coLine);
-    dset('A3',`Defects recorded: ${defRows.length}`); dset('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`); dset('E3',"Priority: L Low · M Medium · H High · U Urgent");
-    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1,c1+1,r2+1,c2+1));
-    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+'5',t); ds.getCell(dcols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
-    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1).height = h;});
+    dset('A'+(1+off),`${sName} — Emergency Lighting Test — Defects`); dset('A'+(2+off),coLine);
+    dset('A'+(3+off),`Defects recorded: ${defRows.length}`); dset('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`); dset('E'+(3+off),"Priority: L Low · M Medium · H High · U Urgent");
+    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1+off,c1+1,r2+1+off,c2+1));
+    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+(5+off),t); ds.getCell(dcols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1+off).height = h;});
     defRows.forEach((row,i)=>{
       const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
       const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
       const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
-      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
+      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+off+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
     });
-    if (!defRows.length) dset('A6',"No defects recorded");
+    if (!defRows.length) dset('A'+(6+off),"No defects recorded");
     [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
-    setup(ds,true,5);
+    setup(ds,true,5+off);
+    if (logo) xjLogo(ds, wb, logo, dn);
   }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
@@ -11230,13 +11660,13 @@ async function exportELTExcel(project, allResults, meta) {
       r.photos.forEach(p=>{
         const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
         pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
-        ps.getRow(pr).height = EXPORT_PHOTO_ROW_PT;
+        const bx = xjPhotoBox(p.dataUrl); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
         const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
         if (m) {
           let ext = m[1]==="jpg"?"jpeg":m[1];
           if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
           const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
-          ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+          ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
         }
         pr++;
       });
@@ -11244,6 +11674,7 @@ async function exportELTExcel(project, allResults, meta) {
     [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
     setup(ps,false,1);
   }
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
@@ -11282,7 +11713,6 @@ function ELTApp({ onGoHome }) {
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [eltDropdowns, setEltDropdowns] = React.useState(ELT_DEFAULT_DROPDOWNS);
   const eltMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(eltMainRef.current) eltMainRef.current.scrollTop=0; },[view,activeAssetId]);
 
   React.useEffect(()=>{
     (async()=>{
@@ -11315,6 +11745,7 @@ function ELTApp({ onGoHome }) {
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
   const today = ()=>new Date().toISOString().slice(0,10);
 
+  useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");   // the list level's key never includes the (still-set) asset id
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -11347,7 +11778,7 @@ function ELTApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
-      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
@@ -11399,11 +11830,13 @@ function parseELTExcel(data, typeOptions) {
     const cell = (row,c)=>c>=0?String(row[c]==null?"":row[c]).trim():"";
     // Site / company: from the title rows above the header. The title is "<site> — Emergency Lighting Test"; strip exactly that
     // suffix (never split on hyphens: "Hearse Road - Firestone" must survive), and ignore template / export placeholders.
+    // A logo strip (2026-09-27) pushes the title/company rows down by one — row 0 is then blank instead of the title.
+    const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
-    const t0 = hi>0 && rows[0] ? String(rows[0][0]||"").trim() : "";
+    const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
     if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test\s*$/i,"").trim();
-    if (hi>1 && rows[1] && rows[1][0]) {
-      const p = parseCompanyRow(rows[1][0]);
+    if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
+      const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
       company = ph(p.company,ELT_IMPORT_PLACEHOLDERS.company)?"":p.company;
       abn = ph(p.abn,ELT_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
@@ -11458,12 +11891,20 @@ function downloadELTTemplate() {
   deliverExportFile(out,"ELT_Import_Template.xlsx");
 }
 
-function ELTSiteFields({vals, setVals}) {
+// logoUrl/onLogoUpload/onLogoRemove are optional: the two import-preview usages of this component don't pass them, so no logo field
+// shows there (a per-site logo isn't manually entered from an import preview — Stage 3 extracts it from the file itself).
+function ELTSiteFields({vals, setVals, logoUrl, logoIsDefault, onLogoUpload, onLogoRemove}) {
   const SS = swbStyles();
-  return [["SITE NAME","name","Site name"],["COMPANY (optional)","company","Company name"],["ABN (optional)","abn","e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","licence","e.g. 123456C"]].map(([lbl,k,ph])=>
-    eltEl('div',{key:k,style:{marginBottom:8}}
-      ,eltEl('div',{style:SS.metaLabelText},lbl)
-      ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:vals[k]||"",placeholder:ph,onChange:e=>setVals({...vals,[k]:e.target.value})})
+  return eltEl(React.Fragment, null
+    ,[["SITE NAME","name","Site name"],["COMPANY (optional)","company","Company name"],["ABN (optional)","abn","e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","licence","e.g. 123456C"]].map(([lbl,k,ph])=>
+      eltEl('div',{key:k,style:{marginBottom:8}}
+        ,eltEl('div',{style:SS.metaLabelText},lbl)
+        ,eltEl('input',{style:{...SS.metaInput,marginTop:4},type:"text",value:vals[k]||"",placeholder:ph,onChange:e=>setVals({...vals,[k]:e.target.value})})
+      )
+    )
+    ,onLogoUpload&&eltEl(React.Fragment,null
+      ,eltEl('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+      ,eltEl('div',{style:{marginTop:4,marginBottom:8}},eltEl(LogoField,{value:logoUrl,isDefault:logoIsDefault,onUpload:onLogoUpload,onRemove:onLogoRemove}))
     )
   );
 }
@@ -11472,17 +11913,20 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const SS = swbStyles();
   const [showAdd,setShowAdd] = React.useState(false);
   const [tab,setTab] = React.useState("manual");
-  const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [vals,setVals] = React.useState(()=>{ const s=loadAppSettings(); return {name:"",company:s.businessName,abn:s.abn,licence:s.licence}; });
+  const [newLogo,setNewLogo] = React.useState(null);
+  const globalLogoUrl = useGlobalLogoPreview();
   const [importing,setImporting] = React.useState(false);
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
   const [importError,setImportError] = React.useState("");
+  const [importLogoUrl,setImportLogoUrl] = React.useState(null);
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setNewLogo(null);setImportPreview(null);setImportLogoUrl(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -11492,6 +11936,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         if(!parsed.ok){setImportError(parsed.error);return;}
         setImportPreview(parsed);
         setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -11502,8 +11947,10 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const confirmImport = ()=>{
     if(!importPreview) return;
     const name=(importVals.name||"").trim()||"Imported Site";
-    onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
+    const id=slugify(name);
+    onAddProject({id,name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
       areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
+    if(importLogoUrl) siteLogoStore.put("elt",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
     setImportVals({name:"",company:"",abn:"",licence:""});closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as IEL, IRT and SWB, in ELT's accent
@@ -11549,9 +11996,9 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         )
         ,tab==="manual"&&eltEl(React.Fragment,null
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
-          ,eltEl(ELTSiteFields,{vals,setVals})
+          ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:newLogo||globalLogoUrl,logoIsDefault:!newLogo&&!!globalLogoUrl,onLogoUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setNewLogo(null)})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});setVals({name:"",company:"",abn:"",licence:""});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:async()=>{if(!vals.name.trim())return;const id=slugify(vals.name);onAddProject({id,name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});if(newLogo)await siteLogoStore.put("elt",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -11573,7 +12020,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
               ,pvAreas.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+nw(pvAreas.length-4,"more area"))
               ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
             )
-            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
+            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals,logoUrl:importLogoUrl||globalLogoUrl,logoIsDefault:!importLogoUrl&&!!globalLogoUrl,onLogoUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setImportLogoUrl(null)})
             ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
               ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:confirmImport},"✓ Import Site")
               ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>{setImportPreview(null);setImportError("");}},"Re-upload")
@@ -11693,7 +12140,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
         ,eltEl('div',{style:{flex:1,minWidth:0}})
         ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
       ))
-      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos})
+      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:ELT_COLOR,border:`1px dashed ${ELT_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
     )
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
@@ -11846,6 +12293,12 @@ function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
+  const [projLogoUrl,setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty,setProjLogoDirty] = React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("elt",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
   const upd = u=>onUpdateProject(u);
   const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
   return eltEl('div',{style:SS.listWrap}
@@ -11853,9 +12306,9 @@ function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
     ,editingProject
       ?eltEl('div',{style:{...SS.addCard,marginBottom:16,border:`1px solid ${ELT_COLOR_BORDER}`}}
         ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:ELT_COLOR,marginBottom:10}},"SITE DETAILS")
-        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:displayLogoUrl,logoIsDefault:logoIsDefault,onLogoUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onLogoRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}})
         ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-          ,eltEl('button',{style:{padding:"9px 14px",background:ELT_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});setEditingProject(false);}},"Save")
+          ,eltEl('button',{style:{padding:"9px 14px",background:ELT_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:async()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("elt",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("elt",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);}},"Save")
           ,eltEl('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
         )
       )
@@ -12026,12 +12479,14 @@ function parseIRTExcel(data){
   try{
     const ws=data.Sheets[data.SheetNames[0]];
     const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:""});
+    // A logo strip (2026-09-27) pushes every header row down by one \u2014 row 0 is then blank instead of the title.
+    const rowOff=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
     let siteName="",company="",abn="",licence="";
-    if(rows[0]&&rows[0][0]){const t=String(rows[0][0]).trim();siteName=t.split(/\s*[-\u2013]\s*/)[0].trim()||t;}
-    if(rows[1]&&rows[1][0]){const parts=String(rows[1][0]).split(/\s*\|\s*/);parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});}
+    if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]).trim();siteName=t.split(/\s*[-\u2013]\s*/)[0].trim()||t;}
+    if(rows[1+rowOff]&&rows[1+rowOff][0]){const parts=String(rows[1+rowOff][0]).split(/\s*\|\s*/);parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});}
     let hi=-1;
     for(let i=0;i<Math.min(rows.length,10);i++){if(rows[i].some(c=>String(c).length>60))continue;const r=rows[i].map(c=>String(c).toLowerCase());if(r.some(c=>c==="area"||c==="location")){hi=i;break;}}
-    if(hi<0)hi=4;
+    if(hi<0)hi=4+rowOff;
     const header=rows[hi].map(c=>String(c).toLowerCase().trim());
     const col=s=>header.findIndex(h=>h.includes(s));
     const cArea=Math.max(0,col("area")>=0?col("area"):col("location"));
@@ -12084,6 +12539,7 @@ function downloadIRTTemplate(){
 // IRT export: THREE linked sheets, all keyed by the same "#":  Register (narrow summary — the sheet meant for a client PDF),
 // Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
 async function exportIRTExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl("irt", project.id);
   const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
   const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
   const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
@@ -12111,11 +12567,12 @@ async function exportIRTExcel(project, results, meta) {
     headers: ["Location", "Panel / DB", "Equipment / Circuit", "Test Date", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 14, 22, 11, 9, 26],
     idHeaders: ["Location", "Panel / DB", "Equipment / Circuit"], idWidths: [16, 14, 22],
-    rows, footer: [],
+    rows, footer: [], logo,
     between: w => xjSheet(w, "Readings", { title: `${title} — Readings`, coLine, meta: [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"],
-      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
+      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]), logo }),
   });
   const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
+  xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
 }
 
@@ -12389,18 +12846,19 @@ function IRTCompleteBtn({color,onComplete}){
 // ─── Project list view with Manual + Import tabs ──────────────────────────
 function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}){
   const [showAdd,setShowAdd]=React.useState(false);const [tab,setTab]=React.useState("manual");
-  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);const [newLogo,setNewLogo]=React.useState(null);const globalLogoUrl=useGlobalLogoPreview();
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=irtStyles();
+  const [importLogoUrl,setImportLogoUrl]=React.useState(null);
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
-    reader.onload=ev=>{try{const data=XLSX.read(ev.target.result,{type:"binary"});const parsed=parseIRTExcel(data);if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Location / Panel / Item columns. Download the template for the correct format.");setImporting(false);return;}setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");}catch(_){setImportError("Failed to read file.");}setImporting(false);};
-    reader.readAsBinaryString(file);
+    reader.onload=ev=>{try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseIRTExcel(data);if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Location / Panel / Item columns. Download the template for the correct format.");setImporting(false);return;}setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));}catch(_){setImportError("Failed to read file.");}setImporting(false);};
+    reader.readAsArrayBuffer(file);
   };
-  const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";onAddProject({id:irtSlug(sName),name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportError("");};
+  const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";const id=irtSlug(sName);onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});if(importLogoUrl) siteLogoStore.put("irt",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoUrl(null);setImportError("");};
   return React.createElement("div",{style:SS.listWrap},
     React.createElement("div",{style:{...SS.listTitle,marginTop:24}},"Sites"),
     projects.length===0&&!showAdd&&React.createElement("div",{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet \u2014 add one or import from Excel."),
@@ -12424,7 +12882,9 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       tab==="manual"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site"),
         [["SITE NAME","text",newName,setNewName,"Site name"],["COMPANY (optional)","text",newCo,setNewCo,"Company name"],["ABN (optional)","text",newAbn,setNewAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",newLic,setNewLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:irtSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
+        React.createElement("div",{style:SS.metaLabelText},"LOGO (optional — overrides the global one)"),
+        React.createElement("div",{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:newLogo||globalLogoUrl,isDefault:!newLogo&&!!globalLogoUrl,onUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setNewLogo(null)})),
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:async()=>{if(!newName.trim())return;const id=irtSlug(newName);onAddProject({id,name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});if(newLogo)await siteLogoStore.put("irt",id,gsdDataUrlToRec(newLogo)).catch(()=>{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setNewLogo(null);setShowAdd(false);}},"Add Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
       ),
       tab==="import"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel"),
@@ -12443,6 +12903,8 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             (importPreview.areas||[]).length>3&&React.createElement("div",{style:{fontSize:11,color:"#52525b"}},"\u2026and ",(importPreview.areas||[]).length-3," more")
           ),
           [["SITE NAME","text",importName,setImportName,"Site name"],["COMPANY (optional)","text",importCo,setImportCo,"Company name"],["ABN (optional)","text",importAbn,setImportAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",importLic,setImportLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))),
+          React.createElement("div",{style:SS.metaLabelText},"LOGO (optional — overrides the global one)"),
+          React.createElement("div",{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)})),
           React.createElement("div",{style:{display:"flex",gap:8}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:confirmImport},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
         )
       )
@@ -12462,9 +12924,14 @@ function IRTManageView({project,onUpdateProject,onBack}){
   const [projCo,setProjCo]=React.useState(project.company||"");
   const [projAbn,setProjAbn]=React.useState(project.abn||"");
   const [projLic,setProjLic]=React.useState(project.licence||"");
+  const [projLogoUrl,setProjLogoUrl]=React.useState(null);const [projLogoDirty,setProjLogoDirty]=React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("irt",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
   const SS=irtStyles();
   const upd=areas=>onUpdateProject({...project,areas});
-  const saveProj=()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});setEditingProject(false);};
+  const saveProj=async()=>{onUpdateProject({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("irt",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("irt",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd([...(project.areas||[]),{id:irtSlug(newAreaName),name:newAreaName.trim(),panels:[]}]);setNewAreaName("");};
   const delArea=id=>upd((project.areas||[]).filter(a=>a.id!==id));
   const startEditArea=(area)=>{setEditingArea(area.id);setEditAreaName(area.name);};
@@ -12493,6 +12960,8 @@ function IRTManageView({project,onUpdateProject,onBack}){
           ,[["SITE NAME",projName,setProjName,"Site name"],["COMPANY",projCo,setProjCo,"Company name"],["ABN",projAbn,setProjAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE",projLic,setProjLic,"e.g. 123456C"]].map(([lbl,val,setter,ph])=>
             React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))
           )
+          ,React.createElement("div",{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+          ,React.createElement("div",{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:displayLogoUrl,isDefault:logoIsDefault,onUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}}))
           ,React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}}
             ,React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:saveProj},"Save")
             ,React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setEditingProject(false)},"Cancel")
@@ -12810,7 +13279,6 @@ function IRTApp({onGoHome}){
   const [viewSnap,setViewSnap]=React.useState(null);const [viewArea,setViewArea]=React.useState(null);const [viewPanel,setViewPanel]=React.useState(null);
   const [activeAreaId,setActiveAreaId]=React.useState(null);const [activePanelId,setActivePanelId]=React.useState(null);const [activeItemId,setActiveItemId]=React.useState(null);const [activeItemName,setActiveItemName]=React.useState("");
   const irtMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(view==="item"&&irtMainRef.current) irtMainRef.current.scrollTop=0; },[view,activeItemId]);
   const [irtWarnDismissed,setIrtWarnDismissed]=React.useState(false);
   const [showGuide,setShowGuide]=React.useState(false);
   React.useEffect(()=>{(async()=>{try{const[p,r,m,h,dd]=await Promise.all([load(K_IRT_PROJECTS,[]),load(K_IRT_RESULTS,{}),load(K_IRT_META,{}),load(K_IRT_HISTORY,[]),load(K_IRT_DROPDOWNS,{responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setIrtDropdowns(dd);}finally{setLoaded(true);}})();},[]);
@@ -12835,6 +13303,7 @@ function IRTApp({onGoHome}){
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
   const isAudit=["audit","area","panel","item"].includes(view);
   const SS=irtStyles();
+  useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["audit","area","panel"].includes(view));
   if(!loaded)return React.createElement("div",{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement("div",{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${IRT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
   return React.createElement("div",{style:SS.root},
     // Top bar
@@ -12868,7 +13337,7 @@ function IRTApp({onGoHome}){
     ),
     // Main
     React.createElement("div",{style:SS.main,ref:irtMainRef},
-      view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
+      view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{siteLogoStore.del("irt",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
       view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));setAuditEntered(false);},auditEntered}),
       view==="audit"&&project&&!auditEntered&&React.createElement(IRTAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);}}),
       view==="audit"&&project&&auditEntered&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
@@ -13480,11 +13949,13 @@ function parseWelderExcel(data) {
     const cell = (row,c)=>c>=0?String(row[c]==null?"":row[c]).trim():"";
     // Site / company: title rows above the header. The title is "<site> — Welder Test" (before the rename: "— Welder (VRD) Test");
     // strip exactly that suffix (never split on hyphens) and ignore template / export placeholders.
+    // A logo strip (2026-09-27) pushes the title/company rows down by one — row 0 is then blank instead of the title.
+    const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
-    const t0 = hi>0 && rows[0] ? String(rows[0][0]||"").trim() : "";
+    const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
     if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test\s*$/i,"").trim();
-    if (hi>1 && rows[1] && rows[1][0]) {
-      const p = parseCompanyRow(rows[1][0]);
+    if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
+      const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
       company = ph(p.company,WELDER_IMPORT_PLACEHOLDERS.company)?"":p.company;
       abn = ph(p.abn,WELDER_IMPORT_PLACEHOLDERS.abn)?"":p.abn;
@@ -13493,7 +13964,9 @@ function parseWelderExcel(data) {
     // Per-welder sheets (identity cells only), in workbook order — the export writes them in Register row order.
     const detail = sheets.filter(n=>n!==regName).map(n=>{
       const r = XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:"",raw:false});
-      const grab = (ri,ci,label)=>{ const v=String((r[ri]&&r[ri][ci])||""); const m=v.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; };
+      // A logo strip on this sheet pushes its own rows down by one too.
+      const off = (r[0]||[]).every(c => c===""||c==null) ? 1 : 0;
+      const grab = (ri,ci,label)=>{ const v=String((r[ri+off]&&r[ri+off][ci])||""); const m=v.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; };
       return { assetId:grab(2,2,"Asset ID"), brand:grab(3,0,"Brand"), model:grab(3,2,"Model"), serial:grab(4,0,"Serial Number") };
     });
     const assets=[], seen=new Set(); let skipped=0, duplicates=0, combined=0, exact=0, k=-1;
@@ -13540,17 +14013,20 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const SS = swbStyles();
   const [showAdd,setShowAdd] = React.useState(false);
   const [tab,setTab] = React.useState("manual");
-  const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [vals,setVals] = React.useState(()=>{ const s=loadAppSettings(); return {name:"",company:s.businessName,abn:s.abn,licence:s.licence}; });
   const [importing,setImporting] = React.useState(false);
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [newLogo,setNewLogo] = React.useState(null);
+  const globalLogoUrl = useGlobalLogoPreview();
   const [importError,setImportError] = React.useState("");
+  const [importLogoUrl,setImportLogoUrl] = React.useState(null);
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setVals({name:"",company:"",abn:"",licence:""});setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);setImportPreview(null);setImportLogoUrl(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
-    setImporting(true);setImportError("");
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -13560,6 +14036,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         if(!parsed.ok){setImportError(parsed.error);return;}
         setImportPreview(parsed);
         setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -13570,8 +14047,10 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const confirmImport = ()=>{
     if(!importPreview) return;
     const name=(importVals.name||"").trim()||"Imported Site";
-    onAddProject({id:slugify(name),name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
+    const id=slugify(name);
+    onAddProject({id,name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
       areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
+    if(importLogoUrl) siteLogoStore.put("welder",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
     closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as ELT, IEL, IRT and SWB, in Welder's accent
@@ -13616,9 +14095,9 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         )
         ,tab==="manual"&&eltEl(React.Fragment,null
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
-          ,eltEl(ELTSiteFields,{vals,setVals})
+          ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:newLogo||globalLogoUrl,logoIsDefault:!newLogo&&!!globalLogoUrl,onLogoUpload:async file=>{try{setNewLogo(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setNewLogo(null)})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:async()=>{if(!vals.name.trim())return;const id=slugify(vals.name);onAddProject({id,name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});if(newLogo)await siteLogoStore.put("welder",id,gsdDataUrlToRec(newLogo)).catch(()=>{});closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -13640,7 +14119,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
               ,pvAreas.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+nw(pvAreas.length-4,"more area"))
               ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
             )
-            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
+            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals,logoUrl:importLogoUrl||globalLogoUrl,logoIsDefault:!importLogoUrl&&!!globalLogoUrl,onLogoUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setImportLogoUrl(null)})
             ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
               ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:confirmImport},"✓ Import Site")
               ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>{setImportPreview(null);setImportError("");}},"Re-upload")
@@ -13826,7 +14305,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
         ,eltEl('div',{style:{flex:1,minWidth:0}})
         ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
       ))
-      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",capture:"environment",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
+      ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:WELDER_COLOR,border:`1px dashed ${WELDER_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
     )
     ,nextDue&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
@@ -13907,6 +14386,12 @@ function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
   const SS = swbStyles();
   const [editingProject,setEditingProject] = React.useState(false);
   const [vals,setVals] = React.useState({name:project.name,company:project.company||"",abn:project.abn||"",licence:project.licence||""});
+  const [projLogoUrl,setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty,setProjLogoDirty] = React.useState(false);
+  React.useEffect(()=>{let alive=true;let url="";siteLogoStore.get("welder",project.id).then(rec=>{if(!alive||!rec)return;url=URL.createObjectURL(new Blob([rec.buf],{type:rec.type}));setProjLogoUrl(url);}).catch(()=>{});return()=>{alive=false;if(url)URL.revokeObjectURL(url);};},[project.id]);
+  const globalLogoUrl=useGlobalLogoPreview();
+  const displayLogoUrl=projLogoDirty?projLogoUrl:(projLogoUrl||globalLogoUrl);
+  const logoIsDefault=!projLogoDirty&&!projLogoUrl&&!!globalLogoUrl;
   const upd = u=>onUpdateProject(u);
   const editBtn = onClick=>eltEl('button',{style:{background:"transparent",border:"1px solid rgba(59,130,246,0.35)",borderRadius:"6px",padding:"4px 8px",fontSize:"13px",lineHeight:1,cursor:"pointer",flexShrink:0,color:"#1d4ed8"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#1d4ed8',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('path',{d:'M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7'}),eltEl('path',{d:'M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z'})));
   return eltEl('div',{style:SS.listWrap}
@@ -13914,9 +14399,9 @@ function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
     ,editingProject
       ?eltEl('div',{style:{...SS.addCard,marginBottom:16,border:`1px solid ${WELDER_COLOR_BORDER}`}}
         ,eltEl('div',{style:{fontSize:12,fontWeight:700,color:WELDER_COLOR,marginBottom:10}},"SITE DETAILS")
-        ,eltEl(ELTSiteFields,{vals,setVals})
+        ,eltEl(ELTSiteFields,{vals,setVals,logoUrl:displayLogoUrl,logoIsDefault:logoIsDefault,onLogoUpload:async file=>{try{setProjLogoUrl(await resizeImageToDataUrl(file,480,0.9));setProjLogoDirty(true);}catch(_){}},onLogoRemove:()=>{setProjLogoUrl(null);setProjLogoDirty(true);}})
         ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-          ,eltEl('button',{style:{padding:"9px 14px",background:WELDER_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});setEditingProject(false);}},"Save")
+          ,eltEl('button',{style:{padding:"9px 14px",background:WELDER_COLOR,color:"#fff",border:"none",borderRadius:8,fontSize:13,cursor:"pointer",fontWeight:700},onClick:async()=>{upd({...project,name:vals.name.trim()||project.name,company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("welder",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("welder",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);}},"Save")
           ,eltEl('button',{style:{padding:"9px 14px",background:"transparent",color:"#6e6a66",border:"1px solid #d4d4d8",borderRadius:8,fontSize:13,cursor:"pointer"},onClick:()=>setEditingProject(false)},"Cancel")
         )
       )
@@ -14015,6 +14500,7 @@ function welderSheetName(a, used) {
 }
 async function exportWelderExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
+  const logo = await xjGetLogoDataUrl("welder", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
@@ -14030,17 +14516,17 @@ async function exportWelderExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
-  setCell('A1',`${sName} — Welder Test`);
-  setCell('A2',coLine);
-  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
-  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
-  setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
+  setCell('A'+(1+off),`${sName} — Welder Test`);
+  setCell('A'+(2+off),coLine);
+  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E'+(3+off),`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
   [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
-    .forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+'5',t));
-  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1).height = h;});
+    .forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
+  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+(5+off),t));
+  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});
   rows.forEach((row,i)=>{
-    const r = 6+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const r = 6+off+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci)=>{
       let st = base;
@@ -14050,7 +14536,8 @@ async function exportWelderExcel(project, allResults, meta) {
     });
   });
   [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  if (logo) xjLogo(ws, wb, logo, n);
 
   // ── One sheet per welder ──
   const used = new Set();
@@ -14059,16 +14546,16 @@ async function exportWelderExcel(project, allResults, meta) {
     const sh = wb.addWorksheet(welderSheetName(a, used));
     const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const date = (meta&&meta.testDate) || "";
-    put('A1',"Welder Inspection & Audit Checklist");
-    put('A2',`${sName}  |  ${coLine}`);
-    put('A3',`Location: ${a.location||""}`); put('C3',`Asset ID: ${a.assetId||""}`);
-    put('A4',`Brand: ${a.brand||""}`);       put('C4',`Model: ${a.model||""}`);
-    put('A5',`Serial Number: ${a.serial||""}`); put('C5',`Date Tested: ${date?fmtDate(date):""}`);
-    put('A6',`Prepared By: ${(meta&&meta.auditor)||""}`); put('C6',`Test Instruments: ${(meta&&meta.instruments)||""}`);
-    [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr,c1,rr,c2));
-    sh.getRow(1).height = 24;
+    put('A'+(1+off),"Welder Inspection & Audit Checklist");
+    put('A'+(2+off),`${sName}  |  ${coLine}`);
+    put('A'+(3+off),`Location: ${a.location||""}`); put('C'+(3+off),`Asset ID: ${a.assetId||""}`);
+    put('A'+(4+off),`Brand: ${a.brand||""}`);       put('C'+(4+off),`Model: ${a.model||""}`);
+    put('A'+(5+off),`Serial Number: ${a.serial||""}`); put('C'+(5+off),`Date Tested: ${date?fmtDate(date):""}`);
+    put('A'+(6+off),`Prepared By: ${(meta&&meta.auditor)||""}`); put('C'+(6+off),`Test Instruments: ${(meta&&meta.instruments)||""}`);
+    [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr+off,c1,rr+off,c2));
+    sh.getRow(1+off).height = 24;
     // Audit summary
-    let rr = 8;
+    let rr = 8 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     const overallSt = row.overall==="pass"?passSt:row.overall==="fail"?failSt:naSt;
     [["Total Items",String(sum.total)],["Pass",String(sum.pass)],["Fail",String(sum.fail)],["N/A",String(sum.na)],["Score",welderScoreLabel(sum.score)],["Actions Required",String(sum.actions)],["Overall",welderOverallLabel(row.overall)]]
@@ -14095,18 +14582,20 @@ async function exportWelderExcel(project, allResults, meta) {
     (raw.photos||[]).forEach((p,pi)=>{
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      sh.getRow(rr).height = EXPORT_PHOTO_ROW_PT;
+      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
         const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
-        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:EXPORT_PHOTO_W_PX,height:EXPORT_PHOTO_H_PX},editAs:"oneCell"});
+        sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
     [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
     xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
+    if (logo) xjLogo(sh, wb, logo, 5);
   });
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
 }
@@ -14123,7 +14612,6 @@ function WelderApp({ onGoHome }) {
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [dropdowns, setDropdowns] = React.useState(WELDER_DEFAULT_DROPDOWNS);
   const mainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(mainRef.current) mainRef.current.scrollTop=0; },[view,activeAssetId]);
 
   React.useEffect(()=>{
     (async()=>{
@@ -14160,6 +14648,7 @@ function WelderApp({ onGoHome }) {
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
 
+  useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${WELDER_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -14196,7 +14685,7 @@ function WelderApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${WELDER_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:mainRef}
-      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:clearSiteResults})
       ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
@@ -14337,8 +14826,10 @@ const GSD_H = { bar: 20, gap: 8, detail: 12, spacer: 10 };
 const gsdFit = (w, h) => { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const s = Math.min(GSD_BOX_W / W, GSD_BOX_H / H); return { dw: Math.max(1, Math.round(W * s)), dh: Math.max(1, Math.round(H * s)) }; };
 const gsdCaptionH = text => { const lines = String(text).split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / GSD_CHARS_LINE)), 0); return lines * 12 + 3; };
 // sections: [{name, items:[{caption, detail, photos:[{id, dw, dh}]}]}] -> { rows:[{kind,h,...}], breaks:[row index a page break goes BEFORE] }
-function gsdLayout(sections) {
-  const rows = [], breaks = []; let y = GSD_HEAD_PT;
+// headPt: actual header space already used above the first content row (defaults to GSD_HEAD_PT; a logo row makes the real header taller, so
+// exportGSDExcel passes GSD_HEAD_PT + XJ_LOGO_ROW_PT when one is set — otherwise the first page's break would land a little too low and clip).
+function gsdLayout(sections, headPt = GSD_HEAD_PT) {
+  const rows = [], breaks = []; let y = headPt;
   const push = r => { rows.push(r); y += r.h; };
   const need = h => { if (y > 0 && y + h > GSD_PAGE_PT) { breaks.push(rows.length); y = 0; } };
   sections.forEach(sec => sec.items.forEach((it, i) => {
@@ -14359,6 +14850,7 @@ const gsdPageSetupFixed = sheet => {
 };
 async function exportGSDExcel(project, items, meta) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
+  const logo = await xjGetLogoDataUrl("gsd", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
   const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
   const metaCells = [`Auditor: ${m.auditor || ""}`, "", `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, "", `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
@@ -14368,24 +14860,24 @@ async function exportGSDExcel(project, items, meta) {
   for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
     let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
   }
-  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })));
+  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT + (off ? XJ_LOGO_ROW_PT : 0));
 
   // ── Sheet 1: the photo report ──
   const ws = wb.addWorksheet("Defects Report"); ws.views = [{ showGridLines: false }];
-  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
   put(1, 1, `${sName} — General Site Defects`); put(2, 1, coLine);
   metaCells.forEach((v, i) => { if (v !== "") put(3, i + 1, v); });
-  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, 5], [4, 1, 4, GSD_COLS]].forEach(a => ws.mergeCells(...a));
-  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, 5], [4, 1, 4, GSD_COLS]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
+  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
   const white = SWB_XC.white;
   const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
   const capSt = swbXCS(white, { sz: 9, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" });
   const detSt = swbXCS(white, { sz: 8, color: { rgb: SWB_XC.mutedGrey } }, { vertical: "top" });
   const breakSet = new Set(layout.breaks);
-  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6, 1, 6, GSD_COLS); }
+  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6 + off, 1, 6 + off, GSD_COLS); }
   layout.rows.forEach((row, i) => {
-    const r = 5 + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
+    const r = 5 + off + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
     ws.getRow(r).height = row.h;
     if (row.kind === "photos") {
       row.photos.forEach((p, k) => {
@@ -14395,10 +14887,11 @@ async function exportGSDExcel(project, items, meta) {
       });
       return;
     }
-    if (row.kind === "bar") put(r, 1, row.text, barSt); else if (row.kind === "caption") put(r, 1, row.text, capSt); else if (row.kind === "detail") put(r, 1, row.text, detSt);
+    if (row.kind === "bar") put(r - off, 1, row.text, barSt); else if (row.kind === "caption") put(r - off, 1, row.text, capSt); else if (row.kind === "detail") put(r - off, 1, row.text, detSt);
     if (["bar", "caption", "detail"].includes(row.kind)) { ws.mergeCells(r, 1, r, GSD_COLS); for (let c = 2; c <= GSD_COLS && row.kind === "bar"; c++) swbApplyXlStyle(ws.getCell(r, c), barSt); }
   });
   gsdPageSetupFixed(ws);
+  if (logo) xjLogo(ws, wb, logo, GSD_COLS);
 
   // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
   const numbered = gsdNumbered(project, items);
@@ -14406,7 +14899,8 @@ async function exportGSDExcel(project, items, meta) {
     headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
     widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
     rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
-    emptyText: "No defects recorded", landscape: true });
+    emptyText: "No defects recorded", landscape: true, logo });
+  xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
 }
@@ -14429,7 +14923,6 @@ function GSDApp({ onGoHome }) {
   const [activeItemId, setActiveItemId] = React.useState(null);
   const [photoError, setPhotoError] = React.useState("");
   const mainRef = React.useRef(null);
-  React.useLayoutEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view, activeItemId]);
   React.useEffect(() => {
     (async () => {
       try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); setProjects(p); setAllItems(i); setAllMeta(m); setHistory(h); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...gsdUpgradeDropdowns(dd) }); }
@@ -14523,6 +15016,7 @@ function GSDApp({ onGoHome }) {
   const goHome = () => { setView("home"); setActiveItemId(null); setViewSnap(null); };
   const goAudit = () => { setView("audit"); setActiveItemId(null); setViewSnap(null); };
   const SS = swbStyles();
+  useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit");
   if (!loaded) return gsdEl("div", { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } }, gsdEl("div", { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GSD_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
   const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if (view === "item") setView("audit"); else if (view === "audit") goHome(); else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
   const navTo = v => () => { setViewSnap(null); setView(v); };
@@ -14540,7 +15034,7 @@ function GSDApp({ onGoHome }) {
           , gsdEl("span", { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Modules")))
       , gsdEl("div", { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GSD_COLOR}, transparent 70%)`, opacity: 0.5 } }))
     , gsdEl("div", { style: SS.main, ref: mainRef }
-      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); if (activeProject === pid) goProjects(); } })
+      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { siteLogoStore.del("gsd", pid).catch(() => {}); dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); if (activeProject === pid) goProjects(); } })
       , view === "home" && project && gsdEl(GSDHomeView, { project, meta, setMeta, items, onStartAudit: goAudit,
           onCompleteAudit: () => { archiveAudit(); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); },
           onReset: () => { gsdPhotoStore.delItems(items); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); } })
@@ -14568,8 +15062,10 @@ function GSDApp({ onGoHome }) {
 function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDeleteProject }) {
   const SS = swbStyles();
   const [showAdd, setShowAdd] = React.useState(false);
-  const [vals, setVals] = React.useState({ name: "", company: "", abn: "", licence: "" });
-  const close = () => { setShowAdd(false); setVals({ name: "", company: "", abn: "", licence: "" }); };
+  const [vals, setVals] = React.useState(() => { const s = loadAppSettings(); return { name: "", company: s.businessName, abn: s.abn, licence: s.licence }; });
+  const [newLogo, setNewLogo] = React.useState(null);
+  const globalLogoUrl = useGlobalLogoPreview();
+  const close = () => { setShowAdd(false); const s = loadAppSettings(); setVals({ name: "", company: s.businessName, abn: s.abn, licence: s.licence }); setNewLogo(null); };
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("div", { style: { ...SS.listTitle, marginTop: 24 } }, "Sites")
     , projects.length === 0 && !showAdd && gsdEl("div", { style: { color: "#52525b", fontSize: 14, marginBottom: 16 } }, "No sites yet — add one to start testing.")
@@ -14584,9 +15080,9 @@ function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDele
     , showAdd
       ? gsdEl("div", { style: SS.addCard }
         , gsdEl("div", { style: { fontSize: 14, fontWeight: 800, color: "#18181b", marginBottom: 12 } }, "New Site")
-        , gsdEl(ELTSiteFields, { vals, setVals })
+        , gsdEl(ELTSiteFields, { vals, setVals, logoUrl: newLogo || globalLogoUrl, logoIsDefault: !newLogo && !!globalLogoUrl, onLogoUpload: async file => { try { setNewLogo(await resizeImageToDataUrl(file, 480, 0.9)); } catch (_) {} }, onLogoRemove: () => setNewLogo(null) })
         , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 4 } }
-          , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: () => { if (!vals.name.trim()) return; onAddProject({ id: slugify(vals.name), name: vals.name.trim(), company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim(), areas: [] }); close(); } }, "Add Site")
+          , gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR }, onClick: async () => { if (!vals.name.trim()) return; const id = slugify(vals.name); onAddProject({ id, name: vals.name.trim(), company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim(), areas: [] }); if (newLogo) await siteLogoStore.put("gsd", id, gsdDataUrlToRec(newLogo)).catch(() => {}); close(); } }, "Add Site")
           , gsdEl("button", { style: SS.ctaSecondary, onClick: close }, "Cancel")))
       : gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR, width: "100%", marginTop: 8 }, onClick: () => setShowAdd(true) }, "+ Add Site"));
 }
@@ -14625,7 +15121,7 @@ function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect
   if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on the Home tab to begin.");
   const startAdd = areaId => { pendingArea.current = areaId; if (fileRef.current) fileRef.current.click(); };
   return gsdEl("div", { style: SS.listWrap }
-    , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
+    , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
     , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 8 } }, photoError)
     , (project.areas || []).length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13, marginBottom: 10 } }, "No areas yet — add an area in the Manage tab, then add defects to it.")
     , gsdEl("div", { style: { display: "flex", flexDirection: "column", gap: 14 } }
@@ -14694,7 +15190,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
         , arrowBtn("Move photo up", "▲", () => onMovePhoto(p.id, -1), i === 0), arrowBtn("Move photo down", "▼", () => onMovePhoto(p.id, 1), i === photos.length - 1)
         , gsdEl(DeleteButton, { onDelete: () => onRemovePhoto(p), compact: true })))
       , photoError && gsdEl("div", { style: { color: "#991b1b", fontSize: 12, marginBottom: 6 } }, photoError)
-      , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", capture: "environment", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
+      , gsdEl("input", { ref: photoRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, "data-testid": "gsd-item-photos", onChange: e => { const f = Array.from(e.target.files || []); e.target.value = ""; if (f.length) onAddPhotos(f); } })
       , gsdEl("button", { type: "button", style: { width: "100%", padding: "10px", background: "transparent", color: GSD_COLOR, border: `1px dashed ${GSD_COLOR_BORDER}`, borderRadius: 10, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => photoRef.current && photoRef.current.click() }, "+ Add Photo"))
     , field("COMMON DEFECT", gsdEl(IELEditableDropdown, { options: [...commonOpts, "Other"], value: r.commonDefect || "", onChange: pickCommon, placeholder: "Select or type…" }))
     , field("DESCRIPTION", gsdEl("textarea", { style: { ...SS.modalInput, minHeight: 68, resize: "vertical", fontFamily: "inherit" }, value: r.description || "", placeholder: "Describe the defect…", "aria-label": "Description", onChange: e => set({ description: e.target.value }) }))
@@ -14742,6 +15238,12 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
   const SS = swbStyles();
   const [editingProject, setEditingProject] = React.useState(false);
   const [vals, setVals] = React.useState({ name: project.name, company: project.company || "", abn: project.abn || "", licence: project.licence || "" });
+  const [projLogoUrl, setProjLogoUrl] = React.useState(null);
+  const [projLogoDirty, setProjLogoDirty] = React.useState(false);
+  React.useEffect(() => { let alive = true; let url = ""; siteLogoStore.get("gsd", project.id).then(rec => { if (!alive || !rec) return; url = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setProjLogoUrl(url); }).catch(() => {}); return () => { alive = false; if (url) URL.revokeObjectURL(url); }; }, [project.id]);
+  const globalLogoUrl = useGlobalLogoPreview();
+  const displayLogoUrl = projLogoDirty ? projLogoUrl : (projLogoUrl || globalLogoUrl);
+  const logoIsDefault = !projLogoDirty && !projLogoUrl && !!globalLogoUrl;
   const [newArea, setNewArea] = React.useState(""); const [err, setErr] = React.useState(""); const [renaming, setRenaming] = React.useState(null); const [renameVal, setRenameVal] = React.useState("");
   const areas = project.areas || [];
   const addArea = () => { const n = newArea.trim(); if (!n) return; if (gsdAreaTaken(project, n)) { setErr(`"${n}" is already an area`); return; } onUpdateProject({ ...project, areas: [...areas, { id: uid(), name: n }] }); setNewArea(""); setErr(""); };
@@ -14751,9 +15253,9 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
     , editingProject
       ? gsdEl("div", { style: { ...SS.addCard, marginBottom: 16, border: `1px solid ${GSD_COLOR_BORDER}` } }
         , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, marginBottom: 10 } }, "SITE DETAILS")
-        , gsdEl(ELTSiteFields, { vals, setVals })
+        , gsdEl(ELTSiteFields, { vals, setVals, logoUrl: displayLogoUrl, logoIsDefault: logoIsDefault, onLogoUpload: async file => { try { setProjLogoUrl(await resizeImageToDataUrl(file, 480, 0.9)); setProjLogoDirty(true); } catch (_) {} }, onLogoRemove: () => { setProjLogoUrl(null); setProjLogoDirty(true); } })
         , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 4 } }
-          , gsdEl("button", { style: { padding: "9px 14px", background: GSD_COLOR, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }, onClick: () => { onUpdateProject({ ...project, name: vals.name.trim() || project.name, company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim() }); setEditingProject(false); } }, "Save")
+          , gsdEl("button", { style: { padding: "9px 14px", background: GSD_COLOR, color: "#fff", border: "none", borderRadius: 8, fontSize: 13, cursor: "pointer", fontWeight: 700 }, onClick: async () => { onUpdateProject({ ...project, name: vals.name.trim() || project.name, company: vals.company.trim(), abn: vals.abn.trim(), licence: vals.licence.trim() }); if (projLogoDirty) { if (projLogoUrl) await siteLogoStore.put("gsd", project.id, gsdDataUrlToRec(projLogoUrl)).catch(() => {}); else await siteLogoStore.del("gsd", project.id).catch(() => {}); setProjLogoDirty(false); } setEditingProject(false); } }, "Save")
           , gsdEl("button", { style: { padding: "9px 14px", background: "transparent", color: "#6e6a66", border: "1px solid #d4d4d8", borderRadius: 8, fontSize: 13, cursor: "pointer" }, onClick: () => setEditingProject(false) }, "Cancel")))
       : gsdEl("div", { style: { background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 12, padding: "12px 14px", marginBottom: 16, display: "flex", justifyContent: "space-between", alignItems: "center" } }
         , gsdEl("div", null, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: "#18181b" } }, project.name), project.company && gsdEl("div", { style: { fontSize: 12, color: "#6e6a66", marginTop: 2 } }, project.company))
@@ -14829,6 +15331,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
     }));
 }
 
-export { StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField };
 export default AppRoot;
