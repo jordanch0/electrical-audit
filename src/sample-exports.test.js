@@ -26,8 +26,8 @@ it('RCD push + injection', async () => {
   circuits.forEach((c, i) => { const pn = i < 30 ? ['a1', 'pn1'] : ['a2', 'pn2']; res.p[pn[0]][pn[1]][c] = {
     push: isFail(i) ? { status: 'fail', comment: 'Tripped late', ...fd(i) } : i % 13 === 7 ? { status: 'na' } : i % 17 === 3 ? { status: 'untested' } : { status: 'pass', comment: i % 5 === 0 ? 'ok' : '' },
     inject: isFail(i) ? { status: 'fail', resultPos: '>300', resultNeg: '25', comment: 'Slow', ...fd(i) } : i % 13 === 7 ? { status: 'na' } : i % 17 === 3 ? { status: 'untested' } : { status: 'pass', resultPos: '12', resultNeg: '14', comment: '' } }; });
-  await exportExcel(res, project, meta, 'push', null); save('rcd-push');
-  await exportExcel(res, project, meta, 'inject', null); save('rcd-inject');
+  await exportExcel(res, project, meta, 'push'); save('rcd-push');
+  await exportExcel(res, project, meta, 'inject'); save('rcd-inject');
 });
 
 it('IEL', async () => {

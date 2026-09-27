@@ -150,6 +150,67 @@ function xjImageSize(dataUrl) {
 const XJ_PHOTO_BOX = 140;   // an embedded photo fits a 140 x 140 px box at its NATURAL aspect (a 4:3 photo is 140 x 105; a portrait one 105 x 140) — never stretched
 function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.w > 0 ? s.w : 4, H = s && s.h > 0 ? s.h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
 const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
+// ── Company logo (Global Settings, 2026-09-27): a centred image strip in row 1, full sheet width, above the existing header block —
+// ONLY when a logo is set in Global Settings (no logo = today's exact output, byte-identical). Every direct-write header sheet reserves
+// row 1 for it by shifting its own rows down by `off` (0 or 1) BEFORE writing anything, then calls xjLogo once every column width is final
+// (centring needs the real widths). xjSheet (the shared builder for RCD/IEL/TAT/Thermo/IRT/GSD-Register/every Defects sheet) does this itself.
+function xjColPx(ws, c) { return (ws.getColumn(c).width || 8.43) * 7 + 5; }
+function xjSheetWidthPx(ws, n) { let w = 0; for (let c = 1; c <= n; c++) w += xjColPx(ws, c); return w; }
+function xjPxToAnchor(ws, px) { let x = 0, c = 1; while (c < 1000) { const w = xjColPx(ws, c); if (x + w > px) return (c - 1) + Math.max(0, px - x) / w; x += w; c++; } return c - 1; }
+const XJ_LOGO_ROW_PT = 46;      // the reserved row's height
+const XJ_LOGO_MAX_H_PX = 50;    // the logo image never taller than this, leaving a margin inside the row
+function xjLogo(ws, wb, dataUrl, n) {
+  if (!dataUrl) return;
+  const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || ""); if (!m) return;
+  let ext = m[1] === "jpg" ? "jpeg" : m[1]; if (!["jpeg", "png", "gif"].includes(ext)) ext = "jpeg";
+  const size = xjImageSize(dataUrl) || { w: 200, h: 60 }; const totalPx = xjSheetWidthPx(ws, n);
+  const k = Math.min(XJ_LOGO_MAX_H_PX / size.h, (totalPx * 0.6) / size.w, 1);
+  const w = Math.max(1, Math.round(size.w * k)), h = Math.max(1, Math.round(size.h * k));
+  ws.getRow(1).height = XJ_LOGO_ROW_PT;
+  for (let c = 1; c <= n; c++) ws.getCell(1, c).border = { bottom: { style: "thin", color: { argb: "FF4472C4" } } };
+  const rowPx = XJ_LOGO_ROW_PT * (96 / 72);
+  const imgId = wb.addImage({ base64: dataUrl, extension: ext });
+  ws.addImage(imgId, { tl: { col: xjPxToAnchor(ws, (totalPx - w) / 2), row: 0 + (rowPx - h) / 2 / rowPx }, ext: { width: w, height: h }, editAs: "oneCell" });
+}
+// ── Global Settings: one app-wide business identity + logo, pre-filling every module's "Add Site" form (2026-09-27) ──────────────────
+// { businessName, abn, licence, logoId }. Purely a PRE-FILL source for NEW sites — saving a site copies whatever's in the form at that
+// moment; already-saved sites are never touched, and there is no migration. logoId is null or a fixed id into appLogoStore below.
+const APP_SETTINGS_KEY = "app-settings-v1";
+function loadAppSettings() {
+  try {
+    const raw = localStorage.getItem(APP_SETTINGS_KEY); if (!raw) return { businessName: "", abn: "", licence: "", logoId: null };
+    const p = JSON.parse(raw); return { businessName: p.businessName || "", abn: p.abn || "", licence: p.licence || "", logoId: p.logoId || null };
+  } catch (_) { return { businessName: "", abn: "", licence: "", logoId: null }; }
+}
+function saveAppSettings(s) { try { localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify({ businessName: s.businessName || "", abn: s.abn || "", licence: s.licence || "", logoId: s.logoId || null })); } catch (_) {} }
+// One logo image in its own IndexedDB store (same record shape as gsdPhotoStore: {buf, type}) — a single fixed-id record, no thumbnail tier.
+const APP_LOGO_DB_NAME = "sparkcheck-app-settings", APP_LOGO_DB_STORE = "logo", APP_LOGO_ID = "logo";
+let _appLogoDb = null;
+function appLogoOpenDb() {
+  if (!_appLogoDb) _appLogoDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(APP_LOGO_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(APP_LOGO_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _appLogoDb = null; throw e; });
+  return _appLogoDb;
+}
+const appLogoTx = (mode, fn) => appLogoOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(APP_LOGO_DB_STORE, mode); const r = fn(tx.objectStore(APP_LOGO_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+const appLogoStore = {
+  put: rec => appLogoTx("readwrite", s => s.put(rec, APP_LOGO_ID)),
+  get: () => appLogoTx("readonly", s => s.get(APP_LOGO_ID)),
+  del: () => appLogoTx("readwrite", s => s.delete(APP_LOGO_ID)),
+};
+// Every export reads the logo fresh at export time (never stored per-site): a later change in Global Settings applies to the NEXT export;
+// an already-written file is untouched. Returns null (no logo drawn, output unchanged) if none is set or it can't be read.
+async function xjGetLogoDataUrl() {
+  const s = loadAppSettings(); if (!s.logoId) return null;
+  try { const rec = await appLogoStore.get(); return rec ? gsdRecToDataUrl(rec) : null; } catch (_) { return null; }
+}
 const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
 // Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
 function xjResultStyle(v) {
@@ -160,16 +221,17 @@ function xjResultStyle(v) {
   if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
   return null;
 }
-// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape }
+// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape, logo }
 function xjSheet(wb, name, o) {
   const ws = wb.addWorksheet(name); const n = o.headers.length;
-  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  const off = o.logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   put(1, 1, o.title); put(2, 1, o.coLine);
   o.meta.forEach((v, i) => { if (v !== "" && v != null) put(3, i + 1, v); });
-  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1, c1, r2, c2));
+  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
   // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
   o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
-  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
   const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
   o.rows.forEach((cells, ri) => {
     const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
@@ -190,7 +252,8 @@ function xjSheet(wb, name, o) {
   // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
   // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
   o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
-  xjPageSetup(ws, o.landscape !== false, 5);
+  xjPageSetup(ws, o.landscape !== false, 5 + off);
+  if (o.logo) xjLogo(ws, wb, o.logo, n);
   return ws;
 }
 // Minimum widths that apply to EVERY export column of that kind (also used by ELT's own sheets)
@@ -204,11 +267,11 @@ const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
 // Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
 // o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
 function xjSplit(wb, o) {
-  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
-  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings)
+  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer, logo: o.logo });
+  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings) — each closure passes its own `logo` through to its xjSheet call
   const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
   xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
-    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded" });
+    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded", logo: o.logo });
   return defects.length;
 }
 
@@ -256,7 +319,6 @@ const K_RESULTS   = "rcd-results-v6";
 const K_META      = "rcd-meta-v6";
 const K_HISTORY   = "rcd-history-v6";
 const K_DROPDOWNS = "rcd-dropdowns-v6";
-const K_LOGO      = "rcd-logo-v6";       // base64 data-URL of uploaded logo
 const K_MODE      = "rcd-mode-v6";        // active audit mode: "push"|"inject"|null
 const load = async (key, fallback) => { try { const r=localStorage.getItem(key); return r?JSON.parse(r):fallback; } catch(_) { return fallback; } };
 let _storageWarnShown = false;
@@ -502,7 +564,8 @@ return { id: slugify(projectName), name: projectName, company: company || "Spark
 // U=dark maroon bg, H=red/salmon bg, M=yellow bg, L=light green bg, Pass=white (no fill), Fail=red bg
 // RCD export: MAIN results table (narrow — identifiers, dates, result, notes) + a Defects sheet (FAIL rows only, always present) + a
 // Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Page setup is native (xjPageSetup).
-async function exportExcel(results, project, meta, mode, logoBase64) {
+async function exportExcel(results, project, meta, mode) {
+  const logo = await xjGetLogoDataUrl();
   const isInject = mode === "inject";
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
   const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
@@ -534,7 +597,7 @@ async function exportExcel(results, project, meta, mode, logoBase64) {
     headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date", "Injection Test Result + (ms)", "Injection Test Result - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Required"] : ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Required"],
     widths: isInject ? [16, 22, 12, 8, 10, 11, 11, 9, 24, 11] : [16, 22, 12, 8, 11, 9, 26, 11],
     idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   // Summary sheet: counts only — the failed-circuit list it used to carry is now the Defects sheet (same rows, more fields)
   const sum = summariseProject(results, project, mode);
@@ -868,7 +931,6 @@ const [allResults,    setAllResults]   = React.useState({});
 const [allMeta,       setAllMeta]      = React.useState({});
 const [history,       setHistory]      = React.useState([]);
 const [dropdowns,     setDropdowns]    = React.useState({ responsibility:DEFAULT_RESPONSIBILITY, rectified:DEFAULT_RECTIFIED });
-const [logo,          setLogo]         = React.useState(null);  // base64 data-URL
 const [activeProject, setActiveProject]= React.useState(null);
 const [mode,          setMode]         = React.useState(null);
 const [view,          setView]         = React.useState("projects");
@@ -886,16 +948,15 @@ React.useEffect(()=>{
 var safetyTimer=setTimeout(()=>setLoaded(true),3000);
 (async()=>{
 try {
-const [p,r,m,h,d,l,mo]=await Promise.all([
+const [p,r,m,h,d,mo]=await Promise.all([
 load(K_PROJECTS,[]),
 load(K_RESULTS,{}),
 load(K_META,{}),
 load(K_HISTORY,[]),
 load(K_DROPDOWNS,{responsibility:DEFAULT_RESPONSIBILITY,rectified:DEFAULT_RECTIFIED,ampRating:DEFAULT_AMP_RATING,cbType:DEFAULT_CB_TYPE}),
-load(K_LOGO,null),
 load(K_MODE,null),
 ]);
-clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setLogo(l);setMode(mo);setLoaded(true);
+clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setMode(mo);setLoaded(true);
 } catch(loadErr) { console.error('Load error:',loadErr); clearTimeout(safetyTimer); setLoaded(true); }
 })();
 },[]);
@@ -904,7 +965,6 @@ React.useEffect(()=>{ if(loaded){save(K_RESULTS,allResults);setSaveFlash(true);c
 React.useEffect(()=>{ if(loaded){save(K_META,allMeta);} },[allMeta,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_HISTORY,history);} },[history,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_DROPDOWNS,dropdowns);} },[dropdowns,loaded]);
-React.useEffect(()=>{ if(loaded){save(K_LOGO,logo);} },[logo,loaded]);
 React.useEffect(()=>{ if(loaded){save(K_MODE,mode);} },[mode,loaded]);
 const project = projects.find(p=>p.id===activeProject);
 const _rcdMeta = _nullishCoalesce(allMeta[activeProject], () => ({auditor:"",pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),notes:""}));
@@ -1004,8 +1064,8 @@ onStartInject: ()=>{setMode("inject");setView("audit");setAuditEntered(true);},
 onReport: ()=>setView("report"), onManage: ()=>setView("manage"),
 onHistory: ()=>setView("history"), onSettings: ()=>setView("settings"),
 onReset: ()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),nextPushDate:"",nextInjectDate:""}}));},
-onExportPush: ()=>exportExcel(allResults,project,meta,"push",logo),
-onExportInject: ()=>exportExcel(allResults,project,meta,"inject",logo),
+onExportPush: ()=>exportExcel(allResults,project,meta,"push"),
+onExportInject: ()=>exportExcel(allResults,project,meta,"inject"),
 activeMode: mode,
 auditEntered: auditEntered,
 onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);},})
@@ -1019,7 +1079,7 @@ onOpenDetail: c=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,circui
 , detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns, onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch), onClose: ()=>setDetailInfo(null),})
 , !detailInfo&&view==="report"&&project&&React.createElement(ReportView, { project: project, results: allResults, meta: meta, onBack:()=>setView("home"),})
 , !detailInfo&&view==="manage"&&project&&React.createElement(ManageView, { project: project, dropdowns: dropdowns, onUpdateProject: updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)), onBack:()=>setView("home"),})
-, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode,logo),
+, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode),
 onContinueFromSnap: (snap)=>{
   // Deep-copy snap results into active results (does NOT overwrite archived snap)
   setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
@@ -1030,7 +1090,7 @@ onContinueFromSnap: (snap)=>{
   setActivePanelId(null);
   setView("audit");
 }, onBack:()=>setView("home"),})
-, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, logo: logo, setLogo: setLogo, onBack:()=>setView("home"),})
+, !detailInfo&&view==="settings"&&React.createElement(SettingsView, { dropdowns: dropdowns, setDropdowns: setDropdowns, onBack:()=>setView("home"),})
 )
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
@@ -1052,9 +1112,9 @@ function ProjectListView({ projects, allResults, dropdowns, onSelect, onAddProje
 const [showAdd,    setShowAdd]    = React.useState(false);
 const [tab,        setTab]        = React.useState("manual"); // manual | import
 const [newName,    setNewName]    = React.useState("");
-const [newCo,      setNewCo]      = React.useState("");
-const [newAbn,     setNewAbn]     = React.useState("");
-const [newLic,     setNewLic]     = React.useState("");
+const [newCo,      setNewCo]      = React.useState(() => loadAppSettings().businessName);
+const [newAbn,     setNewAbn]     = React.useState(() => loadAppSettings().abn);
+const [newLic,     setNewLic]     = React.useState(() => loadAppSettings().licence);
 
 const [importing,  setImporting]  = React.useState(false);
 const [importPreview, setImportPreview] = React.useState(null); // parsed project before confirming
@@ -1103,7 +1163,8 @@ setImportPreview(null);setShowAdd(false);setImportName("");setImportError("");
 const addManual=()=>{
 if(!newName.trim()) return;
 onAddProject({id:slugify(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});
-setNewName("");setNewAbn("");setNewLic("");setShowAdd(false);
+const s=loadAppSettings();
+setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);
 };
 return (
 React.createElement('div', { style: S.listWrap,}
@@ -1472,17 +1533,9 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 // ─────────────────────────────────────────────────────────────────────────
 // SETTINGS VIEW — logo + all dropdown lists
 // ─────────────────────────────────────────────────────────────────────────
-function SettingsView({ dropdowns, setDropdowns, logo, setLogo, onBack }) {
+function SettingsView({ dropdowns, setDropdowns, onBack }) {
 const [newVals, setNewVals] = React.useState({});
 const [notice, setNotice] = React.useState({});
-const logoRef = React.useRef();
-const handleLogoUpload = e => {
-const file = e.target.files[0]; if(!file) return;
-const reader = new FileReader();
-reader.onload = ev => setLogo(ev.target.result);
-reader.readAsDataURL(file);
-e.target.value = "";
-};
 const addItem = (key,val) => {
 const r = dropdownAdd((dropdowns&&dropdowns[key])||[], val);
 if(r.empty) return;
@@ -2398,6 +2451,7 @@ function ielSiteSummary(results,project,cat){
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
 
 async function exportIELExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl();
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
@@ -2433,7 +2487,7 @@ async function exportIELExcel(project, results, meta) {
     headers: ["Location", "Type", "Machine", "Date", "Mechanism / Reset Check", "Circuit Isolation Verified", "Lanyard Tension / Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
     widths: [16, 10, 20, 11, 12, 12, 12, 9, 22, 11],
     idHeaders: ["Location", "Machine"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -2783,9 +2837,9 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[showAdd,setShowAdd]=React.useState(false);
   const[tab,setTab]=React.useState("manual");
   const[newName,setNewName]=React.useState("");
-  const[newCo,setNewCo]=React.useState("");
-  const[newAbn,setNewAbn]=React.useState("");
-  const[newLic,setNewLic]=React.useState("");
+  const[newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);
+  const[newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);
+  const[newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
   const[importing,setImporting]=React.useState(false);
@@ -2890,7 +2944,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:newLic,placeholder:"e.g. 123456C",onChange:e=>setNewLic(e.target.value)})
           )
           ,React.createElement('div',{style:{display:"flex",gap:8}}
-            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{if(!newName.trim())return;onAddProject({id:ielSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:SI.ctaPrimary,onClick:()=>{if(!newName.trim())return;onAddProject({id:ielSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -4500,6 +4554,7 @@ function tatSiteSummary(results, project) {
 // Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
 const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
 async function exportTATExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl();
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const sName = project.name || "Site";
@@ -4534,7 +4589,7 @@ async function exportTATExcel(project, results, meta) {
     headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
     widths: [14, 12, 22, 11, 10, 10, 9, 11, 10, 11, 20],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -4819,9 +4874,9 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[showAdd,setShowAdd]=React.useState(false);
   const[tab,setTab]=React.useState("manual");
   const[newName,setNewName]=React.useState("");
-  const[newCo,setNewCo]=React.useState("");
-  const[newAbn,setNewAbn]=React.useState("");
-  const[newLic,setNewLic]=React.useState("");
+  const[newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);
+  const[newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);
+  const[newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
   const[importing,setImporting]=React.useState(false);
   const[importPreview,setImportPreview]=React.useState(null);
   const[importName,setImportName]=React.useState("");
@@ -4904,7 +4959,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             )
           )
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:tatSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:tatSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]},{});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -6018,6 +6073,7 @@ function siteMonitor(results, project) {
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
 async function exportThermoExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl();
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
@@ -6055,7 +6111,7 @@ async function exportThermoExcel(project, results, meta) {
     headers: ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 18, 18, 11, 9, 11, 9, 22],
     idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
   });
   const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -6805,9 +6861,9 @@ function ThermoProjectListView({
   const [showAdd, setShowAdd] = React.useState(false);
   const [tab, setTab] = React.useState("manual");
   const [newName, setNewName] = React.useState("");
-  const [newCo, setNewCo] = React.useState("");
-  const [newAbn, setNewAbn] = React.useState("");
-  const [newLic, setNewLic] = React.useState("");
+  const [newCo, setNewCo] = React.useState(() => loadAppSettings().businessName);
+  const [newAbn, setNewAbn] = React.useState(() => loadAppSettings().abn);
+  const [newLic, setNewLic] = React.useState(() => loadAppSettings().licence);
   const [importing, setImporting] = React.useState(false);
   const [importPreview, setImportPreview] = React.useState(null);
   const [importName, setImportName] = React.useState("");
@@ -6826,10 +6882,11 @@ function ThermoProjectListView({
       licence: newLic.trim(),
       areas: []
     });
+    const s = loadAppSettings();
     setNewName("");
-    setNewCo("");
-    setNewAbn("");
-    setNewLic("");
+    setNewCo(s.businessName);
+    setNewAbn(s.abn);
+    setNewLic(s.licence);
     setShowAdd(false);
   };
   const handleFile = e => {
@@ -9467,6 +9524,101 @@ function ThermoApp({
   })));
 }
 // ═════════════════════════════════════════════════════════════════════════
+// GLOBAL SETTINGS — one app-wide business identity + logo (2026-09-27); pre-fills every module's "Add Site" form, and the logo is
+// drawn on every export. Explicit Save button (a record-editing form, not a live test result — the app's live-autosave rule doesn't apply).
+// ═════════════════════════════════════════════════════════════════════════
+const GS_COLOR = "#475569"; // neutral slate — this isn't tied to any one module
+function GlobalSettingsView({ onGoHome }) {
+  const [loaded, setLoaded] = React.useState(false);
+  const [businessName, setBusinessName] = React.useState("");
+  const [abn, setAbn] = React.useState("");
+  const [licence, setLicence] = React.useState("");
+  const [hasLogo, setHasLogo] = React.useState(false);
+  const [logoUrl, setLogoUrl] = React.useState("");
+  const [error, setError] = React.useState("");
+  const [saved, setSaved] = React.useState(false);
+  const urlRef = React.useRef("");
+
+  React.useEffect(() => {
+    let alive = true;
+    const s = loadAppSettings();
+    setBusinessName(s.businessName); setAbn(s.abn); setLicence(s.licence); setHasLogo(!!s.logoId);
+    if (s.logoId) appLogoStore.get().then(rec => {
+      if (!alive || !rec) return;
+      const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); urlRef.current = u; setLogoUrl(u);
+    }).catch(() => {});
+    setLoaded(true);
+    return () => { alive = false; if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
+  }, []);
+
+  const onUpload = async e => {
+    const file = e.target.files && e.target.files[0]; e.target.value = "";
+    if (!file) return;
+    setError("");
+    try {
+      const dataUrl = await resizeImageToDataUrl(file, 480, 0.9);
+      const rec = gsdDataUrlToRec(dataUrl);
+      await appLogoStore.put(rec);
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+      const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); urlRef.current = u;
+      setLogoUrl(u); setHasLogo(true); setSaved(false);
+    } catch (_) { setError("Could not read that image."); }
+  };
+  const onRemoveLogo = async () => {
+    await appLogoStore.del().catch(() => {});
+    if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = "";
+    setLogoUrl(""); setHasLogo(false); setSaved(false);
+  };
+  const onSave = () => {
+    saveAppSettings({ businessName: businessName.trim(), abn: abn.trim(), licence: licence.trim(), logoId: hasLogo ? "logo" : null });
+    setSaved(true);
+  };
+
+  const label = { fontSize: 10, color: "#6e6a66", letterSpacing: 0.8, fontWeight: 700 };
+  const input = { background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, color: "#18181b", padding: "12px 16px", fontSize: 13, outline: "none", width: "100%", boxSizing: "border-box", marginTop: 4, fontFamily: "inherit" };
+  const field = (lbl, val, setter, ph) => React.createElement('div', { style: { marginBottom: 14 } },
+    React.createElement('div', { style: label }, lbl),
+    React.createElement('input', { style: input, value: val, placeholder: ph, onChange: e => { setter(e.target.value); setSaved(false); } }));
+
+  if (!loaded) return React.createElement('div', { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } },
+    React.createElement('div', { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GS_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
+
+  return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
+    , React.createElement('div', { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
+      , React.createElement('div', { style: { border: "1px solid rgba(0,0,0,0.06)", borderRadius: "10px", padding: "8px 12px", background: "#f0eeea", flexShrink: 0, alignSelf: "flex-start", marginBottom: 10, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", width: "fit-content" }, onClick: onGoHome }
+        , React.createElement('svg', { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "#52525b", strokeWidth: 2.5, strokeLinecap: "round" }, React.createElement('polyline', { points: "15 18 9 12 15 6" }))
+        , React.createElement('span', { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Back"))
+      , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
+      , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export")
+      , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
+    , React.createElement('div', { style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
+      , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
+      , field("BUSINESS NAME", businessName, setBusinessName, "Company name")
+      , field("ABN", abn, setAbn, "e.g. 12 345 678 901")
+      , field("ELECTRICAL LICENCE", licence, setLicence, "e.g. 123456C")
+      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 20 } }, "Pre-fills the \"Add Site\" form in every module. Fully editable there — this never changes a site already created.")
+
+      , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Company Logo")
+      , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 14, marginBottom: 10 } }
+        , logoUrl
+          ? React.createElement('img', { src: logoUrl, alt: "Company logo", style: { width: 120, height: 70, objectFit: "contain", background: "#fff", border: "1px solid #e4e4e7", borderRadius: 8 } })
+          : React.createElement('div', { style: { width: 120, height: 70, border: "1px dashed #d4d4d8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#a1a1aa", textAlign: "center", padding: 4 } }, "No logo set")
+        , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 8 } }
+          , React.createElement('label', { style: { background: GS_COLOR, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center" } }
+            , hasLogo ? "Replace" : "Upload"
+            , React.createElement('input', { type: "file", accept: "image/*", style: { display: "none" }, onChange: onUpload }))
+          , hasLogo && React.createElement(DeleteButton, { onDelete: onRemoveLogo, label: "Remove logo?" })))
+      , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
+      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
+
+      , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
+        , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
+        , saved && React.createElement('span', { style: { fontSize: 12, color: "#16a34a", fontWeight: 600 } }, "Saved"))
+    )
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
 function AppRoot() {
@@ -9501,6 +9653,7 @@ function AppRoot() {
   if (module === "elt") return React.createElement(ELTApp, {onGoHome: ()=>setModule(null)});
   if (module === "welder") return React.createElement(WelderApp, {onGoHome: ()=>setModule(null)});
   if (module === "gsd") return React.createElement(GSDApp, {onGoHome: ()=>setModule(null)});
+  if (module === "settings") return React.createElement(GlobalSettingsView, {onGoHome: ()=>setModule(null)});
 
   // Home-screen module icons come from the shared registry (moduleIcon) — the Calendar reads the very same definitions.
   const modules = [
@@ -9611,6 +9764,19 @@ function AppRoot() {
       }
       , moduleIcon("cal",16)
       , "Calendar"
+    )
+    // Fixed Global Settings pill — the opposite corner from Calendar so the two never collide; same scope (Home-screen only)
+    , React.createElement('button',{
+        onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
+        style:{position:"fixed",right:"16px",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
+          display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
+          background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
+          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
+      }
+      , React.createElement('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+          React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
+          React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
+      , "Settings"
     )
   );
 }
@@ -9811,6 +9977,7 @@ function swbSheetName(board, area, used) {
 }
 async function exportSWBExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
+  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
   const nextDue = swbNextDue(meta);
@@ -9827,17 +9994,17 @@ async function exportSWBExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st) => { const c = ws.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = cols.length;
-  setCell('A1',`${sName} — Switchboard / Enclosure Audit`);
-  setCell('A2',coLine);
-  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
-  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
-  setCell('E3',`Next Audit Due: ${nextDue}`);
+  setCell('A'+(1+off),`${sName} — Switchboard / Enclosure Audit`);
+  setCell('A'+(2+off),coLine);
+  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E'+(3+off),`Next Audit Due: ${nextDue}`);
   [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
-    .forEach(m => ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+'5',t));
-  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1).height = h; });
+    .forEach(m => ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
+  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+(5+off),t));
+  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1+off).height = h; });
   rows.forEach((row,i) => {
-    const r = 6 + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
+    const r = 6 + off + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci) => {
       let st = base;
@@ -9847,7 +10014,8 @@ async function exportSWBExcel(project, allResults, meta) {
     });
   });
   [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
-  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  if (logo) xjLogo(ws, wb, logo, n);
 
   // ── One sheet per board ──
   const used = new Set();
@@ -9855,15 +10023,15 @@ async function exportSWBExcel(project, allResults, meta) {
     const { area, board, summary: bs, overall } = row;
     const sh = wb.addWorksheet(swbSheetName(board, area, used));
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
-    put('A1',"Switchboard / Enclosure Audit");
-    put('A2',`${sName}  |  ${coLine}`);
-    put('A3',`Area: ${area.name}`); put('C3',`Board: ${board.name}`);
-    put('A4',`Auditor: ${(meta&&meta.auditor)||""}`); put('C4',`Date Tested: ${testDate?fmtDate(testDate):""}`);
-    put('A5',`Next Audit Due: ${nextDue}`);
-    [[1,1,7],[2,1,7],[3,1,2],[3,3,7],[4,1,2],[4,3,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr,c1,rr,c2));
-    sh.getRow(1).height = 24;
+    put('A'+(1+off),"Switchboard / Enclosure Audit");
+    put('A'+(2+off),`${sName}  |  ${coLine}`);
+    put('A'+(3+off),`Area: ${area.name}`); put('C'+(3+off),`Board: ${board.name}`);
+    put('A'+(4+off),`Auditor: ${(meta&&meta.auditor)||""}`); put('C'+(4+off),`Date Tested: ${testDate?fmtDate(testDate):""}`);
+    put('A'+(5+off),`Next Audit Due: ${nextDue}`);
+    [[1,1,7],[2,1,7],[3,1,2],[3,3,7],[4,1,2],[4,3,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr+off,c1,rr+off,c2));
+    sh.getRow(1+off).height = 24;
     // Audit summary
-    let rr = 7;
+    let rr = 7 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     const overallSt = overall==="pass" ? passSt : overall==="fail" ? failSt : naSt;
     [["Total Items",String(bs.total)],["Pass",String(bs.pass)],["Fail",String(bs.fail)],["N/A",String(bs.na)],["Untested",String(bs.untested)],["Score",scoreLabel(bs.score)],["Overall",overall.toUpperCase()]]
@@ -9902,6 +10070,7 @@ async function exportSWBExcel(project, allResults, meta) {
     });
     [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
     xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
+    if (logo) xjLogo(sh, wb, logo, 7);
   });
 
   xjFitRows(wb);
@@ -10163,7 +10332,7 @@ function SWBApp({ onGoHome }) {
 function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}) {
   const [showAdd,setShowAdd]=React.useState(false);
   const [tab,setTab]=React.useState("manual");
-  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=swbStyles();
@@ -10232,7 +10401,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             )
           )
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:()=>{if(!newName.trim())return;onAddProject({id:swbSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site")
+            ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:()=>{if(!newName.trim())return;onAddProject({id:swbSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site")
             ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel")
           )
         )
@@ -11225,6 +11394,7 @@ function eltRegisterRows(project, allResults, meta) {
 
 async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
+  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
@@ -11235,19 +11405,19 @@ async function exportELTExcel(project, allResults, meta) {
   const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
   // Rows 1–5 are deliberately unstyled (no fill/font/border set), with the same merges and row
   // heights as the real IEL/RCD/TAT/Thermo exports: title, company line, meta line, 6pt spacer, headings.
-  setCell('A1',`${sName} — Emergency Lighting Test`);
-  setCell('A2',coLine);
-  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
-  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
-  setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
+  setCell('A'+(1+off),`${sName} — Emergency Lighting Test`);
+  setCell('A'+(2+off),coLine);
+  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E'+(3+off),`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
   merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
-  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+'5',t); ws.getCell(cols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
-  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
+  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+(5+off),t); ws.getCell(cols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
+  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
   const rows = eltRegisterRows(project, allResults, meta);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
   rows.forEach((row,i)=>{
-    const r = 6+i;
+    const r = 6+off+i;
     const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
     const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());
     const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
@@ -11259,11 +11429,12 @@ async function exportELTExcel(project, allResults, meta) {
       setCell(cols[ci]+r,v,st);
     });
   });
-  merges.forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
+  merges.forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
   // Content-width columns (headings wrap). The import-anchor headings stay exact; date columns get the shared >= 13 minimum.
   [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});
   const setup = xjPageSetup;
-  setup(ws,true,5);
+  setup(ws,true,5+off);
+  if (logo) xjLogo(ws, wb, logo, n);
 
   // ── Defects sheet: FAIL fittings only, ALWAYS present (headings even with zero fails), keyed to the register by "#" ──
   {
@@ -11271,20 +11442,21 @@ async function exportELTExcel(project, allResults, meta) {
     const dset = (ref,val,st)=>{const c=ds.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const dcols = "ABCDEFGHIJ".split(""); const dn = dcols.length;
     const defRows = rows.filter(r=>r.defect);
-    dset('A1',`${sName} — Emergency Lighting Test — Defects`); dset('A2',coLine);
-    dset('A3',`Defects recorded: ${defRows.length}`); dset('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`); dset('E3',"Priority: L Low · M Medium · H High · U Urgent");
-    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1,c1+1,r2+1,c2+1));
-    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+'5',t); ds.getCell(dcols[i]+'5').alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
-    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1).height = h;});
+    dset('A'+(1+off),`${sName} — Emergency Lighting Test — Defects`); dset('A'+(2+off),coLine);
+    dset('A'+(3+off),`Defects recorded: ${defRows.length}`); dset('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`); dset('E'+(3+off),"Priority: L Low · M Medium · H High · U Urgent");
+    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1+off,c1+1,r2+1+off,c2+1));
+    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+(5+off),t); ds.getCell(dcols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1+off).height = h;});
     defRows.forEach((row,i)=>{
       const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
       const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
       const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
-      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
+      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+off+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
     });
-    if (!defRows.length) dset('A6',"No defects recorded");
+    if (!defRows.length) dset('A'+(6+off),"No defects recorded");
     [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
-    setup(ds,true,5);
+    setup(ds,true,5+off);
+    if (logo) xjLogo(ds, wb, logo, dn);
   }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
@@ -11542,7 +11714,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const SS = swbStyles();
   const [showAdd,setShowAdd] = React.useState(false);
   const [tab,setTab] = React.useState("manual");
-  const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [vals,setVals] = React.useState(()=>{ const s=loadAppSettings(); return {name:"",company:s.businessName,abn:s.abn,licence:s.licence}; });
   const [importing,setImporting] = React.useState(false);
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
@@ -11621,7 +11793,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
           ,eltEl('div',{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site")
           ,eltEl(ELTSiteFields,{vals,setVals})
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
-            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});setVals({name:"",company:"",abn:"",licence:""});closeAdd();}},"Add Site")
+            ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:()=>{if(!vals.name.trim())return;onAddProject({id:slugify(vals.name),name:vals.name.trim(),company:vals.company.trim(),abn:vals.abn.trim(),licence:vals.licence.trim(),areas:[]});const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});closeAdd();}},"Add Site")
             ,eltEl('button',{style:SS.ctaSecondary,onClick:closeAdd},"Cancel")
           )
         )
@@ -12154,6 +12326,7 @@ function downloadIRTTemplate(){
 // IRT export: THREE linked sheets, all keyed by the same "#":  Register (narrow summary — the sheet meant for a client PDF),
 // Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
 async function exportIRTExcel(project, results, meta) {
+  const logo = await xjGetLogoDataUrl();
   const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
   const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
   const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
@@ -12181,9 +12354,9 @@ async function exportIRTExcel(project, results, meta) {
     headers: ["Location", "Panel / DB", "Equipment / Circuit", "Test Date", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 14, 22, 11, 9, 26],
     idHeaders: ["Location", "Panel / DB", "Equipment / Circuit"], idWidths: [16, 14, 22],
-    rows, footer: [],
+    rows, footer: [], logo,
     between: w => xjSheet(w, "Readings", { title: `${title} — Readings`, coLine, meta: [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"],
-      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
+      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]), logo }),
   });
   const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -12460,7 +12633,7 @@ function IRTCompleteBtn({color,onComplete}){
 // ─── Project list view with Manual + Import tabs ──────────────────────────
 function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteProject}){
   const [showAdd,setShowAdd]=React.useState(false);const [tab,setTab]=React.useState("manual");
-  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState("");const [newAbn,setNewAbn]=React.useState("");const [newLic,setNewLic]=React.useState("");
+  const [newName,setNewName]=React.useState("");const [newCo,setNewCo]=React.useState(()=>loadAppSettings().businessName);const [newAbn,setNewAbn]=React.useState(()=>loadAppSettings().abn);const [newLic,setNewLic]=React.useState(()=>loadAppSettings().licence);
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=irtStyles();
@@ -12495,7 +12668,7 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       tab==="manual"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:12}},"New Site"),
         [["SITE NAME","text",newName,setNewName,"Site name"],["COMPANY (optional)","text",newCo,setNewCo,"Company name"],["ABN (optional)","text",newAbn,setNewAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",newLic,setNewLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))),
-        React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:irtSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});setNewName("");setNewCo("");setNewAbn("");setNewLic("");setShowAdd(false);}},"Add Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
+        React.createElement("div",{style:{display:"flex",gap:8,marginTop:4}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:()=>{if(!newName.trim())return;onAddProject({id:irtSlug(newName),name:newName.trim(),company:newCo.trim(),abn:newAbn.trim(),licence:newLic.trim(),areas:[]});const s=loadAppSettings();setNewName("");setNewCo(s.businessName);setNewAbn(s.abn);setNewLic(s.licence);setShowAdd(false);}},"Add Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
       ),
       tab==="import"&&React.createElement(React.Fragment,null,
         React.createElement("div",{style:{fontSize:14,fontWeight:800,color:"#18181b",marginBottom:4}},"Import from Excel"),
@@ -13611,13 +13784,13 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const SS = swbStyles();
   const [showAdd,setShowAdd] = React.useState(false);
   const [tab,setTab] = React.useState("manual");
-  const [vals,setVals] = React.useState({name:"",company:"",abn:"",licence:""});
+  const [vals,setVals] = React.useState(()=>{ const s=loadAppSettings(); return {name:"",company:s.businessName,abn:s.abn,licence:s.licence}; });
   const [importing,setImporting] = React.useState(false);
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
   const [importError,setImportError] = React.useState("");
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setVals({name:"",company:"",abn:"",licence:""});setImportPreview(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setImportPreview(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
@@ -14086,6 +14259,7 @@ function welderSheetName(a, used) {
 }
 async function exportWelderExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
+  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
@@ -14101,17 +14275,17 @@ async function exportWelderExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
-  setCell('A1',`${sName} — Welder Test`);
-  setCell('A2',coLine);
-  setCell('A3',`Auditor: ${(meta&&meta.auditor)||''}`);
-  setCell('C3',`Date Tested: ${testDate?fmtDate(testDate):''}`);
-  setCell('E3',`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
+  setCell('A'+(1+off),`${sName} — Welder Test`);
+  setCell('A'+(2+off),coLine);
+  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`);
+  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`);
+  setCell('E'+(3+off),`Next Test Due: ${nextDue?fmtDate(nextDue):''}`);
   [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
-    .forEach(m=>ws.mergeCells(m.s.r+1,m.s.c+1,m.e.r+1,m.e.c+1));
-  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+'5',t));
-  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1).height = h;});
+    .forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
+  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+(5+off),t));
+  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});
   rows.forEach((row,i)=>{
-    const r = 6+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const r = 6+off+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci)=>{
       let st = base;
@@ -14121,7 +14295,8 @@ async function exportWelderExcel(project, allResults, meta) {
     });
   });
   [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-  xjPageSetup(ws, true, 5);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
+  if (logo) xjLogo(ws, wb, logo, n);
 
   // ── One sheet per welder ──
   const used = new Set();
@@ -14130,16 +14305,16 @@ async function exportWelderExcel(project, allResults, meta) {
     const sh = wb.addWorksheet(welderSheetName(a, used));
     const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const date = (meta&&meta.testDate) || "";
-    put('A1',"Welder Inspection & Audit Checklist");
-    put('A2',`${sName}  |  ${coLine}`);
-    put('A3',`Location: ${a.location||""}`); put('C3',`Asset ID: ${a.assetId||""}`);
-    put('A4',`Brand: ${a.brand||""}`);       put('C4',`Model: ${a.model||""}`);
-    put('A5',`Serial Number: ${a.serial||""}`); put('C5',`Date Tested: ${date?fmtDate(date):""}`);
-    put('A6',`Prepared By: ${(meta&&meta.auditor)||""}`); put('C6',`Test Instruments: ${(meta&&meta.instruments)||""}`);
-    [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr,c1,rr,c2));
-    sh.getRow(1).height = 24;
+    put('A'+(1+off),"Welder Inspection & Audit Checklist");
+    put('A'+(2+off),`${sName}  |  ${coLine}`);
+    put('A'+(3+off),`Location: ${a.location||""}`); put('C'+(3+off),`Asset ID: ${a.assetId||""}`);
+    put('A'+(4+off),`Brand: ${a.brand||""}`);       put('C'+(4+off),`Model: ${a.model||""}`);
+    put('A'+(5+off),`Serial Number: ${a.serial||""}`); put('C'+(5+off),`Date Tested: ${date?fmtDate(date):""}`);
+    put('A'+(6+off),`Prepared By: ${(meta&&meta.auditor)||""}`); put('C'+(6+off),`Test Instruments: ${(meta&&meta.instruments)||""}`);
+    [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr+off,c1,rr+off,c2));
+    sh.getRow(1+off).height = 24;
     // Audit summary
-    let rr = 8;
+    let rr = 8 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     const overallSt = row.overall==="pass"?passSt:row.overall==="fail"?failSt:naSt;
     [["Total Items",String(sum.total)],["Pass",String(sum.pass)],["Fail",String(sum.fail)],["N/A",String(sum.na)],["Score",welderScoreLabel(sum.score)],["Actions Required",String(sum.actions)],["Overall",welderOverallLabel(row.overall)]]
@@ -14177,6 +14352,7 @@ async function exportWelderExcel(project, allResults, meta) {
     });
     [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
     xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
+    if (logo) xjLogo(sh, wb, logo, 5);
   });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
@@ -14409,8 +14585,10 @@ const GSD_H = { bar: 20, gap: 8, detail: 12, spacer: 10 };
 const gsdFit = (w, h) => { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const s = Math.min(GSD_BOX_W / W, GSD_BOX_H / H); return { dw: Math.max(1, Math.round(W * s)), dh: Math.max(1, Math.round(H * s)) }; };
 const gsdCaptionH = text => { const lines = String(text).split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / GSD_CHARS_LINE)), 0); return lines * 12 + 3; };
 // sections: [{name, items:[{caption, detail, photos:[{id, dw, dh}]}]}] -> { rows:[{kind,h,...}], breaks:[row index a page break goes BEFORE] }
-function gsdLayout(sections) {
-  const rows = [], breaks = []; let y = GSD_HEAD_PT;
+// headPt: actual header space already used above the first content row (defaults to GSD_HEAD_PT; a logo row makes the real header taller, so
+// exportGSDExcel passes GSD_HEAD_PT + XJ_LOGO_ROW_PT when one is set — otherwise the first page's break would land a little too low and clip).
+function gsdLayout(sections, headPt = GSD_HEAD_PT) {
+  const rows = [], breaks = []; let y = headPt;
   const push = r => { rows.push(r); y += r.h; };
   const need = h => { if (y > 0 && y + h > GSD_PAGE_PT) { breaks.push(rows.length); y = 0; } };
   sections.forEach(sec => sec.items.forEach((it, i) => {
@@ -14431,6 +14609,7 @@ const gsdPageSetupFixed = sheet => {
 };
 async function exportGSDExcel(project, items, meta) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
+  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
   const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
   const metaCells = [`Auditor: ${m.auditor || ""}`, "", `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, "", `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
@@ -14440,24 +14619,24 @@ async function exportGSDExcel(project, items, meta) {
   for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
     let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
   }
-  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })));
+  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT + (off ? XJ_LOGO_ROW_PT : 0));
 
   // ── Sheet 1: the photo report ──
   const ws = wb.addWorksheet("Defects Report"); ws.views = [{ showGridLines: false }];
-  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
   put(1, 1, `${sName} — General Site Defects`); put(2, 1, coLine);
   metaCells.forEach((v, i) => { if (v !== "") put(3, i + 1, v); });
-  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, 5], [4, 1, 4, GSD_COLS]].forEach(a => ws.mergeCells(...a));
-  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1).height = h; });
+  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, 5], [4, 1, 4, GSD_COLS]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
+  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
   const white = SWB_XC.white;
   const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
   const capSt = swbXCS(white, { sz: 9, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" });
   const detSt = swbXCS(white, { sz: 8, color: { rgb: SWB_XC.mutedGrey } }, { vertical: "top" });
   const breakSet = new Set(layout.breaks);
-  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6, 1, 6, GSD_COLS); }
+  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6 + off, 1, 6 + off, GSD_COLS); }
   layout.rows.forEach((row, i) => {
-    const r = 5 + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
+    const r = 5 + off + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
     ws.getRow(r).height = row.h;
     if (row.kind === "photos") {
       row.photos.forEach((p, k) => {
@@ -14467,10 +14646,11 @@ async function exportGSDExcel(project, items, meta) {
       });
       return;
     }
-    if (row.kind === "bar") put(r, 1, row.text, barSt); else if (row.kind === "caption") put(r, 1, row.text, capSt); else if (row.kind === "detail") put(r, 1, row.text, detSt);
+    if (row.kind === "bar") put(r - off, 1, row.text, barSt); else if (row.kind === "caption") put(r - off, 1, row.text, capSt); else if (row.kind === "detail") put(r - off, 1, row.text, detSt);
     if (["bar", "caption", "detail"].includes(row.kind)) { ws.mergeCells(r, 1, r, GSD_COLS); for (let c = 2; c <= GSD_COLS && row.kind === "bar"; c++) swbApplyXlStyle(ws.getCell(r, c), barSt); }
   });
   gsdPageSetupFixed(ws);
+  if (logo) xjLogo(ws, wb, logo, GSD_COLS);
 
   // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
   const numbered = gsdNumbered(project, items);
@@ -14478,7 +14658,7 @@ async function exportGSDExcel(project, items, meta) {
     headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
     widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
     rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
-    emptyText: "No defects recorded", landscape: true });
+    emptyText: "No defects recorded", landscape: true, logo });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
@@ -14641,8 +14821,8 @@ function GSDApp({ onGoHome }) {
 function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDeleteProject }) {
   const SS = swbStyles();
   const [showAdd, setShowAdd] = React.useState(false);
-  const [vals, setVals] = React.useState({ name: "", company: "", abn: "", licence: "" });
-  const close = () => { setShowAdd(false); setVals({ name: "", company: "", abn: "", licence: "" }); };
+  const [vals, setVals] = React.useState(() => { const s = loadAppSettings(); return { name: "", company: s.businessName, abn: s.abn, licence: s.licence }; });
+  const close = () => { setShowAdd(false); const s = loadAppSettings(); setVals({ name: "", company: s.businessName, abn: s.abn, licence: s.licence }); };
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("div", { style: { ...SS.listTitle, marginTop: 24 } }, "Sites")
     , projects.length === 0 && !showAdd && gsdEl("div", { style: { color: "#52525b", fontSize: 14, marginBottom: 16 } }, "No sites yet — add one to start testing.")
@@ -14903,5 +15083,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 }
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
+  loadAppSettings, saveAppSettings, appLogoStore, xjGetLogoDataUrl, xjLogo, xjSheet, xjSplit, GlobalSettingsView };
 export default AppRoot;

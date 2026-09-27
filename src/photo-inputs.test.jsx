@@ -11,10 +11,16 @@ afterEach(() => cleanup()); beforeEach(() => localStorage.clear());
 const chooserOk = el => { expect(el).toBeTruthy(); expect(el.hasAttribute('capture')).toBe(false); expect(el.getAttribute('accept')).toBe('image/*'); expect(el.multiple).toBe(true); expect(el.type).toBe('file'); };
 
 describe('no photo input forces the camera', () => {
-  it('source: all five image file inputs (SWB, ELT, Welder, GSD x2) exist and none of them mentions capture', () => {
+  it('source: all six image file inputs (SWB, ELT, Welder, GSD x2, Global Settings logo) exist and none of them mentions capture', () => {
     const src = fs.readFileSync('src/App.jsx', 'utf8'); const hits = [...src.matchAll(/accept:\s*"image\/\*"/g)];
-    expect(hits).toHaveLength(5);
+    expect(hits).toHaveLength(6);
     hits.forEach(h => expect(src.slice(Math.max(0, h.index - 160), h.index + 200), 'near ' + h.index).not.toMatch(/capture\s*:/));
+  });
+  it('Global Settings: the logo upload input (single file, unlike the photo inputs)', async () => {
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(await screen.findByTestId('settings-pill'));
+    const el = document.querySelector('input[type="file"][accept="image/*"]');
+    expect(el).toBeTruthy(); expect(el.hasAttribute('capture')).toBe(false); expect(el.multiple).toBe(false);
   });
   it('GSD: the quick-add input and the item page input', async () => {
     localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'One' }] }]));
