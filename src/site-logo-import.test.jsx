@@ -8,7 +8,7 @@ import ExcelJS from 'exceljs';
 import * as XLSX from 'xlsx';
 import 'fake-indexeddb/auto';
 import {
-  exportExcel, exportSWBExcel, exportWelderExcel, exportELTExcel, exportIRTExcel,
+  exportExcel, exportSWBExcel, exportWelderExcel, exportELTExcel, exportIRTExcel, exportIELExcel, exportTATExcel, exportThermoExcel,
   parseExcelToProject, parseSWBExcel, parseWelderExcel, parseELTExcel, parseIRTExcel, parseIELExcel, parseTATExcel, parseThermoExcel,
   xjExtractLogo, saveAppSettings, appLogoStore, siteLogoStore,
 } from './App.jsx';
@@ -49,6 +49,24 @@ describe('old (no-logo) exports still import at their original row positions', (
     await exportIRTExcel(project, {}, { testDate: '2026-09-21', auditor: 'J' });
     const parsed = parseIRTExcel(wbFromPayload());
     expect(parsed.company).toBe('Old Co'); expect(parsed.areas.map(a => a.name)).toEqual(['Plant']);   // the title also carries the test date (by design), so it isn't checked verbatim here
+  });
+  it('IEL', async () => {
+    const project = { id: 'p', name: 'Site I', company: 'Old Co', abn: '11 111 111 111', licence: 'OLD1', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'p1', name: 'estops', circuits: ['x'], machineNames: { x: 'Conv 1' } }] }] };
+    await exportIELExcel(project, {}, { auditor: 'J', testDate: '2026-09-21' });
+    const parsed = parseIELExcel(wbFromPayload());
+    expect(parsed.company).toBe('Old Co'); expect(JSON.stringify(parsed)).toMatch(/Conv 1/);
+  });
+  it('TAT', async () => {
+    const project = { id: 'p', name: 'Site T', company: 'Old Co', abn: '11 111 111 111', licence: 'OLD1', areas: [{ id: 'a', name: 'Workshop', items: ['x'], itemNames: { x: 'Grinder' }, itemTags: { x: 'T1' } }] };
+    await exportTATExcel(project, {}, { auditor: 'J', testDate: '2026-09-21' });
+    const parsed = parseTATExcel(wbFromPayload());
+    expect(parsed.company).toBe('Old Co'); expect(JSON.stringify(parsed)).toMatch(/Grinder/);
+  });
+  it('Thermo', async () => {
+    const project = { id: 'p', name: 'Site H', company: 'Old Co', abn: '11 111 111 111', licence: 'OLD1', areas: [{ id: 'a', name: 'Plant', boards: [{ id: 'b', name: 'MSB', circuits: ['c1'], circuitNames: { c1: 'One' } }] }] };
+    await exportThermoExcel(project, {}, { auditor: 'J', testDate: '2026-09-21' });
+    const parsed = parseThermoExcel(wbFromPayload(), '', XLSX);
+    expect(parsed.company).toBe('Old Co'); expect(JSON.stringify(parsed)).toMatch(/One/);
   });
 });
 
