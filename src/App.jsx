@@ -205,9 +205,37 @@ const appLogoStore = {
   get: () => appLogoTx("readonly", s => s.get(APP_LOGO_ID)),
   del: () => appLogoTx("readwrite", s => s.delete(APP_LOGO_ID)),
 };
-// Every export reads the logo fresh at export time (never stored per-site): a later change in Global Settings applies to the NEXT export;
-// an already-written file is untouched. Returns null (no logo drawn, output unchanged) if none is set or it can't be read.
-async function xjGetLogoDataUrl() {
+// ── Per-site logo override (2026-09-27): a site's OWN logo, overriding the global one, exactly like Company/ABN/Licence already override the
+// global pre-fill per site. Keyed by `${module}:${siteId}` — every module creates sites with `id: slugify(name)` (no random suffix), so two
+// different modules' sites can share an id; the module prefix keeps their logos from colliding. Presence in this store IS the override: there
+// is no flag on the project object, so a site created before this feature (or one whose logo was never set) just falls through to global,
+// with no migration needed — the same shape as Company/ABN/Licence's own fallback story.
+const SITE_LOGO_DB_NAME = "sparkcheck-site-logos", SITE_LOGO_DB_STORE = "logos";
+let _siteLogoDb = null;
+function siteLogoOpenDb() {
+  if (!_siteLogoDb) _siteLogoDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(SITE_LOGO_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(SITE_LOGO_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _siteLogoDb = null; throw e; });
+  return _siteLogoDb;
+}
+const siteLogoTx = (mode, fn) => siteLogoOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(SITE_LOGO_DB_STORE, mode); const r = fn(tx.objectStore(SITE_LOGO_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+const siteLogoKey = (module, siteId) => `${module}:${siteId}`;
+const siteLogoStore = {
+  put: (module, siteId, rec) => siteLogoTx("readwrite", s => s.put(rec, siteLogoKey(module, siteId))),
+  get: (module, siteId) => siteLogoTx("readonly", s => s.get(siteLogoKey(module, siteId))),
+  del: (module, siteId) => siteLogoTx("readwrite", s => s.delete(siteLogoKey(module, siteId))),
+};
+// Every export reads the logo fresh at export time (never cached on the project): a later change in Global Settings or the site's own logo
+// applies to the NEXT export; an already-written file is untouched. Resolution order: this site's own logo, else the global one, else none.
+async function xjGetLogoDataUrl(module, siteId) {
+  try { const site = await siteLogoStore.get(module, siteId); if (site) return gsdRecToDataUrl(site); } catch (_) { /* fall through to global */ }
   const s = loadAppSettings(); if (!s.logoId) return null;
   try { const rec = await appLogoStore.get(); return rec ? gsdRecToDataUrl(rec) : null; } catch (_) { return null; }
 }
@@ -565,7 +593,7 @@ return { id: slugify(projectName), name: projectName, company: company || "Spark
 // RCD export: MAIN results table (narrow — identifiers, dates, result, notes) + a Defects sheet (FAIL rows only, always present) + a
 // Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Page setup is native (xjPageSetup).
 async function exportExcel(results, project, meta, mode) {
-  const logo = await xjGetLogoDataUrl();
+  const logo = await xjGetLogoDataUrl("rcd", project.id);
   const isInject = mode === "inject";
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
   const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
@@ -1057,7 +1085,7 @@ else goProjects();
 , view==="projects"&&React.createElement(ProjectListView, { projects: projects, allResults: allResults, dropdowns: dropdowns,
 onSelect: id=>{const proj=projects.find(p=>p.id===id);const pushSum=summariseProject(allResults,proj,"push");const injectSum=summariseProject(allResults,proj,"inject");const hasProgress=(pushSum.total>0&&(pushSum.pass+pushSum.fail+pushSum.na)>0)||(injectSum.total>0&&(injectSum.pass+injectSum.fail+injectSum.na)>0);setAuditEntered(hasProgress);setActiveProject(id);setView("home");},
 onAddProject: p=>setProjects(prev=>[...prev,p]),
-onDeleteProject: id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();},})
+onDeleteProject: id=>{siteLogoStore.del("rcd",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();},})
 , view==="home"&&project&&React.createElement(ProjectHomeView, { project: project, meta: meta, setMeta: setMeta, results: allResults,
 onStartPush: ()=>{setMode("push");setView("audit");setAuditEntered(true);},
 onStartInject: ()=>{setMode("inject");setView("audit");setAuditEntered(true);},
@@ -2451,7 +2479,7 @@ function ielSiteSummary(results,project,cat){
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
 
 async function exportIELExcel(project, results, meta) {
-  const logo = await xjGetLogoDataUrl();
+  const logo = await xjGetLogoDataUrl("iel", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
@@ -2737,7 +2765,7 @@ function IELApp({ onGoHome }) {
 
     // ── Main
     ,React.createElement('main',{style:SI.main,ref:mainElRef}
-      ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
+      ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#047857",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
@@ -4554,7 +4582,7 @@ function tatSiteSummary(results, project) {
 // Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
 const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
 async function exportTATExcel(project, results, meta) {
-  const logo = await xjGetLogoDataUrl();
+  const logo = await xjGetLogoDataUrl("tat", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const sName = project.name || "Site";
@@ -4817,7 +4845,7 @@ function TATApp({ onGoHome }) {
     ,React.createElement('main',{style:ST.main,ref:tatMainRef}
       ,view==="projects"&&React.createElement(TATProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);const s=tatSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);},
         onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},
-        onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
+        onDeleteProject:id=>{siteLogoStore.del("tat",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(TATHomeView,{project,meta,setMeta,results:allResults,summary,
         onStartAudit:()=>{setAuditEntered(true);setView("audit");},
         onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onSettings:()=>setView("settings"),
@@ -6073,7 +6101,7 @@ function siteMonitor(results, project) {
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
 async function exportThermoExcel(project, results, meta) {
-  const logo = await xjGetLogoDataUrl();
+  const logo = await xjGetLogoDataUrl("thermo", project.id);
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
@@ -9341,6 +9369,7 @@ function ThermoApp({
       }
     },
     onDeleteProject: id => {
+      siteLogoStore.del("thermo", id).catch(() => {});
       setProjects(prev => prev.filter(p => p.id !== id));
       setAllResults(prev => {
         const n = {
@@ -9977,7 +10006,7 @@ function swbSheetName(board, area, used) {
 }
 async function exportSWBExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("swb", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
   const nextDue = swbNextDue(meta);
@@ -10303,7 +10332,7 @@ function SWBApp({ onGoHome }) {
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #7e22ce, transparent 70%)',opacity:0.5}})
     )
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
-      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
@@ -11394,7 +11423,7 @@ function eltRegisterRows(project, allResults, meta) {
 
 async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("elt", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
@@ -11589,7 +11618,7 @@ function ELTApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
-      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
@@ -12326,7 +12355,7 @@ function downloadIRTTemplate(){
 // IRT export: THREE linked sheets, all keyed by the same "#":  Register (narrow summary — the sheet meant for a client PDF),
 // Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
 async function exportIRTExcel(project, results, meta) {
-  const logo = await xjGetLogoDataUrl();
+  const logo = await xjGetLogoDataUrl("irt", project.id);
   const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
   const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
   const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
@@ -13112,7 +13141,7 @@ function IRTApp({onGoHome}){
     ),
     // Main
     React.createElement("div",{style:SS.main,ref:irtMainRef},
-      view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
+      view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{siteLogoStore.del("irt",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
       view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));setAuditEntered(false);},auditEntered}),
       view==="audit"&&project&&!auditEntered&&React.createElement(IRTAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);}}),
       view==="audit"&&project&&auditEntered&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
@@ -14259,7 +14288,7 @@ function welderSheetName(a, used) {
 }
 async function exportWelderExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("welder", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
@@ -14444,7 +14473,7 @@ function WelderApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${WELDER_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:mainRef}
-      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:clearSiteResults})
       ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
@@ -14609,7 +14638,7 @@ const gsdPageSetupFixed = sheet => {
 };
 async function exportGSDExcel(project, items, meta) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
-  const logo = await xjGetLogoDataUrl(); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("gsd", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
   const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
   const metaCells = [`Auditor: ${m.auditor || ""}`, "", `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, "", `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
@@ -14793,7 +14822,7 @@ function GSDApp({ onGoHome }) {
           , gsdEl("span", { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Modules")))
       , gsdEl("div", { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GSD_COLOR}, transparent 70%)`, opacity: 0.5 } }))
     , gsdEl("div", { style: SS.main, ref: mainRef }
-      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); if (activeProject === pid) goProjects(); } })
+      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { siteLogoStore.del("gsd", pid).catch(() => {}); dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); if (activeProject === pid) goProjects(); } })
       , view === "home" && project && gsdEl(GSDHomeView, { project, meta, setMeta, items, onStartAudit: goAudit,
           onCompleteAudit: () => { archiveAudit(); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); },
           onReset: () => { gsdPhotoStore.delItems(items); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); } })
@@ -15084,5 +15113,5 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, xjGetLogoDataUrl, xjLogo, xjSheet, xjSplit, GlobalSettingsView };
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjLogo, xjSheet, xjSplit, GlobalSettingsView };
 export default AppRoot;
