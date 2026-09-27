@@ -592,6 +592,24 @@ function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allow
       , list.map(o => React.createElement("div", { key: o.value === "" ? "__empty" : o.value, role: "option", "aria-selected": o.value === value, style: { padding: "10px 12px", fontSize: 13, cursor: "pointer", whiteSpace: "normal", wordBreak: "break-word", color: o.value === value ? (color || "#047857") : "#3f3f46", background: o.value === value ? (colorBg || "#dcfce7") : "transparent", fontWeight: o.value === value ? 700 : 400 }, onClick: () => { onChange(o.value); setOpen(false); } }, o.label))
       , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
 }
+// useScrollMemory(ref, key, remember): the app's one scroll rule for a module's main scroll container.
+//   - a DRILL-DOWN LIST level (remember = true) keeps its scroll position: leaving it (into an item / test page or down a level) and coming back Back restores where you were;
+//   - everything else (an item / test detail page, Home, Report, History, Manage, Dropdowns) starts at the TOP when entered.
+// key identifies the level (view + the open area / panel / board / item), so each list level has its own remembered position. Positions are tracked with a scroll
+// listener (not read at navigation time — by then the shorter detail page has already clamped the container's scrollTop).
+function useScrollMemory(ref, key, remember) {
+  const mem = React.useRef({}); const cur = React.useRef({ key, remember }); cur.current = { key, remember };
+  const attached = React.useRef(null);
+  React.useEffect(() => {                      // (re)attach whenever the container element changes (it appears once the module has loaded)
+    const el = ref.current; if (!el || attached.current === el) return undefined;
+    attached.current = el;
+    const on = () => { if (cur.current.remember) mem.current[cur.current.key] = el.scrollTop; };
+    el.addEventListener("scroll", on, { passive: true });
+    return undefined;
+  });
+  React.useEffect(() => () => {}, []);
+  React.useLayoutEffect(() => { const el = ref.current; if (!el) return; el.scrollTop = remember ? (mem.current[key] || 0) : 0; }, [key, remember]);
+}
 function DeleteButton({ onDelete, label = 'Delete?', compact = false, onOpenChange }) {
   const [confirming, setConfirming] = React.useState(false);
   const boxRef = React.useRef(null);
@@ -809,7 +827,6 @@ const [detailInfo,    setDetailInfo]   = React.useState(null);
 const [viewSnap,      setViewSnap]     = React.useState(null);
 const [viewArea,      setViewArea]     = React.useState(null);
 const rcdMainRef = React.useRef(null);
-React.useLayoutEffect(()=>{ if(detailInfo&&rcdMainRef.current) rcdMainRef.current.scrollTop=0; },[detailInfo]);
 React.useEffect(()=>{
 // Safety: force loaded=true after 3s even if storage fails
 var safetyTimer=setTimeout(()=>setLoaded(true),3000);
@@ -885,6 +902,7 @@ return snap;
 };
 const goProjects=()=>{setView("projects");setActiveProject(null);setMode(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
 const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
+useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
 if(!loaded) return React.createElement('div', { style: S.loader,}, React.createElement('div', { style: S.loaderSpinner,}), React.createElement('p', { style: {color:"#6e6a66",marginTop:16},}, "Loading…"));
 const modeColor=mode==="push"?"#a3530f":"#1d4ed8";
 const modeLabel=mode==="push"?"PUSH TEST":"INJECTION TEST";
@@ -2534,15 +2552,6 @@ function IELApp({ onGoHome }) {
   React.useEffect(()=>{if(loaded)save(K_IEL_DROPDOWNS,ielDropdowns);},[ielDropdowns,loaded]);
 
   const mainElRef = React.useRef(null);
-  const savedScrollRef = React.useRef(0);
-  React.useEffect(()=>{
-    if(!detailInfo&&mainElRef.current&&savedScrollRef.current>0){
-      mainElRef.current.scrollTop=savedScrollRef.current;
-    }
-  },[detailInfo]);
-  React.useLayoutEffect(()=>{
-    if(detailInfo&&mainElRef.current) mainElRef.current.scrollTop=0;
-  },[detailInfo]);
 
   const project  = projects.find(p=>p.id===activeProject);
   const _ielMeta = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
@@ -2574,6 +2583,7 @@ function IELApp({ onGoHome }) {
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveCat(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
 
+  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
   if(!loaded)return React.createElement('div',{style:SI.loader},React.createElement('div',{style:SI.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   const catColor = catInfo?catInfo.color:"#047857";
@@ -2623,7 +2633,7 @@ function IELApp({ onGoHome }) {
       ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#047857",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
-      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{if(mainElRef.current)savedScrollRef.current=mainElRef.current.scrollTop;setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
+      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
       ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
@@ -4605,7 +4615,6 @@ function TATApp({ onGoHome }) {
   const [activeAreaId, setActiveAreaId]=React.useState(null);
   const [detailItemId, setDetailItemId]=React.useState(null);
   const tatMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(detailItemId&&tatMainRef.current) tatMainRef.current.scrollTop=0; },[detailItemId]);
   const [auditEntered, setAuditEntered]=React.useState(false);
   const [viewSnap,     setViewSnap]    =React.useState(null);
   const [viewArea,     setViewArea]    =React.useState(null);
@@ -4669,6 +4678,7 @@ function TATApp({ onGoHome }) {
   const summary=project?tatSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0,untested:0};
   const canGoBack=view!=="projects";
 
+  useScrollMemory(tatMainRef,[view,activeAreaId,detailItemId||""].join("|"),view==="audit"&&!detailItemId);
   if(!loaded)return React.createElement('div',{style:ST.loader},React.createElement('div',{style:ST.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   return React.createElement('div',{style:ST.root}
@@ -9018,7 +9028,6 @@ function ThermoApp({
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeCircuitId, setActiveCircuitId] = React.useState(null); // id of circuit open in photo page
   const thermoMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(view==="circuit"&&thermoMainRef.current) thermoMainRef.current.scrollTop=0; },[view,activeCircuitId]);
   const [activeCircuitName, setActiveCircuitName] = React.useState("");
   const [thermoDropdowns, setThermoDropdowns] = React.useState({responsibility:[...RESPONSIBILITY_OPTIONS],rectified:[...RECTIFIED_OPTIONS]});
 
@@ -9181,6 +9190,7 @@ function ThermoApp({
       goHome();
     } else goProjects();
   };
+  useScrollMemory(thermoMainRef,[view,activeAreaId,activeBoardId,activeCircuitId||""].join("|"),["audit","area","board"].includes(view));
   if (!loaded) return /*#__PURE__*/React.createElement("div", {
     style: STH.loader
   }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } }`), /*#__PURE__*/React.createElement("div", {
@@ -9978,7 +9988,6 @@ function SWBApp({ onGoHome }) {
   const [activeBoardId, setActiveBoardId] = React.useState(null);
   const [activeItemKey, setActiveItemKey] = React.useState(null);
   const swbMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(view==="item"&&swbMainRef.current) swbMainRef.current.scrollTop=0; },[view,activeItemKey]);
   const [auditEntered,  setAuditEntered]  = React.useState(false);
   const [swbDropdowns,  setSwbDropdowns]  = React.useState({responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED});
 
@@ -10032,6 +10041,7 @@ function SWBApp({ onGoHome }) {
   // goArea removed - use goAreaList() instead
   const goAreaList=()=>{setView("audit");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
 
+  useScrollMemory(swbMainRef,[view,activeAreaId,activeBoardId,activeItemKey||""].join("|"),["audit","board"].includes(view));
   if(!loaded) return React.createElement('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:"3px solid #7e22ce",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS=swbStyles();
@@ -10047,8 +10057,9 @@ function SWBApp({ onGoHome }) {
             if(view==="item"){setActiveItemKey(null);setView("board");}
             else if(view==="board"){setActiveBoardId(null);setView("audit");}
             else if(view==="audit"&&!auditEntered){goHome();}
+            else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}                       // board list -> area list (this branch was missing: Back fell through to goProjects and skipped a level)
             else if(view==="audit"&&auditEntered&&!activeAreaId){const s=project?swbSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0};setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);goHome();}
-            else if(["manage","report","history","dropdowns"].includes(view))goHome();
+            else if(["manage","report","history","dropdowns"].includes(view)||view==="audit")goHome();
             else goProjects();
           }}
             ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
@@ -11282,7 +11293,6 @@ function ELTApp({ onGoHome }) {
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [eltDropdowns, setEltDropdowns] = React.useState(ELT_DEFAULT_DROPDOWNS);
   const eltMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(eltMainRef.current) eltMainRef.current.scrollTop=0; },[view,activeAssetId]);
 
   React.useEffect(()=>{
     (async()=>{
@@ -11315,6 +11325,7 @@ function ELTApp({ onGoHome }) {
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
   const today = ()=>new Date().toISOString().slice(0,10);
 
+  useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");   // the list level's key never includes the (still-set) asset id
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -12810,7 +12821,6 @@ function IRTApp({onGoHome}){
   const [viewSnap,setViewSnap]=React.useState(null);const [viewArea,setViewArea]=React.useState(null);const [viewPanel,setViewPanel]=React.useState(null);
   const [activeAreaId,setActiveAreaId]=React.useState(null);const [activePanelId,setActivePanelId]=React.useState(null);const [activeItemId,setActiveItemId]=React.useState(null);const [activeItemName,setActiveItemName]=React.useState("");
   const irtMainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(view==="item"&&irtMainRef.current) irtMainRef.current.scrollTop=0; },[view,activeItemId]);
   const [irtWarnDismissed,setIrtWarnDismissed]=React.useState(false);
   const [showGuide,setShowGuide]=React.useState(false);
   React.useEffect(()=>{(async()=>{try{const[p,r,m,h,dd]=await Promise.all([load(K_IRT_PROJECTS,[]),load(K_IRT_RESULTS,{}),load(K_IRT_META,{}),load(K_IRT_HISTORY,[]),load(K_IRT_DROPDOWNS,{responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setIrtDropdowns(dd);}finally{setLoaded(true);}})();},[]);
@@ -12835,6 +12845,7 @@ function IRTApp({onGoHome}){
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
   const isAudit=["audit","area","panel","item"].includes(view);
   const SS=irtStyles();
+  useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["audit","area","panel"].includes(view));
   if(!loaded)return React.createElement("div",{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement("div",{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${IRT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
   return React.createElement("div",{style:SS.root},
     // Top bar
@@ -14123,7 +14134,6 @@ function WelderApp({ onGoHome }) {
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [dropdowns, setDropdowns] = React.useState(WELDER_DEFAULT_DROPDOWNS);
   const mainRef = React.useRef(null);
-  React.useLayoutEffect(()=>{ if(mainRef.current) mainRef.current.scrollTop=0; },[view,activeAssetId]);
 
   React.useEffect(()=>{
     (async()=>{
@@ -14160,6 +14170,7 @@ function WelderApp({ onGoHome }) {
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
 
+  useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${WELDER_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -14429,7 +14440,6 @@ function GSDApp({ onGoHome }) {
   const [activeItemId, setActiveItemId] = React.useState(null);
   const [photoError, setPhotoError] = React.useState("");
   const mainRef = React.useRef(null);
-  React.useLayoutEffect(() => { if (mainRef.current) mainRef.current.scrollTop = 0; }, [view, activeItemId]);
   React.useEffect(() => {
     (async () => {
       try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); setProjects(p); setAllItems(i); setAllMeta(m); setHistory(h); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...gsdUpgradeDropdowns(dd) }); }
@@ -14523,6 +14533,7 @@ function GSDApp({ onGoHome }) {
   const goHome = () => { setView("home"); setActiveItemId(null); setViewSnap(null); };
   const goAudit = () => { setView("audit"); setActiveItemId(null); setViewSnap(null); };
   const SS = swbStyles();
+  useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit");
   if (!loaded) return gsdEl("div", { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } }, gsdEl("div", { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GSD_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
   const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if (view === "item") setView("audit"); else if (view === "audit") goHome(); else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
   const navTo = v => () => { setViewSnap(null); setView(v); };
@@ -14829,6 +14840,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
     }));
 }
 
-export { StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
+export { useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS };
 export default AppRoot;
