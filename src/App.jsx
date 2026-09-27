@@ -1177,7 +1177,7 @@ const [importAbn,  setImportAbn]  = React.useState("");
 const [importLic,  setImportLic]  = React.useState("");
 
 const [importError,setImportError]= React.useState("");
-const [importLogoRec,setImportLogoRec]= React.useState(null);
+const [importLogoUrl,setImportLogoUrl]= React.useState(null);
 const fileRef = React.useRef();
 const handleFile = e => {
 const file = e.target.files[0]; if(!file) return;
@@ -1185,7 +1185,7 @@ if(!/\.(xlsx|xls|csv)$/i.test(file.name)){
   setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");
   return;
 }
-setImporting(true); setImportError(""); setImportLogoRec(null);
+setImporting(true); setImportError(""); setImportLogoUrl(null);
 const reader=new FileReader();
 reader.onload=async ev=>{
 try {
@@ -1201,7 +1201,7 @@ try {
   if(!importCo && proj.company) setImportCo(proj.company);
   if(!importAbn && proj.abn) setImportAbn(proj.abn);
   if(!importLic && proj.licence) setImportLic(proj.licence);
-  xjExtractLogo(buf).then(setImportLogoRec);
+  xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
 } catch(err){ setImportError("Could not parse file — check it is a valid Excel or CSV file."); }
   finally{ setImporting(false); }
 };
@@ -1213,8 +1213,8 @@ const confirmImport = () => {
 if(!importPreview) return;
 const finalProject={...importPreview,id:slugify(importName||importPreview.name),name:importName||importPreview.name,company:importCo,abn:importAbn.trim(),licence:importLic.trim()};
 onAddProject(finalProject);
-if(importLogoRec) siteLogoStore.put("rcd",finalProject.id,importLogoRec).catch(()=>{});
-setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoRec(null);setImportError("");
+if(importLogoUrl) siteLogoStore.put("rcd",finalProject.id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoUrl(null);setImportError("");
 };
 const addManual=async()=>{
 if(!newName.trim()) return;
@@ -1297,6 +1297,8 @@ React.createElement('div', { key: a.id, style: {fontSize:12,color:"#6e6a66",marg
 ))
 , importPreview.areas.length>5&&React.createElement('div', { style: {fontSize:11,color:"#6e6a66"},}, "…and " , importPreview.areas.length-5, " more areas"  )
 )
+, React.createElement('div', { style: S.metaLabelText, }, "LOGO (optional — overrides the global one)")
+, React.createElement('div', { style: {marginTop:4,marginBottom:10}, }, React.createElement(LogoField, { value: importLogoUrl || globalLogoUrl, isDefault: !importLogoUrl && !!globalLogoUrl, onUpload: async file=>{ try{ setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9)); }catch(_){} }, onRemove: ()=>setImportLogoUrl(null) }))
 , React.createElement('div', { style: {display:"flex",gap:8},}
 , React.createElement('button', { style: S.ctaPrimary, onClick: confirmImport,}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Project"  )
 , React.createElement('button', { style: S.ctaSecondary, onClick: ()=>setImportPreview(null),}, "Re-upload")
@@ -2925,13 +2927,13 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[importName,setImportName]=React.useState("");
   const[importCo,setImportCo]=React.useState("");
   const[importError,setImportError]=React.useState("");
-  const[importLogoRec,setImportLogoRec]=React.useState(null);
+  const[importLogoUrl,setImportLogoUrl]=React.useState(null);
   const fileRef=React.useRef();
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
-    setImporting(true);setImportError("");setImportLogoRec(null);
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -2945,7 +2947,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo && parsed.company) setImportCo(parsed.company);
         if(!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if(!importLic && parsed.licence) setImportLic(parsed.licence);
-        xjExtractLogo(buf).then(setImportLogoRec);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -2959,8 +2961,8 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||importPreview.siteName||"Imported Site";
     const proj={id:importPreview.siteId,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas};
     onAddProject(proj,importPreview.results[importPreview.siteId]||{});
-    if(importLogoRec) siteLogoStore.put("iel",proj.id,importLogoRec).catch(()=>{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportLogoRec(null);setImportError("");
+    if(importLogoUrl) siteLogoStore.put("iel",proj.id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportLogoUrl(null);setImportError("");
   };
 
   return React.createElement('div',{style:SI.listWrap}
@@ -3063,6 +3065,8 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
               ,React.createElement('div',{style:SI.metaLabelText},"ELECTRICAL LICENCE (optional)")
               ,React.createElement('input',{style:{...SI.metaInput,marginTop:4},value:importLic,placeholder:"e.g. 123456C",onChange:e=>setImportLic(e.target.value)})
             )
+            ,React.createElement('div',{style:SI.metaLabelText},"LOGO (optional — overrides the global one)")
+            ,React.createElement('div',{style:{marginTop:4,marginBottom:10}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)}))
             ,React.createElement('div',{style:{display:"flex",gap:8}}
               ,React.createElement('button',{style:SI.ctaPrimary,onClick:confirmImport},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Import Site")
               ,React.createElement('button',{style:SI.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
@@ -4979,13 +4983,13 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const[importAbn,setImportAbn]=React.useState("");
   const[importLic,setImportLic]=React.useState("");
   const[importError,setImportError]=React.useState("");
-  const[importLogoRec,setImportLogoRec]=React.useState(null);
+  const[importLogoUrl,setImportLogoUrl]=React.useState(null);
   const fileRef=React.useRef();
 
   const handleFile=e=>{
     const file=e.target.files[0];if(!file)return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");return;}
-    setImporting(true);setImportError("");setImportLogoRec(null);
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -4998,7 +5002,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         if(!importCo&&parsed.company)setImportCo(parsed.company);
         if(!importAbn&&parsed.abn)setImportAbn(parsed.abn);
         if(!importLic&&parsed.licence)setImportLic(parsed.licence);
-        xjExtractLogo(buf).then(setImportLogoRec);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -5012,8 +5016,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||importPreview.siteName||"Imported Site";
     const proj={id:importPreview.siteId,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas};
     onAddProject(proj,importPreview.results[importPreview.siteId]||{});
-    if(importLogoRec) siteLogoStore.put("tat",proj.id,importLogoRec).catch(()=>{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoRec(null);setImportError("");
+    if(importLogoUrl) siteLogoStore.put("tat",proj.id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportLogoUrl(null);setImportError("");
   };
 
   return React.createElement('div',{style:ST.listWrap}
@@ -5085,6 +5089,8 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
                 ,React.createElement('input',{style:{...ST.metaInput,marginTop:4},value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
               )
             )
+            ,React.createElement('div',{style:ST.metaLabelText},"LOGO (optional — overrides the global one)")
+            ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)}))
             ,React.createElement('div',{style:{display:"flex",gap:8}}
               ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR},onClick:confirmImport},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Site")
               ,React.createElement('button',{style:ST.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
@@ -7005,13 +7011,13 @@ function ThermoProjectListView({
     setNewLogo(null);
     setShowAdd(false);
   };
-  const [importLogoRec, setImportLogoRec] = React.useState(null);
+  const [importLogoUrl, setImportLogoUrl] = React.useState(null);
   const handleFile = e => {
     const file = e.target.files[0];
     if (!file) return;
     setImporting(true);
     setImportError("");
-    setImportLogoRec(null);
+    setImportLogoUrl(null);
     const reader = new FileReader();
     reader.onload = async ev => {
       try {
@@ -7027,7 +7033,7 @@ function ThermoProjectListView({
         if (!importCo && parsed.company) setImportCo(parsed.company);
         if (!importAbn && parsed.abn) setImportAbn(parsed.abn);
         if (!importLic && parsed.licence) setImportLic(parsed.licence);
-        xjExtractLogo(buf).then(setImportLogoRec);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       } catch (err) {
         setImportError("Could not parse file: " + err.message);
       }
@@ -7050,14 +7056,14 @@ function ThermoProjectListView({
     };
     // Results always empty — fresh audit, no photos carried over
     onAddProject(proj, {});
-    if (importLogoRec) siteLogoStore.put("thermo", proj.id, importLogoRec).catch(() => {});
+    if (importLogoUrl) siteLogoStore.put("thermo", proj.id, gsdDataUrlToRec(importLogoUrl)).catch(() => {});
     setImportPreview(null);
     setShowAdd(false);
     setImportName("");
     setImportCo("");
     setImportAbn("");
     setImportLic("");
-    setImportLogoRec(null);
+    setImportLogoUrl(null);
     setImportError("");
   };
 
@@ -7288,6 +7294,10 @@ function ThermoProjectListView({
     placeholder: ph,
     onChange: e => setter(e.target.value)
   }))), /*#__PURE__*/React.createElement("div", {
+    style: STH.metaLabelText
+  }, "LOGO (optional — overrides the global one)"), /*#__PURE__*/React.createElement("div", {
+    style: { marginTop: 4, marginBottom: 8 }
+  }, /*#__PURE__*/React.createElement(LogoField, { value: importLogoUrl || globalLogoUrl, isDefault: !importLogoUrl && !!globalLogoUrl, onUpload: async file => { try { setImportLogoUrl(await resizeImageToDataUrl(file, 480, 0.9)); } catch (_) {} }, onRemove: () => setImportLogoUrl(null) })), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: 8
@@ -9678,8 +9688,8 @@ function LogoField({ value, onUpload, onRemove, color, isDefault }) {
       , value
         ? React.createElement('img', { src: value, alt: "Logo", style: { width: 120, height: 70, objectFit: "contain", background: "#fff", border: "1px solid #e4e4e7", borderRadius: 8 } })
         : React.createElement('div', { style: { width: 120, height: 70, border: "1px dashed #d4d4d8", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#a1a1aa", textAlign: "center", padding: 4 } }, "No logo set")
-      , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 8 } }
-        , React.createElement('label', { style: { background: color || GS_COLOR, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center" } }
+      , React.createElement('div', { style: { display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 } }
+        , React.createElement('label', { style: { background: color || GS_COLOR, color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 12, fontWeight: 700, cursor: "pointer", textAlign: "center", flexShrink: 0 } }
           , value ? "Replace" : "Upload"
           , React.createElement('input', { type: "file", accept: "image/*", style: { display: "none" }, onChange: handle }))
         , value && !isDefault && React.createElement(DeleteButton, { onDelete: onRemove, label: "Remove logo?" })))
@@ -10500,17 +10510,17 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=swbStyles();
-  const [importLogoRec,setImportLogoRec]=React.useState(null);
+  const [importLogoUrl,setImportLogoUrl]=React.useState(null);
 
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
-    setImporting(true);setImportError("");setImportLogoRec(null);
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseSWBExcel(data);
         if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Area / Board columns. Download the template for the correct format.");setImporting(false);return;}
         setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");
-        xjExtractLogo(buf).then(setImportLogoRec);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(_){setImportError("Failed to read file.");}
       setImporting(false);
     };
@@ -10522,8 +10532,8 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     const sName=importName.trim()||"Imported Site";
     const id=swbSlug(sName);
     onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});
-    if(importLogoRec) siteLogoStore.put("swb",id,importLogoRec).catch(()=>{});
-    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoRec(null);setImportError("");
+    if(importLogoUrl) siteLogoStore.put("swb",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
+    setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoUrl(null);setImportError("");
   };
 
   return React.createElement('div',{style:SS.listWrap}
@@ -10597,6 +10607,8 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
                 ,React.createElement('input',{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)})
               )
             )
+            ,React.createElement('div',{style:SS.metaLabelText},"LOGO (optional — overrides the global one)")
+            ,React.createElement('div',{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)}))
             ,React.createElement('div',{style:{display:"flex",gap:8}}
               ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce"},onClick:confirmImport},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:14,height:14,fill:"none",stroke:"currentColor",strokeWidth:2.5,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"20 6 9 17 4 12"}))," Import Site")
               ,React.createElement('button',{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload")
@@ -11908,13 +11920,13 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   const [importPreview,setImportPreview] = React.useState(null);
   const [importVals,setImportVals] = React.useState({name:"",company:"",abn:"",licence:""});
   const [importError,setImportError] = React.useState("");
-  const [importLogoRec,setImportLogoRec] = React.useState(null);
+  const [importLogoUrl,setImportLogoUrl] = React.useState(null);
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setNewLogo(null);setImportPreview(null);setImportLogoRec(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");setNewLogo(null);setImportPreview(null);setImportLogoUrl(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
-    setImporting(true);setImportError("");setImportLogoRec(null);
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -11924,7 +11936,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         if(!parsed.ok){setImportError(parsed.error);return;}
         setImportPreview(parsed);
         setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
-        xjExtractLogo(buf).then(setImportLogoRec);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -11938,7 +11950,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
     const id=slugify(name);
     onAddProject({id,name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
       areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
-    if(importLogoRec) siteLogoStore.put("elt",id,importLogoRec).catch(()=>{});
+    if(importLogoUrl) siteLogoStore.put("elt",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
     setImportVals({name:"",company:"",abn:"",licence:""});closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as IEL, IRT and SWB, in ELT's accent
@@ -12008,7 +12020,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
               ,pvAreas.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+nw(pvAreas.length-4,"more area"))
               ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
             )
-            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
+            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals,logoUrl:importLogoUrl||globalLogoUrl,logoIsDefault:!importLogoUrl&&!!globalLogoUrl,onLogoUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setImportLogoUrl(null)})
             ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
               ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR},onClick:confirmImport},"✓ Import Site")
               ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>{setImportPreview(null);setImportError("");}},"Re-upload")
@@ -12838,15 +12850,15 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
   const [importPreview,setImportPreview]=React.useState(null);const [importName,setImportName]=React.useState("");const [importCo,setImportCo]=React.useState("");const [importAbn,setImportAbn]=React.useState("");const [importLic,setImportLic]=React.useState("");
   const [importError,setImportError]=React.useState("");const [importing,setImporting]=React.useState(false);
   const fileRef=React.useRef();const SS=irtStyles();
-  const [importLogoRec,setImportLogoRec]=React.useState(null);
+  const [importLogoUrl,setImportLogoUrl]=React.useState(null);
   const handleFile=e=>{
     const file=e.target.files&&e.target.files[0];if(!file)return;
-    setImporting(true);setImportError("");setImportLogoRec(null);
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
-    reader.onload=ev=>{try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseIRTExcel(data);if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Location / Panel / Item columns. Download the template for the correct format.");setImporting(false);return;}setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");xjExtractLogo(buf).then(setImportLogoRec);}catch(_){setImportError("Failed to read file.");}setImporting(false);};
+    reader.onload=ev=>{try{const buf=ev.target.result;const data=XLSX.read(buf,{type:"array"});const parsed=parseIRTExcel(data);if(!parsed||!parsed.areas||parsed.areas.length===0){setImportError("Could not find Location / Panel / Item columns. Download the template for the correct format.");setImporting(false);return;}setImportPreview(parsed);setImportName(parsed.siteName||"");setImportCo(parsed.company||"");setImportAbn(parsed.abn||"");setImportLic(parsed.licence||"");xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));}catch(_){setImportError("Failed to read file.");}setImporting(false);};
     reader.readAsArrayBuffer(file);
   };
-  const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";const id=irtSlug(sName);onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});if(importLogoRec) siteLogoStore.put("irt",id,importLogoRec).catch(()=>{});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoRec(null);setImportError("");};
+  const confirmImport=()=>{if(!importPreview)return;const sName=importName.trim()||"Imported Site";const id=irtSlug(sName);onAddProject({id,name:sName,company:importCo.trim(),abn:importAbn.trim(),licence:importLic.trim(),areas:importPreview.areas});if(importLogoUrl) siteLogoStore.put("irt",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});setImportPreview(null);setShowAdd(false);setImportName("");setImportCo("");setImportAbn("");setImportLic("");setImportLogoUrl(null);setImportError("");};
   return React.createElement("div",{style:SS.listWrap},
     React.createElement("div",{style:{...SS.listTitle,marginTop:24}},"Sites"),
     projects.length===0&&!showAdd&&React.createElement("div",{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet \u2014 add one or import from Excel."),
@@ -12891,6 +12903,8 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             (importPreview.areas||[]).length>3&&React.createElement("div",{style:{fontSize:11,color:"#52525b"}},"\u2026and ",(importPreview.areas||[]).length-3," more")
           ),
           [["SITE NAME","text",importName,setImportName,"Site name"],["COMPANY (optional)","text",importCo,setImportCo,"Company name"],["ABN (optional)","text",importAbn,setImportAbn,"e.g. 12 345 678 901"],["ELECTRICAL LICENCE (optional)","text",importLic,setImportLic,"e.g. 123456C"]].map(([lbl,type,val,setter,ph])=>React.createElement("div",{key:lbl,style:{marginBottom:8}},React.createElement("div",{style:SS.metaLabelText},lbl),React.createElement("input",{style:{...SS.metaInput,marginTop:4},type,value:val,placeholder:ph,onChange:e=>setter(e.target.value)}))),
+          React.createElement("div",{style:SS.metaLabelText},"LOGO (optional — overrides the global one)"),
+          React.createElement("div",{style:{marginTop:4,marginBottom:8}},React.createElement(LogoField,{value:importLogoUrl||globalLogoUrl,isDefault:!importLogoUrl&&!!globalLogoUrl,onUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onRemove:()=>setImportLogoUrl(null)})),
           React.createElement("div",{style:{display:"flex",gap:8}},React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR},onClick:confirmImport},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Import Site"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setImportPreview(null)},"Re-upload"),React.createElement("button",{style:SS.ctaSecondary,onClick:()=>setShowAdd(false)},"Cancel"))
         )
       )
@@ -14006,13 +14020,13 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   const [newLogo,setNewLogo] = React.useState(null);
   const globalLogoUrl = useGlobalLogoPreview();
   const [importError,setImportError] = React.useState("");
-  const [importLogoRec,setImportLogoRec] = React.useState(null);
+  const [importLogoUrl,setImportLogoUrl] = React.useState(null);
   const fileRef = React.useRef();
-  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);setImportPreview(null);setImportLogoRec(null);setImportError("");};
+  const closeAdd = ()=>{setShowAdd(false);setTab("manual");const s=loadAppSettings();setVals({name:"",company:s.businessName,abn:s.abn,licence:s.licence});setNewLogo(null);setImportPreview(null);setImportLogoUrl(null);setImportError("");};
   const handleFile = e=>{
     const file=e.target.files[0]; if(!file) return;
     if(!/\.(xlsx|xls|csv)$/i.test(file.name)){setImportError("Please upload an Excel (.xlsx or .xls) or CSV (.csv) file.");e.target.value="";return;}
-    setImporting(true);setImportError("");setImportLogoRec(null);
+    setImporting(true);setImportError("");setImportLogoUrl(null);
     const reader=new FileReader();
     reader.onload=ev=>{
       try{
@@ -14022,7 +14036,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         if(!parsed.ok){setImportError(parsed.error);return;}
         setImportPreview(parsed);
         setImportVals({name:parsed.siteName||file.name.replace(/\.(xlsx|xls|csv)$/i,"").replace(/[_-]+/g," ").trim(),company:parsed.company,abn:parsed.abn,licence:parsed.licence});
-        xjExtractLogo(buf).then(setImportLogoRec);
+        xjExtractLogo(buf).then(rec => setImportLogoUrl(rec ? gsdRecToDataUrl(rec) : null));
       }catch(err){setImportError("Could not parse file — check it is a valid Excel or CSV file.");}
       finally{setImporting(false);}
     };
@@ -14036,7 +14050,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
     const id=slugify(name);
     onAddProject({id,name,company:importVals.company.trim(),abn:importVals.abn.trim(),licence:importVals.licence.trim(),
       areas:groupAssetsIntoAreas(importPreview.assets.map(a=>({...a,location:a.location||name})),name)});
-    if(importLogoRec) siteLogoStore.put("welder",id,importLogoRec).catch(()=>{});
+    if(importLogoUrl) siteLogoStore.put("welder",id,gsdDataUrlToRec(importLogoUrl)).catch(()=>{});
     closeAdd();
   };
   // Manual / Import toggle — same pencil / download icons as ELT, IEL, IRT and SWB, in Welder's accent
@@ -14105,7 +14119,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
               ,pvAreas.length>4&&eltEl('div',{style:{fontSize:11,color:"#52525b"}},"…and "+nw(pvAreas.length-4,"more area"))
               ,warnings.map((w,i)=>eltEl('div',{key:i,style:{fontSize:11,color:"#92400e",marginTop:4}},"⚠ "+w))
             )
-            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals})
+            ,eltEl(ELTSiteFields,{vals:importVals,setVals:setImportVals,logoUrl:importLogoUrl||globalLogoUrl,logoIsDefault:!importLogoUrl&&!!globalLogoUrl,onLogoUpload:async file=>{try{setImportLogoUrl(await resizeImageToDataUrl(file,480,0.9));}catch(_){}},onLogoRemove:()=>setImportLogoUrl(null)})
             ,eltEl('div',{style:{display:"flex",gap:8,marginTop:4}}
               ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR},onClick:confirmImport},"✓ Import Site")
               ,eltEl('button',{style:SS.ctaSecondary,onClick:()=>{setImportPreview(null);setImportError("");}},"Re-upload")
@@ -15319,5 +15333,5 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView };
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField };
 export default AppRoot;
