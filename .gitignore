@@ -1,3 +1,14 @@
 node_modules/
 dist/
 .vite/
+
+# Copyrighted Australian Standard / reference documents — never commit these.
+# The folder structure and README are useful to keep tracked; only the
+# documents people drop in are ignored.
+standards/*
+!standards/README.md
+!standards/*/
+standards/*/*
+
+# Read-only product-readiness investigation report — intentionally untracked.
+reports/
