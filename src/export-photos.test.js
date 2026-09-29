@@ -45,12 +45,19 @@ function checkPhotos({ media, anchors, target, rowHeightPt }, sources) {
 
 describe('photos in exports', () => {
   it('SWB: bytes identical, 4:3, fits its row, one photo per row on the board sheet', async () => {
+    // Photos live in sitePhotoStore now (Stage 4, 2026-09-29) — see the ELT test above for why exportCopy is stubbed.
     const project = { id:'s1', name:'S', company:'C', areas:[{ id:'a', name:'A', boards:[{ id:'b', name:'MSB' }] }] };
-    const zip = await unzipExport(exportSWBExcel, project, { s1:{ a:{ b:{ enclosure:{status:'pass'}, _photos:[{id:'1',dataUrl:JPEG_A},{id:'2',dataUrl:JPEG_B}] } } } }, { auditor:'J', testDate:'2026-09-21' });
-    const info = await inspect(zip, 'xl/worksheets/sheet2.xml');   // sheet1 = Register, sheet2 = the MSB board sheet
-    checkPhotos(info, [JPEG_A, JPEG_B]);
-    expect(info.anchors.every(a => a.col === 1)).toBe(true);     // column B, like Welder's per-welder sheets
-    expect(info.anchors[1].row).toBe(info.anchors[0].row + 1);   // one photo per row
+    await sitePhotoStore.put('1', { buf: new Uint8Array([1]).buffer, type: 'image/jpeg' });
+    await sitePhotoStore.put('2', { buf: new Uint8Array([2]).buffer, type: 'image/jpeg' });
+    const origExportCopy = sitePhotoIO.exportCopy;
+    sitePhotoIO.exportCopy = async rec => ({ dataUrl: new Uint8Array(rec.buf)[0] === 1 ? JPEG_A : JPEG_B });
+    try {
+      const zip = await unzipExport(exportSWBExcel, project, { s1:{ a:{ b:{ enclosure:{status:'pass'}, _photos:[{id:'1',w:200,h:150},{id:'2',w:200,h:150}] } } } }, { auditor:'J', testDate:'2026-09-21' });
+      const info = await inspect(zip, 'xl/worksheets/sheet2.xml');   // sheet1 = Register, sheet2 = the MSB board sheet
+      checkPhotos(info, [JPEG_A, JPEG_B]);
+      expect(info.anchors.every(a => a.col === 1)).toBe(true);     // column B, like Welder's per-welder sheets
+      expect(info.anchors[1].row).toBe(info.anchors[0].row + 1);   // one photo per row
+    } finally { sitePhotoIO.exportCopy = origExportCopy; }
   });
 
   it('ELT: bytes identical, 4:3, fits its row, each photo on its own labelled row', async () => {

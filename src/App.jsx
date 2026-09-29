@@ -10236,6 +10236,22 @@ function swbGetBoardPhotos(results, projectId, areaId, boardId) {
   });
   return photos;
 }
+// Every photo pointer ARRAY reachable inside one board's results object — board-level `_photos` plus any legacy stray
+// `item.photos` per checklist item, same two locations swbGetBoardPhotos already reads. Returns actual array references
+// (mutable in place), the shape migrateSitePhotos's `extractSite` callback and the cleanup helpers below both need.
+const swbBoardPhotoArrays = bd => {
+  const arrays = [];
+  if (bd && Array.isArray(bd._photos)) arrays.push(bd._photos);
+  SWB_CHECKLIST.forEach(({key}) => { const item = bd && bd[key]; if (item && Array.isArray(item.photos)) arrays.push(item.photos); });
+  return arrays;
+};
+// Per-site (one project's own results, unwrapped — the shape migrateSitePhotos's extractSite receives, and the same shape
+// a history snapshot's own `.results` already is): every board's photo arrays, across every area.
+const swbExtractPhotos = siteResults => Object.values(siteResults || {}).flatMap(area => Object.values(area || {}).flatMap(swbBoardPhotoArrays));
+// Flattened to a plain photo list — for freeing (Reset / delete-project / delete-history-snapshot), not for migrating.
+const swbPhotoList = siteResults => swbExtractPhotos(siteResults).flat();
+// One area's photos only (Manage's Delete Area).
+const swbAreaPhotoList = (siteResults, areaId) => Object.values((siteResults || {})[areaId] || {}).flatMap(swbBoardPhotoArrays).flat();
 function swbGetStatus(results, projectId, areaId, boardId, itemKey) {
   return swbGetItem(results, projectId, areaId, boardId, itemKey).status || SWB_STATUS.UNTESTED;
 }
@@ -10360,6 +10376,13 @@ async function exportSWBExcel(project, allResults, meta) {
   const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
   const rows = swbRegisterRows(project, allResults, meta);
   const res = allResults || {};
+  // Photos live in sitePhotoStore (Stage 4, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
+  // referenced by any board's photos into a small export-sized copy BEFORE building any sheet (GSD's pattern).
+  const photoCopies = new Map();
+  for (const row of rows) for (const p of swbGetBoardPhotos(res, project.id, row.area.id, row.board.id)) if (!photoCopies.has(p.id)) {
+    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+  }
+  const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
@@ -10435,12 +10458,13 @@ async function exportSWBExcel(project, allResults, meta) {
     swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
-      const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+      const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
+      const copy = photoCopies.get(p.id);
+      const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
-        const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+        const imgId = wb.addImage({base64:copy.dataUrl,extension:ext});
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
@@ -10452,6 +10476,7 @@ async function exportSWBExcel(project, allResults, meta) {
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("swb");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
 // ─── Excel import ─────────────────────────────────────────────────────────
@@ -10595,10 +10620,17 @@ function SWBApp({ onGoHome }) {
   const swbMainRef = React.useRef(null);
   const [auditEntered,  setAuditEntered]  = React.useState(false);
   const [swbDropdowns,  setSwbDropdowns]  = React.useState({responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED});
+  const [historyError,  setHistoryError]  = React.useState("");
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([load(K_SWB_PROJECTS,[]),load(K_SWB_RESULTS,{}),load(K_SWB_META,{}),load(K_SWB_HISTORY,[]),load(K_SWB_DROPDOWNS,{responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setSwbDropdowns(dd);}
+      try{
+        let [p,r,m,h,dd]=await Promise.all([load(K_SWB_PROJECTS,[]),load(K_SWB_RESULTS,{}),load(K_SWB_META,{}),load(K_SWB_HISTORY,[]),load(K_SWB_DROPDOWNS,{responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED})]);
+        const photoMig = await migrateSitePhotos("swb",K_SWB_RESULTS,K_SWB_HISTORY,swbExtractPhotos);
+        if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
+        expirePhotoMigrationBackupIfStale("swb");
+        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setSwbDropdowns(dd);
+      }
       finally{setLoaded(true);}
     })();
   },[]);
@@ -10629,16 +10661,36 @@ function SWBApp({ onGoHome }) {
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,_photos:photos}}}};
   });
 
-  const resetBoard=(areaId,boardId)=>setAllResults(prev=>{
-    const site=prev[activeProject]||{};const ar=site[areaId]||{};
-    const cleared={};
-    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
-    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
-  });
+  // Reset Board discards without archiving anything — its photos (board-level _photos AND any legacy stray item.photos)
+  // must be freed here first, or replacing the board with `cleared` (which carries neither forward) silently orphans them
+  // in sitePhotoStore forever. This was previously a silent drop (harmless while photos were inline; a real leak once
+  // they live in IndexedDB) — fixed as part of the SWB stage per the approved plan.
+  const resetBoard=(areaId,boardId)=>{
+    const bd=((allResults[activeProject]||{})[areaId]||{})[boardId];
+    if (bd) sitePhotoStore.delPhotoList(swbBoardPhotoArrays(bd).flat());
+    setAllResults(prev=>{
+      const site=prev[activeProject]||{};const ar=site[areaId]||{};
+      const cleared={};
+      SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
+      return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
+    });
+  };
 
   const archiveAudit=()=>{
     const snap={id:swbUid(),projectId:activeProject,projectName:project&&project.name||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
+  };
+  // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
+  // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
+  const clearSiteResults=()=>{
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));
+  };
+  // Reset (site-level): nothing will reference these results afterward, so their photos must be freed here.
+  const discardSiteResults=()=>{
+    sitePhotoStore.delPhotoList(swbPhotoList(allResults[activeProject]));
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));
   };
 
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
@@ -10681,8 +10733,8 @@ function SWBApp({ onGoHome }) {
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #7e22ce, transparent 70%)',opacity:0.5}})
     )
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
-      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
+      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});sitePhotoStore.delPhotoList(swbPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(swbPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();clearSiteResults();setAuditEntered(false);},onReset:discardSiteResults,auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
@@ -10690,9 +10742,21 @@ function SWBApp({ onGoHome }) {
       ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
       ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
-      ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
+      ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home"),
+          onRemoveArea:areaId=>sitePhotoStore.delPhotoList(swbAreaPhotoList(allResults[activeProject],areaId)),
+          onRemoveBoard:(areaId,boardId)=>{const bd=((allResults[activeProject]||{})[areaId]||{})[boardId];if(bd)sitePhotoStore.delPhotoList(swbBoardPhotoArrays(bd).flat());}})
       ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns,onBack:()=>setView("home")})
-      ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onBack:()=>setView("home")})
+      ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,error:historyError,
+          onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(swbPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
+          onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),
+          onContinueFromSnap:async snap=>{
+            try{
+              const copied=await copySitePhotosForContinue(snap.results||{},swbExtractPhotos);
+              setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
+              confirmPhotoMigrationVerified("swb");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setHistoryError("");setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");
+            }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
+          },onBack:()=>setView("home")})
     )
     ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",                                  onClick:goHome,                                                                                     color:"#334155"})
@@ -10887,18 +10951,23 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
   const bs=swbBoardSummary(results,project.id,area.id,board.id);
   const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
   const [photos,setPhotosL]=React.useState(swbGetBoardPhotos(results,project.id,area.id,board.id));
+  const [photoError,setPhotoError]=React.useState("");
   const photoInputRef=React.useRef();
   const addPhotos=async e=>{
     const files=Array.from(e.target.files||[]);
     e.target.value="";
     if(!files.length) return;
-    const added=await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    const updated=[...photos,...added];
-    setPhotosL(updated);
-    onPatchPhotos(updated);
+    try{
+      const added=await siteStorePhotos(files);
+      setPhotoError("");
+      const updated=[...photos,...added];
+      setPhotosL(updated);
+      onPatchPhotos(updated);
+    }catch(_){setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full.");}
   };
-  const removePhoto=id=>{
-    const updated=photos.filter(p=>p.id!==id);
+  const removePhoto=photo=>{
+    sitePhotoStore.delPhoto(photo);
+    const updated=photos.filter(p=>p.id!==photo.id);
     setPhotosL(updated);
     onPatchPhotos(updated);
   };
@@ -10925,12 +10994,13 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"BOARD PHOTOS")
       ,photos.map(p=>React.createElement('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
-        ,React.createElement('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,React.createElement(SitePhoto,{photo:p,thumb:true,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
         ,React.createElement('div',{style:{flex:1,minWidth:0}})
-        ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p)})
       ))
       ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#7e22ce",border:"1px dashed #d8b4fe",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
+      ,photoError&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
       ,SWB_CHECKLIST.map(({key,label})=>{
@@ -11089,7 +11159,7 @@ function SWBReportView({project,results,meta,onBack}) {
 // ─────────────────────────────────────────────────────────────────────────
 // MANAGE VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBManageView({project,onUpdateProject,onBack}) {
+function SWBManageView({project,onUpdateProject,onBack,onRemoveArea,onRemoveBoard}) {
   const [newAreaName,setNewAreaName]=React.useState("");const [newBoardName,setNewBoardName]=React.useState({});
   const [expandedArea,setExpandedArea]=React.useState(null);const [editingProject,setEditingProject]=React.useState(false);
   const [projName,setProjName]=React.useState(project.name);
@@ -11106,9 +11176,9 @@ function SWBManageView({project,onUpdateProject,onBack}) {
   const SS=swbStyles();const upd=u=>onUpdateProject(u);
   const saveProj=async()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("swb",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("swb",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...(project.areas||[]),{id:swbSlug(newAreaName),name:newAreaName.trim(),boards:[]}]});setNewAreaName("");};
-  const delArea=id=>upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});
+  const delArea=id=>{onRemoveArea&&onRemoveArea(id);upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});};
   const addBoard=aid=>{const n=(newBoardName[aid]||"").trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:[...(a.boards||[]),{id:swbSlug(n),name:n}]}:a)});setNewBoardName(x=>({...x,[aid]:""}));};
-  const delBoard=(aid,bid)=>upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).filter(b=>b.id!==bid)}:a)});
+  const delBoard=(aid,bid)=>{onRemoveBoard&&onRemoveBoard(aid,bid);upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).filter(b=>b.id!==bid)}:a)});};
   const saveArea=aid=>{const n=editAreaName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,name:n}:a)});setEditingAreaId(null);};
   const saveBoard=(aid,bid)=>{const n=editBoardName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).map(b=>b.id===bid?{...b,name:n}:b)}:a)});setEditingBoard(null);};
   return React.createElement('div',{style:SS.listWrap}
@@ -11182,7 +11252,7 @@ function SWBManageView({project,onUpdateProject,onBack}) {
 // ─────────────────────────────────────────────────────────────────────────
 // HISTORY VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete,onExportSnap,onContinueFromSnap,onBack}) {
+function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete,onExportSnap,onContinueFromSnap,onBack,error}) {
   const [expanded,setExpanded]=React.useState(null);
   const SS=swbStyles();
 
@@ -11264,6 +11334,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   return React.createElement('div',{style:SS.listWrap}
     ,backBtn
     ,React.createElement('div',{style:SS.listTitle},"Audit History")
+    ,error&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginBottom:8}},error)
     ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
       let pass=0,fail=0,na=0,total=0;
