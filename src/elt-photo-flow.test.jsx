@@ -10,6 +10,7 @@ import JSZip from 'jszip';
 import crypto from 'crypto';
 import AppRoot from './App.jsx';
 import { JPEG_A, JPEG_B } from './test/jpeg-fixtures.js';
+import 'fake-indexeddb/auto'; // photos now live in IndexedDB (Stage 3, 2026-09-29), not inline in localStorage
 
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const bytes = url => Buffer.from(url.split(',')[1], 'base64');
@@ -27,14 +28,18 @@ beforeEach(() => {
   window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } };
   vi.stubGlobal('Image', class { set src(v) { this._s = v; queueMicrotask(() => { this.width = 4000; this.height = 3000; this.onload && this.onload(); }); } get src() { return this._s; } });
   HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
-  HTMLCanvasElement.prototype.toDataURL = () => (shot++ % 2 === 0 ? JPEG_A : JPEG_B); // 1st capture -> A, 2nd -> B
+  // siteStorePhotos generates a full (maxDim 1280) AND a thumbnail (maxDim 200) per photo — two toDataURL calls now, not
+  // one. Only the full-size call (canvas width > 200) should advance the JPEG_A/JPEG_B alternation.
+  HTMLCanvasElement.prototype.toDataURL = function () { return this.width > 200 ? (shot++ % 2 === 0 ? JPEG_A : JPEG_B) : 'data:image/jpeg;base64,AAAA'; };
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete window.webkit; });
 
-async function addPhoto(user) {
+async function addPhoto(user, assetKey, expectedLen) {
   const input = document.querySelector('input[type=file]');
   fireEvent.change(input, { target: { files: [new File([new Uint8Array([1, 2, 3])], 'cam.jpg', { type: 'image/jpeg' })] } });
-  await waitFor(() => expect(document.querySelectorAll('img[src^="data:image"]').length).toBeGreaterThan(0));
+  // photos now resolve to a blob: URL asynchronously via IndexedDB (SitePhoto/useSitePhotoUrl) — assert on the actual
+  // persisted state instead of a synchronous data: URL appearing in the DOM.
+  await waitFor(() => { const r = JSON.parse(localStorage.getItem('elt-results-v1') || '{}').p1 || {}; expect((r[assetKey] && r[assetKey].photos || []).length).toBe(expectedLen); });
 }
 
 describe('ELT photo -> export through the real UI', () => {
@@ -47,12 +52,12 @@ describe('ELT photo -> export through the real UI', () => {
 
     // fitting 1: photo + all four checks
     await user.click(await screen.findByText('SE Door'));
-    await addPhoto(user);
+    await addPhoto(user, 'a1', 1);
     for (let i = 0; i < 4; i++) await user.click(screen.getAllByRole('button', { name: 'PASS' })[i]);
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page
     // fitting 2: photo only, no checks at all
     await user.click(await screen.findByText('SW Roof'));
-    await addPhoto(user);
+    await addPhoto(user, 'a2', 1);
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page
 
     // both photos are in stored state
@@ -92,7 +97,7 @@ describe('ELT photo -> export through the real UI', () => {
     expect(screen.queryByRole('button', { name: /Complete Emergency Lighting Audit/ })).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('SE Door'));
-    await addPhoto(user);
+    await addPhoto(user, 'a1', 1);
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
     expect(await screen.findByRole('button', { name: /Complete Emergency Lighting Audit/ })).toBeInTheDocument();

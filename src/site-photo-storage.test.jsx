@@ -72,11 +72,14 @@ describe('migrateSitePhotos: round trip, byte-identical', () => {
     sitePhotoIO.thumbFromDataUrl = async url => url; // no real canvas in jsdom — the thumbnail is just the same bytes here
     try {
       const url1 = dataUrl(1), url2 = dataUrl(50);
+      // `results` is keyed by project/site id (the shape welder-results-v1/elt-results-v1 actually have); a history snapshot's
+      // own `.results` is already ONE site's results with no project-id wrapper (matching archiveAudit's real shape) — extract
+      // is applied per-site either way, so it only ever sees the `{board1:{_photos:[...]}}` shape, never the outer site1 layer.
       const results = { site1: { board1: { _photos: [{ id: 'old1', dataUrl: url1 }] } } };
-      const history = [{ id: 'h1', results: { site1: { board1: { _photos: [{ id: 'old2', dataUrl: url2 }] } } } }];
+      const history = [{ id: 'h1', results: { board1: { _photos: [{ id: 'old2', dataUrl: url2 }] } } }];
       localStorage.setItem('mock-results-v1', JSON.stringify(results));
       localStorage.setItem('mock-history-v1', JSON.stringify(history));
-      const extract = r => Object.values(r).flatMap(site => Object.values(site).map(b => b._photos || []));
+      const extract = siteResults => Object.values(siteResults).map(b => b._photos || []);
 
       const out = await migrateSitePhotos('mock', 'mock-results-v1', 'mock-history-v1', extract);
       expect(out.migrated).toBe(true);
@@ -85,7 +88,7 @@ describe('migrateSitePhotos: round trip, byte-identical', () => {
       const newResults = JSON.parse(localStorage.getItem('mock-results-v1'));
       const newHistory = JSON.parse(localStorage.getItem('mock-history-v1'));
       const p1 = newResults.site1.board1._photos[0];
-      const p2 = newHistory[0].results.site1.board1._photos[0];
+      const p2 = newHistory[0].results.board1._photos[0];
       expect(p1).toMatchObject({ w: 1280, h: 960 }); expect(p1.dataUrl).toBeUndefined(); expect(p1.id).toBeTruthy();
       expect(p2).toMatchObject({ w: 1280, h: 960 }); expect(p2.dataUrl).toBeUndefined();
 
@@ -108,7 +111,7 @@ describe('migrateSitePhotos: round trip, byte-identical', () => {
       const results = { site1: { board1: { _photos: [{ id: 'x', dataUrl: dataUrl(2) }] } } };
       localStorage.setItem('mock2-results-v1', JSON.stringify(results));
       localStorage.setItem('mock2-history-v1', JSON.stringify([]));
-      const extract = r => Object.values(r).flatMap(site => Object.values(site).map(b => b._photos || []));
+      const extract = siteResults => Object.values(siteResults).map(b => b._photos || []);
       await migrateSitePhotos('mock2', 'mock2-results-v1', 'mock2-history-v1', extract);
       const afterFirst = localStorage.getItem('mock2-results-v1');
       const out2 = await migrateSitePhotos('mock2', 'mock2-results-v1', 'mock2-history-v1', extract);
@@ -125,7 +128,7 @@ describe('migrateSitePhotos: round trip, byte-identical', () => {
       const results = { site1: { board1: { _photos: [{ id: 'bad', dataUrl: 'not-a-data-url-at-all' }, { id: 'good', dataUrl: good }] } } };
       localStorage.setItem('mock3-results-v1', JSON.stringify(results));
       localStorage.setItem('mock3-history-v1', JSON.stringify([]));
-      const extract = r => Object.values(r).flatMap(site => Object.values(site).map(b => b._photos || []));
+      const extract = siteResults => Object.values(siteResults).map(b => b._photos || []);
       const out = await migrateSitePhotos('mock3', 'mock3-results-v1', 'mock3-history-v1', extract);
       expect(out.migrated).toBe(true);
       expect(out.photoCount).toBe(1); // only the good one counted
@@ -152,7 +155,7 @@ describe('migrateSitePhotos: round trip, byte-identical', () => {
       const rawResultsJson = JSON.stringify(rawResults);
       localStorage.setItem('mock4-results-v1', rawResultsJson);
       localStorage.setItem('mock4-history-v1', JSON.stringify([]));
-      const extract = r => Object.values(r).flatMap(site => Object.values(site).map(b => b._photos || []));
+      const extract = siteResults => Object.values(siteResults).map(b => b._photos || []);
 
       const out = await migrateSitePhotos('mock4', 'mock4-results-v1', 'mock4-history-v1', extract);
       expect(out.failed).toBe(true);

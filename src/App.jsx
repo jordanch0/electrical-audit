@@ -149,6 +149,9 @@ function xjImageSize(dataUrl) {
 }
 const XJ_PHOTO_BOX = 140;   // an embedded photo fits a 140 x 140 px box at its NATURAL aspect (a 4:3 photo is 140 x 105; a portrait one 105 x 140) — never stretched
 function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.w > 0 ? s.w : 4, H = s && s.h > 0 ? s.h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
+// Same box math as xjPhotoBox, but from already-known dimensions (a sitePhotoStore/gsdPhotoStore pointer's stored {w,h}) rather
+// than re-parsing them out of a data URL — used once photos live in IndexedDB and the pointer already carries its own size.
+function xjPhotoBoxWH(w, h) { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
 const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
 // ── Company logo (Global Settings, 2026-09-27): a centred image strip in row 1, full sheet width, above the existing header block —
 // ONLY when a logo is set in Global Settings (no logo = today's exact output, byte-identical). Every direct-write header sheet reserves
@@ -341,12 +344,15 @@ function SitePhoto({ photo, thumb, style, alt }) {
 // original localStorage data completely untouched, so the module keeps working exactly as it did before migration was attempted
 // and will simply retry on the next app load. A single corrupt/undecodable photo is dropped (logged, not thrown) without
 // aborting the rest of the migration — only a STORAGE-level failure (IndexedDB unavailable/full) aborts and rolls back.
-// `extract(resultsObject)` must return every photo array reachable inside that module's results shape (module-specific: SWB's
-// board `_photos` + legacy stray `item.photos`; ELT/Welder's per-asset `photos`) — arrays are mutated in place, so callers must
-// never pass the live results object, only a fresh deep clone (this function clones internally; `extract` receives the clone).
+// `extractSite(oneSiteResultsObject)` must return every photo array reachable inside ONE SITE's results shape (module-specific:
+// SWB's board `_photos` + legacy stray `item.photos`; ELT/Welder's per-asset `photos`) — arrays are mutated in place, so callers
+// must never pass live data directly, only a fresh deep clone (this function clones internally; `extractSite` receives the
+// clone). Applied per-site: the live results key is keyed by project id (`{projectId: {...siteShape}}`), while a history
+// snapshot's own `.results` field is ALREADY one site's results with no project-id wrapper (that's how archiveAudit already
+// builds it) — `extractSite` only ever needs to understand the one, uniform per-site shape either way.
 // On success, the PRE-migration results/history are kept under `{module}-results-preMigration-v1` / `-history-preMigration-v1`
 // as a recovery backup — see `confirmPhotoMigrationVerified` / `expirePhotoMigrationBackupIfStale` for when that backup is removed.
-async function migrateSitePhotos(module, resultsKey, historyKey, extract) {
+async function migrateSitePhotos(module, resultsKey, historyKey, extractSite) {
   const flagKey = `${module}-photos-migrated-v1`;
   if (localStorage.getItem(flagKey)) return { skipped: true };
   const rawResults = await load(resultsKey, {});
@@ -374,13 +380,13 @@ async function migrateSitePhotos(module, resultsKey, historyKey, extract) {
     }
   };
   try {
-    for (const arr of extract(results)) await migrateArray(arr);
-    for (const snap of history) for (const arr of extract(snap.results || {})) await migrateArray(arr);
+    for (const siteResults of Object.values(results)) for (const arr of extractSite(siteResults)) await migrateArray(arr);
+    for (const snap of history) for (const arr of extractSite(snap.results || {})) await migrateArray(arr);
     await save(resultsKey, results); await save(historyKey, history);
     await save(`${module}-results-preMigration-v1`, rawResults);
     await save(`${module}-history-preMigration-v1`, rawHistory);
     localStorage.setItem(flagKey, new Date().toISOString());
-    return { migrated: true, photoCount };
+    return { migrated: true, photoCount, results, history };
   } catch (e) {
     await Promise.all(written.map(id => sitePhotoStore.del(id).catch(() => {})));
     return { failed: true, error: e };
@@ -402,6 +408,40 @@ function expirePhotoMigrationBackupIfStale(module) {
   if (!at) return;
   const ageDays = (Date.now() - new Date(at).getTime()) / 86400000;
   if (ageDays >= SITE_PHOTO_BACKUP_MAX_AGE_DAYS) confirmPhotoMigrationVerified(module);
+}
+// Flat per-asset results shape shared by ELT and Welder (results[assetId] = {...,photos:[]}) — every photo pointer reachable
+// in one site's results object. Used by Reset / delete-project / delete-history-snapshot to know what to free.
+const assetPhotoList = siteResults => Object.values(siteResults || {}).flatMap(r => (r && r.photos) || []);
+// Same shape, but returning the actual .photos ARRAYS (not their flattened contents) — the shape migrateSitePhotos's and
+// copySitePhotosForContinue's `extract` callbacks need, since they mutate each array in place.
+const assetResultsExtractPhotos = siteResults => Object.values(siteResults || {}).filter(a => Array.isArray(a && a.photos)).map(a => a.photos);
+// Continue-from-history, ownership-safe: copies every photo pointer `extract` finds in `results` to a NEW id in
+// sitePhotoStore, returning a deep-cloned, rewritten results object — the archived snapshot's own photo records are never
+// touched, so it stays independently valid (exportable, deletable) after the copy becomes live and mutable. A photo whose
+// record is already gone is dropped, never left dangling (matches GSD's continueFromSnap at App.jsx). On ANY failure partway
+// through, every copy already made this call is rolled back and the error rethrown — the caller's live state must not be
+// touched until this resolves, so a failed Continue never leaves a half-copied audit live.
+async function copySitePhotosForContinue(results, extract) {
+  const cloned = JSON.parse(JSON.stringify(results || {}));
+  const copiedIds = [];
+  try {
+    for (const arr of extract(cloned)) {
+      for (let i = 0; i < arr.length; i++) {
+        const p = arr[i]; if (!p || !p.id) continue;
+        const full = await sitePhotoStore.get(p.id);
+        if (!full) { arr.splice(i, 1); i--; continue; } // the original photo record is gone: drop it, never left dangling
+        const thumb = await sitePhotoStore.get(p.id + "~t");
+        const nid = uid();
+        await sitePhotoStore.put(nid, full); copiedIds.push(nid);
+        if (thumb) { await sitePhotoStore.put(nid + "~t", thumb); copiedIds.push(nid + "~t"); }
+        arr[i] = { ...p, id: nid };
+      }
+    }
+    return cloned;
+  } catch (e) {
+    await Promise.all(copiedIds.map(id => sitePhotoStore.del(id).catch(() => {})));
+    throw e;
+  }
 }
 // Import extraction (2026-09-27): if the imported file carries an embedded logo (our own export header strip), pull it back out so it
 // becomes the new site's per-site logo override — the same round-trip Company/ABN/Licence already get. SheetJS (the community `xlsx`
@@ -11813,8 +11853,14 @@ async function exportELTExcel(project, allResults, meta) {
   }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
-  // (the register itself only lists tested fittings).
+  // (the register itself only lists tested fittings). Photos live in sitePhotoStore (Stage 3, 2026-09-29) as {id,w,h}
+  // pointers, not inline dataUrl — resolve every one into a small export-sized copy BEFORE building the sheet (GSD's pattern).
   const withPhotos = areaAssets(project).map(a=>({asset:a,res:eltGetRes(allResults||{},project.id,a.id)})).filter(x=>(x.res.photos||[]).length>0);
+  const photoCopies = new Map();
+  for (const { res } of withPhotos) for (const p of res.photos || []) if (!photoCopies.has(p.id)) {
+    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+  }
+  const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
     const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
@@ -11824,12 +11870,13 @@ async function exportELTExcel(project, allResults, meta) {
       r.photos.forEach(p=>{
         const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
         pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
-        const bx = xjPhotoBox(p.dataUrl); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
-        const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+        const bx = xjPhotoBoxWH(p.w, p.h); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
+        const copy = photoCopies.get(p.id);
+        const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
         if (m) {
           let ext = m[1]==="jpg"?"jpeg":m[1];
           if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
-          const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+          const imgId = wb.addImage({base64:copy.dataUrl,extension:ext});
           ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
         }
         pr++;
@@ -11841,6 +11888,7 @@ async function exportELTExcel(project, allResults, meta) {
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("elt");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
 // A retired default type that means the same as a current default: shown as the current one, stored value left untouched.
@@ -11876,11 +11924,19 @@ function ELTApp({ onGoHome }) {
   const [view,          setView]          = React.useState("projects");
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [eltDropdowns, setEltDropdowns] = React.useState(ELT_DEFAULT_DROPDOWNS);
+  const [historyError, setHistoryError] = React.useState("");
   const eltMainRef = React.useRef(null);
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});}
+      try{
+        let [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);
+        await save(K_ELT_HISTORY,h);   // persist the (possibly just area-migrated) v2 history BEFORE the photo migration reads that key directly
+        const photoMig = await migrateSitePhotos("elt",K_ELT_RESULTS,K_ELT_HISTORY,assetResultsExtractPhotos);
+        if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
+        expirePhotoMigrationBackupIfStale("elt");
+        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});
+      }
       finally{setLoaded(true);}
     })();
   },[]);
@@ -11904,10 +11960,22 @@ function ELTApp({ onGoHome }) {
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
+  const today = ()=>new Date().toISOString().slice(0,10);
+  // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
+  // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
+  const clearSiteResults = ()=>{
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+  };
+  // Reset: nothing will reference these results afterward (unlike Complete Audit, nothing was archived first), so their
+  // photos must be freed here or they'd be orphaned in sitePhotoStore forever.
+  const discardSiteResults = ()=>{
+    sitePhotoStore.delPhotoList(assetPhotoList(allResults[activeProject]));
+    clearSiteResults();
+  };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
-  const today = ()=>new Date().toISOString().slice(0,10);
 
   useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");   // the list level's key never includes the (still-set) asset id
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
@@ -11942,14 +12010,24 @@ function ELTApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
-      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:discardSiteResults})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
-      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
+      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>{const site=allResults[activeProject]||{};sitePhotoStore.delPhotoList(assetPhotoList(Object.fromEntries(ids.map(id=>[id,site[id]]))));setAllResults(prev=>removeAssetResults(prev,activeProject,ids));}})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:true,reserved:["Other"]})
-      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,error:historyError,
+          onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(assetPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
+          onExportSnap:snap=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}),
+          onContinueFromSnap:async snap=>{
+            try{
+              const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
+              setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
+              confirmPhotoMigrationVerified("elt");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setHistoryError("");setViewSnap(null);setView("audit");
+            }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
+          }})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_HOME,   label:"Home",   active:view==="home",                   onClick:goHome,                    color:"#334155"})
@@ -12277,15 +12355,16 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
   // ★ defaults are stored when the fitting becomes FAIL (derived at fitting level), same as Welder
   useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
   const photoRef = React.useRef();
+  const [photoError, setPhotoError] = React.useState("");
   const rRef = React.useRef(r); rRef.current = r;
   const setPhotos = photos=>set({photos});
   const addPhotos = async e=>{
     const files = Array.from(e.target.files||[]); e.target.value="";
     if(!files.length) return;
-    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    setPhotos([...(rRef.current.photos||[]),...added]);
+    try { const added = await siteStorePhotos(files); setPhotoError(""); setPhotos([...(rRef.current.photos||[]),...added]); }
+    catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
   };
-  const removePhoto = id=>setPhotos((r.photos||[]).filter(p=>p.id!==id));
+  const removePhoto = photo=>{ sitePhotoStore.delPhoto(photo); setPhotos((rRef.current.photos||[]).filter(p=>p.id!==photo.id)); };
   const sub = [asset.location,eltTypeLabel(asset),asset.maintained,asset.assetId&&`#${asset.assetId}`].filter(Boolean).join(" · ");
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,eltEl(ELTBackBtn,{onClick:onClose})
@@ -12300,12 +12379,13 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
     ,eltEl('div',{style:{margin:"14px 0 16px"}}
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
       ,(r.photos||[]).map(p=>eltEl('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
-        ,eltEl('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,eltEl(SitePhoto,{photo:p,thumb:true,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
         ,eltEl('div',{style:{flex:1,minWidth:0}})
-        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p)})
       ))
       ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:ELT_COLOR,border:`1px dashed ${ELT_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
+      ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
     ,eltEl('div',{style:{display:"flex",gap:6,marginBottom:14}},(()=>{ const sum = eltFittingSummary(r);
@@ -12492,7 +12572,7 @@ function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
   );
 }
 
-function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
+function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error}) {
   const SS = swbStyles();
   const [expanded,setExpanded] = React.useState(null);
   const snapStats = snap=>eltSummary({id:project.id,areas:snap.areas||project.areas||[]},{[project.id]:snap.results||{}});
@@ -12524,6 +12604,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
   }
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Audit History")
+    ,error&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginBottom:8}},error)
     ,history.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No archived audits yet. Use “Complete Emergency Lighting Audit” on the Home tab.")
     ,history.map(snap=>{
       const s = snapStats(snap);
@@ -14382,14 +14463,15 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
   useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
   const patchItem = (key,patch)=>{ const items = {...(rRef.current.items||{}),[key]:{...welderItem(rRef.current,key),...patch}}; set({items}); };
   const photoRef = React.useRef();
+  const [photoError, setPhotoError] = React.useState("");
   const setPhotos = photos=>set({photos});
   const addPhotos = async e=>{
     const files = Array.from(e.target.files||[]); e.target.value="";
     if(!files.length) return;
-    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    setPhotos([...(rRef.current.photos||[]),...added]);
+    try { const added = await siteStorePhotos(files); setPhotoError(""); setPhotos([...(rRef.current.photos||[]),...added]); }
+    catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
   };
-  const removePhoto = id=>setPhotos((rRef.current.photos||[]).filter(p=>p.id!==id));
+  const removePhoto = photo=>{ sitePhotoStore.delPhoto(photo); setPhotos((rRef.current.photos||[]).filter(p=>p.id!==photo.id)); };
   const ro = (lbl,val)=>eltEl('div',{key:lbl,style:{minWidth:0}}
     ,eltEl('div',{style:{fontSize:9,color:"#6e6a66",letterSpacing:0.8,fontWeight:700}},lbl)
     ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
@@ -14465,12 +14547,13 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     ,eltEl('div',{style:{margin:"6px 0 16px"}}
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
       ,(r.photos||[]).map(p=>eltEl('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
-        ,eltEl('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,eltEl(SitePhoto,{photo:p,thumb:true,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
         ,eltEl('div',{style:{flex:1,minWidth:0}})
-        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p)})
       ))
       ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:WELDER_COLOR,border:`1px dashed ${WELDER_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
+      ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,nextDue&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
       ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
@@ -14585,7 +14668,7 @@ function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
   );
 }
 
-function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
+function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error}) {
   const SS = swbStyles();
   const [expanded,setExpanded] = React.useState(null);
   const snapProject = snap=>({...project,areas:snap.areas||project.areas||[]});
@@ -14618,6 +14701,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
   }
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Audit History")
+    ,error&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginBottom:8}},error)
     ,history.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No archived audits yet. Use “Complete Welder Audit” on the Home tab.")
     ,history.map(snap=>{
       const s = snapStats(snap);
@@ -14675,6 +14759,14 @@ async function exportWelderExcel(project, allResults, meta) {
   const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
   const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
   const rows = welderRegisterRows(project, allResults, meta);
+  // Photos now live in sitePhotoStore (Stage 2, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
+  // referenced by this export's own rows into a small export-sized copy BEFORE building any sheet (same pattern as GSD's
+  // exportGSDExcel). A photo whose record is missing is skipped, its space kept, never a broken image reference.
+  const photoCopies = new Map();
+  for (const row of rows) for (const p of (row.res && row.res.photos) || []) if (!photoCopies.has(p.id)) {
+    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+  }
+  const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
 
   // ── Register ──
   const ws = wb.addWorksheet("Register");
@@ -14746,12 +14838,13 @@ async function exportWelderExcel(project, allResults, meta) {
     (raw.photos||[]).forEach((p,pi)=>{
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
-      const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+      const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
+      const copy = photoCopies.get(p.id);
+      const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
-        const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+        const imgId = wb.addImage({base64:copy.dataUrl,extension:ext});
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
@@ -14762,6 +14855,7 @@ async function exportWelderExcel(project, allResults, meta) {
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("welder");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
 function WelderApp({ onGoHome }) {
@@ -14775,11 +14869,19 @@ function WelderApp({ onGoHome }) {
   const [view,          setView]          = React.useState("projects");
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [dropdowns, setDropdowns] = React.useState(WELDER_DEFAULT_DROPDOWNS);
+  const [historyError, setHistoryError] = React.useState("");
   const mainRef = React.useRef(null);
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),loadVersioned(K_WELDER_HISTORY,K_WELDER_HISTORY_V1,[],migrateHistoryList),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});}
+      try{
+        let [p,r,m,h,dd]=await Promise.all([loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),loadVersioned(K_WELDER_HISTORY,K_WELDER_HISTORY_V1,[],migrateHistoryList),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);
+        await save(K_WELDER_HISTORY,h);   // persist the (possibly just area-migrated) v2 history BEFORE the photo migration reads that key directly
+        const photoMig = await migrateSitePhotos("welder",K_WELDER_RESULTS,K_WELDER_HISTORY,assetResultsExtractPhotos);
+        if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
+        expirePhotoMigrationBackupIfStale("welder");
+        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});
+      }
       finally{setLoaded(true);}
     })();
   },[]);
@@ -14804,9 +14906,17 @@ function WelderApp({ onGoHome }) {
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
+  // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
+  // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
   const clearSiteResults = ()=>{
     setAllResults(prev=>({...prev,[activeProject]:{}}));
     setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+  };
+  // Reset: nothing will reference these results afterward (unlike Complete Audit, nothing was archived first), so their
+  // photos must be freed here or they'd be orphaned in sitePhotoStore forever.
+  const discardSiteResults = ()=>{
+    sitePhotoStore.delPhotoList(assetPhotoList(allResults[activeProject]));
+    clearSiteResults();
   };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
@@ -14849,14 +14959,24 @@ function WelderApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${WELDER_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:mainRef}
-      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:clearSiteResults})
+      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:discardSiteResults})
       ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(WelderReportView,{project,results:allResults,meta})
-      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
+      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>{const site=allResults[activeProject]||{};sitePhotoStore.delPhotoList(assetPhotoList(Object.fromEntries(ids.map(id=>[id,site[id]]))));setAllResults(prev=>removeAssetResults(prev,activeProject,ids));}})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns,setDropdowns,onBack:goHome,lists:WELDER_DROPDOWN_LISTS,hint:"These lists feed the Welder defect dropdowns. Tap ★ to move an option to the top.",showDefault:true})
-      ,view==="history"&&project&&eltEl(WelderHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:exportSnap,onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+      ,view==="history"&&project&&eltEl(WelderHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,error:historyError,
+          onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(assetPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
+          onExportSnap:exportSnap,
+          onContinueFromSnap:async snap=>{
+            try{
+              const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
+              setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
+              confirmPhotoMigrationVerified("welder");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setHistoryError("");setViewSnap(null);setView("audit");
+            }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
+          }})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,navBtn(NAV_ICON_HOME,"Home",view==="home",goHome)
@@ -15498,5 +15618,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
-  sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS };
+  sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
+  assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export default AppRoot;
