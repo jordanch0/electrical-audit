@@ -206,8 +206,10 @@ const appLogoStore = {
   del: () => appLogoTx("readwrite", s => s.delete(APP_LOGO_ID)),
 };
 // ── Per-site logo override (2026-09-27): a site's OWN logo, overriding the global one, exactly like Company/ABN/Licence already override the
-// global pre-fill per site. Keyed by `${module}:${siteId}` — every module creates sites with `id: slugify(name)` (no random suffix), so two
-// different modules' sites can share an id; the module prefix keeps their logos from colliding. Presence in this store IS the override: there
+// global pre-fill per site. Keyed by `${module}:${siteId}` — every module creates sites via `slugify(name)`, which DOES append a random uid()
+// suffix (corrected 2026-09-28: an earlier version of this comment said "no random suffix", which was wrong), so an id collision — within one
+// module or across two different modules — is already very unlikely on its own. The module prefix is defence in depth on top of that, not a
+// fix for a real observed collision. Presence in this store IS the override: there
 // is no flag on the project object, so a site created before this feature (or one whose logo was never set) just falls through to global,
 // with no migration needed — the same shape as Company/ABN/Licence's own fallback story.
 const SITE_LOGO_DB_NAME = "sparkcheck-site-logos", SITE_LOGO_DB_STORE = "logos";
@@ -238,6 +240,168 @@ async function xjGetLogoDataUrl(module, siteId) {
   try { const site = await siteLogoStore.get(module, siteId); if (site) return gsdRecToDataUrl(site); } catch (_) { /* fall through to global */ }
   const s = loadAppSettings(); if (!s.logoId) return null;
   try { const rec = await appLogoStore.get(); return rec ? gsdRecToDataUrl(rec) : null; } catch (_) { return null; }
+}
+// ── Shared site-photo storage (SWB / ELT / Welder), 2026-09-29 ─────────────────────────────────────────────────────────────
+// Moves these three modules' photos out of inline base64 in localStorage (each module's own `-results-v{n}` / `-history-v{n}`
+// keys, which share a ~5 MB per-origin quota with everything else) into IndexedDB, following GSD's already-proven pattern
+// (`gsdPhotoStore` below): each photo is TWO records, the full image (long edge <= 1280) under its id, and a thumbnail
+// (long edge 200) under `id + "~t"`. A photo's app-visible shape becomes a pointer, `{id, w, h}` — never `dataUrl` again.
+// A SEPARATE IndexedDB database from GSD's own `sparkcheck-gsd-photos` on purpose: GSD's store already works and is tested;
+// there is no benefit to consolidating it with three more modules' traffic, only migration risk to an already-working module.
+const SITE_PHOTO_DB_NAME = "sparkcheck-site-photos", SITE_PHOTO_DB_STORE = "photos";
+let _sitePhotoDb = null;
+function sitePhotoOpenDb() {
+  if (!_sitePhotoDb) _sitePhotoDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(SITE_PHOTO_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(SITE_PHOTO_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _sitePhotoDb = null; throw e; });
+  return _sitePhotoDb;
+}
+const sitePhotoTx = (mode, fn) => sitePhotoOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(SITE_PHOTO_DB_STORE, mode); const r = fn(tx.objectStore(SITE_PHOTO_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+// records are {buf: ArrayBuffer, type} — plain data, no Blob in the store (matches gsdPhotoStore's shape exactly)
+const sitePhotoStore = {
+  put: (id, rec) => sitePhotoTx("readwrite", s => s.put(rec, id)),
+  get: id => sitePhotoTx("readonly", s => s.get(id)),
+  del: id => sitePhotoTx("readwrite", s => s.delete(id)),
+  delPhoto: p => Promise.all([sitePhotoStore.del(p.id), sitePhotoStore.del(p.id + "~t")]).catch(() => {}),
+  // for records shaped like GSD's ({photos:[...]} on each item)
+  delItems: items => Promise.all((items || []).flatMap(i => (i.photos || []).map(p => sitePhotoStore.delPhoto(p)))),
+  // for a bare photo array not wrapped in an owning record — SWB's board-level `_photos` is exactly this shape
+  delPhotoList: photos => Promise.all((photos || []).map(p => sitePhotoStore.delPhoto(p))),
+};
+// The two image operations behind one object, same reasoning as gsdPhotoIO: tests can supply deterministic ones (jsdom has no canvas).
+const sitePhotoIO = {
+  async resize(file) {
+    const fullUrl = await resizeImageToDataUrl(file); const thumbUrl = await resizeImageToDataUrl(file, 200, 0.6);
+    const { w, h } = await gsdImageSize(fullUrl);
+    return { full: gsdDataUrlToRec(fullUrl), thumb: gsdDataUrlToRec(thumbUrl), w, h };
+  },
+  // stored full image -> a small copy for export embedding: { dataUrl } (long edge <= maxSide) — same as gsdPhotoIO.exportCopy
+  async exportCopy(rec, maxSide = 320) {
+    const url = gsdRecToDataUrl(rec); const { w, h } = await gsdImageSize(url); const s = Math.min(1, maxSide / Math.max(w, h));
+    if (s >= 1 || typeof document === "undefined") return { dataUrl: url };
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+    const im = new Image(); await new Promise(r => { im.onload = r; im.onerror = r; im.src = url; });
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.7) };
+  },
+  // A full-size data URL -> a small thumbnail data URL (long edge 200, quality 0.6). Behind this swappable object for the same
+  // reason as `resize`/`exportCopy`: jsdom has no real canvas, so migrateSitePhotos's migration path (which has no File to hand
+  // resizeImageToDataUrl, only an already-decoded data URL) needs a stubbable seam for its own thumbnail generation. Falls back
+  // to the source data URL unchanged if canvas/Image aren't usable (never throws — a migrated photo just keeps a full-size "thumbnail").
+  async thumbFromDataUrl(dataUrl, w, h) {
+    if (typeof document === "undefined") return dataUrl;
+    return new Promise(res => {
+      try {
+        const c = document.createElement("canvas"); const im = new Image();
+        im.onload = () => {
+          const iw = im.naturalWidth || w || 4, ih = im.naturalHeight || h || 3;
+          const s = Math.min(1, 200 / Math.max(iw, ih));
+          c.width = Math.max(1, Math.round(iw * s)); c.height = Math.max(1, Math.round(ih * s));
+          const ctx = c.getContext("2d");
+          if (!ctx) { res(dataUrl); return; }
+          ctx.drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL("image/jpeg", 0.6));
+        };
+        im.onerror = () => res(dataUrl); im.src = dataUrl;
+      } catch (_) { res(dataUrl); }
+    });
+  },
+  // Reads a data URL's pixel dimensions. A thin, swappable wrapper around gsdImageSize (jsdom has no real
+  // image decoder, so tests stub this the same way they stub `resize`/`exportCopy`/`thumbFromDataUrl` above).
+  imageSize: url => gsdImageSize(url),
+};
+async function siteStorePhotos(files) {
+  const out = [];
+  for (const f of files) { const r = await sitePhotoIO.resize(f); const id = uid(); await sitePhotoStore.put(id, r.full); await sitePhotoStore.put(id + "~t", r.thumb); out.push({ id, w: r.w, h: r.h }); }
+  return out;
+}
+function useSitePhotoUrl(id) {
+  const [url, setUrl] = React.useState("");
+  React.useEffect(() => {
+    let alive = true, u = "";
+    if (!id || typeof URL.createObjectURL !== "function") return undefined;
+    sitePhotoStore.get(id).then(rec => { if (!alive || !rec) return; u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setUrl(u); }).catch(() => {});
+    return () => { alive = false; if (u && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(u); };
+  }, [id]);
+  return url;
+}
+function SitePhoto({ photo, thumb, style, alt }) {
+  const url = useSitePhotoUrl(photo ? photo.id + (thumb ? "~t" : "") : "");
+  return url ? React.createElement("img", { src: url, alt: alt || "", style }) : React.createElement("div", { style: { ...style, background: "#d4d4d8" }, "aria-hidden": true });
+}
+
+// One-time migration: moves inline {id, dataUrl} photos found by `extract` out of a module's results/history localStorage keys
+// into sitePhotoStore, replacing them with {id, w, h} pointers. Idempotent via `${module}-photos-migrated-v1` (never re-runs once
+// set); never leaves a half-migrated state — a failure part-way through rolls back every photo this run wrote and leaves the
+// original localStorage data completely untouched, so the module keeps working exactly as it did before migration was attempted
+// and will simply retry on the next app load. A single corrupt/undecodable photo is dropped (logged, not thrown) without
+// aborting the rest of the migration — only a STORAGE-level failure (IndexedDB unavailable/full) aborts and rolls back.
+// `extract(resultsObject)` must return every photo array reachable inside that module's results shape (module-specific: SWB's
+// board `_photos` + legacy stray `item.photos`; ELT/Welder's per-asset `photos`) — arrays are mutated in place, so callers must
+// never pass the live results object, only a fresh deep clone (this function clones internally; `extract` receives the clone).
+// On success, the PRE-migration results/history are kept under `{module}-results-preMigration-v1` / `-history-preMigration-v1`
+// as a recovery backup — see `confirmPhotoMigrationVerified` / `expirePhotoMigrationBackupIfStale` for when that backup is removed.
+async function migrateSitePhotos(module, resultsKey, historyKey, extract) {
+  const flagKey = `${module}-photos-migrated-v1`;
+  if (localStorage.getItem(flagKey)) return { skipped: true };
+  const rawResults = await load(resultsKey, {});
+  const rawHistory = await load(historyKey, []);
+  const results = JSON.parse(JSON.stringify(rawResults));
+  const history = JSON.parse(JSON.stringify(rawHistory));
+  const written = []; // ids (both full and ~t) written this run, for rollback on a storage-level failure
+  let photoCount = 0;
+  const migrateArray = async arr => {
+    for (let i = 0; i < arr.length; i++) {
+      const p = arr[i];
+      if (!p || !p.dataUrl) continue; // already the new pointer shape, or malformed — leave it exactly as-is
+      let rec, thumbRec, w, h;
+      try {
+        rec = gsdDataUrlToRec(p.dataUrl);
+        if (!rec) { arr.splice(i, 1); i--; continue; } // undecodable: drop this one photo, keep migrating the rest
+        ({ w, h } = await sitePhotoIO.imageSize(p.dataUrl));
+        const thumbUrl = await sitePhotoIO.thumbFromDataUrl(p.dataUrl, w, h);
+        thumbRec = gsdDataUrlToRec(thumbUrl) || rec;
+      } catch (_) { arr.splice(i, 1); i--; continue; } // a decode-time failure is per-photo, never fatal to the whole migration
+      const id = uid();
+      await sitePhotoStore.put(id, rec); written.push(id);           // a rejection HERE (IndexedDB full/unavailable) propagates —
+      await sitePhotoStore.put(id + "~t", thumbRec); written.push(id + "~t"); // that's a storage-level failure, and the catch below rolls back
+      arr[i] = { id, w, h }; photoCount++;
+    }
+  };
+  try {
+    for (const arr of extract(results)) await migrateArray(arr);
+    for (const snap of history) for (const arr of extract(snap.results || {})) await migrateArray(arr);
+    await save(resultsKey, results); await save(historyKey, history);
+    await save(`${module}-results-preMigration-v1`, rawResults);
+    await save(`${module}-history-preMigration-v1`, rawHistory);
+    localStorage.setItem(flagKey, new Date().toISOString());
+    return { migrated: true, photoCount };
+  } catch (e) {
+    await Promise.all(written.map(id => sitePhotoStore.del(id).catch(() => {})));
+    return { failed: true, error: e };
+  }
+}
+// The migration keeps a pre-migration backup (see migrateSitePhotos) precisely so a bug in the migration itself isn't a
+// silent, unrecoverable photo loss. Deleting that backup immediately would free localStorage sooner but remove the safety
+// net before anything has actually PROVEN the migrated photos read back correctly; deleting it only once a real action reads
+// them back (an export that embeds a migrated photo, or a completed Continue-from-history round trip) is the actual proof.
+function confirmPhotoMigrationVerified(module) {
+  localStorage.removeItem(`${module}-results-preMigration-v1`);
+  localStorage.removeItem(`${module}-history-preMigration-v1`);
+}
+// Outer bound regardless of whether the verifying trigger above ever fires (e.g. a site that's never exported or Continued
+// since migrating) — the backup can't linger forever on a device that never happens to trigger the real check.
+const SITE_PHOTO_BACKUP_MAX_AGE_DAYS = 14;
+function expirePhotoMigrationBackupIfStale(module) {
+  const at = localStorage.getItem(`${module}-photos-migrated-v1`);
+  if (!at) return;
+  const ageDays = (Date.now() - new Date(at).getTime()) / 86400000;
+  if (ageDays >= SITE_PHOTO_BACKUP_MAX_AGE_DAYS) confirmPhotoMigrationVerified(module);
 }
 // Import extraction (2026-09-27): if the imported file carries an embedded logo (our own export header strip), pull it back out so it
 // becomes the new site's per-site logo override — the same round-trip Company/ABN/Licence already get. SheetJS (the community `xlsx`
@@ -15333,5 +15497,6 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField };
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
+  sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS };
 export default AppRoot;
