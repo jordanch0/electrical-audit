@@ -573,8 +573,48 @@ const K_HISTORY   = "rcd-history-v6";
 const K_DROPDOWNS = "rcd-dropdowns-v6";
 const K_MODE      = "rcd-mode-v6";        // active audit mode: "push"|"inject"|null
 const load = async (key, fallback) => { try { const r=localStorage.getItem(key); return r?JSON.parse(r):fallback; } catch(_) { return fallback; } };
-let _storageWarnShown = false;
-const save = async (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) { if(!_storageWarnShown){ _storageWarnShown=true; console.error('Storage save failed:',e); try{ const el=document.createElement('div'); el.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#fee2e2;color:#991b1b;border:1px solid #dc2626;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;z-index:9999;max-width:320px;text-align:center;'; el.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Storage full — data may not be saved. Clear old history or browser data.'; document.body.appendChild(el); setTimeout(()=>{ _storageWarnShown=false; el.remove(); },6000); }catch(_){} } } };
+// STORAGE SAFETY NET (2026-09-29). localStorage has no standard quota-check API and no browser guarantees more than ~5MB per
+// origin (Safari's floor; Chrome/Firefox allow more but 5MB is the number every browser meets or exceeds) — that is still the
+// right assumption to warn against here, even now that ELT/Welder/SWB/GSD photos live in IndexedDB (a separate, much larger,
+// disk-quota-based store with its own per-call error handling in sitePhotoStore/gsdPhotoStore — NOT what this `save()` guards).
+// What's left in localStorage is structured JSON only (sites, results, meta, dropdowns, capped-at-100 history snapshots), so
+// the 5MB ceiling is far less likely to be hit day-to-day than when photos were inline — but a save can still fail (many sites,
+// long history, a very large hierarchy), and when it does the user must not be left thinking their work was saved.
+const STORAGE_QUOTA_ASSUMED_BYTES = 5 * 1024 * 1024;
+function localStorageUsageBytes() {
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i); if (k == null) continue;
+      const v = localStorage.getItem(k) || "";
+      total += (k.length + v.length) * 2; // UTF-16: JS strings are 2 bytes/code unit — a safe (over-, never under-) estimate
+    }
+  } catch (_) {}
+  return total;
+}
+function fmtBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+  return (n / (1024 * 1024)).toFixed(2) + " MB";
+}
+let _storageFullBannerEl = null; // tracks the live blocking banner so a second failed save never stacks a duplicate
+const save = async (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {
+  console.error('Storage save failed:', e);
+  try {
+    if (_storageFullBannerEl && document.body.contains(_storageFullBannerEl)) return; // already showing
+    const el = document.createElement('div');
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;background:#fee2e2;color:#991b1b;border:1px solid #dc2626;border-radius:12px;padding:14px 16px;font-size:13px;font-weight:700;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);display:flex;align-items:flex-start;gap:10px;max-width:480px;margin:0 auto;';
+    el.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span style="flex:1">Storage full: your latest changes were NOT saved. Export now, then free space.</span>';
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button'; dismiss.textContent = '✕'; dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.style.cssText = 'flex-shrink:0;background:transparent;border:none;color:#991b1b;font-size:16px;font-weight:800;cursor:pointer;line-height:1;padding:0;';
+    dismiss.onclick = () => { el.remove(); if (_storageFullBannerEl === el) _storageFullBannerEl = null; };
+    el.appendChild(dismiss);
+    document.body.appendChild(el);
+    _storageFullBannerEl = el; // stays until the user dismisses it — no auto-hide timeout
+  } catch (_) {}
+} };
 // ─────────────────────────────────────────────────────────────────────────
 // DATA HELPERS
 // ─────────────────────────────────────────────────────────────────────────
@@ -965,7 +1005,9 @@ function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allow
       , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
 }
 // useScrollMemory(ref, key, remember): the app's one scroll rule for a module's main scroll container.
-//   - a DRILL-DOWN LIST level (remember = true) keeps its scroll position: leaving it (into an item / test page or down a level) and coming back Back restores where you were;
+//   - a DRILL-DOWN LIST level (remember = true) keeps its scroll position: leaving it (into an item / test page or down a level) and coming back Back restores where you were.
+//     This includes the top-level SITES LIST (view==="projects") — a long site list scrolls exactly like an area/board list, but it was missed when this hook
+//     was first rolled out (2026-09-27) because it reads as a "tab view" rather than a drill-down level; fixed across all 9 modules 2026-09-29.
 //   - everything else (an item / test detail page, Home, Report, History, Manage, Dropdowns) starts at the TOP when entered.
 // key identifies the level (view + the open area / panel / board / item), so each list level has its own remembered position. Positions are tracked with a scroll
 // listener (not read at navigation time — by then the shorter detail page has already clamped the container's scrollTop).
@@ -1271,7 +1313,7 @@ return snap;
 };
 const goProjects=()=>{setView("projects");setActiveProject(null);setMode(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
 const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
-useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
+useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
 if(!loaded) return React.createElement('div', { style: S.loader,}, React.createElement('div', { style: S.loaderSpinner,}), React.createElement('p', { style: {color:"#6e6a66",marginTop:16},}, "Loading…"));
 const modeColor=mode==="push"?"#a3530f":"#1d4ed8";
 const modeLabel=mode==="push"?"PUSH TEST":"INJECTION TEST";
@@ -2583,7 +2625,7 @@ saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
 bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
 homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
 brandBlock:{textAlign:"center",borderBottom:"2px solid #a3530f",paddingBottom:8,width:"100%",maxWidth:500},
 brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#a3530f"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -2974,7 +3016,7 @@ function IELApp({ onGoHome }) {
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveCat(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
 
-  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
+  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
   if(!loaded)return React.createElement('div',{style:SI.loader},React.createElement('div',{style:SI.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   const catColor = catInfo?catInfo.color:"#047857";
@@ -4047,7 +4089,7 @@ const SI={
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #047857",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#047857"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -4442,7 +4484,7 @@ function CalendarApp({ onGoHome }) {
     root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans',sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden",maxWidth:"100vw"},
     topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",borderBottom:"2px solid #a5b4fc",flexShrink:0},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,maxWidth:"100%"},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
     formWrap:{padding:"16px",boxSizing:"border-box",width:"100%",maxWidth:"100%",overflowX:"hidden"},
   };
 
@@ -5090,7 +5132,7 @@ function TATApp({ onGoHome }) {
   const summary=project?tatSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0,untested:0};
   const canGoBack=view!=="projects";
 
-  useScrollMemory(tatMainRef,[view,activeAreaId,detailItemId||""].join("|"),view==="audit"&&!detailItemId);
+  useScrollMemory(tatMainRef,[view,activeAreaId,detailItemId||""].join("|"),(view==="projects"||view==="audit")&&!detailItemId);
   if(!loaded)return React.createElement('div',{style:ST.loader},React.createElement('div',{style:ST.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   return React.createElement('div',{style:ST.root}
@@ -6240,7 +6282,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #1d4ed8",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -6743,7 +6785,7 @@ const STH = {
     background: "#f7f6f3",
     borderTop: "1px solid #e4e4e7",
     flexShrink: 0,
-    paddingBottom: "34px",
+    paddingBottom: "env(safe-area-inset-bottom, 0px)",
     boxShadow: "0 200px 0 200px #f7f6f3"
   },
   listWrap: {
@@ -9654,7 +9696,7 @@ function ThermoApp({
       goHome();
     } else goProjects();
   };
-  useScrollMemory(thermoMainRef,[view,activeAreaId,activeBoardId,activeCircuitId||""].join("|"),["audit","area","board"].includes(view));
+  useScrollMemory(thermoMainRef,[view,activeAreaId,activeBoardId,activeCircuitId||""].join("|"),["projects","audit","area","board"].includes(view));
   if (!loaded) return /*#__PURE__*/React.createElement("div", {
     style: STH.loader
   }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } }`), /*#__PURE__*/React.createElement("div", {
@@ -9923,12 +9965,14 @@ function GlobalSettingsView({ onGoHome }) {
   const [logoUrl, setLogoUrl] = React.useState("");
   const [error, setError] = React.useState("");
   const [saved, setSaved] = React.useState(false);
+  const [storageBytes, setStorageBytes] = React.useState(0);
   const urlRef = React.useRef("");
 
   React.useEffect(() => {
     let alive = true;
     const s = loadAppSettings();
     setBusinessName(s.businessName); setAbn(s.abn); setLicence(s.licence); setHasLogo(!!s.logoId);
+    setStorageBytes(localStorageUsageBytes());
     if (s.logoId) appLogoStore.get().then(rec => {
       if (!alive || !rec) return;
       const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); urlRef.current = u; setLogoUrl(u);
@@ -9987,6 +10031,18 @@ function GlobalSettingsView({ onGoHome }) {
       , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
 
+      , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Storage")
+      , (() => {
+          const pct = Math.min(100, (storageBytes / STORAGE_QUOTA_ASSUMED_BYTES) * 100);
+          const color = pct >= 85 ? "#dc2626" : pct >= 60 ? "#b45309" : "#52525b";
+          return React.createElement('div', { style: { marginBottom: 24 } }
+            , React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color, marginBottom: 6 } }
+              , `Storage used: ${fmtBytes(storageBytes)} of ~5 MB (${pct.toFixed(0)}%, approximate)`)
+            , React.createElement('div', { style: { height: 6, borderRadius: 999, background: "#e4e4e7", overflow: "hidden" } }
+              , React.createElement('div', { style: { height: "100%", width: `${pct}%`, background: color, borderRadius: 999 } }))
+            , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Site data, results and history — not photos (those live in a separate, much larger store)."));
+        })()
+
       , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
         , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
         , saved && React.createElement('span', { style: { fontSize: 12, color: "#16a34a", fontWeight: 600 } }, "Saved"))
@@ -9997,6 +10053,12 @@ function GlobalSettingsView({ onGoHome }) {
 // ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
+// Home-screen pill height (2026-09-29): both pills share the same box — 10px top+bottom padding, a 16px icon and 13px
+// text with no icon/text taller than the icon — so both render at ~36px tall. Found sitting too high above the bottom
+// edge in an installed Home Screen (standalone) session; the fix pins them at 1.5x their own height above the bottom,
+// not a flat 12px, while still adding env(safe-area-inset-bottom) so they clear the home indicator.
+const HOME_PILL_HEIGHT_PX = 36;
+const HOME_PILL_BOTTOM = `calc(env(safe-area-inset-bottom, 0px) + ${HOME_PILL_HEIGHT_PX * 1.5}px)`;
 function AppRoot() {
   const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo" | "swb"
 
@@ -10133,7 +10195,7 @@ function AppRoot() {
     // Fixed calendar pill — always reachable, clear of the iPhone home indicator
     , React.createElement('button',{
         onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
-        style:{position:"fixed",left:"50%",transform:"translateX(-50%)",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
+        style:{position:"fixed",left:"50%",transform:"translateX(-50%)",bottom:HOME_PILL_BOTTOM,zIndex:20,
           display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:999,cursor:"pointer",
           background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
           fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
@@ -10144,7 +10206,7 @@ function AppRoot() {
     // Fixed Global Settings pill — the opposite corner from Calendar so the two never collide; same scope (Home-screen only)
     , React.createElement('button',{
         onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
-        style:{position:"fixed",right:"16px",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
+        style:{position:"fixed",right:"16px",bottom:HOME_PILL_BOTTOM,zIndex:20,
           display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
           background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
           fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
@@ -10698,7 +10760,7 @@ function SWBApp({ onGoHome }) {
   // goArea removed - use goAreaList() instead
   const goAreaList=()=>{setView("audit");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
 
-  useScrollMemory(swbMainRef,[view,activeAreaId,activeBoardId,activeItemKey||""].join("|"),["audit","board"].includes(view));
+  useScrollMemory(swbMainRef,[view,activeAreaId,activeBoardId,activeItemKey||""].join("|"),["projects","audit","board"].includes(view));
   if(!loaded) return React.createElement('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:"3px solid #7e22ce",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS=swbStyles();
@@ -11460,7 +11522,7 @@ function swbStyles() {
     breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
     bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     brandBlock:{textAlign:"center",borderBottom:"2px solid #7e22ce",paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -12048,7 +12110,7 @@ function ELTApp({ onGoHome }) {
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
 
-  useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");   // the list level's key never includes the (still-set) asset id
+  useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit"||view==="projects");   // the list level's key never includes the (still-set) asset id
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -12742,7 +12804,7 @@ function irtStyles(){
     backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     appTitle:{fontSize:15,fontWeight:800,color:"#18181b",letterSpacing:0.5},appSub:{fontSize:11,letterSpacing:0.3},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
     brandBlock:{textAlign:"center",borderBottom:`2px solid ${IRT_COLOR}`,paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
     siteTitle:{fontSize:20,fontWeight:800,color:"#18181b"},siteSub:{fontSize:12,color:"#6e6a66"},
@@ -13619,7 +13681,7 @@ function IRTApp({onGoHome}){
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
   const isAudit=["audit","area","panel","item"].includes(view);
   const SS=irtStyles();
-  useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["audit","area","panel"].includes(view));
+  useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["projects","audit","area","panel"].includes(view));
   if(!loaded)return React.createElement("div",{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement("div",{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${IRT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
   return React.createElement("div",{style:SS.root},
     // Top bar
@@ -14993,7 +15055,7 @@ function WelderApp({ onGoHome }) {
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
 
-  useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");
+  useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit"||view==="projects");
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${WELDER_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -15371,7 +15433,7 @@ function GSDApp({ onGoHome }) {
   const goHome = () => { setView("home"); setActiveItemId(null); setViewSnap(null); };
   const goAudit = () => { setView("audit"); setActiveItemId(null); setViewSnap(null); };
   const SS = swbStyles();
-  useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit");
+  useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit" || view === "projects");
   if (!loaded) return gsdEl("div", { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } }, gsdEl("div", { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GSD_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
   const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if (view === "item") setView("audit"); else if (view === "audit") goHome(); else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
   const navTo = v => () => { setViewSnap(null); setView(v); };
@@ -15689,6 +15751,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
+  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save, HOME_PILL_HEIGHT_PX, HOME_PILL_BOTTOM,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export default AppRoot;
