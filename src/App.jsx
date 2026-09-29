@@ -4816,33 +4816,50 @@ function addTATMonths(dateStr, months) {
   } catch(_) { return ""; }
 }
 
-// Electrical Test (the result shown on the test-and-tag machine): "" = not recorded, "pass" or "fail". An ADDITIVE optional field — a stored record
-// without it reads as "" and is never rewritten by a read, so no storage-key bump is needed and every legacy record / History snapshot is untouched.
-// Overall result rule (the overall result itself stays manual): PASS can only be marked when the Visual Inspection is ticked AND the Electrical Test
-// passed; Electrical FAIL forces the overall result to FAIL. The gate applies when MARKING pass — an item already PASS (e.g. legacy) is never changed.
-const tatCanPass = item => !!(item && item.visualCheck) && (item && item.electricalCheck) === "pass";
-// AUTO-PASS mirrors auto-FAIL: whichever tap COMPLETES the pair (Visual ticked + Electrical PASS) sets the overall result to PASS and stamps the tested date —
-// but ONLY from UNTESTED: a recorded FAIL or N/A is never flipped silently (the auditor changes it deliberately with the RESULT buttons). Trigger-on-tap only;
-// opening an item never changes it.
+// Visual Inspection and Electrical Test (2026-09-29: Visual Inspection is now Pass/Fail, matching Electrical Test
+// exactly): "" = not recorded, "pass" or "fail". Both are ADDITIVE optional fields — a stored record without them
+// reads as "" and is never rewritten by a read, so no storage-key bump is needed and every legacy record / History
+// snapshot is untouched. Visual Inspection used to be a boolean tick (ticked/unticked, no Fail state); `tatGetItem`
+// normalises an old boolean at READ time only (true -> "pass", false -> "" — the old UI had no way to record a
+// Visual Fail, so a false/absent tick can only mean "not recorded", never "failed"), same non-destructive pattern as
+// the ELT pre-standard record reconciliation — the old boolean is naturally replaced by a string the next time the
+// record is patched.
+// Overall result rule (the overall result itself stays manual): PASS can only be marked when BOTH Visual Inspection
+// and Electrical Test have passed. EITHER one failing forces the overall result to FAIL (fully symmetric — this is
+// new for Visual as of 2026-09-29; Electrical FAIL already worked this way). The gate applies when MARKING pass —
+// an item already PASS (e.g. legacy) is never changed.
+const tatCanPass = item => (item && item.visualCheck) === "pass" && (item && item.electricalCheck) === "pass";
+// AUTO-PASS mirrors auto-FAIL: whichever tap COMPLETES the pair (both Visual and Electrical PASS) sets the overall
+// result to PASS and stamps the tested date — but ONLY from UNTESTED: a recorded FAIL or N/A is never flipped
+// silently (the auditor changes it deliberately with the RESULT buttons). Trigger-on-tap only; opening an item never
+// changes it.
 const tatAutoPass = (item, testDate) => (item.status || TAT_STATUS.UNTESTED) === TAT_STATUS.UNTESTED ? { status: TAT_STATUS.PASS, lastTested: testDate } : {};
 function tatElectricalPatch(item, next, testDate) {
   const patch = { electricalCheck: next };
   if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }
-  else if (next === "pass") { if (item.visualCheck) Object.assign(patch, tatAutoPass(item, testDate)); }                               // Visual already ticked -> this tap completes the pair
+  else if (next === "pass") { if (item.visualCheck === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                        // Visual already Pass -> this tap completes the pair
   else if (item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;                // pass cleared: the PASS it justified goes
   return patch;
 }
-function tatVisualPatch(item, ticked, testDate) {
-  const patch = { visualCheck: ticked };
-  if (ticked) { if ((item.electricalCheck || "") === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                         // Electrical already PASS -> this tap completes the pair
-  else if (item.status === TAT_STATUS.PASS) patch.status = TAT_STATUS.UNTESTED;                                                          // un-ticked: the PASS it justified goes
+function tatVisualPatch(item, next, testDate) {
+  const patch = { visualCheck: next };
+  if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }                                                    // symmetric with Electrical FAIL
+  else if (next === "pass") { if (item.electricalCheck === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                    // Electrical already Pass -> this tap completes the pair
+  else if (item.status === TAT_STATUS.PASS && (item.visualCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;                     // pass cleared: the PASS it justified goes
   return patch;
 }
+// Normalises visualCheck to the tri-state string shape ("" | "pass" | "fail") wherever a record is read directly
+// (not through tatGetItem) — a legacy boolean true/false is a real stored shape that can turn up in exports and
+// anywhere else that reads results without going through tatGetItem's own copy-and-normalise step.
+const tatNormaliseVisual = v => typeof v === "boolean" ? (v ? "pass" : "") : (v || "");
 function tatGetItem(results, siteId, areaId, itemId) {
   const rec = (((results[siteId]||{})[areaId]||{})[itemId]);
-  if (rec) return "electricalCheck" in rec ? rec : { ...rec, electricalCheck:"" };   // read-time default only (a copy — storage is never touched)
+  if (rec) {
+    const r = "electricalCheck" in rec ? rec : { ...rec, electricalCheck:"" };
+    return { ...r, visualCheck: tatNormaliseVisual(r.visualCheck) };   // read-time default/normalisation only (a copy — storage is never touched)
+  }
   return {
-    status:TAT_STATUS.UNTESTED, visualCheck:false, electricalCheck:"",
+    status:TAT_STATUS.UNTESTED, visualCheck:"", electricalCheck:"",
     equipType:"", freq:"3", lastTested:"", notes:"", priority:"", tag:"", desc:""
   };
 }
@@ -4904,7 +4921,8 @@ async function exportTATExcel(project, results, meta) {
   project.areas.forEach(area => {
     (area.items || []).forEach(itemId => {
       // results is pre-stripped of projectId — lookup directly by areaId
-      const item = defectGateByStatus(((results[area.id] || {})[itemId]) || { status: TAT_STATUS.UNTESTED, visualCheck: false, equipType: "", freq: "3", lastTested: "", notes: "", priority: "" });
+      const rawItem = ((results[area.id] || {})[itemId]) || { status: TAT_STATUS.UNTESTED, visualCheck: "", equipType: "", freq: "3", lastTested: "", notes: "", priority: "" };
+      const item = defectGateByStatus({ ...rawItem, visualCheck: tatNormaliseVisual(rawItem.visualCheck) });
       // Pull tag, name, equipType, freq from area metadata as source of truth
       const areaTag = (area.itemTags || {})[itemId] || item.tag || "";
       const rawName = (area.itemNames || {})[itemId] || "";
@@ -4916,7 +4934,7 @@ async function exportTATExcel(project, results, meta) {
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
       rows.push({
-        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
+        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck === "pass" ? "Pass" : item.visualCheck === "fail" ? "Fail" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
         defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
       });
     });
@@ -4978,7 +4996,7 @@ function parseTATExcel(data) {
         tag,desc,
         equipType:cType>=0?String(row[cType]||"").trim():"",
         freq:cFreq>=0&&row[cFreq]?String(row[cFreq]).match(/\d+/)?.[0]||"3":"3",
-        status:TAT_STATUS.UNTESTED,visualCheck:false,
+        status:TAT_STATUS.UNTESTED,visualCheck:"",
         lastTested:"",notes:"",priority:"",
       }
     });
@@ -5476,7 +5494,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
             )
             ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginBottom:4}},d.equipType)
             ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
-              ,React.createElement('span',{style:{color:d.visualCheck?"#16a34a":"#52525b",fontWeight:600}},d.visualCheck?"✓":"○"," Visual")
+              ,React.createElement('span',{style:{color:d.visualCheck==="pass"?"#16a34a":d.visualCheck==="fail"?"#dc2626":"#52525b",fontWeight:600}},d.visualCheck==="pass"?"✓":d.visualCheck==="fail"?"✕":"○"," Visual")
               ,React.createElement('span',{style:{color:d.electricalCheck==="pass"?"#16a34a":d.electricalCheck==="fail"?"#dc2626":"#52525b",fontWeight:600}},d.electricalCheck==="pass"?"✓":d.electricalCheck==="fail"?"✕":"○"," Electrical")
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
               ,React.createElement('span',null,freqLabel)
@@ -5516,7 +5534,10 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     onPatch(tatElectricalPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
   };
 
-  const toggleVisual=()=>onPatch(tatVisualPatch(item,!item.visualCheck,meta.testDate||new Date().toISOString().slice(0,10)));
+  const setVisual=v=>{
+    const next=(item.visualCheck||"")===v?"":v;   // re-tapping the active button clears it back to "not recorded"
+    onPatch(tatVisualPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
+  };
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
 
@@ -5551,19 +5572,15 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         )
       )
 
-      // Visual inspection checkbox
+      // Visual Inspection — Pass/Fail, same style/semantics as Electrical Test (2026-09-29; FAIL sets the overall result to FAIL)
       ,React.createElement('div',{style:{marginBottom:16}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"INSPECTION CHECK")
-        ,React.createElement('button',{
-          style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:item.visualCheck?"#dcfce7":"#f7f6f3",border:`2px solid ${item.visualCheck?"#16a34a":"#d4d4d8"}`,borderRadius:12,cursor:"pointer",color:"#18181b",textAlign:"left",width:"100%"},
-          onClick:toggleVisual}
-          ,React.createElement('div',{style:{width:28,height:28,borderRadius:6,background:item.visualCheck?"#16a34a":"#e4e4e7",border:`2px solid ${item.visualCheck?"#16a34a":"#d4d4d8"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-            ,item.visualCheck&&React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#fff',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))
-          )
-          ,React.createElement('div',null
-            ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.visualCheck?"#14532d":"#6e6a66"}},"Visual Inspection")
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Check for physical damage, cord condition, plug integrity")
-          )
+        ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:2}},"VISUAL INSPECTION")
+        ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:8}},"Check for physical damage, cord condition, plug integrity")
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,[["pass",TAT_STATUS.PASS],["fail",TAT_STATUS.FAIL]].map(([v,s])=>{
+            const s2=TAT_SM[s]; const active=(item.visualCheck||"")===v;
+            return React.createElement('button',{key:v,"data-testid":"tat-visual-"+v,"aria-label":"Visual inspection "+s2.label,"aria-pressed":active,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?s2.border:"#d4d4d8"}`,background:active?s2.bg:"#f7f6f3",color:active?s2.fg:"#52525b"},onClick:()=>setVisual(v)},s2.label);
+          })
         )
       )
 
@@ -5583,7 +5600,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
         ,canPass&&item.status===TAT_STATUS.FAIL&&React.createElement('div',{"data-testid":"tat-fail-kept-hint",style:{background:"#e0e7ff",border:"1px solid #a5b4fc",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#3730a3"}},"Both checks passed — result is still FAIL. Tap PASS to change it.")
-        ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked and the Electrical Test passed before marking PASS")
+        ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual Inspection and Electrical Test must both pass before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
             const sm2=TAT_SM[s]||TAT_SM.untested;
@@ -5668,7 +5685,7 @@ function TATReportView({project,results,meta,onBack}){
       if((v.status||TAT_STATUS.UNTESTED)===TAT_STATUS.FAIL){
         const mn=(area.itemNames||{})[itemId]||itemId;
         const tag=(area.itemTags||{})[itemId]||"";
-        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,electrical:v.electricalCheck||"",priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
+        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,visual:tatNormaliseVisual(v.visualCheck),electrical:v.electricalCheck||"",priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
       }
     });
   });
@@ -5698,7 +5715,7 @@ function TATReportView({project,results,meta,onBack}){
         );
       })
     )
-    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:f.electrical==="fail"?["Electrical test: FAIL"]:[],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
+    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:[...(f.visual==="fail"?["Visual Inspection: FAIL"]:[]),...(f.electrical==="fail"?["Electrical test: FAIL"]:[])],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
     ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
@@ -6049,7 +6066,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
                 ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},mn.replace(/^\d+\s*—\s*/,""))
               )
               ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#52525b",marginTop:3}}
-                ,React.createElement('span',{style:{color:v.visualCheck?"#16a34a":"#52525b"}},v.visualCheck?"✓":"✕"," Visual")
+                ,(()=>{const vis=tatNormaliseVisual(v.visualCheck);return React.createElement('span',{style:{color:vis==="pass"?"#16a34a":vis==="fail"?"#dc2626":"#52525b"}},vis==="pass"?"✓":vis==="fail"?"✕":"○"," Visual");})()
                 ,React.createElement('span',{style:{color:v.electricalCheck==="pass"?"#16a34a":v.electricalCheck==="fail"?"#dc2626":"#52525b"}},v.electricalCheck==="pass"?"✓":v.electricalCheck==="fail"?"✕":"○"," Electrical")
                 ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
               )
@@ -14589,11 +14606,15 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
   const [r,setR] = React.useState(res);
   const rRef = React.useRef(r); rRef.current = r;
   const set = patch=>{ setR(prev=>({...prev,...patch})); onPatch(patch); };
-  const sum = welderSummary(r); const overall = sum.overall; const sm = welderSM(overall); const isFail = overall==="fail";
+  const sum = welderSummary(r); const overall = sum.overall; const sm = welderSM(overall);
+  // The FAIL panel (and its ★ defaults) must appear the moment ANY item is marked Fail — it must NOT wait for every
+  // item to be answered like `overall` does. `overall` itself is untouched (stays "untested" until all 12 are
+  // answered, per the established rule) — `anyFail` is a separate, independent trigger for panel visibility only.
+  const anyFail = sum.fail > 0;
   const rectOpts = (dropdowns&&dropdowns.rectified)||WELDER_DEFAULT_RECTIFIED;
   const respOpts = (dropdowns&&dropdowns.responsibility)||WELDER_DEFAULT_RESPONSIBILITY;
-  // ★ defaults are stored when the asset becomes FAIL (derived at asset level)
-  useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
+  // ★ defaults are stored as soon as the panel can show (any Fail), not gated on the completed overall result
+  useFailDefaults(anyFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
   const patchItem = (key,patch)=>{ const items = {...(rRef.current.items||{}),[key]:{...welderItem(rRef.current,key),...patch}}; set({items}); };
   const photoRef = React.useRef();
   const [photoError, setPhotoError] = React.useState("");
@@ -14647,8 +14668,8 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
         ,eltEl('input',{style:SS.modalInput,type:"text",value:it.action||"",placeholder:"Corrective action required",onChange:e=>patchItem(key,{action:e.target.value})})
       );
     })
-    // asset-level derived FAIL panel (before the comments box)
-    ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
+    // asset-level derived FAIL panel (before the comments box) — shows on the FIRST Fail, independent of `overall`
+    ,anyFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
       ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
@@ -15749,7 +15770,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 }
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
+  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save, HOME_PILL_HEIGHT_PX, HOME_PILL_BOTTOM,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
