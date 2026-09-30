@@ -91,6 +91,13 @@ describe('Home bar restyled as a Facebook-style overlay (2026-09-30): no filled 
     expect(bar.style.display).toBe('flex');
     expect(cal.style.flex).toBe('1 1 0%'); // flex:1 shorthand, normalised by jsdom's CSSOM
   });
+  it('Calendar and Settings use the SAME neutral slate accent (2026-09-30) — Calendar no longer keeps its own indigo now that both sit in one shared, neutral bar', async () => {
+    render(<AppRoot />);
+    const cal = await screen.findByTestId('calendar-pill');
+    const settings = await screen.findByTestId('settings-pill');
+    expect(cal.style.color).toBe(settings.style.color);
+    expect(cal.style.color).toBe('rgb(71, 85, 105)'); // #475569 (GS_COLOR) — not the old indigo #4338ca
+  });
 });
 
 describe('Every module bottom nav is an overlay too: page background, thin top border, no filled strip (#5)', () => {

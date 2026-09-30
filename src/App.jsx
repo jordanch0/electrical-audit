@@ -10140,8 +10140,10 @@ function AppRoot() {
     {key:"gsd",color:"#4d7c0f",name:"GENERAL SITE DEFECTS",desc:"Punch-list with photos",onClick:()=>setModule("gsd"),
       icon:moduleIcon("gsd")},
   ];
-  // Calendar lives in a fixed pill (not a grid card)
-  const calColor = "#4338ca";
+  // Calendar and Settings now share the same neutral slate accent (2026-09-30): both sit in the same flat, neutral
+  // bar and neither is tied to a module — Calendar's old indigo (#4338ca) stood out once the two were side by side
+  // in one bar instead of two separate pills. GS_COLOR is the existing "neutral, not tied to any module" slate.
+  const calColor = GS_COLOR;
 
   return React.createElement('div', {
     style:{
