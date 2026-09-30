@@ -88,12 +88,29 @@
     // Exposed as --kb-inset and applied only to the bottom nav bar's margin, so
     // only the tab bar moves — the rest of the layout (including #root itself
     // and any top nav) stays fixed in place.
+    //
+    // 2026-09-30 fix: `window.innerHeight - vv.height` is NOT reliably 0 at rest.
+    // In an installed Home Screen (standalone) session, WebKit's visualViewport
+    // can permanently report a smaller height than window.innerHeight by roughly
+    // the safe-area-inset-bottom amount, even with no keyboard open — read
+    // literally, that stale offset was applied as a permanent margin-bottom on
+    // the nav bar, pushing it up and leaving a visible gap of page background
+    // below it (only in standalone; a plain Safari tab doesn't show this). Fix:
+    // track the LOWEST diff ever observed as the resting ("no keyboard") baseline
+    // and report only the amount ABOVE that baseline — a real keyboard opening
+    // always INCREASES the diff, so it's still detected correctly, but a
+    // standing standalone-mode offset is cancelled out instead of being read as
+    // "keyboard open" forever. The baseline can also correct itself downward if
+    // a later reading (e.g. after rotation) turns out lower.
     (function () {
+      var restingDiff = Infinity;
       function syncKeyboardInset() {
         var vv = window.visualViewport;
         var root = document.documentElement;
         if (vv) {
-          var inset = window.innerHeight - vv.height - vv.offsetTop;
+          var raw = window.innerHeight - vv.height - vv.offsetTop;
+          if (raw < restingDiff) restingDiff = raw;
+          var inset = raw - restingDiff;
           root.style.setProperty('--kb-inset', Math.max(0, Math.round(inset)) + 'px');
         } else {
           root.style.setProperty('--kb-inset', '0px');

@@ -10070,12 +10070,20 @@ function GlobalSettingsView({ onGoHome }) {
 // ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
-// Home-screen pill height (2026-09-29): both pills share the same box — 10px top+bottom padding, a 16px icon and 13px
-// text with no icon/text taller than the icon — so both render at ~36px tall. Found sitting too high above the bottom
-// edge in an installed Home Screen (standalone) session; the fix pins them at 1.5x their own height above the bottom,
-// not a flat 12px, while still adding env(safe-area-inset-bottom) so they clear the home indicator.
+// Home-screen pill bar (2026-09-29 / 2026-09-30). Both pills share the same box — 10px top+bottom padding, a 16px
+// icon and 13px text with no icon/text taller than the icon — so both render at ~36px tall.
+// 2026-09-29: found sitting too high above the bottom edge in an installed Home Screen (standalone) session; fixed
+// by pinning them at 1.5x their own height above the bottom instead of a flat 12px.
+// 2026-09-30: that fix used `position:fixed` floating OVER the scrollable module grid, so whatever content happened
+// to be scrolled to that exact screen position — including the last module card — could end up directly BEHIND the
+// pills; a trailing spacer sized to the pills' geometry only ever protected the one scroll position where it lined
+// up with the (still-floating) pills, not every scroll position in between (confirmed still broken after the first
+// fix). The actual fix: the pills now live in a real, non-scrolling flex row reserved below the scrollable content
+// (not overlaid on top of it) — see AppRoot's return — so the grid can never scroll behind them at any scroll
+// position. HOME_PILL_BAR_PADDING_BOTTOM keeps the originally-approved "1.5x the pill's own height above the true
+// bottom" spacing, now as the bar's own real padding instead of a floating `bottom` offset.
 const HOME_PILL_HEIGHT_PX = 36;
-const HOME_PILL_BOTTOM = `calc(env(safe-area-inset-bottom, 0px) + ${HOME_PILL_HEIGHT_PX * 1.5}px)`;
+const HOME_PILL_BAR_PADDING_BOTTOM = `calc(env(safe-area-inset-bottom, 0px) + ${HOME_PILL_HEIGHT_PX * 1.5}px)`;
 function AppRoot() {
   const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo" | "swb"
 
@@ -10142,20 +10150,26 @@ function AppRoot() {
       background:"#e8e6e2",color:"#18181b",
       fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",
       WebkitFontSmoothing:"antialiased",
-      overflowY:"scroll",
-      overflowX:"hidden",
-      WebkitOverflowScrolling:"touch",
     },
-    ref: el => { if(el) el.scrollTop = 0; }
   }
-    , React.createElement('div', {style:{
-        paddingTop:"calc(env(safe-area-inset-top, 0px) + 20px)",
-        display:"flex",flexDirection:"column",
-        alignItems:"center",
-        minHeight:"100%",
-        width:"100%",
-        boxSizing:"border-box",
-      }}
+    // SCROLLABLE content — its own flex:1 region, entirely separate from the pill bar below (2026-09-30 fix: the
+    // pills used to be position:fixed OVER this whole area, which meant whatever scrolled underneath — including
+    // the last module card — could end up directly behind them; a trailing spacer sized to the pills' geometry
+    // could only ever protect the ONE scroll position where it lined up exactly with the fixed pills, not every
+    // scroll position in between. Giving the pills their own reserved, non-scrolling bar (below) instead of
+    // overlaying them is the only fix that holds at every scroll position, not just one.)
+    , React.createElement('div', {
+        style:{flex:1,minHeight:0,overflowY:"scroll",overflowX:"hidden",WebkitOverflowScrolling:"touch"},
+        ref: el => { if(el) el.scrollTop = 0; }
+      }
+      , React.createElement('div', {style:{
+          paddingTop:"calc(env(safe-area-inset-top, 0px) + 20px)",
+          display:"flex",flexDirection:"column",
+          alignItems:"center",
+          minHeight:"100%",
+          width:"100%",
+          boxSizing:"border-box",
+        }}
 
       // Title block
       , React.createElement('div', {style:{textAlign:"center",marginBottom:20,padding:"0 24px"}}
@@ -10207,31 +10221,40 @@ function AppRoot() {
         ))
       )
 
-      , React.createElement('div',{style:{paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 76px)",textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
+      , React.createElement('div',{style:{paddingBottom:24,textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
+      )
     )
-    // Fixed calendar pill — always reachable, clear of the iPhone home indicator
-    , React.createElement('button',{
-        onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
-        style:{position:"fixed",left:"50%",transform:"translateX(-50%)",bottom:HOME_PILL_BOTTOM,zIndex:20,
-          display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:999,cursor:"pointer",
-          background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
-          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
-      }
-      , moduleIcon("cal",16)
-      , "Calendar"
-    )
-    // Fixed Global Settings pill — the opposite corner from Calendar so the two never collide; same scope (Home-screen only)
-    , React.createElement('button',{
-        onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
-        style:{position:"fixed",right:"16px",bottom:HOME_PILL_BOTTOM,zIndex:20,
-          display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
-          background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
-          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
-      }
-      , React.createElement('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
-          React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
-          React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
-      , "Settings"
+    // Pill bar (2026-09-30 fix): a real, non-scrolling flex row reserved below the scrollable content — NOT
+    // position:fixed floating over it — so the grid can never scroll behind the pills at any scroll position.
+    // 3-column grid (1fr / auto / auto-width via 1fr) keeps Calendar visually centred and Settings pinned to the
+    // right, matching the previous position:fixed layout's look exactly. paddingBottom keeps the originally-approved
+    // "1.5x the pill's own height above the true bottom" spacing, now as real reserved space instead of a floating
+    // offset that could be covered.
+    , React.createElement('div', {style:{
+        flexShrink:0, display:"grid", gridTemplateColumns:"1fr auto 1fr", alignItems:"center", columnGap:8,
+        padding:`16px 16px ${HOME_PILL_BAR_PADDING_BOTTOM} 16px`, background:"#e8e6e2",
+      }}
+      , React.createElement('div', null)
+      , React.createElement('button',{
+          onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
+          style:{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:999,cursor:"pointer",
+            background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
+            fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)",justifySelf:"center"}
+        }
+        , moduleIcon("cal",16)
+        , "Calendar"
+      )
+      , React.createElement('button',{
+          onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
+          style:{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
+            background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
+            fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)",justifySelf:"end"}
+        }
+        , React.createElement('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+            React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
+            React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
+        , "Settings"
+      )
     )
   );
 }
@@ -15772,7 +15795,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
-  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save, HOME_PILL_HEIGHT_PX, HOME_PILL_BOTTOM,
+  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save, HOME_PILL_HEIGHT_PX, HOME_PILL_BAR_PADDING_BOTTOM,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export default AppRoot;
