@@ -62,14 +62,20 @@ describe('SWB / ELT data-row borders', () => {
   it('SWB Register header block (rows 1–5) is plain — no fill, font or border — like ELT and Welder; the board sheet keeps a styled Audit Summary heading', async () => {
     const wb = await load(exportSWBExcel, swbProject, swbResults, swbMeta);
     const reg = wb.getWorksheet('Register');
+    // Rows 1-4 are centred (2026-09-30 fix) but still carry no VISIBLE fill/border: ExcelJS materialises a cell's
+    // whole style object once any one sub-property (here, alignment) is set, so `fill` reads back as the explicit
+    // "no fill" value { pattern: 'none' } instead of `undefined` — visually identical (no background colour either
+    // way), just no longer literally untouched. Same accommodation already used by the equivalent ELT test.
     for (let r = 1; r <= 5; r++) for (let c = 1; c <= 16; c++) {
       const cell = reg.getCell(r, c);
-      expect(cell.fill, 'fill r' + r + ' c' + c).toBeUndefined();
-      expect(cell.border, 'border r' + r + ' c' + c).toBeUndefined();
+      expect(cell.fill === undefined || cell.fill.pattern === 'none', 'fill r' + r + ' c' + c).toBe(true);
+      expect(!cell.border || Object.keys(cell.border).length === 0, 'border r' + r + ' c' + c).toBe(true);
     }
     expect(String(reg.getCell('A1').value)).toBe('Site S — Switchboard / Enclosure Audit');
     expect([1, 2, 3, 4, 5].map(r => reg.getRow(r).height)).toEqual([32, 16, 16, 6, 40]);
-    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:B3', 'A4:P4', 'C3:D3', 'E3:P3'].sort());
+    // Row 3 (2026-09-30 fix): one full-width merge (was 3 sub-merges); row 4 is not merged in this sheet (unlike the
+    // shared xjSheet builder / ELT, which do merge their row-4 spacer).
+    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:P3'].sort());
     const board = wb.getWorksheet('MSB');
     expect(board.getCell('A7').fill.fgColor.argb).toBe('FFD9D9D9');                            // "Audit Summary" heading
   });

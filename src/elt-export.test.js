@@ -56,21 +56,30 @@ describe('ELT Excel export structure', () => {
     expect(text(ws.getCell('A1'))).toBe('Hearse Road Firestone — Emergency Lighting Test');
     const co = text(ws.getCell('A2'));
     expect(co).toContain('Dixon Quarry Group'); expect(co).toContain('12 345 678 901'); expect(co).toContain('EW123456');
-    expect(text(ws.getCell('A3'))).toBe('Auditor: Jane Auditor');
-    expect(text(ws.getCell('C3'))).toBe('Date Tested: 21/09/2026');
-    expect(text(ws.getCell('E3'))).toBe('Next Test Due: 21/03/2027');
-    // Rows 1-5 carry NO styling (same as the real IEL/RCD/TAT/Thermo files): no fill, font, border or alignment
-    // (row 5 — the headings — carries wrap-text alignment ONLY, so a narrow column can hold a long heading; still no fill, font or border)
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
+    expect(text(ws.getCell('A3'))).toBe('Auditor: Jane Auditor  |  Date Tested: 21/09/2026  |  Next Test Due: 21/03/2027');
+    // Rows 1-5 carry no INTENTIONAL fill/font/border styling — never bold, never a fill colour, never a border —
+    // same as the real IEL/RCD/TAT/Thermo files. (A cell that has ANY style property set, even just alignment,
+    // gets the workbook's plain default font baked in once the file round-trips through a real save/reload — e.g.
+    // {name:"Calibri",size:11,...} with no bold/italic/custom colour — which is a metadata artifact of the xlsx
+    // format itself, not a visual difference from a truly untouched cell, so it's accepted here too.) Alignment:
+    // rows 1-3 are centred (2026-09-30 fix — they used to carry no alignment at all, which meant the wide merged
+    // header text rendered flush-left instead of centred); row 4 is a blank spacer no code ever writes to, so it
+    // stays fully untouched; row 5 (the headings) carries wrap-text alignment ONLY, so a narrow column can hold a
+    // long heading.
     for (let r = 1; r <= 5; r++) for (let c = 1; c <= 16; c++) {
       const cell = ws.getCell(r, c);
       expect(cell.fill === undefined || cell.fill.pattern === 'none', 'fill r'+r+' c'+c).toBe(true);
-      if (r < 5) expect(cell.font, 'font r'+r+' c'+c).toBeUndefined(); else expect(!cell.font || !cell.font.bold, 'heading font not bold').toBe(true);
+      expect(!cell.font || (!cell.font.bold && !cell.font.italic), 'font r'+r+' c'+c+' should never be bold/italic').toBe(true);
       expect(!cell.border || Object.keys(cell.border).length === 0, 'border r'+r+' c'+c).toBe(true);
-      if (r < 5) expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined(); else expect(cell.alignment).toMatchObject({ wrapText: true });
+      if (r <= 3) expect(cell.alignment, 'alignment r'+r+' c'+c).toMatchObject({ horizontal: 'center' });
+      else if (r === 4) expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined();
+      else expect(cell.alignment).toMatchObject({ wrapText: true });
     }
-    // same merges and row heights as IEL (adjusted for 16 columns)
+    // same merges and row heights as IEL (adjusted for 16 columns). Row 3 (2026-09-30 fix): one full-width merge
+    // (was 3 sub-merges).
     const merged = Object.keys(ws._merges).map(k => ws._merges[k].range).sort();
-    expect(merged).toEqual(['A1:P1','A2:P2','A3:B3','A4:P4','C3:D3','E3:P3'].sort());
+    expect(merged).toEqual(['A1:P1','A2:P2','A3:P3','A4:P4'].sort());
     expect([1,2,3,4,5].map(r => ws.getRow(r).height)).toEqual([32,16,16,6,44]);
 
     // blank 6pt spacer row 4, then the column headings on row 5; no summary block or sheet
@@ -121,7 +130,8 @@ describe('ELT Excel export structure', () => {
     expect(rowVals(ds, 6, 10)).toEqual(['2','Hearse Road Firestone','SW Roof','','74','H','Scheduled for Repair','01/10/2026','Client','Seal cracked']);
     expect(rowVals(ds, 7, 10)).toEqual(['3','Hearse Road Firestone','Workshop','EL-003','','','Removed from Service','','Site Electrician','']);
     expect(rowVals(ds, 8, 10).every(v => v === '')).toBe(true);
-    expect(text(ds.getCell('A3'))).toBe('Defects recorded: 2');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell.
+    expect(text(ds.getCell('A3'))).toMatch(/^Defects recorded: 2\b/);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting','Defects','Photos']);
   });
 

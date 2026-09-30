@@ -266,7 +266,8 @@ describe('export: photo report + Register', () => {
     await exportGSDExcel(project, items, meta); const wb = await readExport();
     expect(wb.worksheets.map(w => w.name)).toEqual(['Defects Report', 'Register']);
     const ws = wb.getWorksheet('Defects Report');
-    expect(ws.getCell('A1').value).toBe('Site G — General Site Defects'); expect(ws.getCell('A3').value).toBe('Auditor: Jane'); expect(ws.getCell('C3').value).toBe('Date Audited: 21/09/2026'); expect(ws.getCell('E3').value).toBe('Next Audit Due: 21/09/2027');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
+    expect(ws.getCell('A1').value).toBe('Site G — General Site Defects'); expect(ws.getCell('A3').value).toBe('Auditor: Jane  |  Date Audited: 21/09/2026  |  Next Audit Due: 21/09/2027');
     const txt = []; for (let r = 5; r <= ws.rowCount; r++) { const v = ws.getCell(r, 1).value; if (v) txt.push(String(v)); }
     expect(txt).toEqual(['Concrete Plant', '#1  Loc i1 — Defect i1', 'Guarding · High · Site Manager · Fix by 31/10/2026', 'Workshop', '#2  Loc i2 — Defect i2', 'Guarding · High · Site Manager · Fix by 31/10/2026']);   // no "Empty Area"
     expect(ws.getCell('A5').fill).toMatchObject({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D7C0F' } });

@@ -165,7 +165,8 @@ describe('IRT (ExcelJS): Register / Readings / Defects — sheet order, styling 
     await exportIRTExcel(irtProject, irtResults, meta); const wb = await load();
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'Readings', 'Defects']);
     const rd = wb.getWorksheet('Readings');
-    expect(String(rd.getCell('E3').value)).toBe('All readings in MΩ');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (A3), was separate A3/C3/E3 cells.
+    expect(String(rd.getCell('A3').value)).toBe('Tested by: Jane  |  Date Tested: 21/09/2026  |  All readings in MΩ');
     const col = rd.getRow(5).values.indexOf('Pass / Fail');
     ['FAIL', 'PASS', 'PASS', 'UNTESTED', 'FAIL', 'FAIL', 'FAIL'].forEach((txt, i) => {
       const cell = rd.getCell(6 + i, col); expect(String(cell.value)).toBe(txt);
