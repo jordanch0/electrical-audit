@@ -2606,9 +2606,13 @@ const NAV_ICON_REPORT=React.createElement('svg',{width:17,height:17,viewBox:"0 0
 const NAV_ICON_HISTORY=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:"12 6 12 12 16 14"}));
 const NAV_ICON_MANAGE=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"}),React.createElement('path',{d:"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"}));
 const NAV_ICON_DROPDOWNS=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('line',{x1:8,y1:6,x2:21,y2:6}),React.createElement('line',{x1:8,y1:12,x2:21,y2:12}),React.createElement('line',{x1:8,y1:18,x2:21,y2:18}),React.createElement('line',{x1:3,y1:6,x2:3.01,y2:6}),React.createElement('line',{x1:3,y1:12,x2:3.01,y2:12}),React.createElement('line',{x1:3,y1:18,x2:3.01,y2:18}));
+// Compact, Facebook-style height (2026-09-30): the bar used to be a filled #f7f6f3 strip with a big
+// box-shadow trick to mask its own bottom edge; it's now an overlay — a thin top border only, background
+// matching the page behind it — so NavBtn itself was shortened to match (minHeight 50->42, tighter
+// vertical padding), same icons/order/labels, just more compact.
 function NavBtn({icon,label,active,onClick,color}){
 const c=active?(color||"#334155"):"#52525b";
-return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
+return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
 }
 // ─────────────────────────────────────────────────────────────────────────
 // STYLES
@@ -2625,7 +2629,7 @@ saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
 bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
+bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
 homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
 brandBlock:{textAlign:"center",borderBottom:"2px solid #a3530f",paddingBottom:8,width:"100%",maxWidth:500},
 brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#a3530f"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -4071,7 +4075,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 // IEL SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────
 function IELStatPill({label,val,col}){return React.createElement('div',{style:{display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"}},React.createElement('span',{style:{fontSize:10,color:col,fontWeight:700,letterSpacing:0.5}},label),React.createElement('span',{style:{fontSize:14,color:col,fontWeight:800}},val));}
-function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#047857"):"#52525b";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#047857"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
+function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#047857"):"#52525b";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#047857"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
 
 // ─────────────────────────────────────────────────────────────────────────
 // IEL STYLES — mirrors S from RCD
@@ -4089,7 +4093,7 @@ const SI={
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
+  bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #047857",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#047857"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -4484,7 +4488,7 @@ function CalendarApp({ onGoHome }) {
     root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans',sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden",maxWidth:"100vw"},
     topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",borderBottom:"2px solid #a5b4fc",flexShrink:0},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,maxWidth:"100%"},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
     formWrap:{padding:"16px",boxSizing:"border-box",width:"100%",maxWidth:"100%",overflowX:"hidden"},
   };
 
@@ -6279,7 +6283,7 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
 
 function TATNavBtn({icon,label,active,onClick,color}){
   const c=active?(color||"#334155"):"#52525b";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
     ,icon
     ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
   );
@@ -6299,7 +6303,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
+  bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #1d4ed8",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -6799,11 +6803,10 @@ const STH = {
   },
   bottomNav: {
     display: "flex",
-    background: "#f7f6f3",
+    background: "#e8e6e2",
     borderTop: "1px solid #e4e4e7",
     flexShrink: 0,
-    paddingBottom: "env(safe-area-inset-bottom, 0px)",
-    boxShadow: "0 200px 0 200px #f7f6f3"
+    paddingBottom: "env(safe-area-inset-bottom, 0px)"
   },
   listWrap: {
     padding: "16px"
@@ -10070,20 +10073,18 @@ function GlobalSettingsView({ onGoHome }) {
 // ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
-// Home-screen pill bar (2026-09-29 / 2026-09-30). Both pills share the same box — 10px top+bottom padding, a 16px
-// icon and 13px text with no icon/text taller than the icon — so both render at ~36px tall.
-// 2026-09-29: found sitting too high above the bottom edge in an installed Home Screen (standalone) session; fixed
-// by pinning them at 1.5x their own height above the bottom instead of a flat 12px.
-// 2026-09-30: that fix used `position:fixed` floating OVER the scrollable module grid, so whatever content happened
-// to be scrolled to that exact screen position — including the last module card — could end up directly BEHIND the
-// pills; a trailing spacer sized to the pills' geometry only ever protected the one scroll position where it lined
-// up with the (still-floating) pills, not every scroll position in between (confirmed still broken after the first
-// fix). The actual fix: the pills now live in a real, non-scrolling flex row reserved below the scrollable content
-// (not overlaid on top of it) — see AppRoot's return — so the grid can never scroll behind them at any scroll
-// position. HOME_PILL_BAR_PADDING_BOTTOM keeps the originally-approved "1.5x the pill's own height above the true
-// bottom" spacing, now as the bar's own real padding instead of a floating `bottom` offset.
-const HOME_PILL_HEIGHT_PX = 36;
-const HOME_PILL_BAR_PADDING_BOTTOM = `calc(env(safe-area-inset-bottom, 0px) + ${HOME_PILL_HEIGHT_PX * 1.5}px)`;
+// Home-screen bottom bar, history:
+// 2026-09-29: two floating pills sat too high; fixed by pinning them 1.5x their own height above the bottom.
+// 2026-09-30 (first attempt): that used `position:fixed` floating OVER the scrollable module grid, so whatever
+// content scrolled to that exact screen position — including the last module card — could end up directly behind
+// the pills; a trailing spacer only ever protected the ONE scroll position where it lined up with the still-floating
+// pills, not every position in between (confirmed still broken). Fixed by moving the pills into a real, non-scrolling
+// flex row reserved below the scrollable content instead of overlaying it.
+// 2026-09-30 (Facebook-style restyle): replaced the bordered/shadowed pill buttons and the filled #f7f6f3 strip with
+// the same overlay treatment as the in-module nav bar (bottomNav) — background matches the page (#e8e6e2), a single
+// thin top border as the only divider, no box-shadow fill trick, and the SAME compact icon+label markup as NavBtn
+// (see NavBtn's own comment). The non-scrolling reserved-row layout from the previous fix is unchanged; only the
+// visual skin and height did.
 function AppRoot() {
   const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo" | "swb"
 
@@ -10224,36 +10225,37 @@ function AppRoot() {
       , React.createElement('div',{style:{paddingBottom:24,textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
       )
     )
-    // Pill bar (2026-09-30 fix): a real, non-scrolling flex row reserved below the scrollable content — NOT
-    // position:fixed floating over it — so the grid can never scroll behind the pills at any scroll position.
-    // 3-column grid (1fr / auto / auto-width via 1fr) keeps Calendar visually centred and Settings pinned to the
-    // right, matching the previous position:fixed layout's look exactly. paddingBottom keeps the originally-approved
-    // "1.5x the pill's own height above the true bottom" spacing, now as real reserved space instead of a floating
-    // offset that could be covered.
+    // Home bar (2026-09-30, restyled to match Facebook's overlay bottom bar): a real, non-scrolling flex row
+    // reserved below the scrollable content — NOT position:fixed floating over it — so the grid can never scroll
+    // behind the buttons at any scroll position (kept from the previous fix; only the visual skin changed here).
+    // Same background/border/height treatment as the in-module nav bar (bottomNav) and the SAME markup shape as
+    // NavBtn — no separate pill background, border or shadow any more, just an icon + label sitting directly on
+    // the page background, divided only by the thin top border. Calendar keeps coming before Settings, left to
+    // right — a plain flex row with each button at flex:1 (matching the in-module bar exactly) rather than the
+    // previous "one centred, one pinned right" pill layout.
     , React.createElement('div', {style:{
-        flexShrink:0, display:"grid", gridTemplateColumns:"1fr auto 1fr", alignItems:"center", columnGap:8,
-        padding:`16px 16px ${HOME_PILL_BAR_PADDING_BOTTOM} 16px`, background:"#e8e6e2",
+        flexShrink:0, display:"flex", background:"#e8e6e2", borderTop:"1px solid #e4e4e7",
+        paddingBottom:"env(safe-area-inset-bottom, 0px)",
       }}
-      , React.createElement('div', null)
       , React.createElement('button',{
           onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
-          style:{display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:999,cursor:"pointer",
-            background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
-            fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)",justifySelf:"center"}
+          style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
+            background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,
+            color:calColor,fontFamily:"inherit"}
         }
-        , moduleIcon("cal",16)
-        , "Calendar"
+        , moduleIcon("cal",17)
+        , React.createElement('span',{style:{fontSize:9,fontWeight:500,letterSpacing:0.5}},"Calendar")
       )
       , React.createElement('button',{
           onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
-          style:{display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
-            background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
-            fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)",justifySelf:"end"}
+          style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
+            background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,
+            color:GS_COLOR,fontFamily:"inherit"}
         }
-        , React.createElement('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+        , React.createElement('svg',{viewBox:'0 0 24 24',width:17,height:17,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
             React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
             React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
-        , "Settings"
+        , React.createElement('span',{style:{fontSize:9,fontWeight:500,letterSpacing:0.5}},"Settings")
       )
     )
   );
@@ -11547,7 +11549,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
 // ─────────────────────────────────────────────────────────────────────────
 function SWBNavBtn({icon,label,active,onClick,color}) {
   const c=active?(color||"#334155"):"#52525b";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
     ,icon
     ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
   );
@@ -11562,7 +11564,7 @@ function swbStyles() {
     breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
     bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     brandBlock:{textAlign:"center",borderBottom:"2px solid #7e22ce",paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -12844,7 +12846,7 @@ function irtStyles(){
     backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     appTitle:{fontSize:15,fontWeight:800,color:"#18181b",letterSpacing:0.5},appSub:{fontSize:11,letterSpacing:0.3},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
     brandBlock:{textAlign:"center",borderBottom:`2px solid ${IRT_COLOR}`,paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
     siteTitle:{fontSize:20,fontWeight:800,color:"#18181b"},siteSub:{fontSize:12,color:"#6e6a66"},
@@ -15795,7 +15797,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
-  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save, HOME_PILL_HEIGHT_PX, HOME_PILL_BAR_PADDING_BOTTOM,
+  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export default AppRoot;

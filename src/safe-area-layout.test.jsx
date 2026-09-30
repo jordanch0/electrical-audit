@@ -1,45 +1,41 @@
-// Fixes #4 and #5 (2026-09-29, both found still broken on a real installed Home Screen session and re-fixed
-// 2026-09-30):
-// #4 — the Home-screen Calendar/Settings pills sat too high, THEN (after the 2026-09-29 fix moved them further from
-//      the bottom) started covering the last module card instead. The root cause: the pills were `position:fixed`,
-//      floating OVER the scrollable module grid — whatever content happened to be scrolled to that exact screen
-//      position (including the last card) could end up directly behind them. A trailing spacer sized to the pills'
-//      geometry (the first 2026-09-30 attempt) only ever protected the ONE scroll position where it lined up with
-//      the still-floating pills, not every scroll position in between — confirmed still broken. The real fix: the
-//      pills now live in a genuine, non-scrolling flex row reserved BELOW the scrollable content (not overlaid on
-//      top of it), so the grid can never scroll behind them at any scroll position, regardless of card count.
-// #5 — every module's bottom nav bar hardcoded 34px of bottom padding instead of the real
-//      env(safe-area-inset-bottom) (fixed 2026-09-29) — but a separate, pre-existing bug in index.html's keyboard-
-//      inset tracking (`--kb-inset`, applied as the nav's own margin-bottom) could read a standing, non-zero
-//      difference between window.innerHeight and visualViewport.height in an installed standalone session (even
-//      with no keyboard open) and apply it as a permanent extra margin, pushing the nav up and leaving a visible
-//      gap of page background below it. Fixed 2026-09-30 by tracking the LOWEST observed diff as the resting
-//      baseline and reporting only the amount above it.
+// Fixes #4 and #5, full history:
+// 2026-09-29 — #4: the Home-screen Calendar/Settings pills sat too high; #5: every module's bottom nav bar
+//   hardcoded 34px of bottom padding instead of env(safe-area-inset-bottom).
+// 2026-09-30 (first re-fix) — both confirmed STILL broken on a real installed Home Screen session:
+//   #4's root cause was architectural: the pills were `position:fixed`, floating OVER the scrollable module grid,
+//   so whatever content scrolled to that exact screen position (including the last card) could end up directly
+//   behind them; a trailing spacer only protected the ONE scroll position where it lined up with the still-floating
+//   pills. Fixed by moving the pills into a genuine non-scrolling flex row reserved BELOW the scrollable content.
+//   #5's env() fix was necessary but not sufficient: a separate bug in index.html's keyboard-inset tracking
+//   (`--kb-inset`, applied as the nav's own margin-bottom) could read a standing non-zero
+//   window.innerHeight/visualViewport.height difference in standalone mode even with no keyboard open, adding a
+//   permanent phantom margin below the nav. Fixed by tracking the lowest-ever-observed diff as a resting baseline.
+// 2026-09-30 (Facebook-style restyle, replaces the visual half of both prior fixes — the non-scrolling-bar
+//   architecture from the first re-fix is KEPT, only the skin changed): both bars now use the same overlay
+//   treatment as Facebook's bottom nav — background matches the page (not a filled contrasting strip), a single
+//   thin top border as the only divider, no box-shadow fill trick, and a shorter, more compact height. The Home
+//   bar's two buttons changed from bordered/shadowed pills to plain icon+label buttons (NavBtn's own shape),
+//   arranged as a flex row (Calendar then Settings, left to right) rather than a "one centred, one pinned right"
+//   pill layout.
 //
 // Note on jsdom: jsdom's CSSOM does not understand the `env()` CSS function — assigning it to `style.paddingBottom`
-// silently no-ops (it never even reaches the style attribute), and `calc()` values get their operands reordered.
-// So #5's nav padding is verified by reading the source (a legitimate way to pin a static CSS-in-JS string jsdom
-// can't render faithfully). index.html's keyboard-inset script is plain, non-modularised JS (by design — it must
-// run before the React bundle loads), so its resting-baseline behaviour is verified two ways: a source-text check
-// that the fixed pattern (tracking a minimum, not the raw instantaneous diff) is present, and a faithful
-// re-implementation of the same algorithm exercised directly against synthetic readings.
+// silently no-ops (it never even reaches the style attribute). So the nav padding and background are verified by
+// reading the source (a legitimate way to pin a static CSS-in-JS string jsdom can't render faithfully).
+// index.html's keyboard-inset script is plain, non-modularised JS (by design — it must run before the React bundle
+// loads), so its resting-baseline behaviour is verified two ways: a source-text check that the fixed pattern
+// (tracking a minimum, not the raw instantaneous diff) is present, and a faithful re-implementation of the
+// algorithm exercised directly against synthetic readings.
 import fs from 'fs';
 import path from 'path';
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
-import AppRoot, { HOME_PILL_HEIGHT_PX, HOME_PILL_BAR_PADDING_BOTTOM } from './App.jsx';
+import AppRoot from './App.jsx';
 
 beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());
 
-describe('Home-screen pills sit in a real, non-scrolling bar — never floating over the scrollable grid (#4, re-fixed 2026-09-30)', () => {
-  it('HOME_PILL_BAR_PADDING_BOTTOM keeps the originally-approved 1.5x-height spacing, not a flat 12px', () => {
-    expect(HOME_PILL_HEIGHT_PX).toBe(36);
-    expect(HOME_PILL_BAR_PADDING_BOTTOM).toContain('54px');
-    expect(HOME_PILL_BAR_PADDING_BOTTOM).toContain('env(safe-area-inset-bottom');
-    expect(HOME_PILL_BAR_PADDING_BOTTOM).not.toMatch(/\+\s*12px/);
-  });
-  it('neither pill uses position:fixed any more — both are static children of the reserved bar', async () => {
+describe('Home bar: non-scrolling reserved row, never floating over the scrollable grid (#4, architecture kept from the 2026-09-30 re-fix)', () => {
+  it('neither button uses position:fixed any more — both are static children of the reserved bar', async () => {
     render(<AppRoot />);
     const cal = await screen.findByTestId('calendar-pill');
     const settings = await screen.findByTestId('settings-pill');
@@ -48,46 +44,89 @@ describe('Home-screen pills sit in a real, non-scrolling bar — never floating 
     expect(cal.style.bottom).toBe('');
     expect(settings.style.bottom).toBe('');
   });
-  it('the pill bar is a sibling of the scrollable content, not nested inside it — scrolling the grid can never move or hide the bar', async () => {
+  it('the bar is a sibling of the scrollable content, not nested inside it — scrolling the grid can never move or hide it', async () => {
     render(<AppRoot />);
     const cal = await screen.findByTestId('calendar-pill');
     const grid = await screen.findByText('GENERAL SITE DEFECTS');
-    // walk up from each to find the nearest ancestor that is itself scrollable (overflowY !== visible/undefined in jsdom's inline-style world)
     function scrollableAncestor(el) {
       let node = el.parentElement;
       while (node) { if (node.style && node.style.overflowY === 'scroll') return node; node = node.parentElement; }
       return null;
     }
-    const gridScrollAncestor = scrollableAncestor(grid);
-    const pillScrollAncestor = scrollableAncestor(cal);
-    expect(gridScrollAncestor).not.toBeNull();     // the grid IS inside a scrollable region
-    expect(pillScrollAncestor).toBeNull();          // the pill bar is NOT inside any scrollable region
+    expect(scrollableAncestor(grid)).not.toBeNull();   // the grid IS inside a scrollable region
+    expect(scrollableAncestor(cal)).toBeNull();        // the bar is NOT inside any scrollable region
   });
-  it('the bar keeps Calendar visually centred and Settings pinned to the right (3-column grid: 1fr / auto / 1fr)', async () => {
+  it('Calendar still comes before Settings, left to right', async () => {
     render(<AppRoot />);
     const cal = await screen.findByTestId('calendar-pill');
     const settings = await screen.findByTestId('settings-pill');
-    const bar = cal.parentElement;
-    expect(bar).toBe(settings.parentElement);
-    expect(bar.style.display).toBe('grid');
-    expect(bar.style.gridTemplateColumns).toBe('1fr auto 1fr');
-    expect(settings.style.justifySelf).toBe('end');
+    expect(cal.parentElement).toBe(settings.parentElement);
+    expect(cal.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
-describe('Every module bottom nav is flush with the bottom, respecting only the real safe-area inset (#5)', () => {
+describe('Home bar restyled as a Facebook-style overlay (2026-09-30): no filled strip, no bordered pills, compact height', () => {
+  it('the bar background matches the page background, with only a thin top border as the divider — no box-shadow fill', async () => {
+    render(<AppRoot />);
+    const bar = (await screen.findByTestId('calendar-pill')).parentElement;
+    expect(bar.style.background).toBe('rgb(232, 230, 226)'); // #e8e6e2 — the page's own background, not the old #f7f6f3 strip
+    expect(bar.style.borderTop).toBe('1px solid rgb(228, 228, 231)'); // #e4e4e7, normalised by jsdom's CSSOM
+    expect(bar.style.boxShadow).toBe('');
+  });
+  it('each button is a plain icon+label — no border, no background fill, no box-shadow (not a pill any more)', async () => {
+    render(<AppRoot />);
+    const cal = await screen.findByTestId('calendar-pill');
+    const settings = await screen.findByTestId('settings-pill');
+    [cal, settings].forEach(btn => {
+      expect(btn.style.borderStyle).toBe('none'); // border:"none" — jsdom's CSSOM reports the shorthand's width as "medium" (the initial value), so check borderStyle instead
+      expect(btn.style.background).toBe('transparent');
+      expect(btn.style.boxShadow).toBe('');
+      expect(btn.style.borderRadius).toBe('');
+    });
+  });
+  it('the bar is a compact flex row (each button flex:1), not a 3-column centred/pinned grid any more', async () => {
+    render(<AppRoot />);
+    const cal = await screen.findByTestId('calendar-pill');
+    const bar = cal.parentElement;
+    expect(bar.style.display).toBe('flex');
+    expect(cal.style.flex).toBe('1 1 0%'); // flex:1 shorthand, normalised by jsdom's CSSOM
+  });
+});
+
+describe('Every module bottom nav is an overlay too: page background, thin top border, no filled strip (#5)', () => {
   const src = fs.readFileSync(path.join(__dirname, 'App.jsx'), 'utf8');
-  // every bottomNav:{...} / bottomNav: {...} block (single- or multi-line) up to its closing brace
   const blocks = [...src.matchAll(/bottomNav:\s*\{[^}]*\}/g)].map(m => m[0]);
 
   it('at least one bottomNav style block exists per module (sanity — the scan itself must find something)', () => {
     expect(blocks.length).toBeGreaterThanOrEqual(7); // S(RCD) SI(IEL) CAL_STYLE ST(TAT) STH(Thermo) swbStyles() irtStyles()
   });
-  it('every bottomNav block uses env(safe-area-inset-bottom) for its bottom padding', () => {
-    blocks.forEach(b => expect(b).toMatch(/paddingBottom:\s*"env\(safe-area-inset-bottom,\s*0px\)"/));
+  it('every bottomNav block uses env(safe-area-inset-bottom) for its bottom padding, never a flat 34px', () => {
+    blocks.forEach(b => {
+      expect(b).toMatch(/paddingBottom:\s*"env\(safe-area-inset-bottom,\s*0px\)"/);
+      expect(b).not.toMatch(/paddingBottom:\s*"34px"/);
+    });
   });
-  it('no bottomNav block hardcodes a flat 34px any more', () => {
-    blocks.forEach(b => expect(b).not.toMatch(/paddingBottom:\s*"34px"/));
+  it('every bottomNav block\'s background matches the page (#e8e6e2), not the old contrasting #f7f6f3 strip', () => {
+    blocks.forEach(b => expect(b).toMatch(/background:\s*"#e8e6e2"/));
+  });
+  it('no bottomNav block uses the old 200px box-shadow fill trick any more', () => {
+    blocks.forEach(b => expect(b).not.toMatch(/boxShadow/));
+  });
+});
+
+describe('NavBtn (and its 3 module-local copies) are shorter, matching Facebook\'s compactness', () => {
+  const src = fs.readFileSync(path.join(__dirname, 'App.jsx'), 'utf8');
+  // the 4 nav-button component bodies: shared NavBtn, and IEL/TAT/SWB's own copies
+  const names = ['NavBtn', 'IELNavBtn', 'TATNavBtn', 'SWBNavBtn'];
+  it('all 4 implementations exist (sanity — the scan itself must find every one)', () => {
+    names.forEach(n => expect(src).toMatch(new RegExp(`function ${n}\\(`)));
+  });
+  it('none of them use the old minHeight:50 any more', () => {
+    expect(src).not.toMatch(/minHeight:\s*50\b/);
+  });
+  it('all 4 use the new compact minHeight:42', () => {
+    const count = (src.match(/minHeight:\s*42\b/g) || []).length;
+    expect(count).toBeGreaterThanOrEqual(4);
   });
 });
 
