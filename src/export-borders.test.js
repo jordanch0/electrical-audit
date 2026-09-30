@@ -62,10 +62,14 @@ describe('SWB / ELT data-row borders', () => {
   it('SWB Register header block (rows 1–5) is plain — no fill, font or border — like ELT and Welder; the board sheet keeps a styled Audit Summary heading', async () => {
     const wb = await load(exportSWBExcel, swbProject, swbResults, swbMeta);
     const reg = wb.getWorksheet('Register');
+    // Rows 1-4 are centred (2026-09-30 fix) but still carry no VISIBLE fill/border: ExcelJS materialises a cell's
+    // whole style object once any one sub-property (here, alignment) is set, so `fill` reads back as the explicit
+    // "no fill" value { pattern: 'none' } instead of `undefined` — visually identical (no background colour either
+    // way), just no longer literally untouched. Same accommodation already used by the equivalent ELT test.
     for (let r = 1; r <= 5; r++) for (let c = 1; c <= 16; c++) {
       const cell = reg.getCell(r, c);
-      expect(cell.fill, 'fill r' + r + ' c' + c).toBeUndefined();
-      expect(cell.border, 'border r' + r + ' c' + c).toBeUndefined();
+      expect(cell.fill === undefined || cell.fill.pattern === 'none', 'fill r' + r + ' c' + c).toBe(true);
+      expect(!cell.border || Object.keys(cell.border).length === 0, 'border r' + r + ' c' + c).toBe(true);
     }
     expect(String(reg.getCell('A1').value)).toBe('Site S — Switchboard / Enclosure Audit');
     expect([1, 2, 3, 4, 5].map(r => reg.getRow(r).height)).toEqual([32, 16, 16, 6, 40]);

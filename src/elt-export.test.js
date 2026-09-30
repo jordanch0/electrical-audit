@@ -59,14 +59,23 @@ describe('ELT Excel export structure', () => {
     expect(text(ws.getCell('A3'))).toBe('Auditor: Jane Auditor');
     expect(text(ws.getCell('C3'))).toBe('Date Tested: 21/09/2026');
     expect(text(ws.getCell('E3'))).toBe('Next Test Due: 21/03/2027');
-    // Rows 1-5 carry NO styling (same as the real IEL/RCD/TAT/Thermo files): no fill, font, border or alignment
-    // (row 5 — the headings — carries wrap-text alignment ONLY, so a narrow column can hold a long heading; still no fill, font or border)
+    // Rows 1-5 carry no INTENTIONAL fill/font/border styling — never bold, never a fill colour, never a border —
+    // same as the real IEL/RCD/TAT/Thermo files. (A cell that has ANY style property set, even just alignment,
+    // gets the workbook's plain default font baked in once the file round-trips through a real save/reload — e.g.
+    // {name:"Calibri",size:11,...} with no bold/italic/custom colour — which is a metadata artifact of the xlsx
+    // format itself, not a visual difference from a truly untouched cell, so it's accepted here too.) Alignment:
+    // rows 1-3 are centred (2026-09-30 fix — they used to carry no alignment at all, which meant the wide merged
+    // header text rendered flush-left instead of centred); row 4 is a blank spacer no code ever writes to, so it
+    // stays fully untouched; row 5 (the headings) carries wrap-text alignment ONLY, so a narrow column can hold a
+    // long heading.
     for (let r = 1; r <= 5; r++) for (let c = 1; c <= 16; c++) {
       const cell = ws.getCell(r, c);
       expect(cell.fill === undefined || cell.fill.pattern === 'none', 'fill r'+r+' c'+c).toBe(true);
-      if (r < 5) expect(cell.font, 'font r'+r+' c'+c).toBeUndefined(); else expect(!cell.font || !cell.font.bold, 'heading font not bold').toBe(true);
+      expect(!cell.font || (!cell.font.bold && !cell.font.italic), 'font r'+r+' c'+c+' should never be bold/italic').toBe(true);
       expect(!cell.border || Object.keys(cell.border).length === 0, 'border r'+r+' c'+c).toBe(true);
-      if (r < 5) expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined(); else expect(cell.alignment).toMatchObject({ wrapText: true });
+      if (r <= 3) expect(cell.alignment, 'alignment r'+r+' c'+c).toMatchObject({ horizontal: 'center' });
+      else if (r === 4) expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined();
+      else expect(cell.alignment).toMatchObject({ wrapText: true });
     }
     // same merges and row heights as IEL (adjusted for 16 columns)
     const merged = Object.keys(ws._merges).map(k => ws._merges[k].range).sort();

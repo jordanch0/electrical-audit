@@ -63,7 +63,20 @@ describe('Welder export structure', () => {
   it('header block rows 1–5 are unstyled; data rows have full-grid borders; Pass / Fail cells are tinted', async () => {
     const { wb } = await build(results);
     const reg = wb.getWorksheet('Register');
-    ['A1', 'A2', 'A3', 'A4'].forEach(a => { expect(reg.getCell(a).fill).toBeFalsy(); expect(reg.getCell(a).border || {}).toEqual({}); });
+    // fill/border stay effectively absent (no visible styling); alignment on A1-A3 is now centred (2026-09-30 fix)
+    // — ExcelJS materialises a cell's whole style once any one sub-property (alignment) is set, so `fill`/`font`
+    // read back with their explicit "untouched" defaults instead of strictly `undefined` once the file round-trips
+    // through a real save/reload, though visually identical either way. A4 is a blank spacer row nothing ever
+    // writes to (same as every other module's export), so it stays fully untouched, alignment included.
+    ['A1', 'A2', 'A3'].forEach(a => {
+      const cell = reg.getCell(a);
+      expect(!cell.fill || cell.fill.pattern === 'none').toBe(true);
+      expect(cell.border || {}).toEqual({});
+      expect(cell.alignment).toMatchObject({ horizontal: 'center' });
+    });
+    const a4 = reg.getCell('A4');
+    expect(!a4.fill || a4.fill.pattern === 'none').toBe(true);
+    expect(a4.border || {}).toEqual({});
     const hasGrid = c => ['top', 'bottom', 'left', 'right'].every(s => c.border && c.border[s] && c.border[s].style === 'thin');
     for (const r of [6, 7, 8, 9]) for (let c = 1; c <= 13; c++) expect(hasGrid(reg.getCell(r, c))).toBe(true);
     expect(reg.getCell('F6').fill.fgColor.argb).toBe('FFE2EFDA');
