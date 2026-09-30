@@ -782,8 +782,11 @@ if (pC < 0) pC = aC + 1;
 // New template has separate Circuit column (col C); old format combined them in col B
 const cC = header.findIndex(h => h === "circuit / cb" || (h.includes("circuit") && !h.includes("isolation")) || h === "cb");
 const hasSeparateCircuit = cC >= 0 && cC !== pC;
-// CB Type (col D) and Amp Rating (col E) — only in new 3-col template
-const cCbType    = header.findIndex(h => h.includes("cb") && h.includes("type") || h === "cb / rcd type");
+// CB Type (col D) and Amp Rating (col E) — the new 3-col BLANK TEMPLATE calls this column "CB Type"; the app's own
+// EXPORT (re-importable as a combined Panel+Circuit sheet, below) calls the same column "Device Type" — both must
+// be recognised so a re-imported export doesn't silently fail to match a column that is actually right there
+// (2026-09-30 fix, part 2).
+const cCbType    = header.findIndex(h => (h.includes("cb") && h.includes("type")) || (h.includes("device") && h.includes("type")) || h === "cb / rcd type");
 const cAmpRating = header.findIndex(h => h.includes("amp") || h.includes("rating"));
 // circuitMeta accumulator: { "Panel Name": { "Circuit Name": {cbType, ampRating} } }
 const circuitMetaMap = {};
@@ -797,11 +800,16 @@ if (!aRaw && !pRaw) continue;
 if (aRaw.toLowerCase() === "area") continue;
 const aKey = aRaw || "General";
 if (!rawByArea[aKey]) rawByArea[aKey] = [];
+// CB Type / Amp Rating are read on EITHER format — the columns are found by header name regardless of whether
+// Circuit is its own column or combined into Panel/Asset Name (2026-09-30 fix, part 1: this used to be read only
+// inside the hasSeparateCircuit branch, so a re-imported EXPORT — which always combines Panel+Circuit into one
+// "Panel / Asset Name" cell — silently lost circuitMeta entirely, even though the export writes the data right
+// there in the sheet).
+const cbT  = cCbType    >= 0 ? String(row[cCbType]    || "").trim() : "";
+const ampR = cAmpRating >= 0 ? String(row[cAmpRating] || "").trim() : "";
 if (hasSeparateCircuit) {
   // New 3-column format: Area | Panel | Circuit [| CB Type | Amp Rating]
   const cRaw = String(row[cC] || "").trim();
-  const cbT  = cCbType    >= 0 ? String(row[cCbType]    || "").trim() : "";
-  const ampR = cAmpRating >= 0 ? String(row[cAmpRating] || "").trim() : "";
   if (pRaw || cRaw) {
     rawByArea[aKey].push({ panel: pRaw, circuit: cRaw || pRaw });
     if (cbT || ampR) {
@@ -810,8 +818,11 @@ if (hasSeparateCircuit) {
     }
   }
 } else {
-  // Legacy 2-column format: Area | Panel+Circuit combined
-  if (pRaw) rawByArea[aKey].push(pRaw);
+  // Legacy 2-column format: Area | Panel+Circuit combined — also the app's OWN EXPORT shape. CB Type / Amp
+  // Rating are captured per raw row here and re-attached by index once the panel/circuit split heuristic below
+  // has run (that heuristic needs the full batch of raw strings for an area at once, to detect a shared panel-name
+  // prefix — it can't resolve a single row in isolation the way the 3-column branch above can).
+  if (pRaw) rawByArea[aKey].push({ raw: pRaw, cbType: cbT, ampRating: ampR });
 }
 }
 const areaMap = {};
@@ -824,8 +835,8 @@ if (hasSeparateCircuit) {
     areaMap[aName][panel].add(circuit);
   });
 } else {
-  // Legacy: items are strings needing panel/circuit split
-  const panelStrs = items;
+  // Legacy: items are {raw, cbType, ampRating} needing panel/circuit split
+  const panelStrs = items.map(it => it.raw);
   let resolved = panelStrs.map(pRaw => {
     const split = parsePanelCircuit(pRaw);
     if (split) return split;
@@ -834,9 +845,16 @@ if (hasSeparateCircuit) {
     return { panel: prefix, circuit };
   });
   resolved = collapsePanelNames(resolved);
-  resolved.forEach(({ panel, circuit }) => {
+  // collapsePanelNames (like the .map() above it) preserves order and length 1:1 with panelStrs/items, so the
+  // original row's cbType/ampRating can be re-attached by index.
+  resolved.forEach(({ panel, circuit }, idx) => {
     if (!areaMap[aName][panel]) areaMap[aName][panel] = new Set();
     areaMap[aName][panel].add(circuit);
+    const { cbType: cbT, ampRating: ampR } = items[idx];
+    if (cbT || ampR) {
+      if (!circuitMetaMap[panel]) circuitMetaMap[panel] = {};
+      circuitMetaMap[panel][circuit] = { cbType: cbT, ampRating: ampR };
+    }
   });
 }
 });
