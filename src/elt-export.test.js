@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportELTExcel, eltOverall, ELT_COLUMNS, ELT_DEFECT_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
+import { exportELTExcel, eltOverall, ELT_COLUMNS, ELT_DEFECT_COLUMNS, migrateProjectToAreas as toAreas, sitePhotoStore, sitePhotoIO } from './App.jsx';
+import 'fake-indexeddb/auto'; // ELT's photos now live in IndexedDB (Stage 3, 2026-09-29)
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+// These tests check image COUNT/POSITION/LABELS, never byte content — a single fixed stub is enough, no need to
+// differentiate which underlying record produced which copy.
+beforeAll(() => { sitePhotoIO.exportCopy = async () => ({ dataUrl: PNG }); });
+beforeEach(async () => { await sitePhotoStore.put('ph1', { buf: new Uint8Array([1]).buffer, type: 'image/png' }); await sitePhotoStore.put('ph2', { buf: new Uint8Array([2]).buffer, type: 'image/png' }); await sitePhotoStore.put('x', { buf: new Uint8Array([3]).buffer, type: 'image/png' }); await sitePhotoStore.put('y', { buf: new Uint8Array([4]).buffer, type: 'image/png' }); });
 const pass4 = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
 
 const project = toAreas({
@@ -20,7 +25,7 @@ const results = { p1: {
   a2: { ...pass4, discharge:'fail', rectified:'Scheduled for Repair', rectifiedDate:'2026-10-01', defectId:'74', responsibility:'Client', priority:'H', notes:'Seal cracked' },
   a3: { ...pass4, visual:'fail', rectified:'Removed from Service', responsibility:'Site Electrician' },
   // a4 left completely untested (no entry)
-  a5: { ...pass4, photos:[{id:'ph1',dataUrl:PNG},{id:'ph2',dataUrl:PNG}] },
+  a5: { ...pass4, photos:[{id:'ph1',w:1,h:1},{id:'ph2',w:1,h:1}] },
 }};
 const meta = { auditor:'Jane Auditor', testDate:'2026-09-21', nextTestDate:'2027-03-21' };
 
@@ -154,7 +159,7 @@ describe('ELT Photos sheet', () => {
   });
 
   it('exports photos of untested/partly tested fittings (labelled), while keeping them out of the register', async () => {
-    const res = { p1: { a4: { photos:[{id:'x',dataUrl:PNG}] }, a3: { visual:'pass', photos:[{id:'y',dataUrl:PNG}] } } };
+    const res = { p1: { a4: { photos:[{id:'x',w:1,h:1}] }, a3: { visual:'pass', photos:[{id:'y',w:1,h:1}] } } };
     const wb = await runExport(project, res, meta);
     const ps = wb.getWorksheet('Photos');
     expect(ps).toBeTruthy();

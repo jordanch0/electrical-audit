@@ -8,6 +8,7 @@ import JSZip from 'jszip';
 import crypto from 'crypto';
 import AppRoot, { exportWelderExcel, WELDER_CHECKLIST, WELDER_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
 import { JPEG_A, JPEG_B } from './test/jpeg-fixtures.js';
+import 'fake-indexeddb/auto'; // photos now live in IndexedDB (Stage 2, 2026-09-29), not inline in localStorage
 
 const sha = b => crypto.createHash('sha256').update(b).digest('hex');
 const bytes = url => Buffer.from(url.split(',')[1], 'base64');
@@ -108,24 +109,28 @@ describe('Welder photo -> export through the real UI', () => {
     localStorage.setItem('welder-meta-v1', JSON.stringify({ p1: meta }));
     vi.stubGlobal('Image', class { set src(v) { this._s = v; queueMicrotask(() => { this.width = 4000; this.height = 3000; this.onload && this.onload(); }); } get src() { return this._s; } });
     HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
-    HTMLCanvasElement.prototype.toDataURL = () => (shot++ % 2 === 0 ? JPEG_A : JPEG_B);
+    // siteStorePhotos generates a full (maxDim 1280) AND a thumbnail (maxDim 200) per photo — two toDataURL calls now, not one.
+    // Only the full-size call (canvas width > 200) should advance the JPEG_A/JPEG_B alternation; the thumbnail's content is
+    // never asserted on, so it gets a fixed placeholder.
+    HTMLCanvasElement.prototype.toDataURL = function () { return this.width > 200 ? (shot++ % 2 === 0 ? JPEG_A : JPEG_B) : 'data:image/jpeg;base64,AAAA'; };
     const user = userEvent.setup();
-    const addPhoto = async () => {
-      const before = document.querySelectorAll('img[src^="data:image"]').length;
+    const addPhoto = async (assetId, expectedLen) => {
       fireEvent.change(screen.getByTestId('welder-photo-input'), { target: { files: [new File([new Uint8Array([1, 2, 3])], 'cam.jpg', { type: 'image/jpeg' })] } });
-      await waitFor(() => expect(document.querySelectorAll('img[src^="data:image"]').length).toBe(before + 1));
+      // photos now resolve to a blob: URL asynchronously via IndexedDB (SitePhoto/useSitePhotoUrl), so the visible DOM signal
+      // is less direct than a synchronous data: URL was — assert on the actual persisted state instead, which is what
+      // every other assertion in this test already reads anyway.
+      await waitFor(() => { const r = JSON.parse(localStorage.getItem('welder-results-v1') || '{}').p1 || {}; expect((r[assetId] && r[assetId].photos || []).length).toBe(expectedLen); });
     };
     render(<AppRoot />);
     await user.click(screen.getByText('WELDER TESTING'));
     await user.click(await screen.findByText('Site A', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('W001'));
-    await addPhoto();
+    await addPhoto('a1', 1);
     for (let i = 0; i < 12; i++) await user.click(screen.getAllByRole('button', { name: 'PASS' })[i]);
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     await user.click(await screen.findByText('W002'));
-    await addPhoto();
-    await waitFor(() => { const r = JSON.parse(localStorage.getItem('welder-results-v1')).p1; expect(r.a1.photos).toHaveLength(1); expect(r.a2.photos).toHaveLength(1); });
+    await addPhoto('a2', 1);
 
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
     await user.click(await screen.findByRole('button', { name: 'Complete Welder Audit' }));

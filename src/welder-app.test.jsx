@@ -85,14 +85,20 @@ describe('Welder module shell', () => {
     expect(ls('welder-results-v1').dixon.a1.items.visual.result).toBe('pass');
   });
 
-  it('a Fail with blanks stays Untested (no panel); once all 12 are answered the asset-level FAIL panel appears with stored ★ defaults, in guide order', async () => {
+  it('a Fail with blanks shows the FAIL panel immediately (2026-09-29 fix) while Overall stays Untested; once all 12 are answered Overall becomes FAIL and the panel (with stored ★ defaults) is unchanged, in guide order', async () => {
     const user = userEvent.setup();
     seed();
     await openWelder(user);
     await setResult(user, 0, 'FAIL');
+    // Overall stays Untested until every item is answered — unchanged rule.
     expect(screen.getByText(/Overall: Untested — 11 items still to answer/)).toBeInTheDocument();
-    expect(screen.queryByText('⚠ FAIL — DEFECT DETAILS')).not.toBeInTheDocument();
+    // But the panel must NOT wait for that: it shows on the very first Fail, independent of how many items remain blank.
+    expect(screen.getByText('⚠ FAIL — DEFECT DETAILS')).toBeInTheDocument();
+    // ★ defaults are stored the moment the panel can show, not only once the asset is fully answered.
+    expect(ls('welder-results-v1').dixon.a1.rectified).toBe('Removed from Service');
+    expect(ls('welder-results-v1').dixon.a1.responsibility).toBe('Site Electrician');
     for (let i = 1; i < 12; i++) await setResult(user, i, 'PASS');
+    expect(screen.getByText('Overall: FAIL')).toBeInTheDocument();
     expect(screen.getByText('⚠ FAIL — DEFECT DETAILS')).toBeInTheDocument();
     const labels = ['RECTIFIED / SCHEDULED ACTION', 'DEFECT ID', 'RESPONSIBILITY', 'PRIORITY', 'DATE RECTIFIED / SCHEDULED'];
     const y = t => screen.getByText(t).compareDocumentPosition.bind(screen.getByText(t));
@@ -104,6 +110,21 @@ describe('Welder module shell', () => {
     const rec = ls('welder-results-v1').dixon.a1;
     expect(rec.rectified).toBe('Removed from Service');
     expect(rec.responsibility).toBe('Site Electrician');
+  });
+
+  it('the FAIL panel tracks "any Fail" independently of Overall: appears/disappears with blanks still unanswered, and the Report/export gate stays tied to the completed Overall result, not to the panel (2026-09-29)', async () => {
+    const user = userEvent.setup();
+    seed();
+    await openWelder(user);
+    expect(screen.queryByText('⚠ FAIL — DEFECT DETAILS')).not.toBeInTheDocument();
+    await setResult(user, 3, 'FAIL'); // one Fail, 11 still blank
+    expect(screen.getByText('⚠ FAIL — DEFECT DETAILS')).toBeInTheDocument();
+    expect(screen.getByText(/Overall: Untested — 11 items still to answer/)).toBeInTheDocument();
+    await setResult(user, 3, 'PASS'); // the only Fail is cleared — panel must go away again, still incomplete
+    expect(screen.queryByText('⚠ FAIL — DEFECT DETAILS')).not.toBeInTheDocument();
+    // Report register is gated on the FULLY DERIVED overall result (still Untested mid-audit), never on the panel:
+    // an incomplete welder that has never had a Fail export/report as Untested either way, so this only matters
+    // once the asset is genuinely FAIL — covered by the existing "defect data is RETAINED" test below.
   });
 
   it('defect data is RETAINED when the asset leaves FAIL, and gated out of the Report register', async () => {

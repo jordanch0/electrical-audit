@@ -1,12 +1,23 @@
 // SWB export = Register (one row per board) + one full sheet per board — the same physical structure as Welder's export.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportSWBExcel, swbRegisterRows, swbBoardOverall, swbSheetName, SWB_REGISTER_COLUMNS, SWB_CHECKLIST } from './App.jsx';
+import { exportSWBExcel, swbRegisterRows, swbBoardOverall, swbSheetName, SWB_REGISTER_COLUMNS, SWB_CHECKLIST, sitePhotoStore, sitePhotoIO } from './App.jsx';
 import { JPEG_A, JPEG_B } from './test/jpeg-fixtures.js';
+import 'fake-indexeddb/auto'; // SWB's photos now live in IndexedDB (Stage 4, 2026-09-29)
 
 let payload;
 beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
 afterEach(() => { delete window.webkit; });
+// These tests check image COUNT/POSITION/LABELS, never byte content — a fixed stub keyed by the record's own `type`
+// marker (set when seeding) is enough, no need for a full canvas-backed exportCopy in jsdom.
+beforeAll(() => { sitePhotoIO.exportCopy = async rec => ({ dataUrl: rec.type === 'A' ? JPEG_A : JPEG_B }); });
+beforeEach(async () => {
+  await sitePhotoStore.put('p1', { buf: new Uint8Array([1]).buffer, type: 'A' });
+  await sitePhotoStore.put('p2', { buf: new Uint8Array([2]).buffer, type: 'B' });
+  await sitePhotoStore.put('p3', { buf: new Uint8Array([3]).buffer, type: 'A' });
+  await sitePhotoStore.put('x', { buf: new Uint8Array([4]).buffer, type: 'A' });
+  await sitePhotoStore.put('y', { buf: new Uint8Array([5]).buffer, type: 'B' });
+});
 const V = c => (c.value == null ? '' : String(c.value));
 const meta = { auditor: 'Jane', testDate: '2026-07-13', nextTestDate: '2027-07-13' };
 async function build(project, results, m = meta) {
@@ -25,10 +36,10 @@ const results = { s1: {
   wp: {
     msb: { ...answered('PPPPPPPPPPP') },                                                                  // all pass
     mcc: { ...answered('PFN........', { ventilation: { risk: 'M', defectId: 'D-7', comment: 'blocked', rectified: 'Scheduled for Repair', responsibility: 'Site Electrician' }, enclosure: { risk: 'H', defectId: 'STALE', comment: 'old' } }),
-           _photos: [{ id: 'p1', dataUrl: JPEG_A }, { id: 'p2', dataUrl: JPEG_B }] },                   // partly answered, 1 fail, 2 photos
+           _photos: [{ id: 'p1', w: 200, h: 150 }, { id: 'p2', w: 200, h: 150 }] },                   // partly answered, 1 fail, 2 photos
   },
   ss: {
-    msb2: { ...answered('PPPPPPPPPPF', { earthing: { risk: 'U', defectId: 'D-9' } }), _photos: [{ id: 'p3', dataUrl: JPEG_A }] }, // complete, 1 fail, 1 photo
+    msb2: { ...answered('PPPPPPPPPPF', { earthing: { risk: 'U', defectId: 'D-9' } }), _photos: [{ id: 'p3', w: 200, h: 150 }] }, // complete, 1 fail, 1 photo
     // db: not tested at all
   },
 } };
@@ -124,7 +135,7 @@ describe('exportSWBExcel structure', () => {
 
   it('stray item-level photos from an earlier build are folded onto the board sheet too (nothing dropped)', async () => {
     const proj = { id: 'p', name: 'S', areas: [{ id: 'a', name: 'A', boards: [{ id: 'b', name: 'B' }] }] };
-    const wb = await build(proj, { p: { a: { b: { enclosure: { status: 'pass', photos: [{ id: 'x', dataUrl: JPEG_A }] }, _photos: [{ id: 'y', dataUrl: JPEG_B }] } } } });
+    const wb = await build(proj, { p: { a: { b: { enclosure: { status: 'pass', photos: [{ id: 'x', w: 200, h: 150 }] }, _photos: [{ id: 'y', w: 200, h: 150 }] } } } });
     expect(wb.getWorksheet('B').getImages()).toHaveLength(2);
   });
 

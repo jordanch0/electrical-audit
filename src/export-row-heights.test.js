@@ -3,7 +3,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
-import { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, exportSWBExcel, exportWelderExcel, exportELTExcel, exportGSDExcel, gsdPhotoStore, gsdPhotoIO, SWB_CHECKLIST, migrateProjectToAreas } from './App.jsx';
+import { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, exportSWBExcel, exportWelderExcel, exportELTExcel, exportGSDExcel, gsdPhotoStore, gsdPhotoIO, sitePhotoStore, sitePhotoIO, SWB_CHECKLIST, migrateProjectToAreas } from './App.jsx';
 import 'fake-indexeddb/auto';
 import { JPEG_A } from './test/jpeg-fixtures.js';
 
@@ -95,22 +95,47 @@ describe('real exports: photos fit their row at their natural aspect', () => {
   };
   const PORTRAIT = pngHeader(300, 400), LANDSCAPE = JPEG_A, SQUARE = pngHeader(500, 500);
   it('SWB board photos: portrait / landscape / square keep their aspect and each row is taller than its image + offset', async () => {
+    // Photos live in sitePhotoStore now (Stage 4, 2026-09-29) — see the Welder test below for why exportCopy is stubbed.
     const project = { id: 's1', name: 'S', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'A', boards: [{ id: 'b', name: 'MSB' }] }] };
-    await exportSWBExcel(project, { s1: { a: { b: { enclosure: { status: 'pass' }, _photos: [{ id: '1', dataUrl: PORTRAIT }, { id: '2', dataUrl: LANDSCAPE }, { id: '3', dataUrl: SQUARE }] } } } }, { auditor: 'J', testDate: '2026-09-21' });
-    const g = await geometry(); expect(g).toHaveLength(3);
-    expect(g.map(x => x.ratio)).toEqual([expect.closeTo(300 / 400, 1), expect.closeTo(4 / 3, 2), expect.closeTo(1, 2)]);           // NOT stretched to one fixed box
-    expect(g.map(x => [Math.round(x.wPx), Math.round(x.hPx)])).toEqual([[105, 140], [140, 105], [140, 140]]);
-    g.forEach((x, i) => expect(x.rowPx, 'photo ' + i).toBeGreaterThan(x.offPx + x.hPx + 8));                                     // a clear margin: nothing can be cut off
-    expect(g[0].rowPx).toBeGreaterThan(g[1].rowPx);                                                                               // the taller portrait photo gets the taller row
+    await sitePhotoStore.put('1', { buf: new Uint8Array([1]).buffer, type: 'portrait' });
+    await sitePhotoStore.put('2', { buf: new Uint8Array([2]).buffer, type: 'landscape' });
+    await sitePhotoStore.put('3', { buf: new Uint8Array([3]).buffer, type: 'square' });
+    const origExportCopy = sitePhotoIO.exportCopy;
+    sitePhotoIO.exportCopy = async rec => ({ dataUrl: rec.type === 'portrait' ? PORTRAIT : rec.type === 'landscape' ? LANDSCAPE : SQUARE });
+    try {
+      await exportSWBExcel(project, { s1: { a: { b: { enclosure: { status: 'pass' }, _photos: [{ id: '1', w: 300, h: 400 }, { id: '2', w: 200, h: 150 }, { id: '3', w: 500, h: 500 }] } } } }, { auditor: 'J', testDate: '2026-09-21' });
+      const g = await geometry(); expect(g).toHaveLength(3);
+      expect(g.map(x => x.ratio)).toEqual([expect.closeTo(300 / 400, 1), expect.closeTo(4 / 3, 2), expect.closeTo(1, 2)]);           // NOT stretched to one fixed box
+      expect(g.map(x => [Math.round(x.wPx), Math.round(x.hPx)])).toEqual([[105, 140], [140, 105], [140, 140]]);
+      g.forEach((x, i) => expect(x.rowPx, 'photo ' + i).toBeGreaterThan(x.offPx + x.hPx + 8));                                     // a clear margin: nothing can be cut off
+      expect(g[0].rowPx).toBeGreaterThan(g[1].rowPx);                                                                               // the taller portrait photo gets the taller row
+    } finally { sitePhotoIO.exportCopy = origExportCopy; }
   });
   it('Welder photos likewise', async () => {
+    // Photos live in sitePhotoStore now (Stage 2, 2026-09-29): the results object carries {id,w,h} pointers, and export
+    // resolves each id to an export-sized copy via sitePhotoIO.exportCopy. Stubbed here the same way GSD's own tests stub
+    // gsdPhotoIO.exportCopy — jsdom has no real canvas, and exportCopy's real implementation needs one once a photo's actual
+    // bytes exceed its 320px maxSide (PORTRAIT's real PNG header is 300x400, over that threshold).
     const project = { id: 'w', name: 'Site W', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W1', brand: 'K', model: 'E', serial: '1' }] }] };
-    await exportWelderExcel(project, { w: { a1: { items: {}, photos: [{ id: '1', dataUrl: PORTRAIT }, { id: '2', dataUrl: LANDSCAPE }] } } }, { auditor: 'J', testDate: '2026-09-21' });
-    const g = await geometry(); expect(g).toHaveLength(2); g.forEach(x => expect(x.rowPx).toBeGreaterThan(x.offPx + x.hPx + 8)); expect(Math.round(g[0].hPx)).toBe(140);
+    await sitePhotoStore.put('1', { buf: new Uint8Array([1]).buffer, type: 'image/png' });
+    await sitePhotoStore.put('2', { buf: new Uint8Array([2]).buffer, type: 'image/jpeg' });
+    const origExportCopy = sitePhotoIO.exportCopy;
+    sitePhotoIO.exportCopy = async rec => ({ dataUrl: rec.type === 'image/png' ? PORTRAIT : LANDSCAPE });
+    try {
+      await exportWelderExcel(project, { w: { a1: { items: {}, photos: [{ id: '1', w: 300, h: 400 }, { id: '2', w: 200, h: 150 }] } } }, { auditor: 'J', testDate: '2026-09-21' });
+      const g = await geometry(); expect(g).toHaveLength(2); g.forEach(x => expect(x.rowPx).toBeGreaterThan(x.offPx + x.hPx + 8)); expect(Math.round(g[0].hPx)).toBe(140);
+    } finally { sitePhotoIO.exportCopy = origExportCopy; }
   });
   it('ELT Photos sheet likewise', async () => {
+    // Photos live in sitePhotoStore now (Stage 3, 2026-09-29) — see the Welder test above for why exportCopy is stubbed.
     const project = migrateProjectToAreas({ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', assets: [{ id: 'a1', location: 'Site E', assetLocation: 'SE Door', assetId: 'EL-1', type: 'Exit Signs', maintained: 'Maintained', fitting: 'X' }] });
-    await exportELTExcel(project, { p1: { a1: { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass', photos: [{ id: '1', dataUrl: PORTRAIT }, { id: '2', dataUrl: LANDSCAPE }] } } }, { auditor: 'J', testDate: '2026-09-21' });
-    const g = await geometry(); expect(g).toHaveLength(2); g.forEach(x => expect(x.rowPx).toBeGreaterThan(x.offPx + x.hPx + 8)); expect(Math.round(g[0].wPx)).toBe(105);
+    await sitePhotoStore.put('1', { buf: new Uint8Array([1]).buffer, type: 'image/png' });
+    await sitePhotoStore.put('2', { buf: new Uint8Array([2]).buffer, type: 'image/jpeg' });
+    const origExportCopy = sitePhotoIO.exportCopy;
+    sitePhotoIO.exportCopy = async rec => ({ dataUrl: rec.type === 'image/png' ? PORTRAIT : LANDSCAPE });
+    try {
+      await exportELTExcel(project, { p1: { a1: { visual: 'pass', discharge: 'pass', switching: 'pass', charging: 'pass', photos: [{ id: '1', w: 300, h: 400 }, { id: '2', w: 200, h: 150 }] } } }, { auditor: 'J', testDate: '2026-09-21' });
+      const g = await geometry(); expect(g).toHaveLength(2); g.forEach(x => expect(x.rowPx).toBeGreaterThan(x.offPx + x.hPx + 8)); expect(Math.round(g[0].wPx)).toBe(105);
+    } finally { sitePhotoIO.exportCopy = origExportCopy; }
   });
 });

@@ -1,12 +1,18 @@
 // SWB and ELT are the only ExcelJS-based exports (the rest go through SheetJS, which drops all styles),
 // so they are the reference pair for real cell styling. Their data-row borders must stay identical.
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import ExcelJS from 'exceljs';
-import { exportSWBExcel, exportELTExcel, migrateProjectToAreas as toAreas } from './App.jsx';
+import { exportSWBExcel, exportELTExcel, migrateProjectToAreas as toAreas, sitePhotoStore, sitePhotoIO } from './App.jsx';
+import 'fake-indexeddb/auto'; // SWB's photos now live in IndexedDB (Stage 4, 2026-09-29)
 
 const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 let payload;
-beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; });
+beforeAll(() => { sitePhotoIO.exportCopy = async () => ({ dataUrl: PNG }); });  // count/label/border checks only, no byte content asserted
+beforeEach(async () => {
+  payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } };
+  await sitePhotoStore.put('p1', { buf: new Uint8Array([1]).buffer, type: 'image/png' });
+  await sitePhotoStore.put('p2', { buf: new Uint8Array([2]).buffer, type: 'image/png' });
+});
 afterEach(() => { delete window.webkit; });
 
 async function load(exportFn, ...args) {
@@ -20,7 +26,7 @@ const swbProject = { id:'s1', name:'Site S', company:'Co', abn:'1', licence:'L',
 const swbResults = { s1: { ar1: { b1: {
   enclosure:   { status:'pass', comment:'ok' },
   ventilation: { status:'fail', comment:'blocked', risk:'H', defectId:'D1' },
-  _photos: [{ id:'p1', dataUrl:PNG }, { id:'p2', dataUrl:PNG }],
+  _photos: [{ id:'p1', w:1, h:1 }, { id:'p2', w:1, h:1 }],
 } } } };
 const swbMeta = { auditor:'Jane', testDate:'2026-09-21', nextTestDate:'2027-09-21' };
 

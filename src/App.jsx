@@ -149,6 +149,9 @@ function xjImageSize(dataUrl) {
 }
 const XJ_PHOTO_BOX = 140;   // an embedded photo fits a 140 x 140 px box at its NATURAL aspect (a 4:3 photo is 140 x 105; a portrait one 105 x 140) — never stretched
 function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.w > 0 ? s.w : 4, H = s && s.h > 0 ? s.h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
+// Same box math as xjPhotoBox, but from already-known dimensions (a sitePhotoStore/gsdPhotoStore pointer's stored {w,h}) rather
+// than re-parsing them out of a data URL — used once photos live in IndexedDB and the pointer already carries its own size.
+function xjPhotoBoxWH(w, h) { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
 const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
 // ── Company logo (Global Settings, 2026-09-27): a centred image strip in row 1, full sheet width, above the existing header block —
 // ONLY when a logo is set in Global Settings (no logo = today's exact output, byte-identical). Every direct-write header sheet reserves
@@ -206,8 +209,10 @@ const appLogoStore = {
   del: () => appLogoTx("readwrite", s => s.delete(APP_LOGO_ID)),
 };
 // ── Per-site logo override (2026-09-27): a site's OWN logo, overriding the global one, exactly like Company/ABN/Licence already override the
-// global pre-fill per site. Keyed by `${module}:${siteId}` — every module creates sites with `id: slugify(name)` (no random suffix), so two
-// different modules' sites can share an id; the module prefix keeps their logos from colliding. Presence in this store IS the override: there
+// global pre-fill per site. Keyed by `${module}:${siteId}` — every module creates sites via `slugify(name)`, which DOES append a random uid()
+// suffix (corrected 2026-09-28: an earlier version of this comment said "no random suffix", which was wrong), so an id collision — within one
+// module or across two different modules — is already very unlikely on its own. The module prefix is defence in depth on top of that, not a
+// fix for a real observed collision. Presence in this store IS the override: there
 // is no flag on the project object, so a site created before this feature (or one whose logo was never set) just falls through to global,
 // with no migration needed — the same shape as Company/ABN/Licence's own fallback story.
 const SITE_LOGO_DB_NAME = "sparkcheck-site-logos", SITE_LOGO_DB_STORE = "logos";
@@ -238,6 +243,205 @@ async function xjGetLogoDataUrl(module, siteId) {
   try { const site = await siteLogoStore.get(module, siteId); if (site) return gsdRecToDataUrl(site); } catch (_) { /* fall through to global */ }
   const s = loadAppSettings(); if (!s.logoId) return null;
   try { const rec = await appLogoStore.get(); return rec ? gsdRecToDataUrl(rec) : null; } catch (_) { return null; }
+}
+// ── Shared site-photo storage (SWB / ELT / Welder), 2026-09-29 ─────────────────────────────────────────────────────────────
+// Moves these three modules' photos out of inline base64 in localStorage (each module's own `-results-v{n}` / `-history-v{n}`
+// keys, which share a ~5 MB per-origin quota with everything else) into IndexedDB, following GSD's already-proven pattern
+// (`gsdPhotoStore` below): each photo is TWO records, the full image (long edge <= 1280) under its id, and a thumbnail
+// (long edge 200) under `id + "~t"`. A photo's app-visible shape becomes a pointer, `{id, w, h}` — never `dataUrl` again.
+// A SEPARATE IndexedDB database from GSD's own `sparkcheck-gsd-photos` on purpose: GSD's store already works and is tested;
+// there is no benefit to consolidating it with three more modules' traffic, only migration risk to an already-working module.
+const SITE_PHOTO_DB_NAME = "sparkcheck-site-photos", SITE_PHOTO_DB_STORE = "photos";
+let _sitePhotoDb = null;
+function sitePhotoOpenDb() {
+  if (!_sitePhotoDb) _sitePhotoDb = new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { rej(new Error("IndexedDB unavailable")); return; }
+    const rq = indexedDB.open(SITE_PHOTO_DB_NAME, 1);
+    rq.onupgradeneeded = () => rq.result.createObjectStore(SITE_PHOTO_DB_STORE);
+    rq.onsuccess = () => res(rq.result);
+    rq.onerror = () => rej(rq.error);
+  }).catch(e => { _sitePhotoDb = null; throw e; });
+  return _sitePhotoDb;
+}
+const sitePhotoTx = (mode, fn) => sitePhotoOpenDb().then(db => new Promise((res, rej) => {
+  const tx = db.transaction(SITE_PHOTO_DB_STORE, mode); const r = fn(tx.objectStore(SITE_PHOTO_DB_STORE));
+  tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+}));
+// records are {buf: ArrayBuffer, type} — plain data, no Blob in the store (matches gsdPhotoStore's shape exactly)
+const sitePhotoStore = {
+  put: (id, rec) => sitePhotoTx("readwrite", s => s.put(rec, id)),
+  get: id => sitePhotoTx("readonly", s => s.get(id)),
+  del: id => sitePhotoTx("readwrite", s => s.delete(id)),
+  delPhoto: p => Promise.all([sitePhotoStore.del(p.id), sitePhotoStore.del(p.id + "~t")]).catch(() => {}),
+  // for records shaped like GSD's ({photos:[...]} on each item)
+  delItems: items => Promise.all((items || []).flatMap(i => (i.photos || []).map(p => sitePhotoStore.delPhoto(p)))),
+  // for a bare photo array not wrapped in an owning record — SWB's board-level `_photos` is exactly this shape
+  delPhotoList: photos => Promise.all((photos || []).map(p => sitePhotoStore.delPhoto(p))),
+};
+// The two image operations behind one object, same reasoning as gsdPhotoIO: tests can supply deterministic ones (jsdom has no canvas).
+const sitePhotoIO = {
+  async resize(file) {
+    const fullUrl = await resizeImageToDataUrl(file); const thumbUrl = await resizeImageToDataUrl(file, 200, 0.6);
+    const { w, h } = await gsdImageSize(fullUrl);
+    return { full: gsdDataUrlToRec(fullUrl), thumb: gsdDataUrlToRec(thumbUrl), w, h };
+  },
+  // stored full image -> a small copy for export embedding: { dataUrl } (long edge <= maxSide) — same as gsdPhotoIO.exportCopy
+  async exportCopy(rec, maxSide = 320) {
+    const url = gsdRecToDataUrl(rec); const { w, h } = await gsdImageSize(url); const s = Math.min(1, maxSide / Math.max(w, h));
+    if (s >= 1 || typeof document === "undefined") return { dataUrl: url };
+    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+    const im = new Image(); await new Promise(r => { im.onload = r; im.onerror = r; im.src = url; });
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.7) };
+  },
+  // A full-size data URL -> a small thumbnail data URL (long edge 200, quality 0.6). Behind this swappable object for the same
+  // reason as `resize`/`exportCopy`: jsdom has no real canvas, so migrateSitePhotos's migration path (which has no File to hand
+  // resizeImageToDataUrl, only an already-decoded data URL) needs a stubbable seam for its own thumbnail generation. Falls back
+  // to the source data URL unchanged if canvas/Image aren't usable (never throws — a migrated photo just keeps a full-size "thumbnail").
+  async thumbFromDataUrl(dataUrl, w, h) {
+    if (typeof document === "undefined") return dataUrl;
+    return new Promise(res => {
+      try {
+        const c = document.createElement("canvas"); const im = new Image();
+        im.onload = () => {
+          const iw = im.naturalWidth || w || 4, ih = im.naturalHeight || h || 3;
+          const s = Math.min(1, 200 / Math.max(iw, ih));
+          c.width = Math.max(1, Math.round(iw * s)); c.height = Math.max(1, Math.round(ih * s));
+          const ctx = c.getContext("2d");
+          if (!ctx) { res(dataUrl); return; }
+          ctx.drawImage(im, 0, 0, c.width, c.height); res(c.toDataURL("image/jpeg", 0.6));
+        };
+        im.onerror = () => res(dataUrl); im.src = dataUrl;
+      } catch (_) { res(dataUrl); }
+    });
+  },
+  // Reads a data URL's pixel dimensions. A thin, swappable wrapper around gsdImageSize (jsdom has no real
+  // image decoder, so tests stub this the same way they stub `resize`/`exportCopy`/`thumbFromDataUrl` above).
+  imageSize: url => gsdImageSize(url),
+};
+async function siteStorePhotos(files) {
+  const out = [];
+  for (const f of files) { const r = await sitePhotoIO.resize(f); const id = uid(); await sitePhotoStore.put(id, r.full); await sitePhotoStore.put(id + "~t", r.thumb); out.push({ id, w: r.w, h: r.h }); }
+  return out;
+}
+function useSitePhotoUrl(id) {
+  const [url, setUrl] = React.useState("");
+  React.useEffect(() => {
+    let alive = true, u = "";
+    if (!id || typeof URL.createObjectURL !== "function") return undefined;
+    sitePhotoStore.get(id).then(rec => { if (!alive || !rec) return; u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); setUrl(u); }).catch(() => {});
+    return () => { alive = false; if (u && typeof URL.revokeObjectURL === "function") URL.revokeObjectURL(u); };
+  }, [id]);
+  return url;
+}
+function SitePhoto({ photo, thumb, style, alt }) {
+  const url = useSitePhotoUrl(photo ? photo.id + (thumb ? "~t" : "") : "");
+  return url ? React.createElement("img", { src: url, alt: alt || "", style }) : React.createElement("div", { style: { ...style, background: "#d4d4d8" }, "aria-hidden": true });
+}
+
+// One-time migration: moves inline {id, dataUrl} photos found by `extract` out of a module's results/history localStorage keys
+// into sitePhotoStore, replacing them with {id, w, h} pointers. Idempotent via `${module}-photos-migrated-v1` (never re-runs once
+// set); never leaves a half-migrated state — a failure part-way through rolls back every photo this run wrote and leaves the
+// original localStorage data completely untouched, so the module keeps working exactly as it did before migration was attempted
+// and will simply retry on the next app load. A single corrupt/undecodable photo is dropped (logged, not thrown) without
+// aborting the rest of the migration — only a STORAGE-level failure (IndexedDB unavailable/full) aborts and rolls back.
+// `extractSite(oneSiteResultsObject)` must return every photo array reachable inside ONE SITE's results shape (module-specific:
+// SWB's board `_photos` + legacy stray `item.photos`; ELT/Welder's per-asset `photos`) — arrays are mutated in place, so callers
+// must never pass live data directly, only a fresh deep clone (this function clones internally; `extractSite` receives the
+// clone). Applied per-site: the live results key is keyed by project id (`{projectId: {...siteShape}}`), while a history
+// snapshot's own `.results` field is ALREADY one site's results with no project-id wrapper (that's how archiveAudit already
+// builds it) — `extractSite` only ever needs to understand the one, uniform per-site shape either way.
+// On success, the PRE-migration results/history are kept under `{module}-results-preMigration-v1` / `-history-preMigration-v1`
+// as a recovery backup — see `confirmPhotoMigrationVerified` / `expirePhotoMigrationBackupIfStale` for when that backup is removed.
+async function migrateSitePhotos(module, resultsKey, historyKey, extractSite) {
+  const flagKey = `${module}-photos-migrated-v1`;
+  if (localStorage.getItem(flagKey)) return { skipped: true };
+  const rawResults = await load(resultsKey, {});
+  const rawHistory = await load(historyKey, []);
+  const results = JSON.parse(JSON.stringify(rawResults));
+  const history = JSON.parse(JSON.stringify(rawHistory));
+  const written = []; // ids (both full and ~t) written this run, for rollback on a storage-level failure
+  let photoCount = 0;
+  const migrateArray = async arr => {
+    for (let i = 0; i < arr.length; i++) {
+      const p = arr[i];
+      if (!p || !p.dataUrl) continue; // already the new pointer shape, or malformed — leave it exactly as-is
+      let rec, thumbRec, w, h;
+      try {
+        rec = gsdDataUrlToRec(p.dataUrl);
+        if (!rec) { arr.splice(i, 1); i--; continue; } // undecodable: drop this one photo, keep migrating the rest
+        ({ w, h } = await sitePhotoIO.imageSize(p.dataUrl));
+        const thumbUrl = await sitePhotoIO.thumbFromDataUrl(p.dataUrl, w, h);
+        thumbRec = gsdDataUrlToRec(thumbUrl) || rec;
+      } catch (_) { arr.splice(i, 1); i--; continue; } // a decode-time failure is per-photo, never fatal to the whole migration
+      const id = uid();
+      await sitePhotoStore.put(id, rec); written.push(id);           // a rejection HERE (IndexedDB full/unavailable) propagates —
+      await sitePhotoStore.put(id + "~t", thumbRec); written.push(id + "~t"); // that's a storage-level failure, and the catch below rolls back
+      arr[i] = { id, w, h }; photoCount++;
+    }
+  };
+  try {
+    for (const siteResults of Object.values(results)) for (const arr of extractSite(siteResults)) await migrateArray(arr);
+    for (const snap of history) for (const arr of extractSite(snap.results || {})) await migrateArray(arr);
+    await save(resultsKey, results); await save(historyKey, history);
+    await save(`${module}-results-preMigration-v1`, rawResults);
+    await save(`${module}-history-preMigration-v1`, rawHistory);
+    localStorage.setItem(flagKey, new Date().toISOString());
+    return { migrated: true, photoCount, results, history };
+  } catch (e) {
+    await Promise.all(written.map(id => sitePhotoStore.del(id).catch(() => {})));
+    return { failed: true, error: e };
+  }
+}
+// The migration keeps a pre-migration backup (see migrateSitePhotos) precisely so a bug in the migration itself isn't a
+// silent, unrecoverable photo loss. Deleting that backup immediately would free localStorage sooner but remove the safety
+// net before anything has actually PROVEN the migrated photos read back correctly; deleting it only once a real action reads
+// them back (an export that embeds a migrated photo, or a completed Continue-from-history round trip) is the actual proof.
+function confirmPhotoMigrationVerified(module) {
+  localStorage.removeItem(`${module}-results-preMigration-v1`);
+  localStorage.removeItem(`${module}-history-preMigration-v1`);
+}
+// Outer bound regardless of whether the verifying trigger above ever fires (e.g. a site that's never exported or Continued
+// since migrating) — the backup can't linger forever on a device that never happens to trigger the real check.
+const SITE_PHOTO_BACKUP_MAX_AGE_DAYS = 14;
+function expirePhotoMigrationBackupIfStale(module) {
+  const at = localStorage.getItem(`${module}-photos-migrated-v1`);
+  if (!at) return;
+  const ageDays = (Date.now() - new Date(at).getTime()) / 86400000;
+  if (ageDays >= SITE_PHOTO_BACKUP_MAX_AGE_DAYS) confirmPhotoMigrationVerified(module);
+}
+// Flat per-asset results shape shared by ELT and Welder (results[assetId] = {...,photos:[]}) — every photo pointer reachable
+// in one site's results object. Used by Reset / delete-project / delete-history-snapshot to know what to free.
+const assetPhotoList = siteResults => Object.values(siteResults || {}).flatMap(r => (r && r.photos) || []);
+// Same shape, but returning the actual .photos ARRAYS (not their flattened contents) — the shape migrateSitePhotos's and
+// copySitePhotosForContinue's `extract` callbacks need, since they mutate each array in place.
+const assetResultsExtractPhotos = siteResults => Object.values(siteResults || {}).filter(a => Array.isArray(a && a.photos)).map(a => a.photos);
+// Continue-from-history, ownership-safe: copies every photo pointer `extract` finds in `results` to a NEW id in
+// sitePhotoStore, returning a deep-cloned, rewritten results object — the archived snapshot's own photo records are never
+// touched, so it stays independently valid (exportable, deletable) after the copy becomes live and mutable. A photo whose
+// record is already gone is dropped, never left dangling (matches GSD's continueFromSnap at App.jsx). On ANY failure partway
+// through, every copy already made this call is rolled back and the error rethrown — the caller's live state must not be
+// touched until this resolves, so a failed Continue never leaves a half-copied audit live.
+async function copySitePhotosForContinue(results, extract) {
+  const cloned = JSON.parse(JSON.stringify(results || {}));
+  const copiedIds = [];
+  try {
+    for (const arr of extract(cloned)) {
+      for (let i = 0; i < arr.length; i++) {
+        const p = arr[i]; if (!p || !p.id) continue;
+        const full = await sitePhotoStore.get(p.id);
+        if (!full) { arr.splice(i, 1); i--; continue; } // the original photo record is gone: drop it, never left dangling
+        const thumb = await sitePhotoStore.get(p.id + "~t");
+        const nid = uid();
+        await sitePhotoStore.put(nid, full); copiedIds.push(nid);
+        if (thumb) { await sitePhotoStore.put(nid + "~t", thumb); copiedIds.push(nid + "~t"); }
+        arr[i] = { ...p, id: nid };
+      }
+    }
+    return cloned;
+  } catch (e) {
+    await Promise.all(copiedIds.map(id => sitePhotoStore.del(id).catch(() => {})));
+    throw e;
+  }
 }
 // Import extraction (2026-09-27): if the imported file carries an embedded logo (our own export header strip), pull it back out so it
 // becomes the new site's per-site logo override — the same round-trip Company/ABN/Licence already get. SheetJS (the community `xlsx`
@@ -369,8 +573,48 @@ const K_HISTORY   = "rcd-history-v6";
 const K_DROPDOWNS = "rcd-dropdowns-v6";
 const K_MODE      = "rcd-mode-v6";        // active audit mode: "push"|"inject"|null
 const load = async (key, fallback) => { try { const r=localStorage.getItem(key); return r?JSON.parse(r):fallback; } catch(_) { return fallback; } };
-let _storageWarnShown = false;
-const save = async (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) { if(!_storageWarnShown){ _storageWarnShown=true; console.error('Storage save failed:',e); try{ const el=document.createElement('div'); el.style.cssText='position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#fee2e2;color:#991b1b;border:1px solid #dc2626;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;z-index:9999;max-width:320px;text-align:center;'; el.innerHTML='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;vertical-align:middle"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> Storage full — data may not be saved. Clear old history or browser data.'; document.body.appendChild(el); setTimeout(()=>{ _storageWarnShown=false; el.remove(); },6000); }catch(_){} } } };
+// STORAGE SAFETY NET (2026-09-29). localStorage has no standard quota-check API and no browser guarantees more than ~5MB per
+// origin (Safari's floor; Chrome/Firefox allow more but 5MB is the number every browser meets or exceeds) — that is still the
+// right assumption to warn against here, even now that ELT/Welder/SWB/GSD photos live in IndexedDB (a separate, much larger,
+// disk-quota-based store with its own per-call error handling in sitePhotoStore/gsdPhotoStore — NOT what this `save()` guards).
+// What's left in localStorage is structured JSON only (sites, results, meta, dropdowns, capped-at-100 history snapshots), so
+// the 5MB ceiling is far less likely to be hit day-to-day than when photos were inline — but a save can still fail (many sites,
+// long history, a very large hierarchy), and when it does the user must not be left thinking their work was saved.
+const STORAGE_QUOTA_ASSUMED_BYTES = 5 * 1024 * 1024;
+function localStorageUsageBytes() {
+  let total = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i); if (k == null) continue;
+      const v = localStorage.getItem(k) || "";
+      total += (k.length + v.length) * 2; // UTF-16: JS strings are 2 bytes/code unit — a safe (over-, never under-) estimate
+    }
+  } catch (_) {}
+  return total;
+}
+function fmtBytes(n) {
+  if (n < 1024) return n + " B";
+  if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+  return (n / (1024 * 1024)).toFixed(2) + " MB";
+}
+let _storageFullBannerEl = null; // tracks the live blocking banner so a second failed save never stacks a duplicate
+const save = async (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {
+  console.error('Storage save failed:', e);
+  try {
+    if (_storageFullBannerEl && document.body.contains(_storageFullBannerEl)) return; // already showing
+    const el = document.createElement('div');
+    el.setAttribute('role', 'alert');
+    el.style.cssText = 'position:fixed;left:16px;right:16px;bottom:16px;background:#fee2e2;color:#991b1b;border:1px solid #dc2626;border-radius:12px;padding:14px 16px;font-size:13px;font-weight:700;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.25);display:flex;align-items:flex-start;gap:10px;max-width:480px;margin:0 auto;';
+    el.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span style="flex:1">Storage full: your latest changes were NOT saved. Export now, then free space.</span>';
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button'; dismiss.textContent = '✕'; dismiss.setAttribute('aria-label', 'Dismiss');
+    dismiss.style.cssText = 'flex-shrink:0;background:transparent;border:none;color:#991b1b;font-size:16px;font-weight:800;cursor:pointer;line-height:1;padding:0;';
+    dismiss.onclick = () => { el.remove(); if (_storageFullBannerEl === el) _storageFullBannerEl = null; };
+    el.appendChild(dismiss);
+    document.body.appendChild(el);
+    _storageFullBannerEl = el; // stays until the user dismisses it — no auto-hide timeout
+  } catch (_) {}
+} };
 // ─────────────────────────────────────────────────────────────────────────
 // DATA HELPERS
 // ─────────────────────────────────────────────────────────────────────────
@@ -761,7 +1005,9 @@ function StyledSelect({ options, value, onChange, placeholder, allowEmpty, allow
       , allowCustom && React.createElement("div", { style: { padding: "8px 12px", fontSize: 12, color: "#52525b", cursor: "pointer", borderTop: "1px solid #e4e4e7" }, onClick: () => { setCustom(true); setOpen(false); } }, " Type custom…")));
 }
 // useScrollMemory(ref, key, remember): the app's one scroll rule for a module's main scroll container.
-//   - a DRILL-DOWN LIST level (remember = true) keeps its scroll position: leaving it (into an item / test page or down a level) and coming back Back restores where you were;
+//   - a DRILL-DOWN LIST level (remember = true) keeps its scroll position: leaving it (into an item / test page or down a level) and coming back Back restores where you were.
+//     This includes the top-level SITES LIST (view==="projects") — a long site list scrolls exactly like an area/board list, but it was missed when this hook
+//     was first rolled out (2026-09-27) because it reads as a "tab view" rather than a drill-down level; fixed across all 9 modules 2026-09-29.
 //   - everything else (an item / test detail page, Home, Report, History, Manage, Dropdowns) starts at the TOP when entered.
 // key identifies the level (view + the open area / panel / board / item), so each list level has its own remembered position. Positions are tracked with a scroll
 // listener (not read at navigation time — by then the shorter detail page has already clamped the container's scrollTop).
@@ -1067,7 +1313,7 @@ return snap;
 };
 const goProjects=()=>{setView("projects");setActiveProject(null);setMode(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
 const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
-useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
+useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
 if(!loaded) return React.createElement('div', { style: S.loader,}, React.createElement('div', { style: S.loaderSpinner,}), React.createElement('p', { style: {color:"#6e6a66",marginTop:16},}, "Loading…"));
 const modeColor=mode==="push"?"#a3530f":"#1d4ed8";
 const modeLabel=mode==="push"?"PUSH TEST":"INJECTION TEST";
@@ -2360,9 +2606,13 @@ const NAV_ICON_REPORT=React.createElement('svg',{width:17,height:17,viewBox:"0 0
 const NAV_ICON_HISTORY=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('polyline',{points:"12 6 12 12 16 14"}));
 const NAV_ICON_MANAGE=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"}),React.createElement('path',{d:"M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"}));
 const NAV_ICON_DROPDOWNS=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('line',{x1:8,y1:6,x2:21,y2:6}),React.createElement('line',{x1:8,y1:12,x2:21,y2:12}),React.createElement('line',{x1:8,y1:18,x2:21,y2:18}),React.createElement('line',{x1:3,y1:6,x2:3.01,y2:6}),React.createElement('line',{x1:3,y1:12,x2:3.01,y2:12}),React.createElement('line',{x1:3,y1:18,x2:3.01,y2:18}));
+// Compact, Facebook-style height (2026-09-30): the bar used to be a filled #f7f6f3 strip with a big
+// box-shadow trick to mask its own bottom edge; it's now an overlay — a thin top border only, background
+// matching the page behind it — so NavBtn itself was shortened to match (minHeight 50->42, tighter
+// vertical padding), same icons/order/labels, just more compact.
 function NavBtn({icon,label,active,onClick,color}){
 const c=active?(color||"#334155"):"#52525b";
-return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
+return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
 }
 // ─────────────────────────────────────────────────────────────────────────
 // STYLES
@@ -2379,7 +2629,7 @@ saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
 bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
 homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
 brandBlock:{textAlign:"center",borderBottom:"2px solid #a3530f",paddingBottom:8,width:"100%",maxWidth:500},
 brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#a3530f"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -2770,7 +3020,7 @@ function IELApp({ onGoHome }) {
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveCat(null);setActiveAreaId(null);setActivePanelId(null);setAuditEntered(false);};
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);};
 
-  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="audit"||view==="panel"));
+  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
   if(!loaded)return React.createElement('div',{style:SI.loader},React.createElement('div',{style:SI.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   const catColor = catInfo?catInfo.color:"#047857";
@@ -3825,7 +4075,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 // IEL SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────
 function IELStatPill({label,val,col}){return React.createElement('div',{style:{display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"}},React.createElement('span',{style:{fontSize:10,color:col,fontWeight:700,letterSpacing:0.5}},label),React.createElement('span',{style:{fontSize:14,color:col,fontWeight:800}},val));}
-function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#047857"):"#52525b";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#047857"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
+function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#047857"):"#52525b";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#047857"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
 
 // ─────────────────────────────────────────────────────────────────────────
 // IEL STYLES — mirrors S from RCD
@@ -3843,7 +4093,7 @@ const SI={
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+  bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #047857",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#047857"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -4238,7 +4488,7 @@ function CalendarApp({ onGoHome }) {
     root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans',sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden",maxWidth:"100vw"},
     topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",borderBottom:"2px solid #a5b4fc",flexShrink:0},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,maxWidth:"100%"},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
     formWrap:{padding:"16px",boxSizing:"border-box",width:"100%",maxWidth:"100%",overflowX:"hidden"},
   };
 
@@ -4570,33 +4820,50 @@ function addTATMonths(dateStr, months) {
   } catch(_) { return ""; }
 }
 
-// Electrical Test (the result shown on the test-and-tag machine): "" = not recorded, "pass" or "fail". An ADDITIVE optional field — a stored record
-// without it reads as "" and is never rewritten by a read, so no storage-key bump is needed and every legacy record / History snapshot is untouched.
-// Overall result rule (the overall result itself stays manual): PASS can only be marked when the Visual Inspection is ticked AND the Electrical Test
-// passed; Electrical FAIL forces the overall result to FAIL. The gate applies when MARKING pass — an item already PASS (e.g. legacy) is never changed.
-const tatCanPass = item => !!(item && item.visualCheck) && (item && item.electricalCheck) === "pass";
-// AUTO-PASS mirrors auto-FAIL: whichever tap COMPLETES the pair (Visual ticked + Electrical PASS) sets the overall result to PASS and stamps the tested date —
-// but ONLY from UNTESTED: a recorded FAIL or N/A is never flipped silently (the auditor changes it deliberately with the RESULT buttons). Trigger-on-tap only;
-// opening an item never changes it.
+// Visual Inspection and Electrical Test (2026-09-29: Visual Inspection is now Pass/Fail, matching Electrical Test
+// exactly): "" = not recorded, "pass" or "fail". Both are ADDITIVE optional fields — a stored record without them
+// reads as "" and is never rewritten by a read, so no storage-key bump is needed and every legacy record / History
+// snapshot is untouched. Visual Inspection used to be a boolean tick (ticked/unticked, no Fail state); `tatGetItem`
+// normalises an old boolean at READ time only (true -> "pass", false -> "" — the old UI had no way to record a
+// Visual Fail, so a false/absent tick can only mean "not recorded", never "failed"), same non-destructive pattern as
+// the ELT pre-standard record reconciliation — the old boolean is naturally replaced by a string the next time the
+// record is patched.
+// Overall result rule (the overall result itself stays manual): PASS can only be marked when BOTH Visual Inspection
+// and Electrical Test have passed. EITHER one failing forces the overall result to FAIL (fully symmetric — this is
+// new for Visual as of 2026-09-29; Electrical FAIL already worked this way). The gate applies when MARKING pass —
+// an item already PASS (e.g. legacy) is never changed.
+const tatCanPass = item => (item && item.visualCheck) === "pass" && (item && item.electricalCheck) === "pass";
+// AUTO-PASS mirrors auto-FAIL: whichever tap COMPLETES the pair (both Visual and Electrical PASS) sets the overall
+// result to PASS and stamps the tested date — but ONLY from UNTESTED: a recorded FAIL or N/A is never flipped
+// silently (the auditor changes it deliberately with the RESULT buttons). Trigger-on-tap only; opening an item never
+// changes it.
 const tatAutoPass = (item, testDate) => (item.status || TAT_STATUS.UNTESTED) === TAT_STATUS.UNTESTED ? { status: TAT_STATUS.PASS, lastTested: testDate } : {};
 function tatElectricalPatch(item, next, testDate) {
   const patch = { electricalCheck: next };
   if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }
-  else if (next === "pass") { if (item.visualCheck) Object.assign(patch, tatAutoPass(item, testDate)); }                               // Visual already ticked -> this tap completes the pair
+  else if (next === "pass") { if (item.visualCheck === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                        // Visual already Pass -> this tap completes the pair
   else if (item.status === TAT_STATUS.PASS && (item.electricalCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;                // pass cleared: the PASS it justified goes
   return patch;
 }
-function tatVisualPatch(item, ticked, testDate) {
-  const patch = { visualCheck: ticked };
-  if (ticked) { if ((item.electricalCheck || "") === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                         // Electrical already PASS -> this tap completes the pair
-  else if (item.status === TAT_STATUS.PASS) patch.status = TAT_STATUS.UNTESTED;                                                          // un-ticked: the PASS it justified goes
+function tatVisualPatch(item, next, testDate) {
+  const patch = { visualCheck: next };
+  if (next === "fail") { patch.status = TAT_STATUS.FAIL; patch.lastTested = testDate; }                                                    // symmetric with Electrical FAIL
+  else if (next === "pass") { if (item.electricalCheck === "pass") Object.assign(patch, tatAutoPass(item, testDate)); }                    // Electrical already Pass -> this tap completes the pair
+  else if (item.status === TAT_STATUS.PASS && (item.visualCheck || "") === "pass") patch.status = TAT_STATUS.UNTESTED;                     // pass cleared: the PASS it justified goes
   return patch;
 }
+// Normalises visualCheck to the tri-state string shape ("" | "pass" | "fail") wherever a record is read directly
+// (not through tatGetItem) — a legacy boolean true/false is a real stored shape that can turn up in exports and
+// anywhere else that reads results without going through tatGetItem's own copy-and-normalise step.
+const tatNormaliseVisual = v => typeof v === "boolean" ? (v ? "pass" : "") : (v || "");
 function tatGetItem(results, siteId, areaId, itemId) {
   const rec = (((results[siteId]||{})[areaId]||{})[itemId]);
-  if (rec) return "electricalCheck" in rec ? rec : { ...rec, electricalCheck:"" };   // read-time default only (a copy — storage is never touched)
+  if (rec) {
+    const r = "electricalCheck" in rec ? rec : { ...rec, electricalCheck:"" };
+    return { ...r, visualCheck: tatNormaliseVisual(r.visualCheck) };   // read-time default/normalisation only (a copy — storage is never touched)
+  }
   return {
-    status:TAT_STATUS.UNTESTED, visualCheck:false, electricalCheck:"",
+    status:TAT_STATUS.UNTESTED, visualCheck:"", electricalCheck:"",
     equipType:"", freq:"3", lastTested:"", notes:"", priority:"", tag:"", desc:""
   };
 }
@@ -4658,7 +4925,8 @@ async function exportTATExcel(project, results, meta) {
   project.areas.forEach(area => {
     (area.items || []).forEach(itemId => {
       // results is pre-stripped of projectId — lookup directly by areaId
-      const item = defectGateByStatus(((results[area.id] || {})[itemId]) || { status: TAT_STATUS.UNTESTED, visualCheck: false, equipType: "", freq: "3", lastTested: "", notes: "", priority: "" });
+      const rawItem = ((results[area.id] || {})[itemId]) || { status: TAT_STATUS.UNTESTED, visualCheck: "", equipType: "", freq: "3", lastTested: "", notes: "", priority: "" };
+      const item = defectGateByStatus({ ...rawItem, visualCheck: tatNormaliseVisual(rawItem.visualCheck) });
       // Pull tag, name, equipType, freq from area metadata as source of truth
       const areaTag = (area.itemTags || {})[itemId] || item.tag || "";
       const rawName = (area.itemNames || {})[itemId] || "";
@@ -4670,7 +4938,7 @@ async function exportTATExcel(project, results, meta) {
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
       rows.push({
-        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck ? "Yes" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
+        cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck === "pass" ? "Pass" : item.visualCheck === "fail" ? "Fail" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
         defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
       });
     });
@@ -4732,7 +5000,7 @@ function parseTATExcel(data) {
         tag,desc,
         equipType:cType>=0?String(row[cType]||"").trim():"",
         freq:cFreq>=0&&row[cFreq]?String(row[cFreq]).match(/\d+/)?.[0]||"3":"3",
-        status:TAT_STATUS.UNTESTED,visualCheck:false,
+        status:TAT_STATUS.UNTESTED,visualCheck:"",
         lastTested:"",notes:"",priority:"",
       }
     });
@@ -4886,7 +5154,7 @@ function TATApp({ onGoHome }) {
   const summary=project?tatSiteSummary(allResults,project):{total:0,pass:0,fail:0,na:0,untested:0};
   const canGoBack=view!=="projects";
 
-  useScrollMemory(tatMainRef,[view,activeAreaId,detailItemId||""].join("|"),view==="audit"&&!detailItemId);
+  useScrollMemory(tatMainRef,[view,activeAreaId,detailItemId||""].join("|"),(view==="projects"||view==="audit")&&!detailItemId);
   if(!loaded)return React.createElement('div',{style:ST.loader},React.createElement('div',{style:ST.loaderSpinner}),React.createElement('p',{style:{color:"#6e6a66",marginTop:16}},"Loading…"));
 
   return React.createElement('div',{style:ST.root}
@@ -5230,7 +5498,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
             )
             ,d.equipType&&React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginBottom:4}},d.equipType)
             ,React.createElement('div',{style:{display:"flex",gap:10,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
-              ,React.createElement('span',{style:{color:d.visualCheck?"#16a34a":"#52525b",fontWeight:600}},d.visualCheck?"✓":"○"," Visual")
+              ,React.createElement('span',{style:{color:d.visualCheck==="pass"?"#16a34a":d.visualCheck==="fail"?"#dc2626":"#52525b",fontWeight:600}},d.visualCheck==="pass"?"✓":d.visualCheck==="fail"?"✕":"○"," Visual")
               ,React.createElement('span',{style:{color:d.electricalCheck==="pass"?"#16a34a":d.electricalCheck==="fail"?"#dc2626":"#52525b",fontWeight:600}},d.electricalCheck==="pass"?"✓":d.electricalCheck==="fail"?"✕":"○"," Electrical")
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
               ,React.createElement('span',null,freqLabel)
@@ -5270,7 +5538,10 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     onPatch(tatElectricalPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
   };
 
-  const toggleVisual=()=>onPatch(tatVisualPatch(item,!item.visualCheck,meta.testDate||new Date().toISOString().slice(0,10)));
+  const setVisual=v=>{
+    const next=(item.visualCheck||"")===v?"":v;   // re-tapping the active button clears it back to "not recorded"
+    onPatch(tatVisualPatch(item,next,meta.testDate||new Date().toISOString().slice(0,10)));
+  };
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
 
@@ -5305,19 +5576,15 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         )
       )
 
-      // Visual inspection checkbox
+      // Visual Inspection — Pass/Fail, same style/semantics as Electrical Test (2026-09-29; FAIL sets the overall result to FAIL)
       ,React.createElement('div',{style:{marginBottom:16}}
-        ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"INSPECTION CHECK")
-        ,React.createElement('button',{
-          style:{display:"flex",alignItems:"center",gap:12,padding:"14px",background:item.visualCheck?"#dcfce7":"#f7f6f3",border:`2px solid ${item.visualCheck?"#16a34a":"#d4d4d8"}`,borderRadius:12,cursor:"pointer",color:"#18181b",textAlign:"left",width:"100%"},
-          onClick:toggleVisual}
-          ,React.createElement('div',{style:{width:28,height:28,borderRadius:6,background:item.visualCheck?"#16a34a":"#e4e4e7",border:`2px solid ${item.visualCheck?"#16a34a":"#d4d4d8"}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}
-            ,item.visualCheck&&React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'#fff',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))
-          )
-          ,React.createElement('div',null
-            ,React.createElement('div',{style:{fontSize:14,fontWeight:700,color:item.visualCheck?"#14532d":"#6e6a66"}},"Visual Inspection")
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Check for physical damage, cord condition, plug integrity")
-          )
+        ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:2}},"VISUAL INSPECTION")
+        ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:8}},"Check for physical damage, cord condition, plug integrity")
+        ,React.createElement('div',{style:{display:"flex",gap:8}}
+          ,[["pass",TAT_STATUS.PASS],["fail",TAT_STATUS.FAIL]].map(([v,s])=>{
+            const s2=TAT_SM[s]; const active=(item.visualCheck||"")===v;
+            return React.createElement('button',{key:v,"data-testid":"tat-visual-"+v,"aria-label":"Visual inspection "+s2.label,"aria-pressed":active,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?s2.border:"#d4d4d8"}`,background:active?s2.bg:"#f7f6f3",color:active?s2.fg:"#52525b"},onClick:()=>setVisual(v)},s2.label);
+          })
         )
       )
 
@@ -5337,7 +5604,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
         ,canPass&&item.status===TAT_STATUS.FAIL&&React.createElement('div',{"data-testid":"tat-fail-kept-hint",style:{background:"#e0e7ff",border:"1px solid #a5b4fc",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#3730a3"}},"Both checks passed — result is still FAIL. Tap PASS to change it.")
-        ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual inspection must be ticked and the Electrical Test passed before marking PASS")
+        ,!canPass&&item.status!==TAT_STATUS.PASS&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ Visual Inspection and Electrical Test must both pass before marking PASS")
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[TAT_STATUS.PASS,TAT_STATUS.FAIL,TAT_STATUS.NA,TAT_STATUS.UNTESTED].map(s=>{
             const sm2=TAT_SM[s]||TAT_SM.untested;
@@ -5422,7 +5689,7 @@ function TATReportView({project,results,meta,onBack}){
       if((v.status||TAT_STATUS.UNTESTED)===TAT_STATUS.FAIL){
         const mn=(area.itemNames||{})[itemId]||itemId;
         const tag=(area.itemTags||{})[itemId]||"";
-        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,electrical:v.electricalCheck||"",priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
+        fails.push({area:area.name,name:mn.replace(/^\d+\s*—\s*/,""),tag,visual:tatNormaliseVisual(v.visualCheck),electrical:v.electricalCheck||"",priority:v.priority||"",notes:v.notes||"",defectId:v.defectId||"",responsibility:v.responsibility||"",rectified:v.rectified||""});
       }
     });
   });
@@ -5452,7 +5719,7 @@ function TATReportView({project,results,meta,onBack}){
         );
       })
     )
-    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:f.electrical==="fail"?["Electrical test: FAIL"]:[],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
+    ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:[...(f.visual==="fail"?["Visual Inspection: FAIL"]:[]),...(f.electrical==="fail"?["Electrical test: FAIL"]:[])],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
     ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
@@ -5803,7 +6070,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
                 ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},mn.replace(/^\d+\s*—\s*/,""))
               )
               ,React.createElement('div',{style:{display:"flex",gap:8,fontSize:10,color:"#52525b",marginTop:3}}
-                ,React.createElement('span',{style:{color:v.visualCheck?"#16a34a":"#52525b"}},v.visualCheck?"✓":"✕"," Visual")
+                ,(()=>{const vis=tatNormaliseVisual(v.visualCheck);return React.createElement('span',{style:{color:vis==="pass"?"#16a34a":vis==="fail"?"#dc2626":"#52525b"}},vis==="pass"?"✓":vis==="fail"?"✕":"○"," Visual");})()
                 ,React.createElement('span',{style:{color:v.electricalCheck==="pass"?"#16a34a":v.electricalCheck==="fail"?"#dc2626":"#52525b"}},v.electricalCheck==="pass"?"✓":v.electricalCheck==="fail"?"✕":"○"," Electrical")
                 ,v.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(v.lastTested))
               )
@@ -6016,7 +6283,7 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
 
 function TATNavBtn({icon,label,active,onClick,color}){
   const c=active?(color||"#334155"):"#52525b";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
     ,icon
     ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
   );
@@ -6036,7 +6303,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+  bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #1d4ed8",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -6536,11 +6803,10 @@ const STH = {
   },
   bottomNav: {
     display: "flex",
-    background: "#f7f6f3",
+    background: "#e8e6e2",
     borderTop: "1px solid #e4e4e7",
     flexShrink: 0,
-    paddingBottom: "34px",
-    boxShadow: "0 200px 0 200px #f7f6f3"
+    paddingBottom: "env(safe-area-inset-bottom, 0px)"
   },
   listWrap: {
     padding: "16px"
@@ -9450,7 +9716,7 @@ function ThermoApp({
       goHome();
     } else goProjects();
   };
-  useScrollMemory(thermoMainRef,[view,activeAreaId,activeBoardId,activeCircuitId||""].join("|"),["audit","area","board"].includes(view));
+  useScrollMemory(thermoMainRef,[view,activeAreaId,activeBoardId,activeCircuitId||""].join("|"),["projects","audit","area","board"].includes(view));
   if (!loaded) return /*#__PURE__*/React.createElement("div", {
     style: STH.loader
   }, /*#__PURE__*/React.createElement("style", null, `@keyframes spin { to { transform: rotate(360deg); } }`), /*#__PURE__*/React.createElement("div", {
@@ -9719,12 +9985,14 @@ function GlobalSettingsView({ onGoHome }) {
   const [logoUrl, setLogoUrl] = React.useState("");
   const [error, setError] = React.useState("");
   const [saved, setSaved] = React.useState(false);
+  const [storageBytes, setStorageBytes] = React.useState(0);
   const urlRef = React.useRef("");
 
   React.useEffect(() => {
     let alive = true;
     const s = loadAppSettings();
     setBusinessName(s.businessName); setAbn(s.abn); setLicence(s.licence); setHasLogo(!!s.logoId);
+    setStorageBytes(localStorageUsageBytes());
     if (s.logoId) appLogoStore.get().then(rec => {
       if (!alive || !rec) return;
       const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); urlRef.current = u; setLogoUrl(u);
@@ -9783,6 +10051,18 @@ function GlobalSettingsView({ onGoHome }) {
       , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
 
+      , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Storage")
+      , (() => {
+          const pct = Math.min(100, (storageBytes / STORAGE_QUOTA_ASSUMED_BYTES) * 100);
+          const color = pct >= 85 ? "#dc2626" : pct >= 60 ? "#b45309" : "#52525b";
+          return React.createElement('div', { style: { marginBottom: 24 } }
+            , React.createElement('div', { style: { fontSize: 12, fontWeight: 700, color, marginBottom: 6 } }
+              , `Storage used: ${fmtBytes(storageBytes)} of ~5 MB (${pct.toFixed(0)}%, approximate)`)
+            , React.createElement('div', { style: { height: 6, borderRadius: 999, background: "#e4e4e7", overflow: "hidden" } }
+              , React.createElement('div', { style: { height: "100%", width: `${pct}%`, background: color, borderRadius: 999 } }))
+            , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Site data, results and history — not photos (those live in a separate, much larger store)."));
+        })()
+
       , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
         , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
         , saved && React.createElement('span', { style: { fontSize: 12, color: "#16a34a", fontWeight: 600 } }, "Saved"))
@@ -9793,6 +10073,18 @@ function GlobalSettingsView({ onGoHome }) {
 // ═════════════════════════════════════════════════════════════════════════
 // MODULE SELECTOR — top-level landing screen
 // ═════════════════════════════════════════════════════════════════════════
+// Home-screen bottom bar, history:
+// 2026-09-29: two floating pills sat too high; fixed by pinning them 1.5x their own height above the bottom.
+// 2026-09-30 (first attempt): that used `position:fixed` floating OVER the scrollable module grid, so whatever
+// content scrolled to that exact screen position — including the last module card — could end up directly behind
+// the pills; a trailing spacer only ever protected the ONE scroll position where it lined up with the still-floating
+// pills, not every position in between (confirmed still broken). Fixed by moving the pills into a real, non-scrolling
+// flex row reserved below the scrollable content instead of overlaying it.
+// 2026-09-30 (Facebook-style restyle): replaced the bordered/shadowed pill buttons and the filled #f7f6f3 strip with
+// the same overlay treatment as the in-module nav bar (bottomNav) — background matches the page (#e8e6e2), a single
+// thin top border as the only divider, no box-shadow fill trick, and the SAME compact icon+label markup as NavBtn
+// (see NavBtn's own comment). The non-scrolling reserved-row layout from the previous fix is unchanged; only the
+// visual skin and height did.
 function AppRoot() {
   const [module, setModule] = React.useState(null); // null | "rcd" | "iel" | "tat" | "cal" | "thermo" | "swb"
 
@@ -9848,8 +10140,10 @@ function AppRoot() {
     {key:"gsd",color:"#4d7c0f",name:"GENERAL SITE DEFECTS",desc:"Punch-list with photos",onClick:()=>setModule("gsd"),
       icon:moduleIcon("gsd")},
   ];
-  // Calendar lives in a fixed pill (not a grid card)
-  const calColor = "#4338ca";
+  // Calendar and Settings now share the same neutral slate accent (2026-09-30): both sit in the same flat, neutral
+  // bar and neither is tied to a module — Calendar's old indigo (#4338ca) stood out once the two were side by side
+  // in one bar instead of two separate pills. GS_COLOR is the existing "neutral, not tied to any module" slate.
+  const calColor = GS_COLOR;
 
   return React.createElement('div', {
     style:{
@@ -9859,20 +10153,26 @@ function AppRoot() {
       background:"#e8e6e2",color:"#18181b",
       fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",
       WebkitFontSmoothing:"antialiased",
-      overflowY:"scroll",
-      overflowX:"hidden",
-      WebkitOverflowScrolling:"touch",
     },
-    ref: el => { if(el) el.scrollTop = 0; }
   }
-    , React.createElement('div', {style:{
-        paddingTop:"calc(env(safe-area-inset-top, 0px) + 20px)",
-        display:"flex",flexDirection:"column",
-        alignItems:"center",
-        minHeight:"100%",
-        width:"100%",
-        boxSizing:"border-box",
-      }}
+    // SCROLLABLE content — its own flex:1 region, entirely separate from the pill bar below (2026-09-30 fix: the
+    // pills used to be position:fixed OVER this whole area, which meant whatever scrolled underneath — including
+    // the last module card — could end up directly behind them; a trailing spacer sized to the pills' geometry
+    // could only ever protect the ONE scroll position where it lined up exactly with the fixed pills, not every
+    // scroll position in between. Giving the pills their own reserved, non-scrolling bar (below) instead of
+    // overlaying them is the only fix that holds at every scroll position, not just one.)
+    , React.createElement('div', {
+        style:{flex:1,minHeight:0,overflowY:"scroll",overflowX:"hidden",WebkitOverflowScrolling:"touch"},
+        ref: el => { if(el) el.scrollTop = 0; }
+      }
+      , React.createElement('div', {style:{
+          paddingTop:"calc(env(safe-area-inset-top, 0px) + 20px)",
+          display:"flex",flexDirection:"column",
+          alignItems:"center",
+          minHeight:"100%",
+          width:"100%",
+          boxSizing:"border-box",
+        }}
 
       // Title block
       , React.createElement('div', {style:{textAlign:"center",marginBottom:20,padding:"0 24px"}}
@@ -9924,31 +10224,41 @@ function AppRoot() {
         ))
       )
 
-      , React.createElement('div',{style:{paddingBottom:"calc(env(safe-area-inset-bottom, 0px) + 76px)",textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
+      , React.createElement('div',{style:{paddingBottom:24,textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
+      )
     )
-    // Fixed calendar pill — always reachable, clear of the iPhone home indicator
-    , React.createElement('button',{
-        onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
-        style:{position:"fixed",left:"50%",transform:"translateX(-50%)",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
-          display:"flex",alignItems:"center",gap:8,padding:"10px 20px",borderRadius:999,cursor:"pointer",
-          background:"#f7f6f3",border:`1.5px solid ${calColor}`,color:calColor,fontSize:13,fontWeight:700,letterSpacing:0.5,
-          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
-      }
-      , moduleIcon("cal",16)
-      , "Calendar"
-    )
-    // Fixed Global Settings pill — the opposite corner from Calendar so the two never collide; same scope (Home-screen only)
-    , React.createElement('button',{
-        onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
-        style:{position:"fixed",right:"16px",bottom:"calc(env(safe-area-inset-bottom, 0px) + 12px)",zIndex:20,
-          display:"flex",alignItems:"center",gap:8,padding:"10px 16px",borderRadius:999,cursor:"pointer",
-          background:"#f7f6f3",border:`1.5px solid ${GS_COLOR}`,color:GS_COLOR,fontSize:13,fontWeight:700,letterSpacing:0.5,
-          fontFamily:"inherit",boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}
-      }
-      , React.createElement('svg',{viewBox:'0 0 24 24',width:16,height:16,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
-          React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
-          React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
-      , "Settings"
+    // Home bar (2026-09-30, restyled to match Facebook's overlay bottom bar): a real, non-scrolling flex row
+    // reserved below the scrollable content — NOT position:fixed floating over it — so the grid can never scroll
+    // behind the buttons at any scroll position (kept from the previous fix; only the visual skin changed here).
+    // Same background/border/height treatment as the in-module nav bar (bottomNav) and the SAME markup shape as
+    // NavBtn — no separate pill background, border or shadow any more, just an icon + label sitting directly on
+    // the page background, divided only by the thin top border. Calendar keeps coming before Settings, left to
+    // right — a plain flex row with each button at flex:1 (matching the in-module bar exactly) rather than the
+    // previous "one centred, one pinned right" pill layout.
+    , React.createElement('div', {style:{
+        flexShrink:0, display:"flex", background:"#e8e6e2", borderTop:"1px solid #e4e4e7",
+        paddingBottom:"env(safe-area-inset-bottom, 0px)",
+      }}
+      , React.createElement('button',{
+          onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
+          style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
+            background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,
+            color:calColor,fontFamily:"inherit"}
+        }
+        , moduleIcon("cal",17)
+        , React.createElement('span',{style:{fontSize:9,fontWeight:500,letterSpacing:0.5}},"Calendar")
+      )
+      , React.createElement('button',{
+          onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
+          style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
+            background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,
+            color:GS_COLOR,fontFamily:"inherit"}
+        }
+        , React.createElement('svg',{viewBox:'0 0 24 24',width:17,height:17,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
+            React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
+            React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
+        , React.createElement('span',{style:{fontSize:9,fontWeight:500,letterSpacing:0.5}},"Settings")
+      )
     )
   );
 }
@@ -10032,6 +10342,22 @@ function swbGetBoardPhotos(results, projectId, areaId, boardId) {
   });
   return photos;
 }
+// Every photo pointer ARRAY reachable inside one board's results object — board-level `_photos` plus any legacy stray
+// `item.photos` per checklist item, same two locations swbGetBoardPhotos already reads. Returns actual array references
+// (mutable in place), the shape migrateSitePhotos's `extractSite` callback and the cleanup helpers below both need.
+const swbBoardPhotoArrays = bd => {
+  const arrays = [];
+  if (bd && Array.isArray(bd._photos)) arrays.push(bd._photos);
+  SWB_CHECKLIST.forEach(({key}) => { const item = bd && bd[key]; if (item && Array.isArray(item.photos)) arrays.push(item.photos); });
+  return arrays;
+};
+// Per-site (one project's own results, unwrapped — the shape migrateSitePhotos's extractSite receives, and the same shape
+// a history snapshot's own `.results` already is): every board's photo arrays, across every area.
+const swbExtractPhotos = siteResults => Object.values(siteResults || {}).flatMap(area => Object.values(area || {}).flatMap(swbBoardPhotoArrays));
+// Flattened to a plain photo list — for freeing (Reset / delete-project / delete-history-snapshot), not for migrating.
+const swbPhotoList = siteResults => swbExtractPhotos(siteResults).flat();
+// One area's photos only (Manage's Delete Area).
+const swbAreaPhotoList = (siteResults, areaId) => Object.values((siteResults || {})[areaId] || {}).flatMap(swbBoardPhotoArrays).flat();
 function swbGetStatus(results, projectId, areaId, boardId, itemKey) {
   return swbGetItem(results, projectId, areaId, boardId, itemKey).status || SWB_STATUS.UNTESTED;
 }
@@ -10156,6 +10482,13 @@ async function exportSWBExcel(project, allResults, meta) {
   const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
   const rows = swbRegisterRows(project, allResults, meta);
   const res = allResults || {};
+  // Photos live in sitePhotoStore (Stage 4, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
+  // referenced by any board's photos into a small export-sized copy BEFORE building any sheet (GSD's pattern).
+  const photoCopies = new Map();
+  for (const row of rows) for (const p of swbGetBoardPhotos(res, project.id, row.area.id, row.board.id)) if (!photoCopies.has(p.id)) {
+    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+  }
+  const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
@@ -10231,12 +10564,13 @@ async function exportSWBExcel(project, allResults, meta) {
     swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
-      const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+      const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
+      const copy = photoCopies.get(p.id);
+      const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
-        const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+        const imgId = wb.addImage({base64:copy.dataUrl,extension:ext});
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
@@ -10248,6 +10582,7 @@ async function exportSWBExcel(project, allResults, meta) {
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("swb");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
 // ─── Excel import ─────────────────────────────────────────────────────────
@@ -10391,10 +10726,17 @@ function SWBApp({ onGoHome }) {
   const swbMainRef = React.useRef(null);
   const [auditEntered,  setAuditEntered]  = React.useState(false);
   const [swbDropdowns,  setSwbDropdowns]  = React.useState({responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED});
+  const [historyError,  setHistoryError]  = React.useState("");
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([load(K_SWB_PROJECTS,[]),load(K_SWB_RESULTS,{}),load(K_SWB_META,{}),load(K_SWB_HISTORY,[]),load(K_SWB_DROPDOWNS,{responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setSwbDropdowns(dd);}
+      try{
+        let [p,r,m,h,dd]=await Promise.all([load(K_SWB_PROJECTS,[]),load(K_SWB_RESULTS,{}),load(K_SWB_META,{}),load(K_SWB_HISTORY,[]),load(K_SWB_DROPDOWNS,{responsibility:SWB_DEFAULT_RESPONSIBILITY,rectified:SWB_DEFAULT_RECTIFIED})]);
+        const photoMig = await migrateSitePhotos("swb",K_SWB_RESULTS,K_SWB_HISTORY,swbExtractPhotos);
+        if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
+        expirePhotoMigrationBackupIfStale("swb");
+        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setSwbDropdowns(dd);
+      }
       finally{setLoaded(true);}
     })();
   },[]);
@@ -10425,16 +10767,36 @@ function SWBApp({ onGoHome }) {
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,_photos:photos}}}};
   });
 
-  const resetBoard=(areaId,boardId)=>setAllResults(prev=>{
-    const site=prev[activeProject]||{};const ar=site[areaId]||{};
-    const cleared={};
-    SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
-    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
-  });
+  // Reset Board discards without archiving anything — its photos (board-level _photos AND any legacy stray item.photos)
+  // must be freed here first, or replacing the board with `cleared` (which carries neither forward) silently orphans them
+  // in sitePhotoStore forever. This was previously a silent drop (harmless while photos were inline; a real leak once
+  // they live in IndexedDB) — fixed as part of the SWB stage per the approved plan.
+  const resetBoard=(areaId,boardId)=>{
+    const bd=((allResults[activeProject]||{})[areaId]||{})[boardId];
+    if (bd) sitePhotoStore.delPhotoList(swbBoardPhotoArrays(bd).flat());
+    setAllResults(prev=>{
+      const site=prev[activeProject]||{};const ar=site[areaId]||{};
+      const cleared={};
+      SWB_CHECKLIST.forEach(({key})=>{cleared[key]={status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};});
+      return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:cleared}}};
+    });
+  };
 
   const archiveAudit=()=>{
     const snap={id:swbUid(),projectId:activeProject,projectName:project&&project.name||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
+  };
+  // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
+  // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
+  const clearSiteResults=()=>{
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));
+  };
+  // Reset (site-level): nothing will reference these results afterward, so their photos must be freed here.
+  const discardSiteResults=()=>{
+    sitePhotoStore.delPhotoList(swbPhotoList(allResults[activeProject]));
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));
   };
 
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
@@ -10442,7 +10804,7 @@ function SWBApp({ onGoHome }) {
   // goArea removed - use goAreaList() instead
   const goAreaList=()=>{setView("audit");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
 
-  useScrollMemory(swbMainRef,[view,activeAreaId,activeBoardId,activeItemKey||""].join("|"),["audit","board"].includes(view));
+  useScrollMemory(swbMainRef,[view,activeAreaId,activeBoardId,activeItemKey||""].join("|"),["projects","audit","board"].includes(view));
   if(!loaded) return React.createElement('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:"3px solid #7e22ce",borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS=swbStyles();
@@ -10477,8 +10839,8 @@ function SWBApp({ onGoHome }) {
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #7e22ce, transparent 70%)',opacity:0.5}})
     )
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
-      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},auditEntered})
+      ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});sitePhotoStore.delPhotoList(swbPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(swbPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();clearSiteResults();setAuditEntered(false);},onReset:discardSiteResults,auditEntered})
       ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
@@ -10486,9 +10848,21 @@ function SWBApp({ onGoHome }) {
       ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
       ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
-      ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
+      ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home"),
+          onRemoveArea:areaId=>sitePhotoStore.delPhotoList(swbAreaPhotoList(allResults[activeProject],areaId)),
+          onRemoveBoard:(areaId,boardId)=>{const bd=((allResults[activeProject]||{})[areaId]||{})[boardId];if(bd)sitePhotoStore.delPhotoList(swbBoardPhotoArrays(bd).flat());}})
       ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns,onBack:()=>setView("home")})
-      ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onBack:()=>setView("home")})
+      ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,error:historyError,
+          onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(swbPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
+          onExportSnap:snap=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}),
+          onContinueFromSnap:async snap=>{
+            try{
+              const copied=await copySitePhotosForContinue(snap.results||{},swbExtractPhotos);
+              setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
+              confirmPhotoMigrationVerified("swb");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setHistoryError("");setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");
+            }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
+          },onBack:()=>setView("home")})
     )
     ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",                                  onClick:goHome,                                                                                     color:"#334155"})
@@ -10683,18 +11057,23 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
   const bs=swbBoardSummary(results,project.id,area.id,board.id);
   const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
   const [photos,setPhotosL]=React.useState(swbGetBoardPhotos(results,project.id,area.id,board.id));
+  const [photoError,setPhotoError]=React.useState("");
   const photoInputRef=React.useRef();
   const addPhotos=async e=>{
     const files=Array.from(e.target.files||[]);
     e.target.value="";
     if(!files.length) return;
-    const added=await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    const updated=[...photos,...added];
-    setPhotosL(updated);
-    onPatchPhotos(updated);
+    try{
+      const added=await siteStorePhotos(files);
+      setPhotoError("");
+      const updated=[...photos,...added];
+      setPhotosL(updated);
+      onPatchPhotos(updated);
+    }catch(_){setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full.");}
   };
-  const removePhoto=id=>{
-    const updated=photos.filter(p=>p.id!==id);
+  const removePhoto=photo=>{
+    sitePhotoStore.delPhoto(photo);
+    const updated=photos.filter(p=>p.id!==photo.id);
     setPhotosL(updated);
     onPatchPhotos(updated);
   };
@@ -10721,12 +11100,13 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"BOARD PHOTOS")
       ,photos.map(p=>React.createElement('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
-        ,React.createElement('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,React.createElement(SitePhoto,{photo:p,thumb:true,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
         ,React.createElement('div',{style:{flex:1,minWidth:0}})
-        ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ,React.createElement(DeleteButton,{onDelete:()=>removePhoto(p)})
       ))
       ,React.createElement('input',{ref:photoInputRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#7e22ce",border:"1px dashed #d8b4fe",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
+      ,photoError&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
       ,SWB_CHECKLIST.map(({key,label})=>{
@@ -10885,7 +11265,7 @@ function SWBReportView({project,results,meta,onBack}) {
 // ─────────────────────────────────────────────────────────────────────────
 // MANAGE VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBManageView({project,onUpdateProject,onBack}) {
+function SWBManageView({project,onUpdateProject,onBack,onRemoveArea,onRemoveBoard}) {
   const [newAreaName,setNewAreaName]=React.useState("");const [newBoardName,setNewBoardName]=React.useState({});
   const [expandedArea,setExpandedArea]=React.useState(null);const [editingProject,setEditingProject]=React.useState(false);
   const [projName,setProjName]=React.useState(project.name);
@@ -10902,9 +11282,9 @@ function SWBManageView({project,onUpdateProject,onBack}) {
   const SS=swbStyles();const upd=u=>onUpdateProject(u);
   const saveProj=async()=>{upd({...project,name:projName.trim()||project.name,company:projCo.trim(),abn:projAbn.trim(),licence:projLic.trim()});if(projLogoDirty){if(projLogoUrl)await siteLogoStore.put("swb",project.id,gsdDataUrlToRec(projLogoUrl)).catch(()=>{});else await siteLogoStore.del("swb",project.id).catch(()=>{});setProjLogoDirty(false);}setEditingProject(false);};
   const addArea=()=>{if(!newAreaName.trim())return;upd({...project,areas:[...(project.areas||[]),{id:swbSlug(newAreaName),name:newAreaName.trim(),boards:[]}]});setNewAreaName("");};
-  const delArea=id=>upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});
+  const delArea=id=>{onRemoveArea&&onRemoveArea(id);upd({...project,areas:(project.areas||[]).filter(a=>a.id!==id)});};
   const addBoard=aid=>{const n=(newBoardName[aid]||"").trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:[...(a.boards||[]),{id:swbSlug(n),name:n}]}:a)});setNewBoardName(x=>({...x,[aid]:""}));};
-  const delBoard=(aid,bid)=>upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).filter(b=>b.id!==bid)}:a)});
+  const delBoard=(aid,bid)=>{onRemoveBoard&&onRemoveBoard(aid,bid);upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).filter(b=>b.id!==bid)}:a)});};
   const saveArea=aid=>{const n=editAreaName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,name:n}:a)});setEditingAreaId(null);};
   const saveBoard=(aid,bid)=>{const n=editBoardName.trim();if(!n)return;upd({...project,areas:(project.areas||[]).map(a=>a.id===aid?{...a,boards:(a.boards||[]).map(b=>b.id===bid?{...b,name:n}:b)}:a)});setEditingBoard(null);};
   return React.createElement('div',{style:SS.listWrap}
@@ -10978,7 +11358,7 @@ function SWBManageView({project,onUpdateProject,onBack}) {
 // ─────────────────────────────────────────────────────────────────────────
 // HISTORY VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete,onExportSnap,onContinueFromSnap,onBack}) {
+function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewArea,onDelete,onExportSnap,onContinueFromSnap,onBack,error}) {
   const [expanded,setExpanded]=React.useState(null);
   const SS=swbStyles();
 
@@ -11060,6 +11440,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
   return React.createElement('div',{style:SS.listWrap}
     ,backBtn
     ,React.createElement('div',{style:SS.listTitle},"Audit History")
+    ,error&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginBottom:8}},error)
     ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},history.length," saved audit",history.length!==1?"s":"")
     ,history.map(snap=>{
       let pass=0,fail=0,na=0,total=0;
@@ -11170,7 +11551,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
 // ─────────────────────────────────────────────────────────────────────────
 function SWBNavBtn({icon,label,active,onClick,color}) {
   const c=active?(color||"#334155"):"#52525b";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",minHeight:50,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
+  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
     ,icon
     ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
   );
@@ -11185,7 +11566,7 @@ function swbStyles() {
     breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
     bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     brandBlock:{textAlign:"center",borderBottom:"2px solid #7e22ce",paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -11649,8 +12030,14 @@ async function exportELTExcel(project, allResults, meta) {
   }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
-  // (the register itself only lists tested fittings).
+  // (the register itself only lists tested fittings). Photos live in sitePhotoStore (Stage 3, 2026-09-29) as {id,w,h}
+  // pointers, not inline dataUrl — resolve every one into a small export-sized copy BEFORE building the sheet (GSD's pattern).
   const withPhotos = areaAssets(project).map(a=>({asset:a,res:eltGetRes(allResults||{},project.id,a.id)})).filter(x=>(x.res.photos||[]).length>0);
+  const photoCopies = new Map();
+  for (const { res } of withPhotos) for (const p of res.photos || []) if (!photoCopies.has(p.id)) {
+    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+  }
+  const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
     const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
@@ -11660,12 +12047,13 @@ async function exportELTExcel(project, allResults, meta) {
       r.photos.forEach(p=>{
         const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
         pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
-        const bx = xjPhotoBox(p.dataUrl); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
-        const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+        const bx = xjPhotoBoxWH(p.w, p.h); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
+        const copy = photoCopies.get(p.id);
+        const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
         if (m) {
           let ext = m[1]==="jpg"?"jpeg":m[1];
           if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
-          const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+          const imgId = wb.addImage({base64:copy.dataUrl,extension:ext});
           ps.addImage(imgId,{tl:{col:3.1,row:pr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
         }
         pr++;
@@ -11677,6 +12065,7 @@ async function exportELTExcel(project, allResults, meta) {
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("elt");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
 // A retired default type that means the same as a current default: shown as the current one, stored value left untouched.
@@ -11712,11 +12101,19 @@ function ELTApp({ onGoHome }) {
   const [view,          setView]          = React.useState("projects");
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [eltDropdowns, setEltDropdowns] = React.useState(ELT_DEFAULT_DROPDOWNS);
+  const [historyError, setHistoryError] = React.useState("");
   const eltMainRef = React.useRef(null);
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});}
+      try{
+        let [p,r,m,h,dd]=await Promise.all([loadVersioned(K_ELT_PROJECTS,K_ELT_PROJECTS_V1,[],migrateProjectList),load(K_ELT_RESULTS,{}),load(K_ELT_META,{}),loadVersioned(K_ELT_HISTORY,K_ELT_HISTORY_V1,[],migrateHistoryList),load(K_ELT_DROPDOWNS,ELT_DEFAULT_DROPDOWNS)]);
+        await save(K_ELT_HISTORY,h);   // persist the (possibly just area-migrated) v2 history BEFORE the photo migration reads that key directly
+        const photoMig = await migrateSitePhotos("elt",K_ELT_RESULTS,K_ELT_HISTORY,assetResultsExtractPhotos);
+        if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
+        expirePhotoMigrationBackupIfStale("elt");
+        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});
+      }
       finally{setLoaded(true);}
     })();
   },[]);
@@ -11740,12 +12137,24 @@ function ELTApp({ onGoHome }) {
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
+  const today = ()=>new Date().toISOString().slice(0,10);
+  // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
+  // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
+  const clearSiteResults = ()=>{
+    setAllResults(prev=>({...prev,[activeProject]:{}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+  };
+  // Reset: nothing will reference these results afterward (unlike Complete Audit, nothing was archived first), so their
+  // photos must be freed here or they'd be orphaned in sitePhotoStore forever.
+  const discardSiteResults = ()=>{
+    sitePhotoStore.delPhotoList(assetPhotoList(allResults[activeProject]));
+    clearSiteResults();
+  };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
-  const today = ()=>new Date().toISOString().slice(0,10);
 
-  useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");   // the list level's key never includes the (still-set) asset id
+  useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit"||view==="projects");   // the list level's key never includes the (still-set) asset id
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -11778,14 +12187,24 @@ function ELTApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
-      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));}})
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:discardSiteResults})
       ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
-      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
+      ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>{const site=allResults[activeProject]||{};sitePhotoStore.delPhotoList(assetPhotoList(Object.fromEntries(ids.map(id=>[id,site[id]]))));setAllResults(prev=>removeAssetResults(prev,activeProject,ids));}})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:true,reserved:["Other"]})
-      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+      ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,error:historyError,
+          onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(assetPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
+          onExportSnap:snap=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}),
+          onContinueFromSnap:async snap=>{
+            try{
+              const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
+              setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
+              confirmPhotoMigrationVerified("elt");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setHistoryError("");setViewSnap(null);setView("audit");
+            }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
+          }})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_HOME,   label:"Home",   active:view==="home",                   onClick:goHome,                    color:"#334155"})
@@ -12113,15 +12532,16 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
   // ★ defaults are stored when the fitting becomes FAIL (derived at fitting level), same as Welder
   useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
   const photoRef = React.useRef();
+  const [photoError, setPhotoError] = React.useState("");
   const rRef = React.useRef(r); rRef.current = r;
   const setPhotos = photos=>set({photos});
   const addPhotos = async e=>{
     const files = Array.from(e.target.files||[]); e.target.value="";
     if(!files.length) return;
-    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    setPhotos([...(rRef.current.photos||[]),...added]);
+    try { const added = await siteStorePhotos(files); setPhotoError(""); setPhotos([...(rRef.current.photos||[]),...added]); }
+    catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
   };
-  const removePhoto = id=>setPhotos((r.photos||[]).filter(p=>p.id!==id));
+  const removePhoto = photo=>{ sitePhotoStore.delPhoto(photo); setPhotos((rRef.current.photos||[]).filter(p=>p.id!==photo.id)); };
   const sub = [asset.location,eltTypeLabel(asset),asset.maintained,asset.assetId&&`#${asset.assetId}`].filter(Boolean).join(" · ");
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,eltEl(ELTBackBtn,{onClick:onClose})
@@ -12136,12 +12556,13 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
     ,eltEl('div',{style:{margin:"14px 0 16px"}}
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
       ,(r.photos||[]).map(p=>eltEl('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
-        ,eltEl('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,eltEl(SitePhoto,{photo:p,thumb:true,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
         ,eltEl('div',{style:{flex:1,minWidth:0}})
-        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p)})
       ))
       ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:ELT_COLOR,border:`1px dashed ${ELT_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
+      ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
     ,eltEl('div',{style:{display:"flex",gap:6,marginBottom:14}},(()=>{ const sum = eltFittingSummary(r);
@@ -12328,7 +12749,7 @@ function ELTManageView({project, dropdowns, onUpdateProject, onRemoveAssets}) {
   );
 }
 
-function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
+function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error}) {
   const SS = swbStyles();
   const [expanded,setExpanded] = React.useState(null);
   const snapStats = snap=>eltSummary({id:project.id,areas:snap.areas||project.areas||[]},{[project.id]:snap.results||{}});
@@ -12360,6 +12781,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
   }
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Audit History")
+    ,error&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginBottom:8}},error)
     ,history.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No archived audits yet. Use “Complete Emergency Lighting Audit” on the Home tab.")
     ,history.map(snap=>{
       const s = snapStats(snap);
@@ -12426,7 +12848,7 @@ function irtStyles(){
     backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     appTitle:{fontSize:15,fontWeight:800,color:"#18181b",letterSpacing:0.5},appSub:{fontSize:11,letterSpacing:0.3},
     main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#f7f6f3",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"34px",boxShadow:"0 200px 0 200px #f7f6f3"},
+    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
     brandBlock:{textAlign:"center",borderBottom:`2px solid ${IRT_COLOR}`,paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
     siteTitle:{fontSize:20,fontWeight:800,color:"#18181b"},siteSub:{fontSize:12,color:"#6e6a66"},
@@ -13303,7 +13725,7 @@ function IRTApp({onGoHome}){
   const goHome=()=>{setView("home");setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
   const isAudit=["audit","area","panel","item"].includes(view);
   const SS=irtStyles();
-  useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["audit","area","panel"].includes(view));
+  useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["projects","audit","area","panel"].includes(view));
   if(!loaded)return React.createElement("div",{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},React.createElement("div",{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${IRT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
   return React.createElement("div",{style:SS.root},
     // Top bar
@@ -14211,21 +14633,26 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
   const [r,setR] = React.useState(res);
   const rRef = React.useRef(r); rRef.current = r;
   const set = patch=>{ setR(prev=>({...prev,...patch})); onPatch(patch); };
-  const sum = welderSummary(r); const overall = sum.overall; const sm = welderSM(overall); const isFail = overall==="fail";
+  const sum = welderSummary(r); const overall = sum.overall; const sm = welderSM(overall);
+  // The FAIL panel (and its ★ defaults) must appear the moment ANY item is marked Fail — it must NOT wait for every
+  // item to be answered like `overall` does. `overall` itself is untouched (stays "untested" until all 12 are
+  // answered, per the established rule) — `anyFail` is a separate, independent trigger for panel visibility only.
+  const anyFail = sum.fail > 0;
   const rectOpts = (dropdowns&&dropdowns.rectified)||WELDER_DEFAULT_RECTIFIED;
   const respOpts = (dropdowns&&dropdowns.responsibility)||WELDER_DEFAULT_RESPONSIBILITY;
-  // ★ defaults are stored when the asset becomes FAIL (derived at asset level)
-  useFailDefaults(isFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
+  // ★ defaults are stored as soon as the panel can show (any Fail), not gated on the completed overall result
+  useFailDefaults(anyFail,{rectified:r.rectified,responsibility:r.responsibility},{rectified:rectOpts[0],responsibility:respOpts[0]},set);
   const patchItem = (key,patch)=>{ const items = {...(rRef.current.items||{}),[key]:{...welderItem(rRef.current,key),...patch}}; set({items}); };
   const photoRef = React.useRef();
+  const [photoError, setPhotoError] = React.useState("");
   const setPhotos = photos=>set({photos});
   const addPhotos = async e=>{
     const files = Array.from(e.target.files||[]); e.target.value="";
     if(!files.length) return;
-    const added = await Promise.all(files.map(async f=>({id:uid(),dataUrl:await resizeImageToDataUrl(f)})));
-    setPhotos([...(rRef.current.photos||[]),...added]);
+    try { const added = await siteStorePhotos(files); setPhotoError(""); setPhotos([...(rRef.current.photos||[]),...added]); }
+    catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
   };
-  const removePhoto = id=>setPhotos((rRef.current.photos||[]).filter(p=>p.id!==id));
+  const removePhoto = photo=>{ sitePhotoStore.delPhoto(photo); setPhotos((rRef.current.photos||[]).filter(p=>p.id!==photo.id)); };
   const ro = (lbl,val)=>eltEl('div',{key:lbl,style:{minWidth:0}}
     ,eltEl('div',{style:{fontSize:9,color:"#6e6a66",letterSpacing:0.8,fontWeight:700}},lbl)
     ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
@@ -14268,8 +14695,8 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
         ,eltEl('input',{style:SS.modalInput,type:"text",value:it.action||"",placeholder:"Corrective action required",onChange:e=>patchItem(key,{action:e.target.value})})
       );
     })
-    // asset-level derived FAIL panel (before the comments box)
-    ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
+    // asset-level derived FAIL panel (before the comments box) — shows on the FIRST Fail, independent of `overall`
+    ,anyFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
       ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
@@ -14301,12 +14728,13 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     ,eltEl('div',{style:{margin:"6px 0 16px"}}
       ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
       ,(r.photos||[]).map(p=>eltEl('div',{key:p.id,style:{display:"flex",alignItems:"center",gap:10,width:"100%",minWidth:0,overflow:"hidden",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:8,marginBottom:8}}
-        ,eltEl('img',{src:p.dataUrl,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
+        ,eltEl(SitePhoto,{photo:p,thumb:true,style:{width:52,height:52,objectFit:"cover",borderRadius:6,flexShrink:0,border:"1px solid #d4d4d8"}})
         ,eltEl('div',{style:{flex:1,minWidth:0}})
-        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p.id)})
+        ,eltEl(DeleteButton,{onDelete:()=>removePhoto(p)})
       ))
       ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:WELDER_COLOR,border:`1px dashed ${WELDER_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
+      ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,nextDue&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
       ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
@@ -14421,7 +14849,7 @@ function WelderManageView({project, onUpdateProject, onRemoveAssets}) {
   );
 }
 
-function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap}) {
+function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error}) {
   const SS = swbStyles();
   const [expanded,setExpanded] = React.useState(null);
   const snapProject = snap=>({...project,areas:snap.areas||project.areas||[]});
@@ -14454,6 +14882,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
   }
   return eltEl('div',{style:SS.listWrap}
     ,eltEl('div',{style:{...SS.listTitle,color:"#334155"}},"Audit History")
+    ,error&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginBottom:8}},error)
     ,history.length===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No archived audits yet. Use “Complete Welder Audit” on the Home tab.")
     ,history.map(snap=>{
       const s = snapStats(snap);
@@ -14511,6 +14940,14 @@ async function exportWelderExcel(project, allResults, meta) {
   const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
   const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
   const rows = welderRegisterRows(project, allResults, meta);
+  // Photos now live in sitePhotoStore (Stage 2, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
+  // referenced by this export's own rows into a small export-sized copy BEFORE building any sheet (same pattern as GSD's
+  // exportGSDExcel). A photo whose record is missing is skipped, its space kept, never a broken image reference.
+  const photoCopies = new Map();
+  for (const row of rows) for (const p of (row.res && row.res.photos) || []) if (!photoCopies.has(p.id)) {
+    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+  }
+  const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
 
   // ── Register ──
   const ws = wb.addWorksheet("Register");
@@ -14582,12 +15019,13 @@ async function exportWelderExcel(project, allResults, meta) {
     (raw.photos||[]).forEach((p,pi)=>{
       rr++;
       put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
-      const bx = xjPhotoBox(p.dataUrl); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
-      const m = /^data:image\/(\w+);base64,(.+)$/.exec(p.dataUrl||"");
+      const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
+      const copy = photoCopies.get(p.id);
+      const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
       if (m) {
         let ext = m[1]==="jpg"?"jpeg":m[1];
         if (!["jpeg","png","gif"].includes(ext)) ext = "jpeg";
-        const imgId = wb.addImage({base64:p.dataUrl,extension:ext});
+        const imgId = wb.addImage({base64:copy.dataUrl,extension:ext});
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
@@ -14598,6 +15036,7 @@ async function exportWelderExcel(project, allResults, meta) {
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("welder");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
 function WelderApp({ onGoHome }) {
@@ -14611,11 +15050,19 @@ function WelderApp({ onGoHome }) {
   const [view,          setView]          = React.useState("projects");
   const [activeAssetId, setActiveAssetId] = React.useState(null);
   const [dropdowns, setDropdowns] = React.useState(WELDER_DEFAULT_DROPDOWNS);
+  const [historyError, setHistoryError] = React.useState("");
   const mainRef = React.useRef(null);
 
   React.useEffect(()=>{
     (async()=>{
-      try{const [p,r,m,h,dd]=await Promise.all([loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),loadVersioned(K_WELDER_HISTORY,K_WELDER_HISTORY_V1,[],migrateHistoryList),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});}
+      try{
+        let [p,r,m,h,dd]=await Promise.all([loadVersioned(K_WELDER_PROJECTS,K_WELDER_PROJECTS_V1,[],migrateProjectList),load(K_WELDER_RESULTS,{}),load(K_WELDER_META,{}),loadVersioned(K_WELDER_HISTORY,K_WELDER_HISTORY_V1,[],migrateHistoryList),load(K_WELDER_DROPDOWNS,WELDER_DEFAULT_DROPDOWNS)]);
+        await save(K_WELDER_HISTORY,h);   // persist the (possibly just area-migrated) v2 history BEFORE the photo migration reads that key directly
+        const photoMig = await migrateSitePhotos("welder",K_WELDER_RESULTS,K_WELDER_HISTORY,assetResultsExtractPhotos);
+        if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
+        expirePhotoMigrationBackupIfStale("welder");
+        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});
+      }
       finally{setLoaded(true);}
     })();
   },[]);
@@ -14640,15 +15087,23 @@ function WelderApp({ onGoHome }) {
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
+  // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
+  // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
   const clearSiteResults = ()=>{
     setAllResults(prev=>({...prev,[activeProject]:{}}));
     setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+  };
+  // Reset: nothing will reference these results afterward (unlike Complete Audit, nothing was archived first), so their
+  // photos must be freed here or they'd be orphaned in sitePhotoStore forever.
+  const discardSiteResults = ()=>{
+    sitePhotoStore.delPhotoList(assetPhotoList(allResults[activeProject]));
+    clearSiteResults();
   };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
   const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
   const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
 
-  useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit");
+  useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit"||view==="projects");
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${WELDER_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
@@ -14685,14 +15140,24 @@ function WelderApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${WELDER_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:mainRef}
-      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:clearSiteResults})
+      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:discardSiteResults})
       ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
       ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(WelderReportView,{project,results:allResults,meta})
-      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>setAllResults(prev=>removeAssetResults(prev,activeProject,ids))})
+      ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>{const site=allResults[activeProject]||{};sitePhotoStore.delPhotoList(assetPhotoList(Object.fromEntries(ids.map(id=>[id,site[id]]))));setAllResults(prev=>removeAssetResults(prev,activeProject,ids));}})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns,setDropdowns,onBack:goHome,lists:WELDER_DROPDOWN_LISTS,hint:"These lists feed the Welder defect dropdowns. Tap ★ to move an option to the top.",showDefault:true})
-      ,view==="history"&&project&&eltEl(WelderHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:exportSnap,onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setViewSnap(null);setView("audit");}})
+      ,view==="history"&&project&&eltEl(WelderHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,error:historyError,
+          onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(assetPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
+          onExportSnap:exportSnap,
+          onContinueFromSnap:async snap=>{
+            try{
+              const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
+              setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
+              confirmPhotoMigrationVerified("welder");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setHistoryError("");setViewSnap(null);setView("audit");
+            }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
+          }})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,navBtn(NAV_ICON_HOME,"Home",view==="home",goHome)
@@ -15016,7 +15481,7 @@ function GSDApp({ onGoHome }) {
   const goHome = () => { setView("home"); setActiveItemId(null); setViewSnap(null); };
   const goAudit = () => { setView("audit"); setActiveItemId(null); setViewSnap(null); };
   const SS = swbStyles();
-  useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit");
+  useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit" || view === "projects");
   if (!loaded) return gsdEl("div", { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } }, gsdEl("div", { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GSD_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
   const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if (view === "item") setView("audit"); else if (view === "audit") goHome(); else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
   const navTo = v => () => { setViewSnap(null); setView(v); };
@@ -15332,6 +15797,9 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 }
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
-  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField };
+  parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
+  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
+  sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
+  assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export default AppRoot;

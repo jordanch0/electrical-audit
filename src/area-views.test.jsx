@@ -1,11 +1,16 @@
 // Site -> Area -> Assets (ELT + Welder) through the real UI: v1 flat data opens migrated, Audit / Report / History are grouped by
 // area, Manage adds / renames / moves / deletes within areas, and delete cleans up the deleted assets' results (a deliberate
 // improvement over the older modules, which leave orphaned results and photos behind).
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, beforeAll } from 'vitest';
 import { render, screen, cleanup, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppRoot, { WELDER_CHECKLIST, migrateProjectToAreas as toAreas, eltRegisterRows, welderRegisterRows, exportELTExcel, exportWelderExcel } from './App.jsx';
+import AppRoot, { WELDER_CHECKLIST, migrateProjectToAreas as toAreas, eltRegisterRows, welderRegisterRows, exportELTExcel, exportWelderExcel, sitePhotoIO } from './App.jsx';
 import ExcelJS from 'exceljs';
+import 'fake-indexeddb/auto'; // ELT's and Welder's inline-photo seeds here now go through migrateSitePhotos on load (Stages 2-3, 2026-09-29)
+
+// jsdom has no real image decoder — a data: URL Image never fires onload/onerror, which would otherwise hang the photo
+// migration this file's ELT/Welder seeds now trigger on every render. Stubbed the same way GSD's own tests stub gsdPhotoIO.
+beforeAll(() => { sitePhotoIO.imageSize = async () => ({ w: 10, h: 10 }); sitePhotoIO.thumbFromDataUrl = async url => url; });
 
 const keys = WELDER_CHECKLIST.map(c => c.key);
 const PHOTO = [{ id: 'ph', dataUrl: 'data:image/jpeg;base64,AAAA' }];
@@ -111,7 +116,9 @@ describe.each(Object.values(MODS))('$name: Site -> Area -> Assets', m => {
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(areas()[0].assets).toHaveLength(0));
     expect(areas()[2].assets.map(a => a.id)).toEqual(['n3', 'n1']);
-    expect(ls(p('results-v1')).p1.n1.photos).toEqual(PHOTO);
+    // Both ELT's and Welder's photos have been migrated to a {id,w,h} pointer by now (Stages 2-3, 2026-09-29), with a
+    // fresh random id — either way, the move itself didn't touch the photo, only its container's location.
+    expect(ls(p('results-v1')).p1.n1.photos).toEqual([{ id: expect.any(String), w: 10, h: 10 }]);
 
     // deleting an asset: Keep leaves everything; Delete removes it AND its results / photos — others untouched
     // (the move already expanded the destination area)
