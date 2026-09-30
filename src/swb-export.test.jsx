@@ -91,7 +91,8 @@ describe('exportSWBExcel structure', () => {
     const reg = (await build(project, results)).getWorksheet('Register');
     expect(V(reg.getCell('A1'))).toBe('Hearse Road - Firestone — Switchboard / Enclosure Audit');
     expect(V(reg.getCell('A2'))).toBe('Acme Pty Ltd  |  ABN: 99 999  |  Electrical Licence: EW1');
-    expect(V(reg.getCell('A3'))).toBe('Auditor: Jane'); expect(V(reg.getCell('C3'))).toBe('Date Tested: 13/07/2026'); expect(V(reg.getCell('E3'))).toBe('Next Audit Due: 13/07/2027');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
+    expect(V(reg.getCell('A3'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Audit Due: 13/07/2027');
     expect(SWB_REGISTER_COLUMNS.map((t, i) => V(reg.getCell(5, i + 1)))).toEqual(SWB_REGISTER_COLUMNS);
     expect(V(reg.getCell('D6'))).toBe('Pass'); expect(V(reg.getCell('D8'))).toBe('Fail'); expect(V(reg.getCell('D7'))).toBe('');
     expect(reg.getCell('D6').fill.fgColor.argb).toBe('FFE2EFDA'); expect(reg.getCell('D8').fill.fgColor.argb).toBe('FFFFC7CE');
@@ -103,7 +104,8 @@ describe('exportSWBExcel structure', () => {
   it('board sheet: header, Audit Summary with Score, the 11 checklist rows with criteria; defect data ONLY on FAIL rows', async () => {
     const sh = (await build(project, results)).getWorksheet('MCC 1');
     expect(V(sh.getCell('A1'))).toBe('Switchboard / Enclosure Audit');
-    expect(V(sh.getCell('A3'))).toBe('Area: Wash Plant'); expect(V(sh.getCell('C3'))).toBe('Board: MCC 1');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3 cells).
+    expect(V(sh.getCell('A3'))).toBe('Area: Wash Plant  |  Board: MCC 1');
     const summary = {}; for (let r = 8; r <= 14; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
     expect(summary).toEqual({ 'Total Items': '11', Pass: '1', Fail: '1', 'N/A': '1', Untested: '8', Score: '10.0%', Overall: 'UNTESTED' });
     expect(V(sh.getCell('A16'))).toBe('Item'); expect(V(sh.getCell('G16'))).toBe('Responsibility / Action');

@@ -114,7 +114,8 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
     });
     expect(JSON.stringify(d)).not.toContain('STALE');
     expect(JSON.stringify(grid(wb, wb.SheetNames[0]))).not.toContain('STALE');
-    expect(d[2][0]).toBe(`Defects recorded: ${failCount}`);
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was "Defects recorded: N" alone).
+    expect(d[2][0]).toMatch(new RegExp(`^Defects recorded: ${failCount}\\b`));
   });
 
   it('with ZERO fails the Defects sheet still exists with its headings and a "No defects recorded" line', async () => {
@@ -125,7 +126,7 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
       IEL: () => exportIELExcel(ielProject, c.ielResults, meta), TAT: () => exportTATExcel(tatProject, c.tatResults, meta), Thermo: () => exportThermoExcel(thermoProject, c.thermoResults, meta), IRT: () => exportIRTExcel(irtProject, c.irtResults, meta) };
     await runs[name](); const wb = readWb(); const d = grid(wb, 'Defects');
     DEFECT_HEADS.forEach(h => expect(d[4], h).toContain(h));
-    expect(d[5][0]).toBe('No defects recorded'); expect(d[2][0]).toBe('Defects recorded: 0');
+    expect(d[5][0]).toBe('No defects recorded'); expect(d[2][0]).toMatch(/^Defects recorded: 0\b/);
   });
 });
 
@@ -157,7 +158,8 @@ describe('IRT: three linked sheets — Register (short + narrow), Readings (full
     const reg = grid(wb, 'Register'); const rd = grid(wb, 'Readings');
     expect(reg[4]).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Date', 'Pass / Fail', 'Notes / Recommendations']);
     expect(rd[4]).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Voltage', 'L1-E', 'L2-E', 'L3-E', 'N-E', 'L1-L2', 'L1-L3', 'L2-L3', 'L1-N', 'L2-N', 'L3-N', 'Pass / Fail']);
-    expect(rd[2]).toContain('All readings in MΩ');                                   // the unit is stated once, not on every heading
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was "All readings in MΩ" alone).
+    expect(rd[2].some(c => String(c).includes('All readings in MΩ'))).toBe(true);    // the unit is stated once, not on every heading
     const regRows = reg.slice(5).filter(r => /^\d+$/.test(r[0])); const rdRows = rd.slice(5).filter(r => /^\d+$/.test(r[0]));
     expect(regRows).toHaveLength(3); expect(rdRows).toHaveLength(3);                 // same number of circuits on both — nothing lost
     expect(regRows.map(r => r[0])).toEqual(rdRows.map(r => r[0]));

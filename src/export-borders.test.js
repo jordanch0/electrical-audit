@@ -73,7 +73,9 @@ describe('SWB / ELT data-row borders', () => {
     }
     expect(String(reg.getCell('A1').value)).toBe('Site S — Switchboard / Enclosure Audit');
     expect([1, 2, 3, 4, 5].map(r => reg.getRow(r).height)).toEqual([32, 16, 16, 6, 40]);
-    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:B3', 'A4:P4', 'C3:D3', 'E3:P3'].sort());
+    // Row 3 (2026-09-30 fix): one full-width merge (was 3 sub-merges); row 4 is not merged in this sheet (unlike the
+    // shared xjSheet builder / ELT, which do merge their row-4 spacer).
+    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:P3'].sort());
     const board = wb.getWorksheet('MSB');
     expect(board.getCell('A7').fill.fgColor.argb).toBe('FFD9D9D9');                            // "Audit Summary" heading
   });

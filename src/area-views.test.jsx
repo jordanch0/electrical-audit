@@ -191,8 +191,12 @@ describe('export order = area order', () => {
     const wb = await load();
     expect(col(wb.getWorksheet('Register'), 'A', 6, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'W1', 'W3', 'W2', 'W4']);
-    // each welder sheet's header reads its AREA name as Location (the asset itself no longer stores one)
-    expect(['W1', 'W3', 'W2', 'W4'].map(n => String(wb.getWorksheet(n).getCell('A3').value))).toEqual(['Location: North Bay', 'Location: North Bay', 'Location: Yard', 'Location: Yard']);
+    // each welder sheet's header reads its AREA name as Location (the asset itself no longer stores one); row 3 is
+    // now one joined "Location: ...  |  Asset ID: ..." cell (2026-09-30 fix), not just "Location: ...".
+    expect(['W1', 'W3', 'W2', 'W4'].map(n => String(wb.getWorksheet(n).getCell('A3').value))).toEqual([
+      'Location: North Bay  |  Asset ID: W1', 'Location: North Bay  |  Asset ID: W3',
+      'Location: Yard  |  Asset ID: W2', 'Location: Yard  |  Asset ID: W4',
+    ]);
   });
 
   it('ELT Photos sheet is also in area order, labelled with the area name', async () => {

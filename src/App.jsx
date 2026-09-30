@@ -487,8 +487,12 @@ function xjSheet(wb, name, o) {
   const off = o.logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   put(1, 1, o.title, XJ_HEADER_CENTER); put(2, 1, o.coLine, XJ_HEADER_CENTER);
-  o.meta.forEach((v, i) => { if (v !== "" && v != null) put(3, i + 1, v, XJ_HEADER_CENTER); });
-  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
+  // Row 3 (2026-09-30 fix): used to be 3 separate sub-merges (auditor / date / next-due), each centred within its
+  // OWN narrow span — not one line. Now ONE joined string in ONE full-width cell, matching row 2 (coLine)'s own
+  // "  |  "-joined, single-merge, centred format exactly.
+  const metaLine = o.meta.filter(v => v !== "" && v != null).join("  |  ");
+  if (metaLine) put(3, 1, metaLine, XJ_HEADER_CENTER);
+  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
   // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
   o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
   [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
@@ -10527,10 +10531,10 @@ async function exportSWBExcel(project, allResults, meta) {
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = cols.length;
   setCell('A'+(1+off),`${sName} — Switchboard / Enclosure Audit`,XJ_HEADER_CENTER);
   setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`,XJ_HEADER_CENTER);
-  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`,XJ_HEADER_CENTER);
-  setCell('E'+(3+off),`Next Audit Due: ${nextDue}`,XJ_HEADER_CENTER);
-  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
+  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
+  // used to be 3 separate sub-merges, each centred within its own narrow span.
+  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Audit Due: ${nextDue}`].join('  |  '),XJ_HEADER_CENTER);
+  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}}]
     .forEach(m => ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
   SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+(5+off),t));
   [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1+off).height = h; });
@@ -10556,10 +10560,13 @@ async function exportSWBExcel(project, allResults, meta) {
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
     put('A'+(1+off),"Switchboard / Enclosure Audit",XJ_HEADER_CENTER);
     put('A'+(2+off),`${sName}  |  ${coLine}`,XJ_HEADER_CENTER);
-    put('A'+(3+off),`Area: ${area.name}`,XJ_HEADER_CENTER); put('C'+(3+off),`Board: ${board.name}`,XJ_HEADER_CENTER);
-    put('A'+(4+off),`Auditor: ${(meta&&meta.auditor)||""}`,XJ_HEADER_CENTER); put('C'+(4+off),`Date Tested: ${testDate?fmtDate(testDate):""}`,XJ_HEADER_CENTER);
+    // Rows 3-4 (2026-09-30 fix): each was 2 separate sub-merges (Area|Board, Auditor|Date Tested) — now ONE joined
+    // "  |  " string per row, in one full-width cell each, matching row 2's format. Row 5 (Next Audit Due) was
+    // already a single full-width cell.
+    put('A'+(3+off),[`Area: ${area.name}`,`Board: ${board.name}`].join('  |  '),XJ_HEADER_CENTER);
+    put('A'+(4+off),[`Auditor: ${(meta&&meta.auditor)||""}`,`Date Tested: ${testDate?fmtDate(testDate):""}`].join('  |  '),XJ_HEADER_CENTER);
     put('A'+(5+off),`Next Audit Due: ${nextDue}`,XJ_HEADER_CENTER);
-    [[1,1,7],[2,1,7],[3,1,2],[3,3,7],[4,1,2],[4,3,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr+off,c1,rr+off,c2));
+    [[1,1,7],[2,1,7],[3,1,7],[4,1,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr+off,c1,rr+off,c2));
     sh.getRow(1+off).height = 24;
     // Audit summary
     let rr = 7 + off;
@@ -12003,10 +12010,10 @@ async function exportELTExcel(project, allResults, meta) {
   // heights as the real IEL/RCD/TAT/Thermo exports: title, company line, meta line, 6pt spacer, headings.
   setCell('A'+(1+off),`${sName} — Emergency Lighting Test`,XJ_HEADER_CENTER);
   setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`,XJ_HEADER_CENTER);
-  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`,XJ_HEADER_CENTER);
-  setCell('E'+(3+off),`Next Test Due: ${nextDue?fmtDate(nextDue):''}`,XJ_HEADER_CENTER);
-  merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
+  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
+  // used to be 3 separate sub-merges, each centred within its own narrow span.
+  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Test Due: ${nextDue?fmtDate(nextDue):''}`].join('  |  '),XJ_HEADER_CENTER);
+  merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
   ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+(5+off),t); ws.getCell(cols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
   [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
   const rows = eltRegisterRows(project, allResults, meta);
@@ -12039,8 +12046,10 @@ async function exportELTExcel(project, allResults, meta) {
     const dcols = "ABCDEFGHIJ".split(""); const dn = dcols.length;
     const defRows = rows.filter(r=>r.defect);
     dset('A'+(1+off),`${sName} — Emergency Lighting Test — Defects`,XJ_HEADER_CENTER); dset('A'+(2+off),coLine,XJ_HEADER_CENTER);
-    dset('A'+(3+off),`Defects recorded: ${defRows.length}`,XJ_HEADER_CENTER); dset('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`,XJ_HEADER_CENTER); dset('E'+(3+off),"Priority: L Low · M Medium · H High · U Urgent",XJ_HEADER_CENTER);
-    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,1],[2,2,2,3],[2,4,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1+off,c1+1,r2+1+off,c2+1));
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
+    // used to be 3 separate sub-merges, each centred within its own narrow span.
+    dset('A'+(3+off),[`Defects recorded: ${defRows.length}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,"Priority: L Low · M Medium · H High · U Urgent"].join('  |  '),XJ_HEADER_CENTER);
+    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1+off,c1+1,r2+1+off,c2+1));
     ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+(5+off),t); ds.getCell(dcols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
     [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1+off).height = h;});
     defRows.forEach((row,i)=>{
@@ -14414,8 +14423,18 @@ function parseWelderExcel(data) {
       const r = XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:"",raw:false});
       // A logo strip on this sheet pushes its own rows down by one too.
       const off = (r[0]||[]).every(c => c===""||c==null) ? 1 : 0;
-      const grab = (ri,ci,label)=>{ const v=String((r[ri+off]&&r[ri+off][ci])||""); const m=v.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; };
-      return { assetId:grab(2,2,"Asset ID"), brand:grab(3,0,"Brand"), model:grab(3,2,"Model"), serial:grab(4,0,"Serial Number") };
+      // Rows 3-6 (2026-09-30 fix): each row is now ONE joined "  |  " string in col A — but a file exported BEFORE
+      // this fix still has 2 separate cells (col A / col C, col B blank). Handle both: collect every non-blank cell
+      // in the row and join them with the same "  |  " separator, then pull the labelled piece out of that line —
+      // this reproduces the new format's single string unchanged, and re-creates it from the old format's 2 cells.
+      const grab = (ri,label)=>{
+        const rowArr = (r[ri+off]) || [];
+        const line = rowArr.filter(c=>c!==""&&c!=null).map(String).join("  |  ");
+        const part = line.split("  |  ").find(p=>new RegExp("^\\s*"+label+":","i").test(p));
+        if (!part) return null;
+        const m = part.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null;
+      };
+      return { assetId:grab(2,"Asset ID"), brand:grab(3,"Brand"), model:grab(3,"Model"), serial:grab(4,"Serial Number") };
     });
     const assets=[], seen=new Set(); let skipped=0, duplicates=0, combined=0, exact=0, k=-1;
     for (let i=hi+1;i<rows.length;i++) {
@@ -14981,10 +15000,10 @@ async function exportWelderExcel(project, allResults, meta) {
   const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
   setCell('A'+(1+off),`${sName} — Welder Test`,XJ_HEADER_CENTER);
   setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  setCell('A'+(3+off),`Auditor: ${(meta&&meta.auditor)||''}`,XJ_HEADER_CENTER);
-  setCell('C'+(3+off),`Date Tested: ${testDate?fmtDate(testDate):''}`,XJ_HEADER_CENTER);
-  setCell('E'+(3+off),`Next Test Due: ${nextDue?fmtDate(nextDue):''}`,XJ_HEADER_CENTER);
-  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:1}},{s:{r:2,c:2},e:{r:2,c:3}},{s:{r:2,c:4},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}}]
+  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
+  // used to be 3 separate sub-merges, each centred within its own narrow span.
+  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Test Due: ${nextDue?fmtDate(nextDue):''}`].join('  |  '),XJ_HEADER_CENTER);
+  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}}]
     .forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
   WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+(5+off),t));
   [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});
@@ -15011,11 +15030,15 @@ async function exportWelderExcel(project, allResults, meta) {
     const date = (meta&&meta.testDate) || "";
     put('A'+(1+off),"Welder Inspection & Audit Checklist",XJ_HEADER_CENTER);
     put('A'+(2+off),`${sName}  |  ${coLine}`,XJ_HEADER_CENTER);
-    put('A'+(3+off),`Location: ${a.location||""}`,XJ_HEADER_CENTER); put('C'+(3+off),`Asset ID: ${a.assetId||""}`,XJ_HEADER_CENTER);
-    put('A'+(4+off),`Brand: ${a.brand||""}`,XJ_HEADER_CENTER);       put('C'+(4+off),`Model: ${a.model||""}`,XJ_HEADER_CENTER);
-    put('A'+(5+off),`Serial Number: ${a.serial||""}`,XJ_HEADER_CENTER); put('C'+(5+off),`Date Tested: ${date?fmtDate(date):""}`,XJ_HEADER_CENTER);
-    put('A'+(6+off),`Prepared By: ${(meta&&meta.auditor)||""}`,XJ_HEADER_CENTER); put('C'+(6+off),`Test Instruments: ${(meta&&meta.instruments)||""}`,XJ_HEADER_CENTER);
-    [[1,1,5],[2,1,5],[3,1,2],[3,3,5],[4,1,2],[4,3,5],[5,1,2],[5,3,5],[6,1,2],[6,3,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr+off,c1,rr+off,c2));
+    // Rows 3-6 (2026-09-30 fix): each was 2 separate sub-merges — now ONE joined "  |  " string per row, in one
+    // full-width cell each, matching row 2's format. (This sheet has no single Auditor/Date/Next-Due triple like the
+    // Register does — Prepared By / Test Instruments live here instead — so the same "join this row's own split
+    // pieces" principle is applied per row rather than collapsing rows together.)
+    put('A'+(3+off),[`Location: ${a.location||""}`,`Asset ID: ${a.assetId||""}`].join('  |  '),XJ_HEADER_CENTER);
+    put('A'+(4+off),[`Brand: ${a.brand||""}`,`Model: ${a.model||""}`].join('  |  '),XJ_HEADER_CENTER);
+    put('A'+(5+off),[`Serial Number: ${a.serial||""}`,`Date Tested: ${date?fmtDate(date):""}`].join('  |  '),XJ_HEADER_CENTER);
+    put('A'+(6+off),[`Prepared By: ${(meta&&meta.auditor)||""}`,`Test Instruments: ${(meta&&meta.instruments)||""}`].join('  |  '),XJ_HEADER_CENTER);
+    [[1,1,5],[2,1,5],[3,1,5],[4,1,5],[5,1,5],[6,1,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr+off,c1,rr+off,c2));
     sh.getRow(1+off).height = 24;
     // Audit summary
     let rr = 8 + off;
@@ -15344,7 +15367,11 @@ async function exportGSDExcel(project, items, meta) {
   const logo = await xjGetLogoDataUrl("gsd", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
   const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
   const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
-  const metaCells = [`Auditor: ${m.auditor || ""}`, "", `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, "", `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
+  // Row 3 (2026-09-30 fix): used to be 3 separate sub-merges, each centred within its own narrow span. `metaArr` is
+  // passed to xjSheet (Register sheet), which does its own "  |  " join into one full-width cell; `metaLine` is the
+  // same join done here directly, for this function's own direct-write Report sheet.
+  const metaArr = [`Auditor: ${m.auditor || ""}`, `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
+  const metaLine = metaArr.join("  |  ");
   const sections = gsdReportSections(project, items);
   // the export copies of every photo, read from IndexedDB (a missing one is skipped, its space kept)
   const copies = new Map();
@@ -15358,8 +15385,8 @@ async function exportGSDExcel(project, items, meta) {
   const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
   put(1, 1, `${sName} — General Site Defects`, XJ_HEADER_CENTER); put(2, 1, coLine, XJ_HEADER_CENTER);
-  metaCells.forEach((v, i) => { if (v !== "") put(3, i + 1, v, XJ_HEADER_CENTER); });
-  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, 2], [3, 3, 3, 4], [3, 5, 3, 5], [4, 1, 4, GSD_COLS]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
+  put(3, 1, metaLine, XJ_HEADER_CENTER);
+  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, GSD_COLS], [4, 1, 4, GSD_COLS]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
   [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
   const white = SWB_XC.white;
   const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
@@ -15386,7 +15413,7 @@ async function exportGSDExcel(project, items, meta) {
 
   // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
   const numbered = gsdNumbered(project, items);
-  xjSheet(wb, "Register", { title: `${sName} — Site Defects Register`, coLine, meta: metaCells,
+  xjSheet(wb, "Register", { title: `${sName} — Site Defects Register`, coLine, meta: metaArr,
     headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
     widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
     rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),

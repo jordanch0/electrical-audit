@@ -81,7 +81,8 @@ describe('Complete Audit and History carry the machine', () => {
     await user.click(screen.getByRole('button', { name: 'View Results' }));
     await user.click(await screen.findByRole('button', { name: /Export/ }));
     await waitFor(() => expect(payload).toBeTruthy());
-    expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('E3').value)).toBe('Machine Used: Rigel 288 (S/N 4471)');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
+    expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A3').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Machine Used: Rigel 288 (S/N 4471)');
   });
 });
 
@@ -104,19 +105,20 @@ describe('Report tab: "Machine: …" under the auditor / date line', () => {
   });
 });
 
-describe('export header: "Machine Used: …" at E3', () => {
+describe('export header: "Machine Used: …" in the joined row 3', () => {
+  // Row 3 (2026-09-30 fix): Auditor / Date Tested / Machine Used are now ONE joined "  |  " string in ONE
+  // full-width cell (A3), not separate A3/C3/E3 cells with their own sub-merges.
   const run = m => exportTATExcel(project, { a1: tested }, { auditor: 'Jane', testDate: '2026-09-21', ...m });
-  it('carries the value next to Auditor and Date Tested; merged across the rest of row 3', async () => {
+  it('carries the value joined after Auditor and Date Tested, in one full-width merged cell', async () => {
     await run({ machine: 'Rigel 288 (S/N 4471)' }); const ws = (await loadWb()).getWorksheet('Test & Tag');
-    expect(String(ws.getCell('A3').value)).toBe('Auditor: Jane'); expect(String(ws.getCell('C3').value)).toBe('Date Tested: 21/09/2026');
-    expect(String(ws.getCell('E3').value)).toBe('Machine Used: Rigel 288 (S/N 4471)');
-    expect(Object.keys(ws._merges).map(k => ws._merges[k].range)).toContain('E3:L3');
+    expect(String(ws.getCell('A3').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Machine Used: Rigel 288 (S/N 4471)');
+    expect(Object.keys(ws._merges).map(k => ws._merges[k].range).some(r => /^A3:[A-Z]+3$/.test(r))).toBe(true);
   });
   it('is printed even when blank, whitespace-free legacy or missing (label only)', async () => {
-    for (const m of [{}, { machine: '' }]) { payload = null; await run(m); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('E3').value)).toBe('Machine Used: '); }
+    for (const m of [{}, { machine: '' }]) { payload = null; await run(m); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A3').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Machine Used: '); }
   });
-  it('the Defects sheet is unchanged (its row 3 still carries the priority legend)', async () => {
+  it('the Defects sheet is unchanged (its row 3 still carries the priority legend, now joined too)', async () => {
     await run({ machine: 'X' }); const ws = (await loadWb()).getWorksheet('Defects');
-    expect(String(ws.getCell('E3').value)).toMatch(/^Priority: L Low/);
+    expect(String(ws.getCell('A3').value)).toMatch(/Priority: L Low/);
   });
 });

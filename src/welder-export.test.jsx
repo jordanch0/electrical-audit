@@ -51,8 +51,8 @@ describe('Welder export structure', () => {
     const reg = wb.getWorksheet('Register');
     expect(V(reg.getCell('A1'))).toBe('Site A — Welder Test');
     expect(V(reg.getCell('A2'))).toBe('Co  |  ABN: 1  |  Electrical Licence: L1');
-    expect(V(reg.getCell('A3'))).toBe('Auditor: Jane');
-    expect(V(reg.getCell('E3'))).toBe('Next Test Due: 13/10/2026');
+    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell.
+    expect(V(reg.getCell('A3'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Test Due: 13/10/2026');
     expect(WELDER_COLUMNS.map((_, i) => V(reg.getCell(5, i + 1)))).toEqual(WELDER_COLUMNS);
     expect([6, 7, 8, 9].map(r => V(reg.getCell(r, 2)))).toEqual(['W001', 'W002', 'W003', 'W/004']);
     expect(V(reg.getCell('D7'))).toBe('N/A');
@@ -101,8 +101,11 @@ describe('Welder export structure', () => {
     const { wb } = await build(results);
     const sh = wb.getWorksheet('W001');
     expect(V(sh.getCell('A1'))).toBe('Welder Inspection & Audit Checklist');
-    expect(V(sh.getCell('A3'))).toBe('Location: ONR Workshop'); expect(V(sh.getCell('C3'))).toBe('Asset ID: W001');
-    expect(V(sh.getCell('A5'))).toBe('Serial Number: 2699294'); expect(V(sh.getCell('C6'))).toBe('Test Instruments: Fluke 1587');
+    // Rows 3-6 (2026-09-30 fix): each is one joined "  |  " string in one full-width cell (col A), not 2 separate
+    // col A / col C cells.
+    expect(V(sh.getCell('A3'))).toBe('Location: ONR Workshop  |  Asset ID: W001');
+    expect(V(sh.getCell('A5'))).toBe('Serial Number: 2699294  |  Date Tested: 13/07/2026');
+    expect(V(sh.getCell('A6'))).toBe('Prepared By: Jane  |  Test Instruments: Fluke 1587');
     const summary = {}; for (let r = 9; r <= 15; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
     expect(summary).toEqual({ 'Total Items': '12', Pass: '7', Fail: '0', 'N/A': '5', Score: '100.0%', 'Actions Required': '0', Overall: 'PASS' });
     expect(['Item', 'Test / Pass Criteria', 'Result', 'Measured Value / Notes', 'Corrective Action Required'].map((_, i) => V(sh.getCell(17, i + 1))))
