@@ -1976,7 +1976,7 @@ if(isPush){
 const push=_nullishCoalesce(d.push, () => ({}));
 const pushIsFail = (_nullishCoalesce(push.status, () => (STATUS.UNTESTED))) === STATUS.FAIL;
 return (
-React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#e8e6e2",minHeight:"100%"}, onClick: onClose,}
+React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}, onClick: onClose,}
 , React.createElement('div', { style: {}, onClick: e=>e.stopPropagation(),}
 , React.createElement('div', { style: S.modalHeader,}
 , React.createElement('div', null, React.createElement('div', { style: S.modalTitle,}, _optionalChain([panel, 'optionalAccess', _154 => _154.name]), " · "  , circuit), React.createElement('div', { style: S.modalSub,}, _optionalChain([area, 'optionalAccess', _155 => _155.name]), " · Push Test"    ))
@@ -2050,7 +2050,7 @@ placeholder: "Select or type…",})
 const inj=_nullishCoalesce(d.inject, () => ({}));
 const isOver = msIsOver(inj.resultPos) || msIsOver(inj.resultNeg);
 return (
-React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#e8e6e2",minHeight:"100%"}, onClick: onClose,}
+React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}, onClick: onClose,}
 , React.createElement('div', { style: {}, onClick: e=>e.stopPropagation(),}
 , React.createElement('div', { style: S.modalHeader,}
 , React.createElement('div', null, React.createElement('div', { style: S.modalTitle,}, _optionalChain([panel, 'optionalAccess', _156 => _156.name]), " · "  , circuit), React.createElement('div', { style: S.modalSub,}, _optionalChain([area, 'optionalAccess', _157 => _157.name]), " · Injection Test"    ))
@@ -2640,15 +2640,42 @@ const NAV_ICON_DROPDOWNS=React.createElement('svg',{width:17,height:17,viewBox:"
 // box-shadow trick to mask its own bottom edge; it's now an overlay — a thin top border only, background
 // matching the page behind it — so NavBtn itself was shortened to match (minHeight 50->42, tighter
 // vertical padding), same icons/order/labels, just more compact.
-function NavBtn({icon,label,active,onClick,color}){
-const c=active?(color||"#334155"):"#52525b";
-return (React.createElement('button', { onClick: onClick, style: {flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"},}, icon, React.createElement('span', { style: {fontSize:9,fontWeight:active?700:500,letterSpacing:0.5},}, label)));
+//
+// FLOATING PILL NAV (2026-10-01) — replaces the flat full-width bar. The pill is position:absolute OVER the content
+// (Facebook's iOS tab bar), so content scrolls underneath it. THAT IS WHY EVERY SCROLLABLE SCREEN MUST PAD ITS BOTTOM
+// WITH NAV_CLEARANCE (never a hard-coded number): the pill sits over whatever is scrolled there, and a screen without
+// the clearance hides its last card behind it. src/safe-area-layout.test.jsx scans the source to enforce this.
+// Measured from nav-reference/IMG_0200.PNG (Facebook iOS): pill ~47pt tall, bottom edge ~19pt from the screen bottom
+// (i.e. it DIPS INTO the home-indicator safe area), ~11pt from the sides. Needs viewport-fit=cover (index.html) or
+// env(safe-area-inset-bottom) is 0 and the pill can't dip.
+const NAV_BTN_H = 44;       // tap target: never below 44
+const NAV_PILL_H = 52;      // 44px button + 2 x 3px padding + 2 x 1px border
+const NAV_GAP_BOTTOM = 8;   // MINIMUM gap to the bottom edge (devices with no home indicator)
+const NAV_SIDE = 14;        // gap between the pill and each side edge
+// ONE bottom offset for the pill: safe-area inset - 14px (34 - 14 = 20px on a home-indicator iPhone), never under 8px.
+const NAV_BOTTOM = `max(${NAV_GAP_BOTTOM}px, calc(env(safe-area-inset-bottom, 0px) - 14px))`;
+// Bottom padding every scrollable screen needs so its last item stops ABOVE the pill: pill + its offset + 16px breathing room.
+const NAV_CLEARANCE = `calc(${NAV_PILL_H}px + ${NAV_BOTTOM} + 16px)`;
+const NAV_PILL_STYLE = {
+  position:"absolute",left:NAV_SIDE,right:NAV_SIDE,bottom:NAV_BOTTOM,zIndex:50,
+  display:"flex",alignItems:"center",boxSizing:"border-box",padding:3,borderRadius:999,
+  background:"rgba(255,255,255,0.92)",backdropFilter:"blur(12px)",WebkitBackdropFilter:"blur(12px)",
+  border:"1px solid rgba(0,0,0,0.08)",boxShadow:"0 4px 16px rgba(0,0,0,0.12)",
+};
+// Module-select screen: only two tabs, so a narrower centred pill instead of stretching them across the screen.
+const NAV_PILL_STYLE_NARROW = {...NAV_PILL_STYLE,left:0,right:0,marginLeft:"auto",marginRight:"auto",width:`calc(100% - ${NAV_SIDE*2}px)`,maxWidth:240};
+const NAV_ACTIVE_BG = "#fdeadb", NAV_ACTIVE_FG = "#a3530f", NAV_INACTIVE_FG = "#3f3f46";
+// ONE nav button for every module (IELNavBtn / TATNavBtn / SWBNavBtn / ThermoNavBtn / IRTNavBtn are aliases of it).
+// The active tab sits in a pale-orange rounded highlight wrapping icon + label; `color` is accepted but ignored.
+const NAV_BTN_STYLE = {flex:1,minWidth:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"4px 0 3px",minHeight:NAV_BTN_H,borderRadius:NAV_BTN_H/2,fontFamily:"inherit"};
+function NavBtn({icon,label,active,onClick}){
+return (React.createElement('button', { onClick: onClick, style: {...NAV_BTN_STYLE,background:active?NAV_ACTIVE_BG:"transparent",color:active?NAV_ACTIVE_FG:NAV_INACTIVE_FG},}, icon, React.createElement('span', { style: {fontSize:11,fontWeight:active?700:500,letterSpacing:0,lineHeight:"13px",whiteSpace:"nowrap"},}, label)));
 }
 // ─────────────────────────────────────────────────────────────────────────
 // STYLES
 // ─────────────────────────────────────────────────────────────────────────
 const S={
-root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
+root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative",touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
 loader:{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#e8e6e2"},
 loaderSpinner:{width:40,height:40,border:"3px solid #d4d4d8",borderTop:"3px solid #a3530f",borderRadius:"50%",animation:"spin 0.8s linear infinite"},
 topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",flexShrink:0,zIndex:10},
@@ -2658,8 +2685,8 @@ backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:
 saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
 bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
-main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
+main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
+bottomNav:NAV_PILL_STYLE,
 homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
 brandBlock:{textAlign:"center",borderBottom:"2px solid #a3530f",paddingBottom:8,width:"100%",maxWidth:500},
 brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#a3530f"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -3181,7 +3208,7 @@ function IELDropdownsView({dropdowns,setDropdowns,onBack}){
     {key:"responsibility",label:"RESPONSIBILITY",color:"#047857",desc:"Options shown when logging a failed item",defaults:IEL_DEFAULT_RESPONSIBILITY},
     {key:"rectified",    label:"RECTIFIED / SCHEDULED ACTION",color:"#92400e",desc:"Actions available when rectifying a defect",defaults:IEL_DEFAULT_RECTIFIED},
   ];
-  return React.createElement('div',{style:{padding:"16px",paddingBottom:100}}
+  return React.createElement('div',{style:{padding:"16px"}}
     ,React.createElement('div',{style:{...SI.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
     ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
     ,React.createElement(DefectListCards,{dropdowns,setDropdowns,sections,S:SI,cardStyle:{background:"#f7f6f3",border:"1px solid #93c5fd",borderRadius:12,padding:"12px 14px",marginBottom:14}})
@@ -3605,7 +3632,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
   const overdue=nextDueISO&&isOverdue(nextDueISO);
   const sm=IEL_SM[item.status||IEL_STATUS.UNTESTED]||IEL_SM.untested;
 
-  return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#e8e6e2",minHeight:"100%"}}
+  return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,React.createElement('div',{style:{}}
       // Header
       ,React.createElement('div',{style:SI.modalHeader}
@@ -4105,13 +4132,13 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 // IEL SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────
 function IELStatPill({label,val,col}){return React.createElement('div',{style:{display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"}},React.createElement('span',{style:{fontSize:10,color:col,fontWeight:700,letterSpacing:0.5}},label),React.createElement('span',{style:{fontSize:14,color:col,fontWeight:800}},val));}
-function IELNavBtn({icon,label,active,onClick,color}){const c=active?(color||"#047857"):"#52525b";return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#047857"}`:"2px solid transparent"}},icon,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label));}
+function IELNavBtn(props){return React.createElement(NavBtn,props);}
 
 // ─────────────────────────────────────────────────────────────────────────
 // IEL STYLES — mirrors S from RCD
 // ─────────────────────────────────────────────────────────────────────────
 const SI={
-  root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
+  root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative",touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
   loader:{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#e8e6e2"},
   loaderSpinner:{width:40,height:40,border:"3px solid #d4d4d8",borderTop:"3px solid #047857",borderRadius:"50%",animation:"spin 0.8s linear infinite"},
   topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",flexShrink:0,zIndex:10},
@@ -4122,8 +4149,8 @@ const SI={
   saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
-  main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
+  main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
+  bottomNav:NAV_PILL_STYLE,
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #047857",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3,color:"#047857"},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -4515,10 +4542,10 @@ function CalendarApp({ onGoHome }) {
   const selectedEvents = selectedDay ? eventsOnDay(selectedDay) : [];
 
   const CAL_STYLE = {
-    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans',sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden",maxWidth:"100vw"},
+    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans',sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden",maxWidth:"100vw"},
     topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",borderBottom:"2px solid #a5b4fc",flexShrink:0},
-    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,maxWidth:"100%"},
-    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
+    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE,maxWidth:"100%"},
+    bottomNav:NAV_PILL_STYLE,
     formWrap:{padding:"16px",boxSizing:"border-box",width:"100%",maxWidth:"100%",overflowX:"hidden"},
   };
 
@@ -4712,18 +4739,9 @@ function CalendarApp({ onGoHome }) {
 
     // Bottom nav
     ,React.createElement('nav',{style:CAL_STYLE.bottomNav}
-      ,React.createElement('button',{onClick:()=>{setView("upcoming");setShowAdd(false);},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:view==="upcoming"&&!showAdd?"#334155": "#52525b",borderTop:view==="upcoming"&&!showAdd?"2px solid #334155":"2px solid transparent"}}
-        ,React.createElement('span',{style:{fontSize:18}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-        ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Upcoming")
-      )
-      ,React.createElement('button',{onClick:()=>{setView("calendar");setShowAdd(false);},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:view==="calendar"&&!showAdd?"#334155": "#52525b",borderTop:view==="calendar"&&!showAdd?"2px solid #334155":"2px solid transparent"}}
-        ,React.createElement('span',{style:{fontSize:18}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10})))
-        ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Calendar")
-      )
-      ,React.createElement('button',{onClick:()=>{setShowAdd(true);setEditId(null);setForm({...blank});setCustomSite("");setValidErr({type:false,site:false,date:false});},style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,background:"transparent",border:"none",cursor:"pointer",padding:"10px 0 6px",color:showAdd?"#334155": "#52525b",borderTop:showAdd?"2px solid #334155":"2px solid transparent"}}
-        ,React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:12,y1:5,x2:12,y2:19}),React.createElement('line',{x1:5,y1:12,x2:19,y2:12}))
-        ,React.createElement('span',{style:{fontSize:9,fontWeight:600}},"Add Event")
-      )
+      ,React.createElement(NavBtn,{icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})),label:"Upcoming",active:view==="upcoming"&&!showAdd,onClick:()=>{setView("upcoming");setShowAdd(false);}})
+      ,React.createElement(NavBtn,{icon:React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10})),label:"Calendar",active:view==="calendar"&&!showAdd,onClick:()=>{setView("calendar");setShowAdd(false);}})
+      ,React.createElement(NavBtn,{icon:React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:12,y1:5,x2:12,y2:19}),React.createElement('line',{x1:5,y1:12,x2:19,y2:12})),label:"Add Event",active:showAdd,onClick:()=>{setShowAdd(true);setEditId(null);setForm({...blank});setCustomSite("");setValidErr({type:false,site:false,date:false});}})
     )
   );
 }
@@ -5575,7 +5593,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
 
-  return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",paddingBottom:80,background:"#e8e6e2",minHeight:"100%"}}
+  return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,React.createElement('div',{style:{}}
       ,React.createElement('div',{style:ST.modalHeader}
         ,React.createElement('div',null
@@ -6245,7 +6263,7 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
   const secStyle={background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px",marginBottom:16};
   const secTitle=t=>React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",marginBottom:12}},t);
 
-  return React.createElement('div',{style:{...ST.listWrap,paddingBottom:80}}
+  return React.createElement('div',{style:{...ST.listWrap}}
     ,React.createElement('div',{style:{...ST.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
     ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
 
@@ -6311,17 +6329,11 @@ function TATSettingsView({dropdowns, setDropdowns, equipTypes, setEquipTypes, fr
 
 
 
-function TATNavBtn({icon,label,active,onClick,color}){
-  const c=active?(color||"#334155"):"#52525b";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
-    ,icon
-    ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
-  );
-}
+function TATNavBtn(props){return React.createElement(NavBtn,props);}
 
 // Reuse SI styles for T&T (same dark theme, blue accent handled inline)
 const ST = {...(typeof SI !== 'undefined' ? SI : {}),
-  root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
+  root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative",touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
   loader:{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",background:"#e8e6e2"},
   loaderSpinner:{width:40,height:40,border:"3px solid #d4d4d8",borderTop:`3px solid ${TAT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"},
   topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",flexShrink:0,zIndex:10},
@@ -6332,8 +6344,8 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
-  main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-  bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
+  main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
+  bottomNav:NAV_PILL_STYLE,
   listWrap:{padding:"16px"},listTitle:{fontSize:20,fontWeight:800,color:"#18181b",marginBottom:16},
   brandBlock:{textAlign:"center",borderBottom:"2px solid #1d4ed8",paddingBottom:8,width:"100%",maxWidth:500},
   brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -6758,6 +6770,7 @@ function downloadThermoTemplate() {
 const STH = {
   root: {
     display: "flex",
+    position: "relative",
     flexDirection: "column",
     flex: 1,
     background: "#e8e6e2",
@@ -6829,15 +6842,10 @@ const STH = {
     flex: 1,
     overflowY: "auto",
     WebkitOverflowScrolling: "touch",
-    position: "relative"
+    position: "relative",
+    paddingBottom: NAV_CLEARANCE
   },
-  bottomNav: {
-    display: "flex",
-    background: "#e8e6e2",
-    borderTop: "1px solid #e4e4e7",
-    flexShrink: 0,
-    paddingBottom: "env(safe-area-inset-bottom, 0px)"
-  },
+  bottomNav: NAV_PILL_STYLE,
   listWrap: {
     padding: "16px"
   },
@@ -9531,7 +9539,7 @@ function ThermoDropdownsView({dropdowns,setDropdowns,onBack}){
     {key:"responsibility",label:"RESPONSIBILITY",color:"#c2410c",desc:"Options shown when logging a failed or monitor item"},
     {key:"rectified",label:"RECTIFIED / SCHEDULED ACTION",color:"#92400e",desc:"Actions available when rectifying a defect"},
   ];
-  return React.createElement("div",{style:{padding:"16px",paddingBottom:100}}
+  return React.createElement("div",{style:{padding:"16px"}}
     ,React.createElement("div",{style:{...STH.listTitle,color:"#334155"}},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Dropdowns")
     ,React.createElement("div",{style:{fontSize:12,color:"#52525b",marginBottom:16}},"Tap ★ on any item to make it the default. The default is pre-selected when opening a circuit test form.")
     ,sections.map(({key,label,color,desc})=>{
@@ -10197,6 +10205,7 @@ function AppRoot() {
       }
       , React.createElement('div', {style:{
           paddingTop:"calc(env(safe-area-inset-top, 0px) + 20px)",
+          paddingBottom:NAV_CLEARANCE,
           display:"flex",flexDirection:"column",
           alignItems:"center",
           minHeight:"100%",
@@ -10257,37 +10266,26 @@ function AppRoot() {
       , React.createElement('div',{style:{paddingBottom:24,textAlign:"center",fontSize:11,color:"#a1a1aa",letterSpacing:0.5}},"© SparkCheck")
       )
     )
-    // Home bar (2026-09-30, restyled to match Facebook's overlay bottom bar): a real, non-scrolling flex row
-    // reserved below the scrollable content — NOT position:fixed floating over it — so the grid can never scroll
-    // behind the buttons at any scroll position (kept from the previous fix; only the visual skin changed here).
-    // Same background/border/height treatment as the in-module nav bar (bottomNav) and the SAME markup shape as
-    // NavBtn — no separate pill background, border or shadow any more, just an icon + label sitting directly on
-    // the page background, divided only by the thin top border. Calendar keeps coming before Settings, left to
-    // right — a plain flex row with each button at flex:1 (matching the in-module bar exactly) rather than the
-    // previous "one centred, one pinned right" pill layout.
-    , React.createElement('div', {style:{
-        flexShrink:0, display:"flex", background:"#e8e6e2", borderTop:"1px solid #e4e4e7",
-        paddingBottom:"env(safe-area-inset-bottom, 0px)",
-      }}
+    // Home bar (2026-10-01): the SAME floating pill as every module (NAV_PILL_STYLE, shared NAV_BTN_STYLE), just
+    // narrower and centred because there are only two tabs. It is position:absolute OVER the grid, so the grid's
+    // inner wrapper pads its bottom with NAV_CLEARANCE (the last card can never sit behind the pill). Calendar
+    // comes before Settings, left to right. Neither tab is ever "active" here, so each keeps its own icon colour.
+    , React.createElement('div', {style:NAV_PILL_STYLE_NARROW}
       , React.createElement('button',{
           onClick:()=>setModule("cal"), "aria-label":"Open Test Calendar", "data-testid":"calendar-pill",
-          style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
-            background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,
-            color:calColor,fontFamily:"inherit"}
+          style:{...NAV_BTN_STYLE,color:calColor}
         }
         , moduleIcon("cal",17)
-        , React.createElement('span',{style:{fontSize:9,fontWeight:500,letterSpacing:0.5}},"Calendar")
+        , React.createElement('span',{style:{fontSize:11,fontWeight:500,letterSpacing:0,lineHeight:"13px"}},"Calendar")
       )
       , React.createElement('button',{
           onClick:()=>setModule("settings"), "aria-label":"Open Global Settings", "data-testid":"settings-pill",
-          style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,
-            background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,
-            color:GS_COLOR,fontFamily:"inherit"}
+          style:{...NAV_BTN_STYLE,color:GS_COLOR}
         }
         , React.createElement('svg',{viewBox:'0 0 24 24',width:17,height:17,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round'},
             React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),
             React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))
-        , React.createElement('span',{style:{fontSize:9,fontWeight:500,letterSpacing:0.5}},"Settings")
+        , React.createElement('span',{style:{fontSize:11,fontWeight:500,letterSpacing:0,lineHeight:"13px"}},"Settings")
       )
     )
   );
@@ -11582,24 +11580,18 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
 // ─────────────────────────────────────────────────────────────────────────
 // SHARED COMPONENTS & STYLES
 // ─────────────────────────────────────────────────────────────────────────
-function SWBNavBtn({icon,label,active,onClick,color}) {
-  const c=active?(color||"#334155"):"#52525b";
-  return React.createElement('button',{onClick,style:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:2,background:"transparent",border:"none",cursor:"pointer",padding:"6px 0 4px",minHeight:42,color:c,borderTop:active?`2px solid ${color||"#334155"}`:"2px solid transparent"}}
-    ,icon
-    ,React.createElement('span',{style:{fontSize:9,fontWeight:active?700:500,letterSpacing:0.5}},label)
-  );
-}
+function SWBNavBtn(props) {return React.createElement(NavBtn,props);}
 function swbStyles() {
   return {
-    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
+    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative",touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
     topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px 10px",background:"#f7f6f3",flexShrink:0,zIndex:10},
     topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
     appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#7e22ce"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
     backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
     bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
-    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
+    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
+    bottomNav:NAV_PILL_STYLE,
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
     brandBlock:{textAlign:"center",borderBottom:"2px solid #7e22ce",paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
@@ -12877,13 +12869,13 @@ function irtSiteSummary(results,project){let total=0,pass=0,fail=0,na=0,untested
 
 function irtStyles(){
   return{
-    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
+    root:{display:"flex",flexDirection:"column",flex:1,minHeight:0,position:"relative",touchAction:"pan-y",background:"#e8e6e2",color:"#18181b",fontFamily:"'DM Sans','SF Pro Display',-apple-system,sans-serif",WebkitFontSmoothing:"antialiased",overflow:"hidden"},
     topbar:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"max(env(safe-area-inset-top,12px),12px) 16px 10px",flexShrink:0,background:"#e8e6e2",borderBottom:"2px solid #93c5fd",zIndex:10},
     topbarLeft:{display:"flex",alignItems:"center",gap:10},topbarRight:{display:"flex",alignItems:"center",gap:8},
     backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
     appTitle:{fontSize:15,fontWeight:800,color:"#18181b",letterSpacing:0.5},appSub:{fontSize:11,letterSpacing:0.3},
-    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0},
-    bottomNav:{display:"flex",background:"#e8e6e2",borderTop:"1px solid #e4e4e7",flexShrink:0,paddingBottom:"env(safe-area-inset-bottom, 0px)"},
+    main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
+    bottomNav:NAV_PILL_STYLE,
     brandBlock:{textAlign:"center",borderBottom:`2px solid ${IRT_COLOR}`,paddingBottom:8,width:"100%",maxWidth:500},
     brandTitle:{fontSize:20,fontWeight:900,letterSpacing:3},brandSub:{fontSize:11,color:"#6e6a66",letterSpacing:1,marginTop:2},
     siteTitle:{fontSize:20,fontWeight:800,color:"#18181b"},siteSub:{fontSize:12,color:"#6e6a66"},
