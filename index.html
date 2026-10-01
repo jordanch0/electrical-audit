@@ -22,6 +22,12 @@
       padding: 0;
       background: #e8e6e2;
       height: 100%;
+      /* iOS standalone (measured on an iPhone, 2026-10-01): "100%" resolved to 879pt on a 926pt screen, and the
+         WEB VIEW itself followed it - innerHeight 879, anything below that line never painted, so the floating
+         pill sat 47pt too high with a blank strip under it. Setting 100vh (926 there) makes the web view fill
+         the screen (innerHeight 926). The 100% line stays as the fallback for browsers without vh. #root is
+         position:fixed so desktop / Safari-tab layout is unaffected by this. */
+      height: 100vh;
       overflow: hidden;
     }
     /* Use position fixed so layout never depends on parent height chain */
@@ -37,14 +43,18 @@
       overflow: hidden;
       padding-top: var(--sat, env(safe-area-inset-top, 0px));
     }
-    /* On iOS the layout viewport does not shrink when the on-screen keyboard
-       opens; --kb-inset (see script below) tracks how much of the bottom is
-       covered by the keyboard. Applying it as margin only to the bottom nav
-       (not #root) shrinks the flex:1 main content area by that amount and
-       lifts just the tab bar to sit above the keyboard, while the header and
-       everything else stay put. */
+    /* The floating pill nav NEVER depends on the keyboard position (2026-10-01):
+       it stays anchored at its normal bottom position and is simply HIDDEN while
+       a text field is focused (html.kb-open, toggled by the script below). The
+       old --kb-inset margin-bottom lifted the pill with the keyboard and could
+       be left stale (pill stranded mid-screen) on iOS - it is gone, and nothing
+       may read or set --kb-inset any more. */
     #root nav {
-      margin-bottom: var(--kb-inset, 0px);
+      transition: opacity 0.15s ease;
+    }
+    html.kb-open #root nav {
+      opacity: 0 !important;
+      pointer-events: none !important;
     }
     #loading {
       position: fixed;
@@ -82,46 +92,72 @@
   <div id="root"></div>
 
   <script>
-    // Track how much of the bottom of the screen the on-screen keyboard covers
-    // (window.visualViewport shrinks and offsets on iOS when the keyboard opens,
-    // while the layout viewport used for `position:fixed` elements does not).
-    // Exposed as --kb-inset and applied only to the bottom nav bar's margin, so
-    // only the tab bar moves — the rest of the layout (including #root itself
-    // and any top nav) stays fixed in place.
+    // Keyboard handling for the floating pill nav (2026-10-01). The pill is ALWAYS anchored at its normal
+    // bottom position and never moves with the keyboard. While a text field is focused (= the on-screen
+    // keyboard is up) the pill is hidden instead (html.kb-open -> opacity 0 + pointer-events none, see the CSS
+    // above) and it returns when focus leaves the field.
     //
-    // 2026-09-30 fix: `window.innerHeight - vv.height` is NOT reliably 0 at rest.
-    // In an installed Home Screen (standalone) session, WebKit's visualViewport
-    // can permanently report a smaller height than window.innerHeight by roughly
-    // the safe-area-inset-bottom amount, even with no keyboard open — read
-    // literally, that stale offset was applied as a permanent margin-bottom on
-    // the nav bar, pushing it up and leaving a visible gap of page background
-    // below it (only in standalone; a plain Safari tab doesn't show this). Fix:
-    // track the LOWEST diff ever observed as the resting ("no keyboard") baseline
-    // and report only the amount ABOVE that baseline — a real keyboard opening
-    // always INCREASES the diff, so it's still detected correctly, but a
-    // standing standalone-mode offset is cancelled out instead of being read as
-    // "keyboard open" forever. The baseline can also correct itself downward if
-    // a later reading (e.g. after rotation) turns out lower.
+    // This REPLACES the old --kb-inset scheme (a margin-bottom on the nav computed from
+    // window.innerHeight - visualViewport.height, with a resting-baseline workaround). On a real iPhone that
+    // lifted the pill with the keyboard, and tapping a nav icon with the keyboard up closed the keyboard
+    // WITHOUT a final viewport event, leaving --kb-inset stale and the pill stranded mid-screen. Nothing sets
+    // or reads --kb-inset any more; the line below just clears any leftover value from an older session.
+    //
+    // Sync is derived from document.activeElement every time, never from a remembered flag, so the class
+    // cannot get stuck: it is re-evaluated on focusin, focusout, blur, visualViewport resize/scroll (backup),
+    // pagehide / visibilitychange, and when a nav button is pressed.
     (function () {
-      var restingDiff = Infinity;
-      function syncKeyboardInset() {
-        var vv = window.visualViewport;
-        var root = document.documentElement;
-        if (vv) {
-          var raw = window.innerHeight - vv.height - vv.offsetTop;
-          if (raw < restingDiff) restingDiff = raw;
-          var inset = raw - restingDiff;
-          root.style.setProperty('--kb-inset', Math.max(0, Math.round(inset)) + 'px');
-        } else {
-          root.style.setProperty('--kb-inset', '0px');
-        }
+      var root = document.documentElement;
+      root.style.removeProperty('--kb-inset');
+      var NO_KEYBOARD = { button: 1, checkbox: 1, radio: 1, range: 1, file: 1, submit: 1, reset: 1, image: 1, color: 1 };
+      function isTextEntry(el) {
+        if (!el || el === document.body) return false;
+        var tag = el.tagName;
+        if (tag === 'TEXTAREA' || tag === 'SELECT') return true;
+        if (tag === 'INPUT') return !NO_KEYBOARD[(el.type || 'text').toLowerCase()];
+        return !!el.isContentEditable;
       }
+      function sync() {
+        var open = isTextEntry(document.activeElement);
+        if (open) root.classList.add('kb-open'); else root.classList.remove('kb-open');
+        root.style.removeProperty('--kb-inset');
+      }
+      // iOS usually scrolls a focused field above the keyboard itself; this is a backup for fields near the
+      // bottom of a scroll area (waits for the keyboard animation, then only acts if the field is covered).
+      function keepVisible(el) {
+        setTimeout(function () {
+          if (document.activeElement !== el) return;
+          var vv = window.visualViewport;
+          var visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+          var r = el.getBoundingClientRect();
+          if (r.bottom > visibleBottom - 12 || r.top < (vv ? vv.offsetTop : 0)) {
+            try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+          }
+        }, 350);
+      }
+      document.addEventListener('focusin', function (e) { sync(); if (isTextEntry(e.target)) keepVisible(e.target); });
+      // focusout fires BEFORE the next field takes focus - wait a tick so moving between fields doesn't flash
+      document.addEventListener('focusout', function () { setTimeout(sync, 50); });
+      window.addEventListener('blur', sync);
+      window.addEventListener('pagehide', sync);
+      document.addEventListener('visibilitychange', sync);
       if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', syncKeyboardInset);
-        window.visualViewport.addEventListener('scroll', syncKeyboardInset);
+        window.visualViewport.addEventListener('resize', sync);
+        window.visualViewport.addEventListener('scroll', sync);
       }
-      window.addEventListener('resize', syncKeyboardInset);
-      syncKeyboardInset();
+      window.addEventListener('resize', sync);
+      // A nav button press (capture phase, before the click): drop focus so the keyboard dismisses, and show
+      // the pill right away. The tab switch itself is the button's own click handler.
+      function onNavPress(e) {
+        var t = e.target;
+        if (!t || !t.closest || !t.closest('#root nav')) return;
+        var a = document.activeElement;
+        if (a && a !== document.body && a.blur) a.blur();
+        sync();
+      }
+      document.addEventListener('pointerdown', onNavPress, true);
+      document.addEventListener('touchstart', onNavPress, true);
+      sync();
     })();
     function showErr(t, m) {
       document.body.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;padding:30px;font-family:sans-serif;background:#e8e6e2;color:#18181b;overflow:auto"><h2 style="color:#a3530f">' + t + '</h2><pre style="color:#991b1b;white-space:pre-wrap;font-size:13px">' + m + '</pre></div>';
