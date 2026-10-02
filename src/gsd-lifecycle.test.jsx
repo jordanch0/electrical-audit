@@ -121,7 +121,7 @@ describe('GSD History matches ELT: accordion cards, View Results / Export / Dele
     const card = await screen.findByTestId('gsd-history-card');
     expect(within(card).getByText('Site Defects Audit')).toBeInTheDocument(); expect(within(card).getByText('2 HIGH / URGENT')).toBeInTheDocument();      // the badge, ELT-FAIL-badge style
     expect(within(card).getByText(/21\/09\/2026 · Jane/)).toBeInTheDocument(); expect(within(card).getByText(/^Archived .*2026/)).toBeInTheDocument();
-    expect(within(card).getByText('3 defects')).toBeInTheDocument(); expect(within(card).getByText('2 High / Urgent')).toHaveStyle({ color: '#dc2626' }); expect(within(card).getByText('3 photos')).toBeInTheDocument();
+    expect(within(card).getByText('3 defects')).toBeInTheDocument(); expect(within(card).getByText('2 High / Urgent')).toHaveStyle({ color: '#b91c1c' }); expect(within(card).getByText('3 photos')).toBeInTheDocument();
     expect(within(card).queryByRole('button', { name: 'View Results' })).not.toBeInTheDocument(); expect(within(card).queryByRole('button', { name: 'Export' })).not.toBeInTheDocument();
     cleanup(); localStorage.setItem('gsd-history-v1', JSON.stringify([{ ...JSON.parse(localStorage.getItem('gsd-history-v1'))[0], items: [mk('i9', 'a1', [], { priority: 'L' })] }]));
     await open(userEvent.setup(), 'History'); expect(within(await screen.findByTestId('gsd-history-card')).queryByText(/HIGH \/ URGENT$/)).not.toBeInTheDocument();       // no badge at zero

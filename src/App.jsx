@@ -8,7 +8,7 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 // ─────────────────────────────────────────────────────────────────────────
 const STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const SM = {
-[STATUS.UNTESTED]: { label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
+[STATUS.UNTESTED]: { label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
 [STATUS.PASS]:     { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },
 [STATUS.FAIL]:     { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
 [STATUS.NA]:       { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
@@ -1217,7 +1217,7 @@ function dropdownAdd(items, raw, reserved) {
 const DD_ROW_BG = "#e8e6e2", DD_ROW_BORDER = "#f7f6f3", DD_STAR_BORDER = "#fcd34d", DD_LIST_GAP = 5;
 const ddRowStyle = isDefault => ({ display: "flex", alignItems: "center", gap: 8, background: DD_ROW_BG, border: `1px solid ${isDefault ? DD_STAR_BORDER : DD_ROW_BORDER}`, borderRadius: 7, padding: "7px 10px" });
 const ddListStyle = extra => ({ display: "flex", flexDirection: "column", gap: DD_LIST_GAP, ...(extra || {}) });
-function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#dc2626" } }, text) : null; }
+function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#b91c1c" } }, text) : null; }
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
   const boxRef = React.useRef(null);
@@ -1278,7 +1278,7 @@ function ReportStatTiles({ rows, mb = 20 }) {
 function ReportFailedItems({ items, accent = '#7e22ce' }) {
   if (!items || !items.length) return null;
   return React.createElement('div', { style: { marginBottom: 20 } },
-    React.createElement('div', { style: { fontSize: 13, fontWeight: 800, color: '#dc2626', marginBottom: 10 } }, 'Failed Items'),
+    React.createElement('div', { style: { fontSize: 13, fontWeight: 800, color: '#b91c1c', marginBottom: 10 } }, 'Failed Items'),
     items.map((f, i) => React.createElement('div', { key: i, style: { padding: '10px 12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 6, fontSize: 13 } },
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' } },
         f.tag && React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: f.tag.color, background: f.tag.color + '22', borderRadius: 4, padding: '1px 6px' } }, f.tag.text),
@@ -1298,7 +1298,7 @@ function ReportFailedItems({ items, accent = '#7e22ce' }) {
   );
 }
 function ReportNoDefects() {
-  return React.createElement('div', { style: { textAlign: 'center', color: '#16a34a', fontSize: 13, fontWeight: 700, padding: '20px 0' } }, '✓ No defects recorded');
+  return React.createElement('div', { style: { textAlign: 'center', color: '#166534', fontSize: 13, fontWeight: 700, padding: '20px 0' } }, '✓ No defects recorded');
 }
 const reportPriorityBadge = p => (p ? { text: PRIORITY_LABELS[p] || p, color: PRIORITY_COLORS[p] || '#92400e' } : null);
 // ─────────────────────────────────────────────────────────────────────────
@@ -1680,7 +1680,7 @@ React.createElement('div', { style: S.homeWrap,}
 , project.company&&React.createElement('div', { style: S.siteSub,}, project.company)
 , React.createElement('div', { style: S.metaCard,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
-, !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#dc2626",marginTop:4}}, "⚠ Enter auditor name to enable testing")
+, !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#b91c1c",marginTop:4}}, "⚠ Enter auditor name to enable testing")
 , React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:10,width:"100%",boxSizing:"border-box"}}
 , React.createElement('div',{style:{width:"100%",boxSizing:"border-box",background:"#e8e6e2",border:"1px solid #fdecdc",borderRadius:10,padding:"10px 12px"}}
   ,React.createElement('div',{style:{fontSize:10,color:"#a3530f",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"PUSH TEST")
@@ -1919,8 +1919,8 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , React.createElement('div', { style: {fontSize:12,color:"#52525b"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor")
 , React.createElement('div', { style: {fontSize:11,color:"#52525b",marginTop:2},}, "Archived " , fmtDateTime(snap.archivedAt))
 , total>0&&React.createElement('div', { style: {display:"flex",gap:8,marginTop:6},}
-, React.createElement('span', { style: {fontSize:11,color:"#16a34a"},}, pass, " Pass" )
-, React.createElement('span', { style: {fontSize:11,color:"#dc2626"},}, fail, " Fail" )
+, React.createElement('span', { style: {fontSize:11,color:"#166534"},}, pass, " Pass" )
+, React.createElement('span', { style: {fontSize:11,color:"#b91c1c"},}, fail, " Fail" )
 , React.createElement('span', { style: {fontSize:11,color:"#334155"},}, na, " N/A" )
 , React.createElement('span', { style: {fontSize:11,color:"#92400e"},}, total-pass-fail-na, " Untested" )
 )
@@ -2073,7 +2073,7 @@ style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,curs
 )
 /* FAIL-ONLY SECTION — only shown when result is FAIL */
 , pushIsFail && React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4},}
-, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
+, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED ACTION")
 , React.createElement(EditableDropdown, {
@@ -2103,7 +2103,7 @@ placeholder: "Select or type…",})
         style: {
           padding: "10px 14px",
           background: (push.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-          color: (push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+          color: (push.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
           border: `1px solid ${(push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
           borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
         },
@@ -2177,7 +2177,7 @@ return React.createElement('button', { key: s, onClick: ()=>onPatch({inject:{...
 /* Fail-only section — red panel matching push test standard */
 , (inj.status===STATUS.FAIL)&&(
 React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4},}
-, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
+, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED ACTION")
 , React.createElement(EditableDropdown, {options:rectOptions, value:_nullishCoalesce(inj.rectified,()=>(rectOptions[0]||"")), onChange:v=>onPatch({inject:{...inj,rectified:v}}), placeholder:"Select or type…",})
@@ -2199,7 +2199,7 @@ React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca
         style: {
           padding: "10px 14px",
           background: (inj.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-          color: (inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+          color: (inj.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
           border: `1px solid ${(inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
           borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
         },
@@ -2584,7 +2584,7 @@ const total=pnl.circuits.length;
 return(React.createElement('button', { key: pnl.id, style: {...S.siteCard,...(ps.fail>0?S.siteCardFail:ps.untested===0?S.siteCardDone:{})}, onClick: ()=>onSelect(pnl.id),}
 , React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, pnl.name), React.createElement('div', { style: S.siteCardSub,}, total, " circuit" , total!==1?"s":"")
 , React.createElement('div', { style: {display:"flex",gap:6,marginTop:6},}
-, ps.pass>0&&React.createElement('span', { style: {fontSize:11,color:"#16a34a",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.pass, " Pass" )
+, ps.pass>0&&React.createElement('span', { style: {fontSize:11,color:"#166534",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.pass, " Pass" )
 , ps.fail>0&&React.createElement('span', { style: {fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.fail, " Fail" )
 , ps.na>0&&React.createElement('span', { style: {fontSize:11,color:"#334155",background:"#f1f5f9",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.na, " N/A" )
 , ps.untested>0&&React.createElement('span', { style: {fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.untested, " untested" )
@@ -2601,8 +2601,8 @@ const total=circuits.length;
 return(React.createElement('div', { style: S.circuitWrap,}
 , React.createElement('div', { style: S.panelHeader,}, React.createElement('div', null, React.createElement('div', { style: S.panelTitle,}, panel.name), React.createElement('div', { style: S.panelSub,}, area.name, " · "  , total, " circuit" , total!==1?"s":""))
 , React.createElement('div', { style: S.panelStats,}
-, React.createElement('span', { style: {color:"#16a34a"},}, ps.pass, "P")
-, React.createElement('span', { style: {color:"#dc2626"},}, ps.fail, "F")
+, React.createElement('span', { style: {color:"#166534"},}, ps.pass, "P")
+, React.createElement('span', { style: {color:"#b91c1c"},}, ps.fail, "F")
 , React.createElement('span', { style: {color:"#92400e",fontSize:12},}, ps.untested, " untested" )
 ))
 , React.createElement('div', { style: S.quickRow,}, React.createElement('span', { style: S.quickLabel,}, "Set all:" )
@@ -2758,7 +2758,7 @@ topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",paddin
 topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
 appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#a3530f"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
 backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
-saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
+saveIndicator:{fontSize:11,color:"#166534",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
 bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
@@ -2847,14 +2847,14 @@ const IEL_DEFAULT_RESPONSIBILITY = ["Site Electrician","Site Manager","Contracto
 const IEL_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair","Replacement Required","Under Investigation","No Action Required"];
 
 const IEL_CATEGORIES = [
-  { key:"estops",    label:"E-Stops",   icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#dc2626',stroke:'none'},React.createElement('circle',{cx:12,cy:12,r:10})), color:"#dc2626", desc:"Emergency stop buttons & devices" },
+  { key:"estops",    label:"E-Stops",   icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#dc2626',stroke:'none'},React.createElement('circle',{cx:12,cy:12,r:10})), color:"#b91c1c", desc:"Emergency stop buttons & devices" },
   { key:"lanyards",  label:"Lanyards",  icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},React.createElement('path',{d:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'}),React.createElement('path',{d:'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'})), color:"#047857", desc:"Safety lanyards & fall arrest equipment" },
   { key:"isolators", label:"Isolators", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#a3530f',stroke:'none'},React.createElement('path',{d:'M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z'})), color:"#92400e", desc:"Electrical isolators & lockout points" },
 ];
 const IEL_TYPE_LABEL  = { estops:"Estop", lanyards:"Lanyard", isolators:"Isolator" };
 const IEL_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const IEL_SM = {
-  untested: { label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
+  untested: { label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
   pass:     { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },
   fail:     { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
   na:       { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
@@ -3481,12 +3481,12 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
     ,project.company&&React.createElement('div',{style:SI.siteSub},project.company)
-    ,lastArchivedAt&&React.createElement('div',{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:999,padding:"4px 10px",alignSelf:"flex-start"}},"✓ Last completed ",fmtDateTime(lastArchivedAt))
+    ,lastArchivedAt&&React.createElement('div',{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:999,padding:"4px 10px",alignSelf:"flex-start"}},"✓ Last completed ",fmtDateTime(lastArchivedAt))
     ,React.createElement('div',{style:SI.metaCard}
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SI.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...SI.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',{style:{marginBottom:8}}
         ,React.createElement('div',{style:SI.metaLabelText},"TEST DATE")
@@ -3512,8 +3512,8 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:sum.fail>0?"#dc2626":cat.color,transition:"width 0.4s"}})
           )
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}
-            ,sum.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},sum.pass," Pass")
-            ,sum.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#dc2626",fontWeight:800}},sum.fail," FAIL")
+            ,sum.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#166534"}},sum.pass," Pass")
+            ,sum.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},sum.fail," FAIL")
             ,sum.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},sum.untested," untested")
             ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},sum.total," total")
           )
@@ -3581,7 +3581,7 @@ function IELPanelListView({area,project,results,cat,catColor,onSelect}){
         ,React.createElement('div',{style:SI.siteCardName},catI.icon," ",catI.label)
         ,React.createElement('div',{style:SI.siteCardSub},items.length," item",items.length!==1?"s":"")
         ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:6}}
-          ,s.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#16a34a",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.pass," Pass")
+          ,s.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#166534",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.pass," Pass")
           ,s.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.fail," Fail")
           ,s.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.untested," untested")
         )
@@ -3610,8 +3610,8 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
         ,React.createElement('div',{style:SI.panelSub},area.name," · ",items.length," item",items.length!==1?"s":"")
       )
       ,React.createElement('div',{style:SI.panelStats}
-        ,React.createElement('span',{style:{color:"#16a34a"}},s.pass,"P")
-        ,React.createElement('span',{style:{color:"#dc2626"}},s.fail,"F")
+        ,React.createElement('span',{style:{color:"#166534"}},s.pass,"P")
+        ,React.createElement('span',{style:{color:"#b91c1c"}},s.fail,"F")
         ,React.createElement('span',{style:{color:"#92400e",fontSize:12}},s.untested," untested")
       )
     )
@@ -3634,7 +3634,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
           ,React.createElement('div',{style:{flex:1,padding:"12px 14px",minWidth:0}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
               ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#18181b"}},machineName)
-              ,overdue&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:"#dc2626",background:"#fee2e2",borderRadius:4,padding:"1px 6px",border:"1px solid #fca5a5"}},"OVERDUE")
+              ,overdue&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",background:"#fee2e2",borderRadius:4,padding:"1px 6px",border:"1px solid #fca5a5"}},"OVERDUE")
               ,dueSoon&&React.createElement('span',{style:{fontSize:10,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px"}},"DUE SOON")
             )
             ,React.createElement('div',{style:{display:"flex",gap:10,marginTop:4,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
@@ -3802,7 +3802,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
 
       // Notes
       ,(item.status===IEL_STATUS.FAIL)&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"RECTIFIED / SCHEDULED ACTION")
           ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED,value:item.rectified||(((dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED)[0]||""),onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…"})
@@ -3824,7 +3824,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
                 style: {
                   padding: "10px 14px",
                   background: (item.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+                  color: (item.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
                   border: `1px solid ${(item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
                   borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
                 },
@@ -3877,7 +3877,7 @@ function IELReportView({project,results,meta,onBack}){
       );
     })
     ,React.createElement(ReportFailedItems,{accent:"#047857",items:allFails.map(f=>({title:f.name,tag:{text:f.cat.label,color:f.cat.color},badge:reportPriorityBadge(f.priority),path:f.area,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))})
-    ,allFails.length===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
+    ,allFails.length===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -4044,7 +4044,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
           )
           ,React.createElement('div',{style:{display:"flex",gap:6,marginLeft:"auto"}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#16a34a",background:"#dcfce7",borderRadius:4,padding:"2px 7px",fontWeight:700}},pass,"P")
+            ,React.createElement('span',{style:{fontSize:11,color:"#166534",background:"#dcfce7",borderRadius:4,padding:"2px 7px",fontWeight:700}},pass,"P")
             ,fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"2px 7px",fontWeight:700}},fail,"F")
             ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"2px 7px",fontWeight:700}},unt," left")
           )
@@ -4102,7 +4102,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
                 ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":cat.color}})
               )
               ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-                ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},pass," Pass")
+                ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},pass," Pass")
                 ,fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},fail," Fail")
                 ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},unt," untested")
               )
@@ -4192,8 +4192,8 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#dc2626"}},fail," Fail")
+              ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},pass," Pass")
+              ,React.createElement('span',{style:{fontSize:11,color:"#b91c1c"}},fail," Fail")
               ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
               ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
             )
@@ -4231,7 +4231,7 @@ const SI={
   appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#047857"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
   backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
   homeModuleBtn:{fontSize:11,color:"#52525b",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
-  saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
+  saveIndicator:{fontSize:11,color:"#166534",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
@@ -4288,7 +4288,7 @@ const K_CAL_EVENTS = "cal-events-v1";
 const CAL_TYPES = [
   { key:"rcd_push",    label:"RCD Testing · Push",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
   { key:"rcd_inject",  label:"RCD Testing · Injection",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
-  { key:"iel_estop",   label:"IEL Testing · E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_estop",   label:"IEL Testing · E-Stops",            color:"#b91c1c", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"iel_lanyard", label:"IEL Testing · Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"iel_iso",     label:"IEL Testing · Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:moduleIcon("tat",15), period:"Variable"   },
@@ -4371,7 +4371,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
             ? ev.recur==="3-Monthly"?"3-Monthly (Bldg/Const)":ev.recur==="6-Monthly"?"6-Monthly (Factory/Whs)":ev.recur==="Annual"?"Annual (Hostile)":ev.recur
             : ev.recur
         )):"")
-        ,ev.completed&&ev.completedAt&&React.createElement('div',{style:{fontSize:10,color:"#16a34a",marginTop:2}},"✓ Completed ",fmtDate(ev.completedAt.slice(0,10)))
+        ,ev.completed&&ev.completedAt&&React.createElement('div',{style:{fontSize:10,color:"#166534",marginTop:2}},"✓ Completed ",fmtDate(ev.completedAt.slice(0,10)))
         ,ev.notes&&React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginTop:3}},ev.notes)
         ,ev.seriesId&&React.createElement('div',{style:{fontSize:10,color:"#4338ca",marginTop:3}},"↻ ",ev.recur," · ",ev.seriesIndex!==undefined?`${ev.seriesIndex+1} of ${ev.seriesTotal}`:"series")
       )
@@ -4384,7 +4384,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
             ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " All ",ev.seriesTotal," in series")
             ,React.createElement('button',{style:SI.smallBtn,onClick:closeDel},"Keep")
           )
-          :React.createElement('button',{style:{...SI.smallBtn,color:"#dc2626",borderColor:"#fca5a5"},onClick:openDel},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
+          :React.createElement('button',{style:{...SI.smallBtn,color:"#b91c1c",borderColor:"#fca5a5"},onClick:openDel},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
       )
       ,!compact&&ev.completed&&React.createElement('button',{style:{...SI.smallBtn,color:"#52525b",marginLeft:8},onClick:()=>onToggleComplete&&onToggleComplete(ev.id)},"↩ Undo")
     )
@@ -4417,7 +4417,7 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
 
     // ── DUE THIS WEEK ─────────────────────────────────────────────────
     ,upcoming7.length>0&&React.createElement('div',{style:{marginBottom:14}}
-      ,React.createElement(SectionHeader,{color:"#dc2626",icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#a3530f",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})),label:"DUE THIS WEEK",count:upcoming7.length})
+      ,React.createElement(SectionHeader,{color:"#b91c1c",icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#a3530f",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})),label:"DUE THIS WEEK",count:upcoming7.length})
       ,upcoming7.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete,onDeleteSeries,onStartEdit}))
     )
 
@@ -4447,10 +4447,10 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
         style:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"10px 14px",cursor:"pointer",color:"inherit",marginBottom:showCompleted?8:0},
         onClick:()=>setShowCompleted(x=>!x)}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
-          ,React.createElement('span',{style:{fontSize:11,color:"#16a34a",fontWeight:700,letterSpacing:1}},"✓ COMPLETED")
-          ,React.createElement('span',{style:{fontSize:10,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"1px 7px",fontWeight:600}},completedEvents.length)
+          ,React.createElement('span',{style:{fontSize:11,color:"#166534",fontWeight:700,letterSpacing:1}},"✓ COMPLETED")
+          ,React.createElement('span',{style:{fontSize:10,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"1px 7px",fontWeight:600}},completedEvents.length)
         )
-        ,React.createElement('span',{style:{fontSize:14,color:"#16a34a"}},showCompleted?"▾":"▸")
+        ,React.createElement('span',{style:{fontSize:14,color:"#166534"}},showCompleted?"▾":"▸")
       )
       ,showCompleted&&completedEvents.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete,onDeleteSeries,onStartEdit}))
     )
@@ -4740,7 +4740,7 @@ function CalendarApp({ onGoHome }) {
               ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:form.type===t.key?t.color:"#6e6a66"}},t.label)
             ))
           )
-          ,validErr.type&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:6}},"Select a type")
+          ,validErr.type&&React.createElement('div',{style:{color:"#b91c1c",fontSize:12,marginTop:6}},"Select a type")
         )
         // Site / Location — direct input when no sites exist; dropdown + custom otherwise
         ,React.createElement('div',{style:{marginBottom:12}}
@@ -4764,13 +4764,13 @@ function CalendarApp({ onGoHome }) {
                   boxStyle:{background:"#f7f6f3",border:`1px solid ${validErr.site?"#dc2626":"#d4d4d8"}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},wrapStyle:{marginBottom:6}})
                 ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginTop:4}},"Sites auto-filled from all modules")
               )
-          ,validErr.site&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:4}},"Select or enter a site")
+          ,validErr.site&&React.createElement('div',{style:{color:"#b91c1c",fontSize:12,marginTop:4}},"Select or enter a site")
         )
         // Due date
         ,React.createElement('div',{style:{marginBottom:12,width:"100%",boxSizing:"border-box",overflow:"hidden"}}
           ,React.createElement('div',{style:{fontSize:10,color:validErr.date?"#dc2626": "#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
           ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{width:"100%",background:"#f7f6f3",border:`1px solid ${validErr.date?"#dc2626":"#d4d4d8"}`,borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",textAlign:"center"}},form.dueDate?fmtDate(form.dueDate):"Select date…"),React.createElement('input',{type:"date",value:form.dueDate,onChange:e=>{setForm(f=>({...f,dueDate:e.target.value}));setValidErr(v=>({...v,date:false}));},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
-          ,validErr.date&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:4}},"Select a due date")
+          ,validErr.date&&React.createElement('div',{style:{color:"#b91c1c",fontSize:12,marginTop:4}},"Select a due date")
         )
         // Series edit mode picker — shown when editing a recurring event
         ,editId&&(()=>{
@@ -4921,8 +4921,8 @@ const K_TAT_HISTORY  = "tat-history-v1";
 
 const TAT_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const TAT_SM = {
-  untested:{ label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
-  pass:    { label:"PASS", bg:"#dbeafe", fg:"#1d4ed8", border:"#1d4ed8" },
+  untested:{ label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
+  pass:    { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },   // green, same as every other module (blue was a one-off)
   fail:    { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
   na:      { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
 };
@@ -5519,7 +5519,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:ST.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...ST.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
@@ -5604,7 +5604,7 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
       )
       ,React.createElement('div',{style:ST.panelStats}
         ,React.createElement('span',{style:{color:"#1d4ed8"}},s.pass,"P")
-        ,React.createElement('span',{style:{color:"#dc2626"}},s.fail,"F")
+        ,React.createElement('span',{style:{color:"#b91c1c"}},s.fail,"F")
         ,React.createElement('span',{style:{color:"#92400e",fontSize:12}},s.untested," untested")
       )
     )
@@ -5767,7 +5767,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 
       // Notes
       ,item.status===TAT_STATUS.FAIL&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:ST.modalField}
           ,React.createElement('label',{style:ST.modalLabel},"RECTIFIED / SCHEDULED ACTION")
           ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||DEFAULT_RECTIFIED,value:item.rectified||"",onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…",color:TAT_COLOR,colorBg:"#dbeafe"})
@@ -5789,7 +5789,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
                 style: {
                   padding: "10px 14px",
                   background: (item.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+                  color: (item.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
                   border: `1px solid ${(item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
                   borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
                 },
@@ -5855,7 +5855,7 @@ function TATReportView({project,results,meta,onBack}){
       })
     )
     ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:[...(f.visual==="fail"?["Visual Inspection: FAIL"]:[]),...(f.electrical==="fail"?["Electrical test: FAIL"]:[])],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
-    ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
+    ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -6277,7 +6277,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:11,color:"#1d4ed8"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#dc2626"}},fail," Fail")
+              ,React.createElement('span',{style:{fontSize:11,color:"#b91c1c"}},fail," Fail")
               ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
               ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
             )
@@ -6428,7 +6428,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   appTitle:{fontSize:16,fontWeight:800,letterSpacing:1},appSub:{fontSize:10,letterSpacing:0.5},
   backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
   homeModuleBtn:{fontSize:11,color:"#52525b",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
-  saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
+  saveIndicator:{fontSize:11,color:"#166534",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
@@ -6494,21 +6494,23 @@ const PRIORITY_LABELS = {
   U: "Urgent"
 };
 const PRIORITY_COLORS = {
-  L: "#16a34a",
+  L: "#166534",
   M: "#92400e",
-  H: "#dc2626",
+  H: "#b91c1c",
   U: "#9B0000"
 };
 const PRIORITY_BG = {
   L: "#dcfce7",
   M: "#fef3c7",
   H: "#fee2e2",
-  U: "#fee2e2"
+  U: "#9B0000"      // URGENT is a solid dark maroon (white text, PRIORITY_FG) so it is never mistaken for H, which keeps the pale red
 };
+// Text colour to put ON a PRIORITY_BG fill (L / M / H are their own colour on the pale tint; U is white on the solid maroon)
+const PRIORITY_FG = { L: "#166534", M: "#92400e", H: "#b91c1c", U: "#FFFFFF" };   // L / H darkened (same hues) so every priority text is >= 4.5:1 on its tint
 const RESULT_OPTIONS = ["PASS", "FAIL", "MONITOR"];
 const RESULT_COLORS = {
-  PASS: "#16a34a",
-  FAIL: "#dc2626",
+  PASS: "#166534",
+  FAIL: "#b91c1c",
   MONITOR: "#92400e",
   UNTESTED: "#52525b"
 };
@@ -6900,7 +6902,7 @@ const STH = {
   },
   saveIndicator: {
     fontSize: 11,
-    color: "#16a34a",
+    color: "#166534",
     fontWeight: 700,
     transition: "opacity 0.3s"
   },
@@ -7765,7 +7767,7 @@ function ThermoHomeView({
   }), !hasAuditor && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: "#dc2626",
+      color: "#b91c1c",
       marginTop: 4
     }
   }, "\u26A0 Enter auditor name to enable testing")), /*#__PURE__*/React.createElement("div", {
@@ -7826,7 +7828,7 @@ function ThermoHomeView({
       }
     })), /*#__PURE__*/React.createElement("div", {style: {display: "flex", gap: 8, flexWrap: "wrap"}},
       /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#1d4ed8"}}, photoCount, " Photos"),
-      passCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#16a34a"}}, passCount, " Pass"),
+      passCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#166534"}}, passCount, " Pass"),
       monitorCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#92400e", fontWeight: 800}}, monitorCount, " Monitor"),
       failCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#991b1b", fontWeight: 800}}, failCount, " FAIL"),
       /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#52525b"}}, total, " total")
@@ -8352,7 +8354,7 @@ function PhotoPage({
       style: {
         fontSize: 12,
         fontWeight: 800,
-        color: PRIORITY_COLORS[photo.priority],
+        color: PRIORITY_FG[photo.priority],
         background: PRIORITY_BG[photo.priority],
         borderRadius: 4,
         padding: "2px 8px"
@@ -8519,7 +8521,7 @@ function PhotoPage({
     style: {
       padding:"10px 14px",
       background: form.priority===p ? p ? PRIORITY_BG[p] : "#f1f5f9" : "#f7f6f3",
-      color: form.priority===p ? p ? PRIORITY_COLORS[p] : "#334155" : "#52525b",
+      color: form.priority===p ? p ? PRIORITY_FG[p] : "#334155" : "#52525b",
       border: `1px solid ${form.priority===p ? p ? PRIORITY_COLORS[p] : "#94a3b8" : "#e4e4e7"}`,
       borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
     },
@@ -8619,8 +8621,8 @@ function ThermoReportView({
         const bPass=bRows.filter(r=>r.photo.result==="PASS").length;
         return React.createElement("div",{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bFail>0?"#fca5a5":THERMO_COLOR+"22"}`,borderRadius:8,marginBottom:4}},
           React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},board.name),
-          bPass>0&&React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},bPass," P"),
-          bFail>0&&React.createElement("span",{style:{fontSize:11,color:"#dc2626",fontWeight:800}},bFail," F"),
+          bPass>0&&React.createElement("span",{style:{fontSize:11,color:"#166534"}},bPass," P"),
+          bFail>0&&React.createElement("span",{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},bFail," F"),
           bMon>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},bMon," M"),
           bRows.length===0&&React.createElement("span",{style:{fontSize:11,color:"#52525b"}},"No photos")
         );
@@ -8629,7 +8631,7 @@ function ThermoReportView({
   ),
   React.createElement(ReportFailedItems,{accent:THERMO_COLOR,items:fails.map(r=>({title:r.photo.flirFile,badge:reportPriorityBadge(r.photo.priority),path:`${r.area} › ${r.board}${r.circuit?` › ${r.circuit}`:""}`,defectId:r.photo.defectId,comment:r.photo.notes,lines:r.photo.temp?[`🌡 ${r.photo.temp}°C`]:[],responsibility:r.photo.responsibility,rectified:r.photo.rectified}))}),
   monitors.length>0&&React.createElement("div",{style:{marginBottom:20}},React.createElement("div",{style:{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:10}},"Items to Monitor"),monitors.map((r,i)=>React.createElement("div",{key:i,style:{background:`${RESULT_BG.MONITOR}88`,border:`1px solid ${RESULT_COLORS.MONITOR}44`,borderRadius:8,padding:"10px 12px",marginBottom:6,fontSize:12}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}},React.createElement("span",{style:{fontWeight:800,color:THERMO_COLOR}},r.photo.flirFile),r.photo.temp&&React.createElement("span",{style:{color:"#92400e"}},"🌡 ",r.photo.temp,"°C")),React.createElement("div",{style:{color:"#6e6a66"}},r.area," › ",r.board,r.circuit?` › ${r.circuit}`:""),r.photo.notes&&React.createElement("div",{style:{color:"#52525b",marginTop:3}},"✎ ",r.photo.notes)))),
-  fails.length===0&&/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"));
+  fails.length===0&&/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -9194,7 +9196,7 @@ function ThermoHistoryView({
           style: {
             fontSize: 12,
             fontWeight: 800,
-            color: PRIORITY_COLORS[photo.priority],
+            color: PRIORITY_FG[photo.priority],
             background: PRIORITY_BG[photo.priority],
             borderRadius: 4,
             padding: "2px 8px"
@@ -9547,7 +9549,7 @@ function ThermoHistoryView({
     }, /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 11,
-        color: "#16a34a"
+        color: "#166534"
       }
     }, passPhotos, " Pass"), failPhotos > 0 && /*#__PURE__*/React.createElement("span", {
       style: {
@@ -10171,7 +10173,7 @@ function GlobalSettingsView({ onGoHome }) {
 
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Company Logo")
       , React.createElement('div', { style: { marginBottom: 10 } }, React.createElement(LogoField, { value: logoUrl, onUpload, onRemove: onRemoveLogo }))
-      , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
+      , error && React.createElement('div', { style: { fontSize: 11, color: "#b91c1c", marginBottom: 10 } }, error)
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
 
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Storage")
@@ -10188,7 +10190,7 @@ function GlobalSettingsView({ onGoHome }) {
 
       , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
         , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
-        , saved && React.createElement('span', { style: { fontSize: 12, color: "#16a34a", fontWeight: 600 } }, "Saved"))
+        , saved && React.createElement('span', { style: { fontSize: 12, color: "#166534", fontWeight: 600 } }, "Saved"))
     )
   );
 }
@@ -10426,12 +10428,12 @@ const SWB_GUIDANCE = {
 
 const SWB_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const SWB_SM = {
-  untested:{ label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
+  untested:{ label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
   pass:    { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },
   fail:    { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
   na:      { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
 };
-const SWB_RISK_COLORS = { L:"#16a34a", M:"#92400e", H:"#dc2626", U:"#c0392b" };
+const SWB_RISK_COLORS = { L:"#166534", M:"#92400e", H:"#b91c1c", U:"#9B0000" };   // same as PRIORITY_COLORS (U was a one-off #c0392b)
 const SWB_RISK_LABELS = { L:"Low", M:"Medium", H:"High", U:"Urgent" };
 
 function swbUid()  { return Math.random().toString(36).slice(2,9); }
@@ -11110,7 +11112,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SS.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:SS.metaLabelText},"TEST DATE")
@@ -11185,7 +11187,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
           ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},board.name)
           ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginTop:2}},area.name)
         )
-        ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
+        ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
       )
       ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
         ,[["PASS",bs.pass,"#16a34a"],["FAIL",bs.fail,"#dc2626"],["N/A",bs.na,"#334155"],["—",bs.untested,"#92400e"],["SCORE",scoreLabel(bs.score),"#334155"]].map(([l,v,c])=>
@@ -11268,7 +11270,7 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
       ,React.createElement('div',{style:{background:"#f3e8ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"12px",marginBottom:16}}
         ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:0}}
           ,React.createElement('div',{style:{flex:1,background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"10px 12px"}}
-            ,React.createElement('div',{style:{fontSize:10,fontWeight:700,color:"#16a34a",letterSpacing:0.8,marginBottom:4}},"✓ PASS CRITERIA")
+            ,React.createElement('div',{style:{fontSize:10,fontWeight:700,color:"#166534",letterSpacing:0.8,marginBottom:4}},"✓ PASS CRITERIA")
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},guidance.pass)
           )
           ,React.createElement('div',{style:{flex:1,background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px"}}
@@ -11288,11 +11290,11 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         )
       )
       ,isFail&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}
           ,React.createElement('label',{style:SS.modalLabel},"RISK RATING")
           ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-            ,["",...PRIORITY_OPTIONS].map(p=>React.createElement('button',{key:p||"none",type:"button",style:{padding:"10px 14px",background:(risk||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(risk||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(risk||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>setRisk(p)},p?`${p} — ${PRIORITY_LABELS[p]}`:"None")))
+            ,["",...PRIORITY_OPTIONS].map(p=>React.createElement('button',{key:p||"none",type:"button",style:{padding:"10px 14px",background:(risk||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(risk||"")===p?(p?PRIORITY_FG[p]:"#334155"):"#52525b",border:`1px solid ${(risk||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>setRisk(p)},p?`${p} — ${PRIORITY_LABELS[p]}`:"None")))
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
@@ -11346,18 +11348,18 @@ function SWBReportView({project,results,meta,onBack}) {
           const isComp=swbBoardComplete(results,project.id,area.id,board.id);
           return React.createElement('div',{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bs.fail>0?"#fca5a5":"#f3e8ff"}`,borderRadius:8,marginBottom:4}}
             ,React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},board.name)
-            ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},bs.pass," P")
-            ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#dc2626",fontWeight:800}},bs.fail," F")
+            ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},bs.pass," P")
+            ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},bs.fail," F")
             ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#334155"}},bs.na," N/A")
             ,bs.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},bs.untested," U")
             ,React.createElement('span',{style:{fontSize:11,color:"#334155",fontWeight:700}},scoreLabel(bs.score))
-            ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#16a34a",fontWeight:800,fontSize:12}},"✓")
+            ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#166534",fontWeight:800,fontSize:12}},"✓")
           );
         })
       ))
     )
     ,React.createElement(ReportFailedItems,{accent:"#7e22ce",items:fails.map(f=>({title:f.label,badge:f.item.risk?{text:SWB_RISK_LABELS[f.item.risk]||f.item.risk,color:SWB_RISK_COLORS[f.item.risk]}:null,path:`${f.area} › ${f.board}`,defectId:f.item.defectId,comment:f.item.comment,priorityText:f.item.priority?`${f.item.priority} priority`:"",responsibility:f.item.responsibility,rectified:f.item.rectified}))})
-    ,fails.length===0&&summary.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
+    ,fails.length===0&&summary.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -11554,8 +11556,8 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#dc2626"}},fail," Fail")
+              ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},pass," Pass")
+              ,React.createElement('span',{style:{fontSize:11,color:"#b91c1c"}},fail," Fail")
               ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
               ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
             )
@@ -11637,7 +11639,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
         ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
-          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#dc2626"},ref:el=>{if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});}},notice[key])
+          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#b91c1c"},ref:el=>{if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});}},notice[key])
         )
       );
     })
@@ -12552,7 +12554,7 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
       ,eltEl('div',{style:{marginBottom:10}}
         ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
         ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED (default for all fittings)")
@@ -12672,7 +12674,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
     )
     // same asset-level derived FAIL panel as Welder (and the rest of the app): RECTIFIED / SCHEDULED ACTION, DEFECT ID, RESPONSIBILITY, PRIORITY, DATE
     ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
         ,eltEl(IELEditableDropdown,{options:rectOpts,value:r.rectified||rectOpts[0]||"",onChange:v=>set({rectified:v}),placeholder:"Select or type…"})
@@ -12688,7 +12690,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"PRIORITY")
         ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
+          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_FG[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
         )
       )
       ,eltEl('div',{style:SS.modalField}
@@ -12883,8 +12885,8 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
             ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.total," tested")
-              ,eltEl('span',{style:{fontSize:11,color:"#16a34a"}},s.pass," Pass")
-              ,eltEl('span',{style:{fontSize:11,color:"#dc2626"}},s.fail," Fail")
+              ,eltEl('span',{style:{fontSize:11,color:"#166534"}},s.pass," Pass")
+              ,eltEl('span',{style:{fontSize:11,color:"#b91c1c"}},s.fail," Fail")
             )
           )
           ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?ELT_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
@@ -12919,7 +12921,7 @@ const IRT_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair
 const IRT_TEST_VOLTAGES = ["250V","500V","1000V"];
 const IRT_PHASE_EARTH  = [{key:"L1E",label:"L1\u2013E"},{key:"L2E",label:"L2\u2013E"},{key:"L3E",label:"L3\u2013E"},{key:"NE",label:"N\u2013E"}];
 const IRT_PHASE_PHASE  = [{key:"L1L2",label:"L1\u2013L2"},{key:"L1L3",label:"L1\u2013L3"},{key:"L2L3",label:"L2\u2013L3"},{key:"L1N",label:"L1\u2013N"},{key:"L2N",label:"L2\u2013N"},{key:"L3N",label:"L3\u2013N"}];
-const IRT_SM={untested:{label:"\u2014",bg:"#e4e4e7",fg:"#6e6a66",border:"#d4d4d8"},pass:{label:"PASS",bg:"#dcfce7",fg:"#14532d",border:"#16a34a"},fail:{label:"FAIL",bg:"#fee2e2",fg:"#991b1b",border:"#dc2626"},na:{label:"N/A",bg:"#f1f5f9",fg:"#334155",border:"#94a3b8"}};
+const IRT_SM={untested:{label:"\u2014",bg:"#e4e4e7",fg:"#5f5b57",border:"#d4d4d8"},pass:{label:"PASS",bg:"#dcfce7",fg:"#14532d",border:"#16a34a"},fail:{label:"FAIL",bg:"#fee2e2",fg:"#991b1b",border:"#dc2626"},na:{label:"N/A",bg:"#f1f5f9",fg:"#334155",border:"#94a3b8"}};
 function irtUid(){return Math.random().toString(36).slice(2,9);}
 function irtSlug(s){return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,22)+"-"+irtUid();}
 function irtAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
@@ -13102,7 +13104,7 @@ function IRTMotorInfoModal({onClose}){
           {title:"SIMPLIFIED MOTOR TEST",color:"#1d4ed8",border:"#93c5fd",lines:[["1. Isolate & lock out","motor at starter/MCC"],["2. Disconnect all phases","at motor terminal box"],["3. Test each winding separately","L1-E, L2-E, L3-E \u2014 one at a time, others floating"],["4. Test N-E if neutral accessible","neutral conductor to earth"],["5. Discharge each winding","short phase to earth 15\u201330 sec before touching or reconnecting"]]},
           {title:"PHASE-TO-PHASE (WINDING-TO-WINDING)",color:"#1d4ed8",border:"#93c5fd",lines:[["Connections:","L1\u2013L2, L2\u2013L3, L3\u2013L1"],["What it tests:","Insulation failure between separate internal phase coils"],["Before testing:","Remove star/delta shorting links to isolate individual windings"],["Discharge:","Short each tested phase to earth 15\u201330 sec before proceeding"]]},
           {title:"WHAT TO LOOK OUT FOR",color:"#92400e",border:"#fcd34d",lines:[["\u2265100 M\u03a9 \u2014 Good:","Healthy insulation. Record as baseline."],["1\u201310 M\u03a9 \u2014 Monitor:","Degrading \u2014 schedule service, clean & bake"],["<1 M\u03a9 \u2014 Fail:","Remove from service immediately. Do not energise."],["Damp/moisture:","Dry out, retest before condemning"],["Trending down:","Investigate even if still above 1 M\u03a9"]]},
-          {title:"\u26a0 VSDs \u2014 CRITICAL",color:"#dc2626",border:"#fca5a5",lines:[["Always disconnect","VSD output leads before testing motor"],["NEVER test","with VSD connected \u2014 it will be permanently damaged"],["Test from:","Motor terminal box only, not drive output"],["Remove links:","Disconnect star/delta links at motor terminal box"]]},
+          {title:"\u26a0 VSDs \u2014 CRITICAL",color:"#b91c1c",border:"#fca5a5",lines:[["Always disconnect","VSD output leads before testing motor"],["NEVER test","with VSD connected \u2014 it will be permanently damaged"],["Test from:","Motor terminal box only, not drive output"],["Remove links:","Disconnect star/delta links at motor terminal box"]]},
           {title:"TEST VOLTAGE GUIDE",color:"#1d4ed8",border:"#93c5fd",lines:[["250V:","Older/fragile insulation or sensitive control circuits"],["500V:","Standard baseline \u2014 recommended for most LV (415V/480V) motors"],["1000V:","690V motors, heavy-duty LV cables, or rigorous testing of known healthy 415V motors"]]},
         ].map(({title,color,border,lines})=>React.createElement("div",{key:title,style:{background:"#e8e6e2",border:`1px solid ${border}`,borderRadius:10,padding:"12px",marginBottom:10}},
           React.createElement("div",{style:{fontSize:11,fontWeight:800,color,letterSpacing:0.8,marginBottom:6}},title),
@@ -13193,7 +13195,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     // Guidance panel (pass/fail criteria) — matches SWBItemPage
     React.createElement("div",{style:{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:10,padding:"12px",marginBottom:16}},
       React.createElement("div",{style:{display:"flex",gap:8}},
-        React.createElement("div",{style:{flex:1,background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"10px 12px"}},React.createElement("div",{style:{fontSize:10,fontWeight:700,color:"#16a34a",letterSpacing:0.8,marginBottom:4}},"\u2713 PASS CRITERIA"),React.createElement("div",{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},"\u22651 M\u03a9 on all phases. Healthy insulation typically \u2265100 M\u03a9. No significant drop from previous tests.")),
+        React.createElement("div",{style:{flex:1,background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"10px 12px"}},React.createElement("div",{style:{fontSize:10,fontWeight:700,color:"#166534",letterSpacing:0.8,marginBottom:4}},"\u2713 PASS CRITERIA"),React.createElement("div",{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},"\u22651 M\u03a9 on all phases. Healthy insulation typically \u2265100 M\u03a9. No significant drop from previous tests.")),
         React.createElement("div",{style:{flex:1,background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px"}},React.createElement("div",{style:{fontSize:10,fontWeight:700,color:"#991b1b",letterSpacing:0.8,marginBottom:4}},"\u2717 FAIL INDICATORS"),React.createElement("div",{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},"<1 M\u03a9 on any phase. Significant drop from prior reading. Moisture ingress, cable damage or winding breakdown."))
       )
     ),
@@ -13229,7 +13231,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     ),
     // Comments
     isFail&&React.createElement("div",{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}},
-      React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
+      React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION"),React.createElement(IRTEditableDropdown,{options:rectOptions,value:form.rectified||"",onChange:v=>pf({rectified:v}),placeholder:"Select or type\u2026",color:"#92400e"})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DEFECT ID"),React.createElement("input",{style:SS.modalInput,type:"text",placeholder:"e.g. 74",value:form.defectId||"",onChange:e=>pf({defectId:e.target.value})})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RESPONSIBILITY"),React.createElement(IRTEditableDropdown,{options:respOptions,value:form.responsibility||"",onChange:v=>pf({responsibility:v}),placeholder:"Select or type\u2026",color:"#6b21a8"})),
@@ -13240,7 +13242,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
             style: {
               padding: "10px 14px",
               background: (form.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-              color: (form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+              color: (form.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
               border: `1px solid ${(form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
               borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
             },
@@ -13290,7 +13292,7 @@ function IRTPanelListView({area,project,results,onSelect,onBack}){
       const hasFail=fail>0;
       return React.createElement("button",{key:panel.id,style:{...SS.siteCard,...(hasFail?{background:"#fee2e2",border:"1px solid #fca5a5"}:{})},onClick:()=>onSelect(panel.id)},
         React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:SS.siteCardSub},nw((panel.items||[]).length,"item"))),
-        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#166534"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
       );
     })
   );
@@ -13305,7 +13307,7 @@ function IRTAreaListView({project,results,onSelect}){
       let pass=0,fail=0,total=0;(area.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,area.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;}));const hasFail=fail>0;
       return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(hasFail?{background:"#fee2e2",border:"1px solid #fca5a5"}:{})},onClick:()=>onSelect(area.id)},
         React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:SS.siteCardSub},nw((area.panels||[]).length,"panel")," \u00b7 ",nw(total,"item"))),
-        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#166534"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
       );
     })
   );
@@ -13321,7 +13323,7 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     React.createElement("div",{style:SS.siteTitle},project.name),
     React.createElement("div",{style:SS.siteSub},project.company||""),
     React.createElement("div",{style:{...SS.metaCard}},
-      React.createElement("div",{style:{marginBottom:10}},React.createElement("div",{style:SS.metaLabelText},"AUDITOR"),React.createElement("input",{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit\u2026",onChange:e=>setMeta({auditor:e.target.value})}),!hasAuditor&&React.createElement("div",{style:{fontSize:11,color:"#dc2626",marginTop:4}},"\u26a0 Enter auditor name to enable testing")),
+      React.createElement("div",{style:{marginBottom:10}},React.createElement("div",{style:SS.metaLabelText},"AUDITOR"),React.createElement("input",{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit\u2026",onChange:e=>setMeta({auditor:e.target.value})}),!hasAuditor&&React.createElement("div",{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"\u26a0 Enter auditor name to enable testing")),
       React.createElement("div",null,React.createElement("div",{style:SS.metaLabelText},"TEST DATE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement("input",{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addYearsISO(meta.testDate,1):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addYearsISO(nd,1)}:{})});},onBlur:e=>{if(!meta.nextTestDate){setMeta({nextTestDate:addYearsISO(meta.testDate,1)});}},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))),
       React.createElement("div",{style:{marginTop:8}},React.createElement("div",{style:SS.metaLabelText},"NEXT TEST DUE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement("input",{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
     ),
@@ -13604,12 +13606,12 @@ function IRTReportView({project,results,meta,onBack}){
         React.createElement("div",{style:{fontSize:11,color:"#52525b",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
         (area.panels||[]).map(panel=>{
           let pPass=0,pFail=0,pUnt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pPass++;else if(s==="fail")pFail++;else pUnt++;});
-          return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${pFail>0?"#fca5a5":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},panel.name),React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},pPass," P"),pFail>0&&React.createElement("span",{style:{fontSize:11,color:"#dc2626",fontWeight:800}},pFail," F"),pUnt>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},pUnt," U"));
+          return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${pFail>0?"#fca5a5":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},panel.name),React.createElement("span",{style:{fontSize:11,color:"#166534"}},pPass," P"),pFail>0&&React.createElement("span",{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},pFail," F"),pUnt>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},pUnt," U"));
         })
       ))
     ),
     React.createElement(ReportFailedItems,{accent:IRT_COLOR,items:fails.map(f=>({title:f.name,badge:reportPriorityBadge(f.item.priority),path:`${f.area} › ${f.panel}`,defectId:f.item.defectId,comment:f.item.notes,responsibility:f.item.responsibility,rectified:f.item.rectified}))}),
-    fails.length===0&&summary.fail===0&&React.createElement("div",{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"),
+    fails.length===0&&summary.fail===0&&React.createElement("div",{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"),
   );
 }
 
@@ -13746,7 +13748,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       const sum=irtSiteSummary(snap.results&&project?{[project.id]:snap.results}:{},project||{areas:[],id:""});
       return React.createElement("div",{key:snap.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#1d4ed8"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#dc2626"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#334155"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#92400e"}},sum.untested," Untested"))),
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#1d4ed8"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#166534"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#b91c1c"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#334155"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#92400e"}},sum.untested," Untested"))),
           React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#1d4ed8": "#52525b"}},expanded===snap.id?"\u25be":"\u203a")
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}},
@@ -14665,7 +14667,7 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
       ,eltEl('div',{style:{marginBottom:10}}
         ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
         ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED")
@@ -14794,7 +14796,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     })
     // asset-level derived FAIL panel (before the comments box) — shows on the FIRST Fail, independent of `overall`
     ,anyFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
         ,eltEl(IELEditableDropdown,{options:rectOpts,value:r.rectified||rectOpts[0]||"",onChange:v=>set({rectified:v}),placeholder:"Select or type…"})
@@ -14810,7 +14812,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"PRIORITY")
         ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
+          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_FG[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
         )
       )
       ,eltEl('div',{style:SS.modalField}
@@ -14994,8 +14996,8 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
             ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
             ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
               ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.tested," tested")
-              ,eltEl('span',{style:{fontSize:11,color:"#16a34a"}},s.pass," Pass")
-              ,eltEl('span',{style:{fontSize:11,color:"#dc2626"}},s.fail," Fail")
+              ,eltEl('span',{style:{fontSize:11,color:"#166534"}},s.pass," Pass")
+              ,eltEl('span',{style:{fontSize:11,color:"#b91c1c"}},s.fail," Fail")
             )
           )
           ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?WELDER_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
@@ -15650,7 +15652,7 @@ function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAu
       , gsdEl("div", { style: { marginBottom: 10 } }
         , gsdEl("div", { style: SS.metaLabelText }, "AUDITOR")
         , gsdEl("input", { style: { ...SS.metaInput, marginTop: 4, borderColor: "#d4d4d8" }, value: meta.auditor || "", placeholder: "Enter name to begin…", onChange: e => setMeta({ auditor: e.target.value }) })
-        , !hasAuditor && gsdEl("div", { style: { fontSize: 11, color: "#dc2626", marginTop: 4 } }, "⚠ Enter auditor name to begin"))
+        , !hasAuditor && gsdEl("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 4 } }, "⚠ Enter auditor name to begin"))
       , gsdEl("div", null, gsdEl("div", { style: SS.metaLabelText }, "DATE AUDITED")
         , gsdEl("div", { style: { position: "relative", marginTop: 4 } }, dateBox(meta.testDate, "Select date…"), overlay(meta.testDate, nd => { const autoPrev = meta.testDate ? addYearsISO(meta.testDate, 1) : ""; const upd = !meta.nextTestDate || meta.nextTestDate === autoPrev; setMeta({ testDate: nd, ...(upd ? { nextTestDate: addYearsISO(nd, 1) } : {}) }); })))
       , gsdEl("div", { style: { marginTop: 8 } }, gsdEl("div", { style: SS.metaLabelText }, "NEXT AUDIT DUE")
@@ -15746,7 +15748,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     , field("DESCRIPTION", gsdEl("textarea", { style: { ...SS.modalInput, minHeight: 68, resize: "vertical", fontFamily: "inherit" }, value: r.description || "", placeholder: "Describe the defect…", "aria-label": "Description", onChange: e => set({ description: e.target.value }) }))
     , field("CATEGORY", gsdEl(IELEditableDropdown, { options: catOpts, value: r.category || "", onChange: v => set({ category: v }), placeholder: "Select or type…" }))
     , field("PRIORITY", gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
-      , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
+      , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
     , field("RESPONSIBILITY", gsdEl(IELEditableDropdown, { options: respOpts, value: r.responsibility || "", onChange: v => set({ responsibility: v }), placeholder: "Select or type…" }))
     , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
     , field("FIX BY DATE (informational)", gsdEl("input", { style: SS.modalInput, type: "date", value: r.dueDate || "", "aria-label": "Fix by date", onChange: e => set({ dueDate: e.target.value }) }))
@@ -15869,7 +15871,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
             , gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, "Archived ", fmtDateTime(snap.archivedAt))
             , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 6 } }
               , gsdEl("span", { style: { fontSize: 11, color: "#334155" } }, nw(n, "defect"))
-              , gsdEl("span", { style: { fontSize: 11, color: "#dc2626" } }, urgent, " High / Urgent")
+              , gsdEl("span", { style: { fontSize: 11, color: "#b91c1c" } }, urgent, " High / Urgent")
               , gsdEl("span", { style: { fontSize: 11, color: "#92400e" } }, nw(photos, "photo"))))
           , gsdEl("span", { style: { ...SS.arrow, color: open ? GSD_COLOR : "#52525b" } }, open ? "▾" : "›"))
         , open && gsdEl("div", { style: { padding: "0 16px 14px", borderTop: "1px solid #e4e4e7" } }
@@ -15883,7 +15885,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
