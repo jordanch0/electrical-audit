@@ -2858,6 +2858,19 @@ function ielTypeToKey(t){
 }
 
 // ─── IEL data helpers ────────────────────────────────────────────────────
+// IEL per-item due date. The auditor-chosen next-due date (Home -> NEXT TEST DUE) wins when one was set; otherwise last tested + 3 months. meta.nextTestDate is ALWAYS populated
+// (it defaults to testDate + 3 months and follows the test date until edited), so "chosen" means "differs from that default" - no stored flag, works on saved audits and History snapshots.
+function ielChosenNextDue(meta){
+  const n=meta&&meta.nextTestDate;
+  if(!n)return null;
+  return n!==addMonthsISO(meta.testDate,3)?n:null;
+}
+function ielItemDue(item,meta){
+  if(!item||!item.lastTested)return{iso:null,label:""};
+  const chosen=ielChosenNextDue(meta);
+  if(chosen)return{iso:chosen,label:fmtDate(chosen)};
+  return{iso:addMonthsISO(item.lastTested,3),label:addMonths(item.lastTested,3)};
+}
 function ielGetItem(results,siteId,areaId,cat,itemId){
   return((((results[siteId]||{})[areaId]||{})[cat]||{})[itemId])||{status:IEL_STATUS.UNTESTED,mechCheck:false,circuitIso:false,lanyardCond:false,notes:"",priority:"",rectified:"",lastTested:""};
 }
@@ -2905,7 +2918,7 @@ async function exportIELExcel(project, results, meta) {
         const item = defectGateByStatus((((results[area.id] || {})[catKey]) || {})[itemId] || { status: IEL_STATUS.UNTESTED, mechCheck: false, circuitIso: false, lanyardCond: false, notes: "", priority: "", rectified: "", lastTested: "" });
         const st = item.status || IEL_STATUS.UNTESTED;
         const pf = st === IEL_STATUS.PASS ? "Pass" : st === IEL_STATUS.FAIL ? "Fail" : st === IEL_STATUS.NA ? "N/A" : "Untested";
-        const dueDate = item.lastTested ? addMonths(item.lastTested, 3) : "";
+        const dueDate = ielItemDue(item, meta).label;
         rows.push({
           cells: [area.name, catLabel, machineName, fmtDate(item.lastTested), item.mechCheck ? "yes" : "", item.circuitIso ? "yes" : "", catKey === "lanyards" ? (item.lanyardCond ? "yes" : "") : "", pf, item.notes || "", dueDate],
           defect: pf === "Fail" ? { ids: [area.name, machineName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
@@ -3587,8 +3600,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
         const st=d.status||IEL_STATUS.UNTESTED;
         const sm=IEL_SM[st]||IEL_SM.untested;
         const machineName=machineNames[itemId]||itemId;
-        const nextDueISO=d.lastTested?addMonthsISO(d.lastTested,3):null;
-        const nextDue=d.lastTested?addMonths(d.lastTested,3):null;
+        const _due=ielItemDue(d,meta);const nextDueISO=_due.iso;const nextDue=_due.label||null;
         const overdue=nextDueISO&&isOverdue(nextDueISO);
         const dueSoon=nextDueISO&&!overdue&&isDueSoon(nextDueISO);
         const hasNote=!!(d.notes);
@@ -3678,8 +3690,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
     onPatch({status:s,...(s===IEL_STATUS.PASS||s===IEL_STATUS.FAIL?{lastTested:testDate}:{})});
   };
 
-  const nextDue=item.lastTested?addMonths(item.lastTested,3):null;
-  const nextDueISO=item.lastTested?addMonthsISO(item.lastTested,3):null;
+  const _due=ielItemDue(item,meta);const nextDue=_due.label||null;const nextDueISO=_due.iso;
   const overdue=nextDueISO&&isOverdue(nextDueISO);
   const sm=IEL_SM[item.status||IEL_STATUS.UNTESTED]||IEL_SM.untested;
 
@@ -15854,7 +15865,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, xjSiteFromTitle, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
