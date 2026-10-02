@@ -82,11 +82,11 @@ describe('ELT photo -> export through the real UI', () => {
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(buf);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting', 'Defects', 'Photos']);
     const reg = wb.getWorksheet('Emergency Lighting');
-    expect(String(reg.getCell('C6').value)).toBe('SE Door');   // only the tested fitting is in the register
-    expect(reg.getCell('C7').value == null || String(reg.getCell('C7').value) === '').toBe(true);
+    expect(String(reg.getCell('C7').value)).toBe('SE Door');   // only the tested fitting is in the register (data starts on row 7 under the shared header)
+    expect(reg.getCell('C8').value == null || String(reg.getCell('C8').value) === '').toBe(true);
     const ps = wb.getWorksheet('Photos');
     expect(ps.getImages()).toHaveLength(2);
-    expect([2, 3].map(r => String(ps.getCell(r, 2).value))).toEqual(['SE Door', 'SW Roof']);
+    expect([7, 8].map(r => String(ps.getCell(r, 2).value))).toEqual(['SE Door', 'SW Roof']);
   });
 
   it('Complete Audit is offered when a fitting has only a photo (so it can be exported)', async () => {

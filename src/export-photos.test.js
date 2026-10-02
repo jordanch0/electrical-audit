@@ -77,7 +77,7 @@ describe('photos in exports', () => {
       const zip = await unzipExport(exportELTExcel, project, { e1:{ a1:{ ...pass4, photos:[{id:'1',w:200,h:150}] }, a2:{ ...pass4, photos:[{id:'2',w:200,h:150}] } } }, { auditor:'J', testDate:'2026-09-21', nextTestDate:'2027-03-21' });
       const info = await inspect(zip, 'xl/worksheets/sheet3.xml'); // sheet1 = register, sheet2 = Defects, sheet3 = Photos
       checkPhotos(info, [JPEG_A, JPEG_B]);
-      expect(info.anchors.map(a => a.row)).toEqual([1, 2]); // rows 2 and 3, one photo per row
+      expect(info.anchors.map(a => a.row)).toEqual([6, 7]); // rows 7 and 8 (0-based 6, 7) under the shared 5-row header + headings row 6, one photo per row
       expect(info.anchors.every(a => a.col === 3)).toBe(true);
     } finally { sitePhotoIO.exportCopy = origExportCopy; }
   });

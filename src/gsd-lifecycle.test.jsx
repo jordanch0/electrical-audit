@@ -266,20 +266,20 @@ describe('export: photo report + Register', () => {
     await exportGSDExcel(project, items, meta); const wb = await readExport();
     expect(wb.worksheets.map(w => w.name)).toEqual(['Defects Report', 'Register']);
     const ws = wb.getWorksheet('Defects Report');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
-    expect(ws.getCell('A1').value).toBe('Site G — General Site Defects'); expect(ws.getCell('A3').value).toBe('Auditor: Jane  |  Date Audited: 21/09/2026  |  Next Audit Due: 21/09/2027');
-    const txt = []; for (let r = 5; r <= ws.rowCount; r++) { const v = ws.getCell(r, 1).value; if (v) txt.push(String(v)); }
+    // shared header (2026-10-02): the title is row 2, auditor / dates row 4 ("Date Tested", not "Date Audited"); the report content starts on row 6
+    expect(ws.getCell('A2').value).toBe('Site G  –  General Site Defects  (Punch-List Report)'); expect(ws.getCell('A4').value).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Audit Due: 21/09/2027');
+    const txt = []; for (let r = 6; r <= ws.rowCount; r++) { const v = ws.getCell(r, 1).value; if (v) txt.push(String(v)); }
     expect(txt).toEqual(['Concrete Plant', '#1  Loc i1 — Defect i1', 'Guarding · High · Site Manager · Fix by 31/10/2026', 'Workshop', '#2  Loc i2 — Defect i2', 'Guarding · High · Site Manager · Fix by 31/10/2026']);   // no "Empty Area"
-    expect(ws.getCell('A5').fill).toMatchObject({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D7C0F' } });
-    expect(ws.getCell('A5').font).toMatchObject({ bold: true, color: { argb: 'FFFFFFFF' } });
-    expect(ws.model.merges).toContain('A5:E5');                                                       // full width
-    expect(ws.getRow(6).height).toBe(8);                                                              // the small gap after the bar
-    expect(ws.getCell('A7').value).toBe('#1  Loc i1 — Defect i1');                                    // caption on the row ABOVE its photos
+    expect(ws.getCell('A6').fill).toMatchObject({ type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4D7C0F' } });
+    expect(ws.getCell('A6').font).toMatchObject({ bold: true, color: { argb: 'FFFFFFFF' } });
+    expect(ws.model.merges).toContain('A6:E6');                                                       // full width
+    expect(ws.getRow(7).height).toBe(8);                                                              // the small gap after the bar
+    expect(ws.getCell('A8').value).toBe('#1  Loc i1 — Defect i1');                                    // caption on the row ABOVE its photos
     const imgs = ws.getImages(); expect(imgs).toHaveLength(3);
     expect(imgs[0].range.ext).toMatchObject({ width: 120, height: 160 });                            // portrait 3:4 -> 120 x 160
     expect(imgs[1].range.ext).toMatchObject({ width: 120, height: 90 });                              // landscape 4:3 -> 120 x 90
     expect(Math.floor(imgs[0].range.tl.col)).toBe(0); expect(Math.floor(imgs[1].range.tl.col)).toBe(1); expect(Math.floor(imgs[0].range.tl.row)).toBe(Math.floor(imgs[1].range.tl.row));   // same row, next column
-    expect(Math.floor(imgs[0].range.tl.row)).toBeGreaterThanOrEqual(8 - 1);                          // below the caption (row 7) and detail (row 8)
+    expect(Math.floor(imgs[0].range.tl.row)).toBeGreaterThanOrEqual(9 - 1);                          // below the caption (row 8) and detail (row 9)
   });
   it('portrait A4 at 100% scale (Excel ignores manual page breaks under fit-to-page), page footer, five 140 px columns', async () => {
     const items = [mkI('i1', 'a1', [[300, 400]])]; await seedPhotos(items); await exportGSDExcel(project, items, meta); const ws = (await readExport()).getWorksheet('Defects Report');
@@ -303,16 +303,16 @@ describe('export: photo report + Register', () => {
   it('Register: one row per defect, # matching the report (area order), Priority coloured with the shared swbXPC palette, landscape', async () => {
     const items = [mkI('i1', 'a2', [[300, 400]], { priority: 'U' }), mkI('i2', 'a1', [[300, 400], [300, 400]], { priority: '', dueDate: '' })]; await seedPhotos(items);
     await exportGSDExcel(project, items, meta); const ws = (await readExport()).getWorksheet('Register');
-    expect(ws.getRow(5).values.slice(1)).toEqual(['#', 'Area', 'Asset Location', 'Category', 'Description', 'Priority', 'Responsibility', 'Fix By Date', 'Photos']);
-    expect(ws.getRow(6).values.slice(1)).toEqual([1, 'Concrete Plant', 'Loc i2', 'Guarding', 'Defect i2', '', 'Site Manager', '', 2]);      // area order first: the a1 defect is #1
-    expect(ws.getRow(7).values.slice(1)).toEqual([2, 'Workshop', 'Loc i1', 'Guarding', 'Defect i1', 'U', 'Site Manager', '31/10/2026', 1]);
-    expect(ws.getCell('F7').fill.fgColor.argb).toBe('FF9B0000');
+    expect(ws.getRow(6).values.slice(1)).toEqual(['#', 'Area', 'Asset Location', 'Category', 'Description', 'Priority', 'Responsibility', 'Fix By Date', 'Photos']);   // headings on row 6 (shared header rows 1-5)
+    expect(ws.getRow(7).values.slice(1)).toEqual([1, 'Concrete Plant', 'Loc i2', 'Guarding', 'Defect i2', '', 'Site Manager', '', 2]);      // area order first: the a1 defect is #1
+    expect(ws.getRow(8).values.slice(1)).toEqual([2, 'Workshop', 'Loc i1', 'Guarding', 'Defect i1', 'U', 'Site Manager', '31/10/2026', 1]);
+    expect(ws.getCell('F8').fill.fgColor.argb).toBe('FF9B0000');
     expect(ws.pageSetup).toMatchObject({ orientation: 'landscape', fitToPage: true, fitToWidth: 1 }); expect(ws.getColumn(8).width).toBeGreaterThanOrEqual(13);
   });
   it('no defects: both sheets still exist, with "No defects recorded" and their headings', async () => {
     await exportGSDExcel(project, [], meta); const wb = await readExport();
-    expect(wb.getWorksheet('Defects Report').getCell('A6').value).toBe('No defects recorded'); expect(wb.getWorksheet('Register').getCell('A6').value).toBe('No defects recorded');
-    expect(wb.getWorksheet('Register').getRow(5).values.slice(1)).toContain('Priority');
+    expect(wb.getWorksheet('Defects Report').getCell('A6').value).toBe('No defects recorded'); expect(wb.getWorksheet('Register').getCell('A7').value).toBe('No defects recorded');   // Register: headings row 6, so the empty line is the first data row (7)
+    expect(wb.getWorksheet('Register').getRow(6).values.slice(1)).toContain('Priority');
   });
   it('the export is reachable from History and uses the ARCHIVED areas / items / photos', async () => {
     await seedItems(); const user = userEvent.setup(); await open(user, null);
@@ -320,6 +320,8 @@ describe('export: photo report + Register', () => {
     await waitFor(() => expect(ls('gsd-history-v1')).toHaveLength(1));
     await user.click(screen.getByRole('button', { name: 'History' })); await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false })); await user.click(await screen.findByRole('button', { name: 'Export' }));
     await waitFor(() => expect(payload).toBeTruthy()); const ws = (await readExport()).getWorksheet('Defects Report');
-    expect(String(ws.getCell('A5').value)).toBe('Concrete Plant'); expect(ws.getImages()).toHaveLength(3);
+    expect(String(ws.getCell('A6').value)).toBe('Concrete Plant'); expect(ws.getImages()).toHaveLength(3);
+    // an ARCHIVED report carries the same shared header as a live one (title on row 2, auditor / dates on row 4, content from row 6)
+    expect(String(ws.getCell('A2').value)).toBe('Site G  –  General Site Defects  (Punch-List Report)'); expect(String(ws.getCell('A4').value)).toMatch(/^Auditor: .+  |  Date Tested: .+  |  Next Audit Due: .+$/);
   });
 });

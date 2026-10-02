@@ -89,41 +89,46 @@ describe('exportSWBExcel structure', () => {
 
   it('Register: plain header block, one row per board with the derived values, Pass/Fail cells tinted', async () => {
     const reg = (await build(project, results)).getWorksheet('Register');
-    expect(V(reg.getCell('A1'))).toBe('Hearse Road - Firestone — Switchboard / Enclosure Audit');
-    expect(V(reg.getCell('A2'))).toBe('Acme Pty Ltd  |  ABN: 99 999  |  Electrical Licence: EW1');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
-    expect(V(reg.getCell('A3'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Audit Due: 13/07/2027');
-    expect(SWB_REGISTER_COLUMNS.map((t, i) => V(reg.getCell(5, i + 1)))).toEqual(SWB_REGISTER_COLUMNS);
-    expect(V(reg.getCell('D6'))).toBe('Pass'); expect(V(reg.getCell('D8'))).toBe('Fail'); expect(V(reg.getCell('D7'))).toBe('');
-    expect(reg.getCell('D6').fill.fgColor.argb).toBe('FFE2EFDA'); expect(reg.getCell('D8').fill.fgColor.argb).toBe('FFFFC7CE');
-    expect(V(reg.getCell('I6'))).toBe('100.0%'); expect(V(reg.getCell('I7'))).toBe('10.0%');
-    expect(V(reg.getCell('K7'))).toBe('Ventilation'); expect(V(reg.getCell('J8'))).toBe('Urgent');
-    expect(Number(reg.getCell('E9').value)).toBe(0); expect(Number(reg.getCell('H9').value)).toBe(11);   // untested board still listed
+    // shared header (2026-10-02): row 1 = the always-reserved logo row, 2 = title, 3 = company, 4 = auditor / dates; the table headings are row 6
+    expect(V(reg.getCell('A1'))).toBe('');
+    expect(V(reg.getCell('A2'))).toBe('Hearse Road - Firestone  –  Switchboard / Enclosure Audit  (Visual Inspection)');
+    expect(V(reg.getCell('A3'))).toBe('Acme Pty Ltd  |  ABN: 99 999  |  Electrical Licence: EW1');
+    expect(V(reg.getCell('A4'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Audit Due: 13/07/2027');
+    expect(SWB_REGISTER_COLUMNS.map((t, i) => V(reg.getCell(6, i + 1)))).toEqual(SWB_REGISTER_COLUMNS);
+    expect(V(reg.getCell('D7'))).toBe('Pass'); expect(V(reg.getCell('D9'))).toBe('Fail'); expect(V(reg.getCell('D8'))).toBe('');
+    expect(reg.getCell('D7').fill.fgColor.argb).toBe('FFE2EFDA'); expect(reg.getCell('D9').fill.fgColor.argb).toBe('FFFFC7CE');
+    expect(V(reg.getCell('I7'))).toBe('100.0%'); expect(V(reg.getCell('I8'))).toBe('10.0%');
+    expect(V(reg.getCell('K8'))).toBe('Ventilation'); expect(V(reg.getCell('J9'))).toBe('Urgent');
+    expect(Number(reg.getCell('E10').value)).toBe(0); expect(Number(reg.getCell('H10').value)).toBe(11);   // untested board still listed
   });
 
   it('board sheet: header, Audit Summary with Score, the 11 checklist rows with criteria; defect data ONLY on FAIL rows', async () => {
     const sh = (await build(project, results)).getWorksheet('MCC 1');
-    expect(V(sh.getCell('A1'))).toBe('Switchboard / Enclosure Audit');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3 cells).
-    expect(V(sh.getCell('A3'))).toBe('Area: Wash Plant  |  Board: MCC 1');
-    const summary = {}; for (let r = 8; r <= 14; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
+    // The SAME shared header as the Register (no per-board title any more); the board's Area / Board moved into an "Asset Details" block from row 6.
+    expect(V(sh.getCell('A1'))).toBe('');
+    expect(V(sh.getCell('A2'))).toBe('Hearse Road - Firestone  –  Switchboard / Enclosure Audit  (Visual Inspection)');
+    expect(V(sh.getCell('A4'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Audit Due: 13/07/2027');
+    expect(V(sh.getCell('A6'))).toBe('Asset Details');                          // (A6:B6 is merged: B6 reads back as the master's text)
+    expect([7, 8].map(r => [V(sh.getCell(r, 1)), V(sh.getCell(r, 2))])).toEqual([['Area', 'Wash Plant'], ['Board', 'MCC 1']]);
+    expect(V(sh.getCell('A10'))).toBe('Audit Summary');                          // after Asset Details + one blank row (9)
+    const summary = {}; for (let r = 11; r <= 17; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
     expect(summary).toEqual({ 'Total Items': '11', Pass: '1', Fail: '1', 'N/A': '1', Untested: '8', Score: '10.0%', Overall: 'UNTESTED' });
-    expect(V(sh.getCell('A16'))).toBe('Item'); expect(V(sh.getCell('G16'))).toBe('Responsibility / Action');
-    for (let i = 0; i < 11; i++) expect(V(sh.getCell(17 + i, 1))).toBe(`${i + 1}. ${SWB_CHECKLIST[i].label}`);
-    expect(V(sh.getCell('B17'))).toMatch(/structurally sound/);                       // pass criteria text
-    // Enclosure (row 17) PASSED but retains a risk / defect id -> blank in the export (a plain comment is not defect data and stays);
-    // Ventilation (row 18) FAILED -> defect details shown
-    expect([V(sh.getCell('C17')), V(sh.getCell('D17')), V(sh.getCell('E17')), V(sh.getCell('F17'))]).toEqual(['Pass', '', 'old', '']);
-    expect([V(sh.getCell('C18')), V(sh.getCell('D18')), V(sh.getCell('E18')), V(sh.getCell('F18')), V(sh.getCell('G18'))]).toEqual(['Fail', 'D-7', 'blocked', 'M', 'Scheduled for Repair | Site Electrician']);
-    expect(V(sh.getCell('C19'))).toBe('N/A'); expect(V(sh.getCell('C20'))).toBe('');
-    expect(JSON.stringify(sh.getRow(17).values)).not.toMatch(/STALE/);        // the stale defect id never appears
+    expect(V(sh.getCell('A19'))).toBe('Item'); expect(V(sh.getCell('G19'))).toBe('Responsibility / Action');
+    for (let i = 0; i < 11; i++) expect(V(sh.getCell(20 + i, 1))).toBe(`${i + 1}. ${SWB_CHECKLIST[i].label}`);
+    expect(V(sh.getCell('B20'))).toMatch(/structurally sound/);                       // pass criteria text
+    // Enclosure (row 20) PASSED but retains a risk / defect id -> blank in the export (a plain comment is not defect data and stays);
+    // Ventilation (row 21) FAILED -> defect details shown
+    expect([V(sh.getCell('C20')), V(sh.getCell('D20')), V(sh.getCell('E20')), V(sh.getCell('F20'))]).toEqual(['Pass', '', 'old', '']);
+    expect([V(sh.getCell('C21')), V(sh.getCell('D21')), V(sh.getCell('E21')), V(sh.getCell('F21')), V(sh.getCell('G21'))]).toEqual(['Fail', 'D-7', 'blocked', 'M', 'Scheduled for Repair | Site Electrician']);
+    expect(V(sh.getCell('C22'))).toBe('N/A'); expect(V(sh.getCell('C23'))).toBe('');
+    expect(JSON.stringify(sh.getRow(20).values)).not.toMatch(/STALE/);        // the stale defect id never appears
   });
 
   it('a complete board reads Overall FAIL / PASS on its sheet', async () => {
     const wb = await build(project, results);
-    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B14'))).toBe('FAIL');
-    expect(V(wb.getWorksheet('MSB').getCell('B14'))).toBe('PASS');
-    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B13'))).toBe('90.9%');
+    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B17'))).toBe('FAIL');
+    expect(V(wb.getWorksheet('MSB').getCell('B17'))).toBe('PASS');
+    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B16'))).toBe('90.9%');
   });
 
   it('photos land on their OWN board sheet (1:1), one per row, nothing on the Register or other boards', async () => {
@@ -168,7 +173,7 @@ describe('SWB Register "Priority (L,M,H,U)" is filled from the Risk Rating (the 
   });
   it('and it reaches the exported Register sheet', async () => {
     const wb = await build(proj, res); const reg = wb.getWorksheet('Register');
-    const c = reg.getRow(5).values.indexOf('Priority (L,M,H,U)');
-    expect([6, 7, 8, 9].map(r => String(reg.getCell(r, c).value || ''))).toEqual(['L', 'U; H; L', 'H', '']);
+    const c = reg.getRow(6).values.indexOf('Priority (L,M,H,U)');
+    expect([7, 8, 9, 10].map(r => String(reg.getCell(r, c).value || ''))).toEqual(['L', 'U; H; L', 'H', '']);
   });
 });

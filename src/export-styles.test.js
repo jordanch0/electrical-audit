@@ -48,8 +48,8 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
   it('every data cell on the main AND Defects sheets has full thin borders on all four sides (like ELT / SWB)', async () => {
     await run(); const wb = await load();
     for (const [sheet, n] of [[mainSheet, expectedResults.length], ['Defects', 4]]) {
-      const ws = wb.getWorksheet(sheet); const cols = ws.getRow(5).cellCount;
-      for (let r = 6; r < 6 + n; r++) for (let c = 1; c <= cols; c++) {
+      const ws = wb.getWorksheet(sheet); const cols = ws.getRow(6).cellCount;
+      for (let r = 7; r < 7 + n; r++) for (let c = 1; c <= cols; c++) {
         const b = ws.getCell(r, c).border || {};
         ['top', 'bottom', 'left', 'right'].forEach(side => expect(b[side] && b[side].style, `${sheet} r${r} c${c} ${side}`).toBe('thin'));
       }
@@ -58,14 +58,14 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
 
   it('Pass green / Fail red (bold) / N/A grey; Untested stays a plain zebra cell', async () => {
     await run(); const wb = await load(); const ws = wb.getWorksheet(mainSheet);
-    const col = ws.getRow(5).values.indexOf('Pass / Fail');
+    const col = ws.getRow(6).values.indexOf('Pass / Fail');
     expectedResults.forEach((txt, i) => {
-      const cell = ws.getCell(6 + i, col); expect(String(cell.value == null ? '' : cell.value), 'row ' + (6 + i)).toBe(txt);
+      const cell = ws.getCell(7 + i, col); expect(String(cell.value == null ? '' : cell.value), 'row ' + (7 + i)).toBe(txt);
       const expected = { PASS: PALETTE.pass, FAIL: PALETTE.fail, 'N/A': PALETTE.na, MONITOR: PALETTE.monitor }[txt.toUpperCase()];
       if (expected) { expect(argb(cell), txt).toBe(expected); expect(cell.font.bold, txt).toBe(true); }
       else expect([PALETTE.white, PALETTE.zebra]).toContain(argb(cell));                                // Untested / blank: zebra, not coloured
     });
-    const first = word => { const i = expectedResults.findIndex(t => t.toUpperCase() === word); return ws.getCell(6 + i, col); };
+    const first = word => { const i = expectedResults.findIndex(t => t.toUpperCase() === word); return ws.getCell(7 + i, col); };
     expect(first('FAIL').font.color.argb).toBe('FF9C0006');                                            // Fail text is dark red
     expect(first('PASS').font.color.argb).toBe('FF375623');                                            // Pass text is dark green
     if (expectedResults.includes('MONITOR')) expect(first('MONITOR').font.color.argb).toBe('FF7F6000');   // MONITOR: dark amber text on amber
@@ -73,10 +73,10 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
 
   it('other cells alternate white / light-grey zebra rows', async () => {
     await run(); const wb = await load(); const ws = wb.getWorksheet(mainSheet);
-    for (let i = 0; i < expectedResults.length; i++) expect(argb(ws.getCell(6 + i, 2)), 'row ' + (6 + i)).toBe(i % 2 === 0 ? PALETTE.white : PALETTE.zebra);
+    for (let i = 0; i < expectedResults.length; i++) expect(argb(ws.getCell(7 + i, 2)), 'row ' + (7 + i)).toBe(i % 2 === 0 ? PALETTE.white : PALETTE.zebra);
   });
 
-  it('the header block stays PLAIN (no fill / border / bold, like ELT / SWB / Welder); the heading row only wraps and centres; row heights 32/16/16/6/44', async () => {
+  it('the header block stays PLAIN (no fill / border / bold, like ELT / SWB / Welder); the heading row only wraps and centres; row heights 45.75/31.5/15.75/15.75/6 (row 1 = the always-reserved logo row)', async () => {
     await run(); const wb = await load();
     for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
       for (let r = 1; r <= 5; r++) ws.getRow(r).eachCell({ includeEmpty: true }, (cell, c) => {
@@ -84,15 +84,15 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
         expect(!cell.border || Object.keys(cell.border).length === 0, `${ws.name} r${r} c${c} border`).toBe(true);
         expect(!cell.font || !cell.font.bold, `${ws.name} r${r} c${c} bold`).toBe(true);
       });
-      ws.getRow(5).eachCell(cell => expect(cell.alignment).toMatchObject({ wrapText: true, horizontal: 'center' }));
-      expect([1, 2, 3, 4, 5].map(r => ws.getRow(r).height)).toEqual([32, 16, 16, 6, 44]);
+      ws.getRow(6).eachCell(cell => expect(cell.alignment).toMatchObject({ wrapText: true, horizontal: 'center' }));
+      expect([1, 2, 3, 4, 5].map(r => ws.getRow(r).height)).toEqual([45.75, 31.5, 15.75, 15.75, 6]);
     }
   });
 
   it('Defects sheet: Priority is colour-coded U dark red / H red / M amber / L green', async () => {
     await run(); const wb = await load(); const ws = wb.getWorksheet('Defects');
-    const col = ws.getRow(5).values.indexOf('Priority'); expect(col).toBeGreaterThan(0);
-    const seen = {}; for (let r = 6; r < 10; r++) seen[String(ws.getCell(r, col).value)] = ws.getCell(r, col);
+    const col = ws.getRow(6).values.indexOf('Priority'); expect(col).toBeGreaterThan(0);
+    const seen = {}; for (let r = 7; r < 11; r++) seen[String(ws.getCell(r, col).value)] = ws.getCell(r, col);
     ['U', 'H', 'M', 'L'].forEach(p => expect(argb(seen[p]), p).toBe(PALETTE[p]));
     expect(seen.U.font.color.argb).toBe('FFFFFFFF'); expect(seen.U.font.bold).toBe(true);           // urgent = white bold on dark red
   });
@@ -100,11 +100,11 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
   it('every DATE column is wide enough for a full "dd/mm/yyyy" on ONE line (dates are wrapping TEXT cells; Excel / Sheets break a tight one at the "/")', async () => {
     await run(); const wb = await load(); let checked = 0;
     for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
-      ws.getRow(5).values.forEach((h, col) => {
+      ws.getRow(6).values.forEach((h, col) => {
         if (!/^(Date|Test Date|Next Test)/.test(String(h))) return;
         // 10 characters + a 30% margin for other apps' font metrics; the column width is what the file declares
         expect(ws.getColumn(col).width, `${ws.name} / "${h}"`).toBeGreaterThanOrEqual(13);
-        for (let r = 6; r < ws.rowCount + 1; r++) {
+        for (let r = 7; r < ws.rowCount + 1; r++) {
           const v = ws.getCell(r, col).value; if (v == null || v === '') continue;
           expect(String(v), `${ws.name} / "${h}" r${r}`).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);   // plain 10-character text, never a longer date-time string
           checked++;
@@ -117,9 +117,9 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
   it('the Pass / Fail column is wide enough for its longest value ("UNTESTED" / "Untested" = 8 characters, "MONITOR") on ONE line, on every sheet that has one', async () => {
     await run(); const wb = await load(); let sheets = 0;
     for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
-      const col = ws.getRow(5).values.indexOf('Pass / Fail'); if (col < 1) continue; sheets++;
+      const col = ws.getRow(6).values.indexOf('Pass / Fail'); if (col < 1) continue; sheets++;
       let longest = 8;                                                                            // never below "UNTESTED", even if a dataset has none
-      for (let r = 6; r < ws.rowCount + 1; r++) { const v = ws.getCell(r, col).value; if (v != null) longest = Math.max(longest, String(v).length); }
+      for (let r = 7; r < ws.rowCount + 1; r++) { const v = ws.getCell(r, col).value; if (v != null) longest = Math.max(longest, String(v).length); }
       expect(ws.getColumn(col).width, `${ws.name} Pass / Fail`).toBeGreaterThanOrEqual(Math.ceil(longest * 1.3));   // +30% for other apps' font metrics (and bold caps)
     }
     expect(sheets).toBeGreaterThan(0);
@@ -128,7 +128,7 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
   it('page setup is NATIVE in the file: A4, landscape, fit to 1 page wide, heading row repeated, footer', async () => {
     await run(); const wb = await load();
     for (const ws of wb.worksheets.filter(s => s.name !== 'Summary')) {
-      expect(ws.pageSetup, ws.name).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '5:5' });
+      expect(ws.pageSetup, ws.name).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '6:6' });
       expect(ws.headerFooter.oddFooter).toContain('Page &P of &N');
     }
   });
@@ -137,8 +137,8 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
 describe('TAT (ExcelJS): the Frequency column still shows the plain interval only', () => {
   it('"1 Month" / "3 Months" / "6 Months" / "12 Months" / "2 Months" — no site-type description — in a narrow column', async () => {
     await exportTATExcel(tatProject, tatResults, meta); const wb = await load(); const ws = wb.getWorksheet('Test & Tag');
-    const col = ws.getRow(5).values.indexOf('Test Frequency');
-    const vals = []; for (let r = 6; r < 13; r++) vals.push(String(ws.getCell(r, col).value));
+    const col = ws.getRow(6).values.indexOf('Test Frequency');
+    const vals = []; for (let r = 7; r < 14; r++) vals.push(String(ws.getCell(r, col).value));
     expect(vals).toEqual(['3 Months', '1 Month', '6 Months', '12 Months', '3 Months', '2 Months', '3 Months']);
     expect(JSON.stringify(vals)).not.toMatch(/Construction|Hire|Demolition|Warehouse|Hostile| — /);
     expect(ws.getColumn(col).width).toBeLessThanOrEqual(10);
@@ -161,40 +161,40 @@ describe('RCD Summary sheet (ExcelJS): counts only, points to Defects, portrait,
 });
 
 describe('IRT (ExcelJS): Register / Readings / Defects — sheet order, styling of all three, and the # cross-reference', () => {
-  it('three sheets in order; Readings is boxed, has coloured results, a units line, wrapped headings and native page setup like the others', async () => {
+  it('three sheets in order; Readings is boxed, has coloured results, (MΩ) on its resistance headings, wrapped headings and native page setup like the others', async () => {
     await exportIRTExcel(irtProject, irtResults, meta); const wb = await load();
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'Readings', 'Defects']);
     const rd = wb.getWorksheet('Readings');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (A3), was separate A3/C3/E3 cells.
-    expect(String(rd.getCell('A3').value)).toBe('Tested by: Jane  |  Date Tested: 21/09/2026  |  All readings in MΩ');
-    const col = rd.getRow(5).values.indexOf('Pass / Fail');
+    // Row 4 of the shared header: ONE joined "  |  " string in one full-width merged cell (A4).
+    expect(String(rd.getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due: 21/09/2027');
+    const col = rd.getRow(6).values.indexOf('Pass / Fail');
     ['FAIL', 'PASS', 'PASS', 'UNTESTED', 'FAIL', 'FAIL', 'FAIL'].forEach((txt, i) => {
-      const cell = rd.getCell(6 + i, col); expect(String(cell.value)).toBe(txt);
+      const cell = rd.getCell(7 + i, col); expect(String(cell.value)).toBe(txt);
       const want = { PASS: PALETTE.pass, FAIL: PALETTE.fail }[txt]; if (want) { expect(argb(cell)).toBe(want); expect(cell.font.bold).toBe(true); }
     });
-    for (let r = 6; r < 13; r++) for (let c = 1; c <= 16; c++) { const b = rd.getCell(r, c).border || {}; ['top', 'bottom', 'left', 'right'].forEach(s => expect(b[s] && b[s].style, `Readings r${r} c${c}`).toBe('thin')); }
-    expect(rd.getCell(6, 6).alignment.horizontal).toBe('center');                                        // a reading value is centred
-    expect(rd.pageSetup).toMatchObject({ orientation: 'landscape', fitToWidth: 1, printTitlesRow: '5:5' });
+    for (let r = 7; r < 14; r++) for (let c = 1; c <= 16; c++) { const b = rd.getCell(r, c).border || {}; ['top', 'bottom', 'left', 'right'].forEach(s => expect(b[s] && b[s].style, `Readings r${r} c${c}`).toBe('thin')); }
+    expect(rd.getCell(7, 6).alignment.horizontal).toBe('center');                                        // a reading value is centred
+    expect(rd.pageSetup).toMatchObject({ orientation: 'landscape', fitToWidth: 1, printTitlesRow: '6:6' });
   });
 
   it('# lines up: the same # is the same circuit on Register, Readings AND Defects, and the Register carries none of the reading columns', async () => {
     await exportIRTExcel(irtProject, irtResults, meta); const wb = await load();
     const reg = wb.getWorksheet('Register'); const rd = wb.getWorksheet('Readings'); const df = wb.getWorksheet('Defects');
-    const head = ws => ws.getRow(5).values;
+    const head = ws => ws.getRow(6).values;
     expect(head(reg).slice(1)).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Date', 'Pass / Fail', 'Notes / Recommendations']);
-    const name = ws => ws.getRow(5).values.indexOf('Equipment / Circuit');
+    const name = ws => ws.getRow(6).values.indexOf('Equipment / Circuit');
     for (let i = 0; i < 7; i++) {
-      expect(reg.getCell(6 + i, 1).value).toBe(i + 1); expect(rd.getCell(6 + i, 1).value).toBe(i + 1);
-      expect(reg.getCell(6 + i, name(reg)).value).toBe(rd.getCell(6 + i, name(rd)).value);              // same circuit on each #
+      expect(reg.getCell(7 + i, 1).value).toBe(i + 1); expect(rd.getCell(7 + i, 1).value).toBe(i + 1);
+      expect(reg.getCell(7 + i, name(reg)).value).toBe(rd.getCell(7 + i, name(rd)).value);              // same circuit on each #
     }
-    for (let r = 6; r < 10; r++) { const n = df.getCell(r, 1).value; expect(df.getCell(r, name(df)).value).toBe(reg.getCell(5 + n, name(reg)).value); }   // Defects # points at the Register row
+    for (let r = 6; r < 10; r++) { const n = df.getCell(r, 1).value; expect(df.getCell(r, name(df)).value).toBe(reg.getCell(6 + n, name(reg)).value); }   // Defects # points at the Register row
     expect(head(reg).some(h => /^L\d|^N-E/.test(String(h)))).toBe(false);
   });
 
   it('the Register Test Date column is wide enough for dd/mm/yyyy on one line', async () => {
     await exportIRTExcel(irtProject, irtResults, meta); const wb = await load(); const reg = wb.getWorksheet('Register');
-    const c = reg.getRow(5).values.indexOf('Test Date'); expect(reg.getColumn(c).width).toBeGreaterThanOrEqual(13);
-    expect(String(reg.getCell(6, c).value)).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
+    const c = reg.getRow(6).values.indexOf('Test Date'); expect(reg.getColumn(c).width).toBeGreaterThanOrEqual(13);
+    expect(String(reg.getCell(7, c).value)).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
   });
 });
 
@@ -206,7 +206,7 @@ describe.each(MODULES)('%s: no heading word is wider than its column', (name, ru
   it('every unbreakable heading segment fits its column width (heading wrap can not clip mid-word)', async () => {
     await run(); const wb = await load();
     for (const ws of wb.worksheets.filter(s => s.name !== 'Summary'))
-      ws.getRow(5).values.forEach((h, col) => { if (h) expect(longestSegment(h), `${ws.name}: "${h}" in a ${widthOf(ws, col)}-wide column`).toBeLessThanOrEqual(widthOf(ws, col) + 1); });
+      ws.getRow(6).values.forEach((h, col) => { if (h) expect(longestSegment(h), `${ws.name}: "${h}" in a ${widthOf(ws, col)}-wide column`).toBeLessThanOrEqual(widthOf(ws, col) + 1); });
   });
 });
 
@@ -219,12 +219,12 @@ describe('ELT (ExcelJS): content-width columns, wrapped headings, shared date-wi
   it('date columns >= 13, no heading word clipped, headings wrap, and the main sheet fits >= 80% of a landscape page (was 77%)', async () => {
     await exportELTExcel(eltProject, eltResults, meta); const wb = await load();
     for (const ws of wb.worksheets.filter(s => s.name === 'Emergency Lighting' || s.name === 'Defects')) {
-      const head = ws.getRow(5).values; const n = ws.getRow(5).cellCount;
+      const head = ws.getRow(6).values; const n = ws.getRow(6).cellCount;
       head.forEach((h, col) => {
         if (!h) return;
         if (/^(Date|Next Test)/.test(String(h))) expect(widthOf(ws, col), `${ws.name} "${h}"`).toBeGreaterThanOrEqual(13);
         expect(longestSegment(h), `${ws.name}: "${h}" in a ${widthOf(ws, col)}-wide column`).toBeLessThanOrEqual(widthOf(ws, col) + 1);
-        expect(ws.getCell(5, col).alignment).toMatchObject({ wrapText: true });
+        expect(ws.getCell(6, col).alignment).toMatchObject({ wrapText: true });
       });
       let px = 0; for (let c = 1; c <= n; c++) px += widthOf(ws, c) * 7 + 5;
       expect(Math.min(1, LAND / px), ws.name).toBeGreaterThanOrEqual(ws.name === 'Defects' ? 0.95 : 0.8);
@@ -233,8 +233,8 @@ describe('ELT (ExcelJS): content-width columns, wrapped headings, shared date-wi
 
   it('nothing was dropped: all 16 main columns and 10 Defects columns are still there, in order, with the import-anchor headings exact', async () => {
     await exportELTExcel(eltProject, eltResults, meta); const wb = await load();
-    expect(wb.getWorksheet('Emergency Lighting').getRow(5).values.slice(1)).toEqual(['#', 'Location', 'Asset Location', 'Asset ID', 'Type', 'Maintained/Non-Maintained', 'Fitting Type/Manufacturer', 'Date', 'Visual Inspection', '90-Min Discharge Test', 'Automatic Switching Test', 'Charging Circuit Test', 'Pass/Fail', 'Score', 'Notes / Recommendations', 'Next Test Due']);
-    expect(wb.getWorksheet('Defects').getRow(5).values.slice(1)).toHaveLength(10);
+    expect(wb.getWorksheet('Emergency Lighting').getRow(6).values.slice(1)).toEqual(['#', 'Location', 'Asset Location', 'Asset ID', 'Type', 'Maintained/Non-Maintained', 'Fitting Type/Manufacturer', 'Date', 'Visual Inspection', '90-Min Discharge Test', 'Automatic Switching Test', 'Charging Circuit Test', 'Pass/Fail', 'Score', 'Notes / Recommendations', 'Next Test Due']);
+    expect(wb.getWorksheet('Defects').getRow(6).values.slice(1)).toHaveLength(10);
   });
 });
 
@@ -245,10 +245,10 @@ describe('TAT export: the Electrical Test column', () => {
   const run = () => exportTATExcel(tatProject, withElec, meta);
 
   it('sits right after Visual Inspection; shows Pass / Fail / blank; Fail cells are red, Pass plain (like ELT check columns)', async () => {
-    await run(); const wb = await load(); const ws = wb.getWorksheet('Test & Tag'); const h = ws.getRow(5).values;
+    await run(); const wb = await load(); const ws = wb.getWorksheet('Test & Tag'); const h = ws.getRow(6).values;
     const v = h.indexOf('Visual Inspection'), e = h.indexOf('Electrical Test');
     expect(e).toBe(v + 1); expect(h[e + 1]).toBe('Pass / Fail');
-    const col = r => ws.getCell(6 + r, e);
+    const col = r => ws.getCell(7 + r, e);
     expect(['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((_, r) => String(col(r).value || ''))).toEqual(['Fail', 'Pass', 'Pass', '', 'Fail', '', '']);
     expect(argb(col(0))).toBe(PALETTE.fail); expect(col(0).font.bold).toBe(true); expect(col(0).font.color.argb).toBe('FF9C0006');
     expect(argb(col(4))).toBe(PALETTE.fail);
@@ -257,17 +257,17 @@ describe('TAT export: the Electrical Test column', () => {
   });
 
   it('the main sheet still fits >= 95% of a landscape page, heading words fit, and nothing else moved (# first, Notes last)', async () => {
-    await run(); const wb = await load(); const ws = wb.getWorksheet('Test & Tag'); const n = ws.getRow(5).cellCount;
+    await run(); const wb = await load(); const ws = wb.getWorksheet('Test & Tag'); const n = ws.getRow(6).cellCount;
     let px = 0; for (let c = 1; c <= n; c++) px += widthOf(ws, c) * 7 + 5;
     expect(Math.min(1, ((11.69 - 0.5) * 96) / px)).toBeGreaterThanOrEqual(0.95);
-    const h = ws.getRow(5).values.slice(1);
+    const h = ws.getRow(6).values.slice(1);
     expect(h).toEqual(['#', 'Area', 'Asset ID / Tag', 'Description', 'Equipment Type', 'Visual Inspection', 'Electrical Test', 'Pass / Fail', 'Date Tested', 'Test Frequency', 'Next Test Due', 'Notes / Comments']);
     expect(longestSegment('Electrical Test')).toBeLessThanOrEqual(widthOf(ws, h.indexOf('Electrical Test') + 1) + 1);
   });
 
   it('a legacy record (no electrical field) exports a blank Electrical Test cell', async () => {
     await exportTATExcel(tatProject, tatResults, meta); const wb = await load(); const ws = wb.getWorksheet('Test & Tag');
-    const e = ws.getRow(5).values.indexOf('Electrical Test');
-    for (let r = 6; r < 13; r++) expect(String(ws.getCell(r, e).value || '')).toBe('');
+    const e = ws.getRow(6).values.indexOf('Electrical Test');
+    for (let r = 7; r < 14; r++) expect(String(ws.getCell(r, e).value || '')).toBe('');
   });
 });

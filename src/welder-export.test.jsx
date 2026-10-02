@@ -49,15 +49,16 @@ describe('Welder export structure', () => {
     const { wb } = await build(results);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'W001', 'W002', 'W003', 'W-004']);
     const reg = wb.getWorksheet('Register');
-    expect(V(reg.getCell('A1'))).toBe('Site A — Welder Test');
-    expect(V(reg.getCell('A2'))).toBe('Co  |  ABN: 1  |  Electrical Licence: L1');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell.
-    expect(V(reg.getCell('A3'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Test Due: 13/10/2026');
-    expect(WELDER_COLUMNS.map((_, i) => V(reg.getCell(5, i + 1)))).toEqual(WELDER_COLUMNS);
-    expect([6, 7, 8, 9].map(r => V(reg.getCell(r, 2)))).toEqual(['W001', 'W002', 'W003', 'W/004']);
-    expect(V(reg.getCell('D7'))).toBe('N/A');
-    expect(V(reg.getCell('F6'))).toBe('Pass'); expect(V(reg.getCell('F7'))).toBe('Fail'); expect(V(reg.getCell('F8'))).toBe('');
-    expect(V(reg.getCell('M6'))).toBe('13/10/2026');
+    // shared header (2026-10-02): row 1 = the always-reserved logo row; 2 = title; 3 = company; 4 = auditor / dates; headings on row 6, welders from row 7
+    expect(V(reg.getCell('A1'))).toBe('');
+    expect(V(reg.getCell('A2'))).toBe('Site A  –  Welder Test  (Inspection & Audit Checklist)');
+    expect(V(reg.getCell('A3'))).toBe('Co  |  ABN: 1  |  Electrical Licence: L1');
+    expect(V(reg.getCell('A4'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Test Due: 13/10/2026');
+    expect(WELDER_COLUMNS.map((_, i) => V(reg.getCell(6, i + 1)))).toEqual(WELDER_COLUMNS);
+    expect([7, 8, 9, 10].map(r => V(reg.getCell(r, 2)))).toEqual(['W001', 'W002', 'W003', 'W/004']);
+    expect(V(reg.getCell('D8'))).toBe('N/A');
+    expect(V(reg.getCell('F7'))).toBe('Pass'); expect(V(reg.getCell('F8'))).toBe('Fail'); expect(V(reg.getCell('F9'))).toBe('');
+    expect(V(reg.getCell('M7'))).toBe('13/10/2026');
   });
 
   it('header block rows 1–5 are unstyled; data rows have full-grid borders; Pass / Fail cells are tinted', async () => {
@@ -68,31 +69,29 @@ describe('Welder export structure', () => {
     // read back with their explicit "untouched" defaults instead of strictly `undefined` once the file round-trips
     // through a real save/reload, though visually identical either way. A4 is a blank spacer row nothing ever
     // writes to (same as every other module's export), so it stays fully untouched, alignment included.
-    ['A1', 'A2', 'A3'].forEach(a => {
+    // rows 2-4 are centred (horizontal only); row 1 (logo) and row 5 (spacer) are never written to; none has a fill or a border
+    ['A2', 'A3', 'A4'].forEach(a => { expect(reg.getCell(a).alignment).toMatchObject({ horizontal: 'center' }); });
+    ['A1', 'A2', 'A3', 'A4', 'A5'].forEach(a => {
       const cell = reg.getCell(a);
       expect(!cell.fill || cell.fill.pattern === 'none').toBe(true);
       expect(cell.border || {}).toEqual({});
-      expect(cell.alignment).toMatchObject({ horizontal: 'center' });
     });
-    const a4 = reg.getCell('A4');
-    expect(!a4.fill || a4.fill.pattern === 'none').toBe(true);
-    expect(a4.border || {}).toEqual({});
     const hasGrid = c => ['top', 'bottom', 'left', 'right'].every(s => c.border && c.border[s] && c.border[s].style === 'thin');
-    for (const r of [6, 7, 8, 9]) for (let c = 1; c <= 13; c++) expect(hasGrid(reg.getCell(r, c))).toBe(true);
-    expect(reg.getCell('F6').fill.fgColor.argb).toBe('FFE2EFDA');
-    expect(reg.getCell('F7').fill.fgColor.argb).toBe('FFFFC7CE');
+    for (const r of [7, 8, 9, 10]) for (let c = 1; c <= 13; c++) expect(hasGrid(reg.getCell(r, c))).toBe(true);
+    expect(reg.getCell('F7').fill.fgColor.argb).toBe('FFE2EFDA');
+    expect(reg.getCell('F8').fill.fgColor.argb).toBe('FFFFC7CE');
   });
 
   it('defect columns are gated on the derived result (PASS welder with retained data shows none; FAIL welder shows them)', async () => {
     const { wb } = await build(results);
     const reg = wb.getWorksheet('Register');
-    expect(['G6', 'H6', 'I6', 'J6', 'L6'].map(a => V(reg.getCell(a)))).toEqual(['', '', '', '', '']);
-    expect(['G7', 'H7', 'I7', 'J7', 'K7', 'L7'].map(a => V(reg.getCell(a)))).toEqual(['Removed from Service', '01/08/2026', 'D-9', 'Site Electrician', 'Return to supplier', 'H']);
+    expect(['G7', 'H7', 'I7', 'J7', 'L7'].map(a => V(reg.getCell(a)))).toEqual(['', '', '', '', '']);
+    expect(['G8', 'H8', 'I8', 'J8', 'K8', 'L8'].map(a => V(reg.getCell(a)))).toEqual(['Removed from Service', '01/08/2026', 'D-9', 'Site Electrician', 'Return to supplier', 'H']);
     const w1 = wb.getWorksheet('W001'); const text1 = []; w1.eachRow(r => r.eachCell(c => text1.push(V(c))));
     expect(text1).not.toContain('D-9'); expect(text1).toContain('Defect ID');   // the defect block is ALWAYS present on a welder sheet, blank unless FAIL
-    const blockLabels = [31, 32, 33, 34, 35].map(r => V(w1.getCell(r, 1)));
+    const blockLabels = [37, 38, 39, 40, 41].map(r => V(w1.getCell(r, 1)));
     expect(blockLabels).toEqual(['Rectified / Scheduled', 'Date Rectified / Scheduled', 'Defect ID', 'Responsibility', 'Priority']);
-    expect([31, 32, 33, 34, 35].map(r => V(w1.getCell(r, 2)))).toEqual(['', '', '', '', '']);
+    expect([37, 38, 39, 40, 41].map(r => V(w1.getCell(r, 2)))).toEqual(['', '', '', '', '']);
     const w2 = wb.getWorksheet('W002'); const text2 = []; w2.eachRow(r => r.eachCell(c => text2.push(V(c))));
     expect(text2).toContain('D-9'); expect(text2).toContain('Defect ID');
   });
@@ -100,21 +99,23 @@ describe('Welder export structure', () => {
   it('welder sheet: header fields, Audit Summary (W001 shape = 12 / 7 / 0 / 5 / 100.0% / 0 / PASS) and the 12 checklist rows with criteria', async () => {
     const { wb } = await build(results);
     const sh = wb.getWorksheet('W001');
-    expect(V(sh.getCell('A1'))).toBe('Welder Inspection & Audit Checklist');
-    // Rows 3-6 (2026-09-30 fix): each is one joined "  |  " string in one full-width cell (col A), not 2 separate
-    // col A / col C cells.
-    expect(V(sh.getCell('A3'))).toBe('Location: ONR Workshop  |  Asset ID: W001');
-    expect(V(sh.getCell('A5'))).toBe('Serial Number: 2699294  |  Date Tested: 13/07/2026');
-    expect(V(sh.getCell('A6'))).toBe('Prepared By: Jane  |  Test Instruments: Fluke 1587');
-    const summary = {}; for (let r = 9; r <= 15; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
+    // the SAME shared header as the Register; the asset's identity + the test instruments moved into an "Asset Details" block from row 6
+    expect(V(sh.getCell('A1'))).toBe('');
+    expect(V(sh.getCell('A2'))).toBe('Site A  –  Welder Test  (Inspection & Audit Checklist)');
+    expect(V(sh.getCell('A4'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Test Due: 13/10/2026');
+    expect(V(sh.getCell('A6'))).toBe('Asset Details');
+    expect([7, 8, 9, 10, 11, 12].map(r => [V(sh.getCell(r, 1)), V(sh.getCell(r, 2))])).toEqual([['Location', 'ONR Workshop'], ['Asset ID', 'W001'], ['Brand', 'Kemppi'], ['Model', 'Evo'], ['Serial Number', '2699294'], ['Test Instruments', 'Fluke 1587']]);
+    expect(JSON.stringify(sh.getSheetValues())).not.toMatch(/Prepared By/);     // same stored value as Auditor — not repeated
+    expect(V(sh.getCell('A14'))).toBe('Audit Summary');
+    const summary = {}; for (let r = 15; r <= 21; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
     expect(summary).toEqual({ 'Total Items': '12', Pass: '7', Fail: '0', 'N/A': '5', Score: '100.0%', 'Actions Required': '0', Overall: 'PASS' });
-    expect(['Item', 'Test / Pass Criteria', 'Result', 'Measured Value / Notes', 'Corrective Action Required'].map((_, i) => V(sh.getCell(17, i + 1))))
+    expect(['Item', 'Test / Pass Criteria', 'Result', 'Measured Value / Notes', 'Corrective Action Required'].map((_, i) => V(sh.getCell(23, i + 1))))
       .toEqual(['Item', 'Test / Pass Criteria', 'Result', 'Measured Value / Notes', 'Corrective Action Required']);
-    expect(V(sh.getCell('A18'))).toBe('1. Visual Inspection');
-    expect(V(sh.getCell('B21'))).toBe('Min insulation resistance 5 MΩ');
-    expect(V(sh.getCell('C21'))).toBe('Pass'); expect(V(sh.getCell('D21'))).toBe('9.9 MΩ'); expect(V(sh.getCell('C23'))).toBe('N/A');
-    expect(V(sh.getCell('C18'))).toBe('Pass');
-    expect(V(sh.getCell('A37'))).toBe('Auditor Comments / Overall Notes'); expect(V(sh.getCell('B37'))).toBe('All good');
+    expect(V(sh.getCell('A24'))).toBe('1. Visual Inspection');
+    expect(V(sh.getCell('B27'))).toBe('Min insulation resistance 5 MΩ');
+    expect(V(sh.getCell('C27'))).toBe('Pass'); expect(V(sh.getCell('D27'))).toBe('9.9 MΩ'); expect(V(sh.getCell('C29'))).toBe('N/A');
+    expect(V(sh.getCell('C24'))).toBe('Pass');
+    expect(V(sh.getCell('A43'))).toBe('Auditor Comments / Overall Notes'); expect(V(sh.getCell('B43'))).toBe('All good');
   });
 });
 
@@ -164,7 +165,7 @@ describe('Welder photo -> export through the real UI', () => {
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'W001', 'W002']);
     expect(wb.getWorksheet('W001').getImages()).toHaveLength(1);
     expect(wb.getWorksheet('W002').getImages()).toHaveLength(1);
-    expect(V(wb.getWorksheet('Register').getCell('F6'))).toBe('Pass');
-    expect(V(wb.getWorksheet('Register').getCell('F7'))).toBe(''); // W002 untested: photo only
+    expect(V(wb.getWorksheet('Register').getCell('F7'))).toBe('Pass');
+    expect(V(wb.getWorksheet('Register').getCell('F8'))).toBe(''); // W002 untested: photo only
   }, 30000); // long real-UI flow (~30 clicks + ExcelJS build); the default 5s limit timed out when files run in parallel
 });

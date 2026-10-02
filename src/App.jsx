@@ -153,28 +153,14 @@ function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.
 // than re-parsing them out of a data URL — used once photos live in IndexedDB and the pointer already carries its own size.
 function xjPhotoBoxWH(w, h) { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
 const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
-// ── Company logo (Global Settings, 2026-09-27): a centred image strip in row 1, full sheet width, above the existing header block —
-// ONLY when a logo is set in Global Settings (no logo = today's exact output, byte-identical). Every direct-write header sheet reserves
-// row 1 for it by shifting its own rows down by `off` (0 or 1) BEFORE writing anything, then calls xjLogo once every column width is final
-// (centring needs the real widths). xjSheet (the shared builder for RCD/IEL/TAT/Thermo/IRT/GSD-Register/every Defects sheet) does this itself.
-function xjColPx(ws, c) { return (ws.getColumn(c).width || 8.43) * 7 + 5; }
+// ── Company logo geometry helpers (Global Settings, 2026-09-27) — used by the shared header (xjHeader / xjLogoPlace, below): real column widths in pixels, so the logo can be centred.
+// A column's width in px AS THE FILE WILL RENDER IT. ExcelJS writes no <col> entry for a width of exactly 9 (it treats 9 as "default") and the file declares no default column
+// width, so Excel shows such a column at ITS default, 8.43 characters (64 px) — not the 68 px that "9" would be. Mirror that here, or a logo "centred" over a sheet with a width-9 column is off.
+function xjColPx(ws, c) { const w = ws.getColumn(c).width; return (w == null || w === 9 ? 8.43 : w) * 7 + 5; }
 function xjSheetWidthPx(ws, n) { let w = 0; for (let c = 1; c <= n; c++) w += xjColPx(ws, c); return w; }
-function xjPxToAnchor(ws, px) { let x = 0, c = 1; while (c < 1000) { const w = xjColPx(ws, c); if (x + w > px) return (c - 1) + Math.max(0, px - x) / w; x += w; c++; } return c - 1; }
-const XJ_LOGO_ROW_PT = 46;      // the reserved row's height
-const XJ_LOGO_MAX_H_PX = 50;    // the logo image never taller than this, leaving a margin inside the row
-function xjLogo(ws, wb, dataUrl, n) {
-  if (!dataUrl) return;
-  const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || ""); if (!m) return;
-  let ext = m[1] === "jpg" ? "jpeg" : m[1]; if (!["jpeg", "png", "gif"].includes(ext)) ext = "jpeg";
-  const size = xjImageSize(dataUrl) || { w: 200, h: 60 }; const totalPx = xjSheetWidthPx(ws, n);
-  const k = Math.min(XJ_LOGO_MAX_H_PX / size.h, (totalPx * 0.6) / size.w, 1);
-  const w = Math.max(1, Math.round(size.w * k)), h = Math.max(1, Math.round(size.h * k));
-  ws.getRow(1).height = XJ_LOGO_ROW_PT;
-  for (let c = 1; c <= n; c++) ws.getCell(1, c).border = { bottom: { style: "thin", color: { argb: "FF4472C4" } } };
-  const rowPx = XJ_LOGO_ROW_PT * (96 / 72);
-  const imgId = wb.addImage({ base64: dataUrl, extension: ext });
-  ws.addImage(imgId, { tl: { col: xjPxToAnchor(ws, (totalPx - w) / 2), row: 0 + (rowPx - h) / 2 / rowPx }, ext: { width: w, height: h }, editAs: "oneCell" });
-}
+// An x position in px -> { nativeCol (0-based column), nativeColOff (EMU inside it) }. Passed straight to ExcelJS as an ABSOLUTE anchor: ExcelJS's own fractional-column anchor
+// assumes a column is (width x 10000) EMU wide, ~6.7x narrower than a real column (7 px per character), which would drop a "centred" logo far to the left on any wide column.
+function xjPxToNative(ws, px) { let x = 0, c = 1; while (c < 1000) { const w = xjColPx(ws, c); if (x + w > px) return { nativeCol: c - 1, nativeColOff: Math.round(Math.max(0, px - x) * 9525) }; x += w; c++; } return { nativeCol: c - 1, nativeColOff: 0 }; }
 // ── Global Settings: one app-wide business identity + logo, pre-filling every module's "Add Site" form (2026-09-27) ──────────────────
 // { businessName, abn, licence, logoId }. Purely a PRE-FILL source for NEW sites — saving a site copies whatever's in the form at that
 // moment; already-saved sites are never touched, and there is no migration. logoId is null or a fixed id into appLogoStore below.
@@ -473,32 +459,84 @@ function xjResultStyle(v) {
   if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
   return null;
 }
-// The header block's title / company / auditor-meta rows are merged across the sheet's REAL column count (already
-// correct everywhere — confirmed by reading back real generated files) but were never actually CENTERED within
-// that merge (2026-09-30 bug: `put`/`setCell` only applies a style when one is passed, and none of these calls
-// ever passed one, so `cell.alignment` stayed undefined and Excel/Sheets render the text flush-left in a wide
-// merged cell instead of centred). No fill/font/border is added — the header block stays deliberately plain — only
-// `alignment`. Shared by xjSheet/xjSplit AND every direct-write header block (SWB/Welder per-asset sheets, ELT
-// Register/Defects, GSD Report) so the fix can't drift out of sync between them again.
-const XJ_HEADER_CENTER = { alignment: { horizontal: "center", vertical: "center" } };
-// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape, logo }
+// ── SHARED REPORT HEADER (2026-10-02) ────────────────────────────────────────────────────────────────────────────
+// ONE header for every sheet of every export. Reference: SparkCheck-assets/header-reference/Header_Reference_FINAL.xlsx (the authority).
+// Rows 1-5, each MERGED across the sheet's table width (widened to >= XJ_HEADER_MIN_PX so the company line never clips): R1 logo (45.75pt,
+// ALWAYS reserved, blank when there is no logo), R2 title (31.5), R3 company line (15.75), R4 auditor / dates (15.75), R5 6pt spacer. Plain
+// Calibri 11, not bold, horizontal-centre only, no fill, NO border. The table (or first content row) starts on row 6 of every sheet.
+// The wording of every title lives in XJ_REPORT_TITLES (edit it THERE). RULE: no title / sheet name / filename states a test interval — the
+// interval is shown only by the real next-due date in row 4 (the date the auditor chose, else the module default).
+const XJ_HEADER_H = [45.75, 31.5, 15.75, 15.75, 6];
+const XJ_TABLE_START = 6;          // the table headings (or first content row) are ALWAYS on this row
+const XJ_HEADING_H = 43.5;         // the table-heading row's height (reference)
+const XJ_HEADER_MIN_PX = 640;      // minimum merged header width (the reference merges its 2-column Summary out to column E = 642 px)
+const XJ_HEADER_EXT_W = 8.71;      // width of an extension column added to reach XJ_HEADER_MIN_PX
+const XJ_LOGO_BOX_W = 105, XJ_LOGO_BOX_H = 50;
+const XJ_PRIORITY_LEGEND = "Priority: L Low · M Medium · H High · U Urgent";
+// { module, type, next } per module (RCD has one entry per test type). `next` is the label in front of the next-due date in row 4.
+const XJ_REPORT_TITLES = {
+  rcd:    { module: "RCD & ELR Test", variants: { push: { type: "Push Test", next: "Next Push Test Due" }, inject: { type: "Injection Test", next: "Next Injection Test Due" } } },
+  iel:    { module: "Isolators, E-Stops & Lanyards Test", type: "Periodic Inspection", next: "Next Test Due" },
+  tat:    { module: "Test & Tag", type: "In-Service Electrical Equipment", next: "Next Test Due (earliest)" },
+  thermo: { module: "Thermographic Test", type: "Infrared Survey", next: "Next Test Due" },
+  swb:    { module: "Switchboard / Enclosure Audit", type: "Visual Inspection", next: "Next Audit Due" },
+  irt:    { module: "Insulation Resistance Test", type: "Insulation Resistance Readings", next: "Next Test Due" },
+  elt:    { module: "Emergency Lighting Test", type: "AS/NZS 2293.2:2019", next: "Next Test Due" },
+  welder: { module: "Welder Test", type: "Inspection & Audit Checklist", next: "Next Test Due" },
+  gsd:    { module: "General Site Defects", type: "Punch-List Report", next: "Next Audit Due" },
+};
+// The header spec every export builds ONCE and hands to every sheet of that export. o = { variant (RCD only), site, company, abn, licence, auditor, testDate, nextDue, logo }
+// (testDate / nextDue are already-formatted display strings).
+function xjHdr(key, o) {
+  const t = XJ_REPORT_TITLES[key]; const v = t.variants ? t.variants[o.variant] : t;
+  return {
+    key, logo: o.logo || null,
+    title: `${o.site || "Site"}  –  ${t.module}  (${v.type})`,
+    coLine: [o.company || "SparkCheck", o.abn ? `ABN: ${o.abn}` : "", o.licence ? `Electrical Licence: ${o.licence}` : ""].filter(Boolean).join("  |  "),
+    metaLine: `Auditor: ${o.auditor || ""}  |  Date Tested: ${o.testDate || ""}  |  ${v.next}: ${o.nextDue || ""}`,
+  };
+}
+// The five header rows as [text, height] — what xjHeader writes, and what the regression tests compare every sheet against.
+function xjHeaderRows(hdr) { return [["", XJ_HEADER_H[0]], [hdr.title, XJ_HEADER_H[1]], [hdr.coLine, XJ_HEADER_H[2]], [hdr.metaLine, XJ_HEADER_H[3]], ["", XJ_HEADER_H[4]]]; }
+// Writes rows 1-5 of `ws` (column widths must already be set: the merge width and the logo's centring both come from the REAL widths).
+// n = the table's column count; returns the merged width in columns (n, or more when the sheet is narrower than XJ_HEADER_MIN_PX).
+function xjHeader(ws, wb, hdr, n) {
+  let nEff = n; let px = xjSheetWidthPx(ws, nEff);
+  while (px < XJ_HEADER_MIN_PX) { nEff++; if (!ws.getColumn(nEff).width) ws.getColumn(nEff).width = XJ_HEADER_EXT_W; px += xjColPx(ws, nEff); }
+  xjHeaderRows(hdr).forEach(([text, h], i) => {
+    const r = i + 1; const cell = ws.getCell(r, 1);
+    if (text !== "") { cell.value = text; cell.alignment = { horizontal: "center" }; }
+    ws.mergeCells(r, 1, r, nEff); ws.getRow(r).height = h;
+  });
+  xjLogoPlace(ws, wb, hdr.logo, nEff);
+  return nEff;
+}
+// The logo: fit inside XJ_LOGO_BOX_W x XJ_LOGO_BOX_H keeping its aspect, never enlarged past its native size, never wider than the sheet; centred
+// horizontally over the merged width (from the real column widths) and vertically inside row 1. No border, no row-height side effects.
+function xjLogoPlace(ws, wb, dataUrl, n) {
+  if (!dataUrl) return;
+  const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl); if (!m) return;
+  let ext = m[1] === "jpg" ? "jpeg" : m[1]; if (!["jpeg", "png", "gif"].includes(ext)) ext = "jpeg";
+  const size = xjImageSize(dataUrl) || { w: XJ_LOGO_BOX_W, h: XJ_LOGO_BOX_H }; const totalPx = xjSheetWidthPx(ws, n);
+  const k = Math.min(XJ_LOGO_BOX_W / size.w, XJ_LOGO_BOX_H / size.h, totalPx / size.w, 1);
+  const w = Math.max(1, Math.round(size.w * k)), h = Math.max(1, Math.round(size.h * k));
+  const rowPx = XJ_HEADER_H[0] * (96 / 72);
+  ws.addImage(wb.addImage({ base64: dataUrl, extension: ext }), { tl: { ...xjPxToNative(ws, (totalPx - w) / 2), nativeRow: 0, nativeRowOff: Math.round((rowPx - h) / 2 * 9525) }, ext: { width: w, height: h }, editAs: "oneCell" });
+}
+// o = { hdr (from xjHdr), headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape }. Header rows 1-5 come from xjHeader; the table
+// headings are ALWAYS on row 6 (xjHeader needs the column widths first, so they are set before anything else).
 function xjSheet(wb, name, o) {
   const ws = wb.addWorksheet(name); const n = o.headers.length;
-  const off = o.logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
-  const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
-  put(1, 1, o.title, XJ_HEADER_CENTER); put(2, 1, o.coLine, XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): used to be 3 separate sub-merges (auditor / date / next-due), each centred within its
-  // OWN narrow span — not one line. Now ONE joined string in ONE full-width cell, matching row 2 (coLine)'s own
-  // "  |  "-joined, single-merge, centred format exactly.
-  const metaLine = o.meta.filter(v => v !== "" && v != null).join("  |  ");
-  if (metaLine) put(3, 1, metaLine, XJ_HEADER_CENTER);
-  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
-  // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
-  o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
-  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
+  xjHeader(ws, wb, o.hdr, n);
+  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  // The headings row is plain (no fill / font / border): wrap + horizontal centring only, so a narrow column can hold a long heading (reference)
+  o.headers.forEach((h, i) => { put(XJ_TABLE_START, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
+  const first = XJ_TABLE_START + 1;
   const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
   o.rows.forEach((cells, ri) => {
-    const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
+    const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = first + ri;
     const base = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
     const ctr = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
     for (let c = 0; c < n; c++) {
@@ -509,15 +547,12 @@ function xjSheet(wb, name, o) {
       put(r, c + 1, v, st);
     }
   });
-  if (!o.rows.length && o.emptyText) put(6, 1, o.emptyText);
-  (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
+  if (!o.rows.length && o.emptyText) put(first, 1, o.emptyText);
+  (o.footer || []).forEach((row, i) => put(first + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
   // A date is written as "dd/mm/yyyy" TEXT in a wrapping cell, and Excel / Sheets break it at a "/" if the column is even slightly tight (their
-  // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
-  // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
-  // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
-  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
-  xjPageSetup(ws, o.landscape !== false, 5 + off);
-  if (o.logo) xjLogo(ws, wb, o.logo, n);
+  // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W (xjColWidth, applied above), whatever a module
+  // asks for. The result column has the same problem ("UNTESTED" / "Untested" is longer than PASS / FAIL / N/A): forced to at least XJ_RESULT_W.
+  xjPageSetup(ws, o.landscape !== false, XJ_TABLE_START);
   return ws;
 }
 // Minimum widths that apply to EVERY export column of that kind (also used by ELT's own sheets)
@@ -528,14 +563,16 @@ function xjColWidth(heading, w) {
 const XJ_RESULT_W = 11;  // fits "UNTESTED" / "Untested" (8 characters) and "MONITOR" on ONE line, with a margin
 const XJ_DATE_W = 13;   // fits "21/09/2026" (10 characters) on ONE line with a margin for Excel / Google Sheets metrics
 const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
-// Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
-// o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
+// Main results sheet + Defects sheet (ALWAYS present) on one ExcelJS workbook; returns the defect count. Both sheets carry the SAME header (o.hdr).
+// The Defects footer is ALWAYS written, even with 0 defects: below the table (and its "No defects recorded" line) a blank row, then the count — COMPUTED from the
+// real defect rows, never typed — then the priority legend.
+// o = { hdr, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
 function xjSplit(wb, o) {
-  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer, logo: o.logo });
-  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings) — each closure passes its own `logo` through to its xjSheet call
+  xjSheet(wb, o.mainSheet, { hdr: o.hdr, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
+  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings) — each closure passes the same `hdr` to its xjSheet call
   const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
-  xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
-    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded", logo: o.logo });
+  xjSheet(wb, "Defects", { hdr: o.hdr, headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded",
+    footer: [[""], [`Defects recorded: ${defects.length}`], [XJ_PRIORITY_LEGEND]] });
   return defects.length;
 }
 
@@ -895,7 +932,7 @@ async function exportExcel(results, project, meta, mode) {
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
   const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
   const label    = isInject ? "Injection Test" : "Push Test";
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("rcd", { variant: isInject ? "inject" : "push", site: project.name, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: fmtDate(testDate), nextDue, logo });
   // A defect is only exported for FAIL rows (a >300 ms injection result counts as Fail whatever the stored status), so data
   // retained from an earlier FAIL never shows up on a PASS / N/A / untested row.
   const rows = [];
@@ -915,14 +952,12 @@ async function exportExcel(results, project, meta, mode) {
   })));
   const wb = new ExcelJS.Workbook();
   const failCount = xjSplit(wb, {
-    title: `${project.name}  –  RCD & ELR Test  (${label})`, defectTitle: `${project.name}  –  RCD & ELR Test  (${label})  –  Defects`, coLine,
-    meta: [`Auditor: ${(meta && meta.auditor) || ""}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next ${label} Due: ${nextDue}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: label.slice(0, 31),
     headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date", "Injection Test Result + (ms)", "Injection Test Result - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Required"] : ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Required"],
     widths: isInject ? [16, 22, 12, 8, 10, 11, 11, 9, 24, 11] : [16, 22, 12, 8, 11, 9, 26, 11],
     idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   // Summary sheet: counts only — the failed-circuit list it used to carry is now the Defects sheet (same rows, more fields)
   const sum = summariseProject(results, project, mode);
@@ -935,11 +970,12 @@ async function exportExcel(results, project, meta, mode) {
   ];
   const ss = wb.addWorksheet("Summary");
   const boxed = swbXCS(SWB_XC.white, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+  ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
+  xjHeader(ss, wb, hdr, 2);   // the 2-column Summary is narrower than the header text needs, so xjHeader merges out to column E (as in the reference file) — widths first
   sumRows.forEach((r, i) => r.forEach((v, ci) => {
-    const cell = ss.getCell(i + 1, ci + 1); cell.value = v;
+    const cell = ss.getCell(i + XJ_TABLE_START, ci + 1); cell.value = v;
     if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjResultStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjResultStyle("PASS") : boxed);
   }));
-  ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
   xjPageSetup(ss, false, null);
   const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -2838,7 +2874,7 @@ async function exportIELExcel(project, results, meta) {
   const auditor = (meta && meta.auditor) || "";
   const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
   const sName = project.name || "Site";
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("iel", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue, logo });
   const rows = [];
   const catOrder = ["estops", "lanyards", "isolators"];
   // Organised by AREA first, then category within each area — no separator rows
@@ -2862,14 +2898,12 @@ async function exportIELExcel(project, results, meta) {
   });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
-    title: `${sName} — Isolators, E-Stops & Lanyards Test`, defectTitle: `${sName} — Isolators, E-Stops & Lanyards Test — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${nextDue}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Isolators EStops Lanyards",
     headers: ["Location", "Type", "Machine", "Date", "Mechanism / Reset Check", "Circuit Isolation Verified", "Lanyard Tension / Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
     widths: [16, 10, 20, 11, 12, 12, 12, 9, 22, 11],
     idHeaders: ["Location", "Machine"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -4968,8 +5002,8 @@ async function exportTATExcel(project, results, meta) {
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const sName = project.name || "Site";
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
   const rows = [];
+  const passDues = [];   // ISO due dates of the items PASSED in this report (row 4's "Next Test Due (earliest)" — each item has its own frequency, so there is no single report-level due date)
   project.areas.forEach(area => {
     (area.items || []).forEach(itemId => {
       // results is pre-stripped of projectId — lookup directly by areaId
@@ -4985,6 +5019,7 @@ async function exportTATExcel(project, results, meta) {
       const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
+      if (st === TAT_STATUS.PASS && item.lastTested) passDues.push(addTATMonths(item.lastTested, parseInt(areaFreq)));   // only PASSED items count: failed / N/A / untested / undated are excluded
       rows.push({
         cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck === "pass" ? "Pass" : item.visualCheck === "fail" ? "Fail" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
         defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
@@ -4992,15 +5027,16 @@ async function exportTATExcel(project, results, meta) {
     });
   });
   const wb = new ExcelJS.Workbook();
+  const earliestDue = passDues.length ? passDues.slice().sort()[0] : "";   // ISO dates sort chronologically; blank when no item qualifies
+  const hdr = xjHdr("tat", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue: earliestDue ? fmtDate(earliestDue) : "", logo });
   xjSplit(wb, {
-    title: `${sName} — Test & Tag`, defectTitle: `${sName} — Test & Tag — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Machine Used: ${(meta && meta.machine) || ""}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Test & Tag",
     headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
     widths: [14, 12, 22, 11, 10, 10, 9, 11, 10, 11, 20],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    // "Test Machine" is report-level (meta.machine, typed once on Home) and no longer lives in the header: footer line directly above Notes
+    rows, footer: [[""], [`Test Machine: ${(meta && meta.machine) || ""}`], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -6501,7 +6537,7 @@ async function exportThermoExcel(project, results, meta) {
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
   const nextDue = meta && meta.nextTestDate ? meta.nextTestDate : (testDate ? addYearsISO(testDate, 1) : "");
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("thermo", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue: fmtDate(nextDue), logo });
   const rows = [];
   // FAIL and MONITOR photos carry defect details (the MONITOR panel collects the same fields on purpose); PASS never does
   const add = (area, board, cName, photo0) => {
@@ -6527,14 +6563,12 @@ async function exportThermoExcel(project, results, meta) {
   });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
-    title: `${sName} — Thermographic Test`, defectTitle: `${sName} — Thermographic Test — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${fmtDate(nextDue)}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Thermographic Test",
     headers: ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 18, 18, 11, 9, 11, 9, 22],
     idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -10503,11 +10537,11 @@ function swbSheetName(board, area, used) {
 }
 async function exportSWBExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl("swb", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("swb", project.id);
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
   const nextDue = swbNextDue(meta);
-  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("swb", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue, logo });
   const rows = swbRegisterRows(project, allResults, meta);
   const res = allResults || {};
   // Photos live in sitePhotoStore (Stage 4, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
@@ -10527,17 +10561,13 @@ async function exportSWBExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st) => { const c = ws.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = cols.length;
-  setCell('A'+(1+off),`${sName} — Switchboard / Enclosure Audit`,XJ_HEADER_CENTER);
-  setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-  // used to be 3 separate sub-merges, each centred within its own narrow span.
-  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Audit Due: ${nextDue}`].join('  |  '),XJ_HEADER_CENTER);
-  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}}]
-    .forEach(m => ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
-  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+(5+off),t));
-  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1+off).height = h; });
+  // Shared header rows 1-5 (xjHeader — widths first, it needs the real column widths); the table headings are ALWAYS row 6, data from row 7.
+  [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
+  xjHeader(ws, wb, hdr, n);
+  SWB_REGISTER_COLUMNS.forEach((t,i) => { setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   rows.forEach((row,i) => {
-    const r = 6 + off + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
+    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci) => {
       let st = base;
@@ -10546,9 +10576,7 @@ async function exportSWBExcel(project, allResults, meta) {
       setCell(cols[ci]+r,v,st);
     });
   });
-  [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
-  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
-  if (logo) xjLogo(ws, wb, logo, n);
+  xjPageSetup(ws, true, XJ_TABLE_START);   // native page setup: A4 landscape, 1 page wide, heading row 6 repeated, page footer
 
   // ── One sheet per board ──
   const used = new Set();
@@ -10556,18 +10584,15 @@ async function exportSWBExcel(project, allResults, meta) {
     const { area, board, summary: bs, overall } = row;
     const sh = wb.addWorksheet(swbSheetName(board, area, used));
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
-    put('A'+(1+off),"Switchboard / Enclosure Audit",XJ_HEADER_CENTER);
-    put('A'+(2+off),`${sName}  |  ${coLine}`,XJ_HEADER_CENTER);
-    // Rows 3-4 (2026-09-30 fix): each was 2 separate sub-merges (Area|Board, Auditor|Date Tested) — now ONE joined
-    // "  |  " string per row, in one full-width cell each, matching row 2's format. Row 5 (Next Audit Due) was
-    // already a single full-width cell.
-    put('A'+(3+off),[`Area: ${area.name}`,`Board: ${board.name}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(4+off),[`Auditor: ${(meta&&meta.auditor)||""}`,`Date Tested: ${testDate?fmtDate(testDate):""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(5+off),`Next Audit Due: ${nextDue}`,XJ_HEADER_CENTER);
-    [[1,1,7],[2,1,7],[3,1,7],[4,1,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr+off,c1,rr+off,c2));
-    sh.getRow(1+off).height = 24;
+    // Shared header rows 1-5 (same as the Register — only the merge width is this sheet's 7 columns); widths first, the merge + logo centring read them.
+    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+    xjHeader(sh, wb, hdr, 7);
+    // Asset Details (2026-10-02): the Area / Board that used to sit in header row 3 — a labelled block directly under the header, styled like Audit Summary.
+    let rr = XJ_TABLE_START;
+    put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
+    [["Area",area.name],["Board",board.name]].forEach(([l,v]) => { put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,cellSt(SWB_XC.white)); rr++; });
+    rr++;   // blank row
     // Audit summary
-    let rr = 7 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     const overallSt = overall==="pass" ? passSt : overall==="fail" ? failSt : naSt;
     [["Total Items",String(bs.total)],["Pass",String(bs.pass)],["Fail",String(bs.fail)],["N/A",String(bs.na)],["Untested",String(bs.untested)],["Score",scoreLabel(bs.score)],["Overall",overall.toUpperCase()]]
@@ -10605,9 +10630,7 @@ async function exportSWBExcel(project, allResults, meta) {
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
-    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
     xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
-    if (logo) xjLogo(sh, wb, logo, 7);
   });
 
   xjFitRows(wb);
@@ -10648,7 +10671,7 @@ function parseSWBExcel(data) {
     let siteName="",company="",abn="",licence="";
     if(rows[rowOff]&&rows[rowOff][0]){
       const t=String(rows[rowOff][0]).trim();
-      if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit\s*$/i,"").trim();
+      if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit(?:\s*\([^)]*\))?\s*$/i,"").trim();
     }
     if(rows[1+rowOff]&&rows[1+rowOff][0]){
       const p=parseCompanyRow(rows[1+rowOff][0]);
@@ -11989,30 +12012,24 @@ function eltRegisterRows(project, allResults, meta) {
 
 async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl("elt", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("elt", project.id);
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
-  const merges = [];
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
-  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-  // Rows 1–5 are deliberately unstyled (no fill/font/border set), with the same merges and row
-  // heights as the real IEL/RCD/TAT/Thermo exports: title, company line, meta line, 6pt spacer, headings.
-  setCell('A'+(1+off),`${sName} — Emergency Lighting Test`,XJ_HEADER_CENTER);
-  setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-  // used to be 3 separate sub-merges, each centred within its own narrow span.
-  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Test Due: ${nextDue?fmtDate(nextDue):''}`].join('  |  '),XJ_HEADER_CENTER);
-  merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
-  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+(5+off),t); ws.getCell(cols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
-  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
+  const hdr = xjHdr("elt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
+  // Shared header rows 1-5 (xjHeader; column widths are set FIRST — it needs them). The table headings are ALWAYS row 6, data from row 7.
+  [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});   // content-width columns (headings wrap); import-anchor headings stay exact; date columns >= 13
+  xjHeader(ws, wb, hdr, n);
+  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap + centre only (no fill / font / border): a narrow column can carry a long heading
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   const rows = eltRegisterRows(project, allResults, meta);
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
   rows.forEach((row,i)=>{
-    const r = 6+off+i;
+    const r = XJ_TABLE_START + 1 + i;
     const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
     const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());
     const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
@@ -12024,12 +12041,8 @@ async function exportELTExcel(project, allResults, meta) {
       setCell(cols[ci]+r,v,st);
     });
   });
-  merges.forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
-  // Content-width columns (headings wrap). The import-anchor headings stay exact; date columns get the shared >= 13 minimum.
-  [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});
   const setup = xjPageSetup;
-  setup(ws,true,5+off);
-  if (logo) xjLogo(ws, wb, logo, n);
+  setup(ws,true,XJ_TABLE_START);
 
   // ── Defects sheet: FAIL fittings only, ALWAYS present (headings even with zero fails), keyed to the register by "#" ──
   {
@@ -12037,23 +12050,22 @@ async function exportELTExcel(project, allResults, meta) {
     const dset = (ref,val,st)=>{const c=ds.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const dcols = "ABCDEFGHIJ".split(""); const dn = dcols.length;
     const defRows = rows.filter(r=>r.defect);
-    dset('A'+(1+off),`${sName} — Emergency Lighting Test — Defects`,XJ_HEADER_CENTER); dset('A'+(2+off),coLine,XJ_HEADER_CENTER);
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-    // used to be 3 separate sub-merges, each centred within its own narrow span.
-    dset('A'+(3+off),[`Defects recorded: ${defRows.length}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,"Priority: L Low · M Medium · H High · U Urgent"].join('  |  '),XJ_HEADER_CENTER);
-    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1+off,c1+1,r2+1+off,c2+1));
-    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+(5+off),t); ds.getCell(dcols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
-    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1+off).height = h;});
+    // Same shared header as the Register (identical rows 1-5, merged over this sheet's 10 columns); widths first.
+    [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
+    xjHeader(ds, wb, hdr, dn);
+    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+XJ_TABLE_START,t); ds.getCell(dcols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    ds.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
     defRows.forEach((row,i)=>{
       const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
       const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
       const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
-      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+off+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
+      row.defect.forEach((v,ci)=>dset(dcols[ci]+(XJ_TABLE_START+1+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
     });
-    if (!defRows.length) dset('A'+(6+off),"No defects recorded");
-    [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
-    setup(ds,true,5+off);
-    if (logo) xjLogo(ds, wb, logo, dn);
+    if (!defRows.length) dset('A'+(XJ_TABLE_START+1),"No defects recorded");
+    // Footer — ALWAYS written, even with 0 defects: a blank row, the count (COMPUTED from the real defect rows) and the priority legend, below the table / the "No defects recorded" line
+    const footAt = XJ_TABLE_START + 1 + Math.max(defRows.length, 1) + 1;
+    dset('A'+footAt,`Defects recorded: ${defRows.length}`); dset('A'+(footAt+1),XJ_PRIORITY_LEGEND);
+    setup(ds,true,XJ_TABLE_START);
   }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
@@ -12068,8 +12080,12 @@ async function exportELTExcel(project, allResults, meta) {
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
     const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
-    ["Location","Asset Location","Asset ID","Photo"].forEach((t,i)=>pc("ABCD"[i]+"1",t));
-    let pr = 2;
+    // Shared header rows 1-5 (this sheet had none): widths first; the 4-column table is narrower than the minimum header width, so xjHeader extends the merge by one column.
+    [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
+    xjHeader(ps, wb, hdr, 4);
+    ["Location","Asset Location","Asset ID","Photo"].forEach((t,i)=>{ pc("ABCD"[i]+XJ_TABLE_START,t); ps.getCell("ABCD"[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    ps.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
+    let pr = XJ_TABLE_START + 1;
     withPhotos.forEach(({asset:a,res:r})=>{
       r.photos.forEach(p=>{
         const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
@@ -12086,8 +12102,7 @@ async function exportELTExcel(project, allResults, meta) {
         pr++;
       });
     });
-    [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
-    setup(ps,false,1);
+    setup(ps,false,XJ_TABLE_START);
   }
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
@@ -12280,7 +12295,7 @@ function parseELTExcel(data, typeOptions) {
     const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
     const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
-    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test\s*$/i,"").trim();
+    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test(?:\s*\([^)]*\))?\s*$/i,"").trim();
     if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
       const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
@@ -12990,8 +13005,8 @@ function downloadIRTTemplate(){
 async function exportIRTExcel(project, results, meta) {
   const logo = await xjGetLogoDataUrl("irt", project.id);
   const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
-  const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
   const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
+  const hdr = xjHdr("irt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta.auditor, testDate: td, nextDue, logo });
   const rows = []; const readingRows = [];
   (project.areas || []).forEach(area => (area.panels || []).forEach(panel => (panel.items || []).forEach(itemId => {
     const name = (panel.itemNames || {})[itemId] || itemId;
@@ -13004,21 +13019,19 @@ async function exportIRTExcel(project, results, meta) {
     });
     readingRows.push([area.name, panel.name, name, d.testVoltage || "500V", r.L1E || "", r.L2E || "", r.L3E || "", r.NE || "", r.L1L2 || "", r.L1L3 || "", r.L2L3 || "", r.L1N || "", r.L2N || "", r.L3N || "", eff.toUpperCase()]);
   })));
-  const metaRow = [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", `Next Test Due: ${nextDue}`];
-  const title = `${sName} — Insulation Resistance Test — ${td}`;
-  // Readings: same "#" (row order identical to the Register); readings are in MΩ, stated once in the header block instead of on every heading
-  const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E", "L2-E", "L3-E", "N-E", "L1-L2", "L1-L3", "L2-L3", "L1-N", "L2-N", "L3-N", "Pass / Fail"];
+  // Readings: same "#" (row order identical to the Register). The unit now sits on each resistance heading — "(MΩ)" — because the header block no longer carries
+  // a units note; Test Voltage (volts) and Pass / Fail hold no resistance, so they get no unit. Nothing imports this sheet (parseIRTExcel reads only the Register).
+  const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E (MΩ)", "L2-E (MΩ)", "L3-E (MΩ)", "N-E (MΩ)", "L1-L2 (MΩ)", "L1-L3 (MΩ)", "L2-L3 (MΩ)", "L1-N (MΩ)", "L2-N (MΩ)", "L3-N (MΩ)", "Pass / Fail"];
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
-    title, defectTitle: `${title} — Defects`, coLine, meta: metaRow,
-    defectMeta: [`Date Tested: ${td}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Register",
     headers: ["Location", "Panel / DB", "Equipment / Circuit", "Test Date", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 14, 22, 11, 9, 26],
     idHeaders: ["Location", "Panel / DB", "Equipment / Circuit"], idWidths: [16, 14, 22],
-    rows, footer: [], logo,
-    between: w => xjSheet(w, "Readings", { title: `${title} — Readings`, coLine, meta: [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"],
-      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]), logo }),
+    rows, footer: [],
+    between: w => xjSheet(w, "Readings", { hdr,
+      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
   });
   const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -14402,7 +14415,7 @@ function parseWelderExcel(data) {
     const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
     const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
-    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test\s*$/i,"").trim();
+    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test(?:\s*\([^)]*\))?\s*$/i,"").trim();
     if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
       const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
@@ -14413,20 +14426,22 @@ function parseWelderExcel(data) {
     // Per-welder sheets (identity cells only), in workbook order — the export writes them in Register row order.
     const detail = sheets.filter(n=>n!==regName).map(n=>{
       const r = XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:"",raw:false});
-      // A logo strip on this sheet pushes its own rows down by one too.
-      const off = (r[0]||[]).every(c => c===""||c==null) ? 1 : 0;
-      // Rows 3-6 (2026-09-30 fix): each row is now ONE joined "  |  " string in col A — but a file exported BEFORE
-      // this fix still has 2 separate cells (col A / col C, col B blank). Handle both: collect every non-blank cell
-      // in the row and join them with the same "  |  " separator, then pull the labelled piece out of that line —
-      // this reproduces the new format's single string unchanged, and re-creates it from the old format's 2 cells.
-      const grab = (ri,label)=>{
-        const rowArr = (r[ri+off]) || [];
-        const line = rowArr.filter(c=>c!==""&&c!=null).map(String).join("  |  ");
-        const part = line.split("  |  ").find(p=>new RegExp("^\\s*"+label+":","i").test(p));
-        if (!part) return null;
-        const m = part.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null;
+      // Identity is looked up by LABEL anywhere in the top 16 rows (no fixed row numbers), in EITHER layout:
+      //   NEW (2026-10-02): an "Asset Details" block — label in column A, value in column B (merged B:E), one detail per row;
+      //   OLD: header rows of "Label: value" strings ("Brand: Kemppi  |  Model: Evo") — one joined string in col A (after 2026-09-30) or 2 separate cells
+      //   (col A / col C) before it. A logo strip / the always-reserved row 1 only moves rows down, which a label search does not care about.
+      const grab = (label)=>{
+        const lc = label.toLowerCase();
+        for (let ri=0; ri<Math.min(r.length,16); ri++) {
+          const rowArr = r[ri] || [];
+          if (String(rowArr[0]==null?"":rowArr[0]).trim().toLowerCase()===lc) return String(rowArr[1]==null?"":rowArr[1]).trim();   // new block: label cell + value cell
+          const line = rowArr.filter(c=>c!==""&&c!=null).map(String).join("  |  ");
+          const part = line.split("  |  ").find(p=>new RegExp("^\\s*"+label+":","i").test(p));                                          // old header string
+          if (part) { const m = part.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; }
+        }
+        return null;
       };
-      return { assetId:grab(2,"Asset ID"), brand:grab(3,"Brand"), model:grab(3,"Model"), serial:grab(4,"Serial Number") };
+      return { assetId:grab("Asset ID"), brand:grab("Brand"), model:grab("Model"), serial:grab("Serial Number") };
     });
     const assets=[], seen=new Set(); let skipped=0, duplicates=0, combined=0, exact=0, k=-1;
     for (let i=hi+1;i<rows.length;i++) {
@@ -14966,11 +14981,11 @@ function welderSheetName(a, used) {
 }
 async function exportWelderExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl("welder", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("welder", project.id);
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
-  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("welder", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
   const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
   const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
@@ -14990,17 +15005,13 @@ async function exportWelderExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
-  setCell('A'+(1+off),`${sName} — Welder Test`,XJ_HEADER_CENTER);
-  setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-  // used to be 3 separate sub-merges, each centred within its own narrow span.
-  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Test Due: ${nextDue?fmtDate(nextDue):''}`].join('  |  '),XJ_HEADER_CENTER);
-  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}}]
-    .forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
-  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+(5+off),t));
-  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});
+  // Shared header rows 1-5 (xjHeader; widths FIRST — it needs them). The table headings are ALWAYS row 6, data from row 7.
+  [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  xjHeader(ws, wb, hdr, n);
+  WELDER_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   rows.forEach((row,i)=>{
-    const r = 6+off+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci)=>{
       let st = base;
@@ -15009,9 +15020,7 @@ async function exportWelderExcel(project, allResults, meta) {
       setCell(cols[ci]+r,v,st);
     });
   });
-  [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
-  if (logo) xjLogo(ws, wb, logo, n);
+  xjPageSetup(ws, true, XJ_TABLE_START);   // native page setup: A4 landscape, 1 page wide, heading row 6 repeated, page footer
 
   // ── One sheet per welder ──
   const used = new Set();
@@ -15019,21 +15028,17 @@ async function exportWelderExcel(project, allResults, meta) {
     const a = row.asset; const raw = row.res; const sum = row.summary; const r = defectGate(raw, row.overall==="fail");
     const sh = wb.addWorksheet(welderSheetName(a, used));
     const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-    const date = (meta&&meta.testDate) || "";
-    put('A'+(1+off),"Welder Inspection & Audit Checklist",XJ_HEADER_CENTER);
-    put('A'+(2+off),`${sName}  |  ${coLine}`,XJ_HEADER_CENTER);
-    // Rows 3-6 (2026-09-30 fix): each was 2 separate sub-merges — now ONE joined "  |  " string per row, in one
-    // full-width cell each, matching row 2's format. (This sheet has no single Auditor/Date/Next-Due triple like the
-    // Register does — Prepared By / Test Instruments live here instead — so the same "join this row's own split
-    // pieces" principle is applied per row rather than collapsing rows together.)
-    put('A'+(3+off),[`Location: ${a.location||""}`,`Asset ID: ${a.assetId||""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(4+off),[`Brand: ${a.brand||""}`,`Model: ${a.model||""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(5+off),[`Serial Number: ${a.serial||""}`,`Date Tested: ${date?fmtDate(date):""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(6+off),[`Prepared By: ${(meta&&meta.auditor)||""}`,`Test Instruments: ${(meta&&meta.instruments)||""}`].join('  |  '),XJ_HEADER_CENTER);
-    [[1,1,5],[2,1,5],[3,1,5],[4,1,5],[5,1,5],[6,1,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr+off,c1,rr+off,c2));
-    sh.getRow(1+off).height = 24;
+    // Shared header rows 1-5 (identical to the Register's, merged over this sheet's 5 columns); widths first.
+    [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
+    xjHeader(sh, wb, hdr, 5);
+    // Asset Details (2026-10-02): everything that used to crowd header rows 3-6 — label cell + value cell (value merged B:E), styled like the defect block below.
+    // Date Tested / the auditor ("Prepared By" was always the same stored value as Auditor) are NOT repeated: they are header row 4 now.
+    let rr = XJ_TABLE_START;
+    put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
+    [["Location",a.location||""],["Asset ID",a.assetId||""],["Brand",a.brand||""],["Model",a.model||""],["Serial Number",a.serial||""],["Test Instruments",(meta&&meta.instruments)||""]]
+      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v,cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+    rr++;   // blank row
     // Audit summary
-    let rr = 8 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     const overallSt = row.overall==="pass"?passSt:row.overall==="fail"?failSt:naSt;
     [["Total Items",String(sum.total)],["Pass",String(sum.pass)],["Fail",String(sum.fail)],["N/A",String(sum.na)],["Score",welderScoreLabel(sum.score)],["Actions Required",String(sum.actions)],["Overall",welderOverallLabel(row.overall)]]
@@ -15070,9 +15075,7 @@ async function exportWelderExcel(project, allResults, meta) {
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
-    [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
     xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
-    if (logo) xjLogo(sh, wb, logo, 5);
   });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
@@ -15327,13 +15330,13 @@ function gsdReportSections(project, items) {
 
 // ── Export layout (pure, so it can be tested without a workbook) ───────────────────────────────────────
 // 5 columns x 140 px = 700 px, which fits A4 portrait at 100% (7.77 in = 746 px), so page heights are exact. Photos are scaled to fit a 120 x 160 px box.
-const GSD_COLS = 5, GSD_COL_PX = 140, GSD_BOX_W = 120, GSD_BOX_H = 160, GSD_PAGE_PT = 730, GSD_HEAD_PT = 70, GSD_CHARS_LINE = 105;
+const GSD_COLS = 5, GSD_COL_PX = 140, GSD_BOX_W = 120, GSD_BOX_H = 160, GSD_PAGE_PT = 730, GSD_HEAD_PT = 114.75, GSD_CHARS_LINE = 105;   // GSD_HEAD_PT = the fixed shared header: 45.75 + 31.5 + 15.75 + 15.75 + 6
 const GSD_H = { bar: 20, gap: 8, detail: 12, spacer: 10 };
 const gsdFit = (w, h) => { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const s = Math.min(GSD_BOX_W / W, GSD_BOX_H / H); return { dw: Math.max(1, Math.round(W * s)), dh: Math.max(1, Math.round(H * s)) }; };
 const gsdCaptionH = text => { const lines = String(text).split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / GSD_CHARS_LINE)), 0); return lines * 12 + 3; };
 // sections: [{name, items:[{caption, detail, photos:[{id, dw, dh}]}]}] -> { rows:[{kind,h,...}], breaks:[row index a page break goes BEFORE] }
-// headPt: actual header space already used above the first content row (defaults to GSD_HEAD_PT; a logo row makes the real header taller, so
-// exportGSDExcel passes GSD_HEAD_PT + XJ_LOGO_ROW_PT when one is set — otherwise the first page's break would land a little too low and clip).
+// headPt: the header space already used above the first content row. It is ALWAYS the shared 5-row header now (the logo row is always reserved), so
+// GSD_HEAD_PT is the real figure with or without a logo — no per-logo adjustment any more.
 function gsdLayout(sections, headPt = GSD_HEAD_PT) {
   const rows = [], breaks = []; let y = headPt;
   const push = r => { rows.push(r); y += r.h; };
@@ -15356,36 +15359,28 @@ const gsdPageSetupFixed = sheet => {
 };
 async function exportGSDExcel(project, items, meta) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
-  const logo = await xjGetLogoDataUrl("gsd", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("gsd", project.id); const off = 1;   // the shared header always reserves row 1 (logo row); `put` below is relative to the header
   const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
-  // Row 3 (2026-09-30 fix): used to be 3 separate sub-merges, each centred within its own narrow span. `metaArr` is
-  // passed to xjSheet (Register sheet), which does its own "  |  " join into one full-width cell; `metaLine` is the
-  // same join done here directly, for this function's own direct-write Report sheet.
-  const metaArr = [`Auditor: ${m.auditor || ""}`, `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
-  const metaLine = metaArr.join("  |  ");
+  const hdr = xjHdr("gsd", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: m.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
   const sections = gsdReportSections(project, items);
   // the export copies of every photo, read from IndexedDB (a missing one is skipped, its space kept)
   const copies = new Map();
   for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
     let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
   }
-  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT + (off ? XJ_LOGO_ROW_PT : 0));
+  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT);
 
   // ── Sheet 1: the photo report ──
   const ws = wb.addWorksheet("Defects Report"); ws.views = [{ showGridLines: false }];
   const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
-  put(1, 1, `${sName} — General Site Defects`, XJ_HEADER_CENTER); put(2, 1, coLine, XJ_HEADER_CENTER);
-  put(3, 1, metaLine, XJ_HEADER_CENTER);
-  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, GSD_COLS], [4, 1, 4, GSD_COLS]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
-  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
+  xjHeader(ws, wb, hdr, GSD_COLS);   // shared rows 1-5 (5 x 140px = 700px, wide enough that the merge is not widened); the report content starts on row 6
   const white = SWB_XC.white;
   const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
   const capSt = swbXCS(white, { sz: 9, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" });
   const detSt = swbXCS(white, { sz: 8, color: { rgb: SWB_XC.mutedGrey } }, { vertical: "top" });
   const breakSet = new Set(layout.breaks);
-  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6 + off, 1, 6 + off, GSD_COLS); }
+  if (!layout.rows.length) { put(5, 1, "No defects recorded"); ws.mergeCells(5 + off, 1, 5 + off, GSD_COLS); }
   layout.rows.forEach((row, i) => {
     const r = 5 + off + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
     ws.getRow(r).height = row.h;
@@ -15401,15 +15396,14 @@ async function exportGSDExcel(project, items, meta) {
     if (["bar", "caption", "detail"].includes(row.kind)) { ws.mergeCells(r, 1, r, GSD_COLS); for (let c = 2; c <= GSD_COLS && row.kind === "bar"; c++) swbApplyXlStyle(ws.getCell(r, c), barSt); }
   });
   gsdPageSetupFixed(ws);
-  if (logo) xjLogo(ws, wb, logo, GSD_COLS);
 
   // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
   const numbered = gsdNumbered(project, items);
-  xjSheet(wb, "Register", { title: `${sName} — Site Defects Register`, coLine, meta: metaArr,
+  xjSheet(wb, "Register", { hdr,
     headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
     widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
     rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
-    emptyText: "No defects recorded", landscape: true, logo });
+    emptyText: "No defects recorded", landscape: true });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
@@ -15843,7 +15837,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };

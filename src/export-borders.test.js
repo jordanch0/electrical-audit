@@ -48,10 +48,10 @@ describe('SWB / ELT data-row borders', () => {
     const elt = (await load(exportELTExcel, eltProject, eltResults, swbMeta)).getWorksheet('Emergency Lighting');
 
     const swbDataCells = [];
-    for (let c = 1; c <= 12; c++) swbDataCells.push(reg.getCell(6, c));                       // Register: header row 5, data from row 6
-    for (let r = 17; r <= 27; r++) for (let c = 1; c <= 7; c++) swbDataCells.push(board.getCell(r, c)); // board sheet: the 11 checklist rows
+    for (let c = 1; c <= 12; c++) swbDataCells.push(reg.getCell(7, c));                       // Register: headings row 6, data from row 7
+    for (let r = 20; r <= 30; r++) for (let c = 1; c <= 7; c++) swbDataCells.push(board.getCell(r, c)); // board sheet: the 11 checklist rows (after the Asset Details block + Audit Summary)
     const eltDataCells = [];
-    for (let r = 6; r <= 7; r++) for (let c = 1; c <= 15; c++) eltDataCells.push(elt.getCell(r, c));
+    for (let r = 7; r <= 8; r++) for (let c = 1; c <= 15; c++) eltDataCells.push(elt.getCell(r, c));
 
     const reference = sig(eltDataCells[0]);
     JSON.parse(reference).forEach(([style, color]) => { expect(style).toBe('thin'); expect(color).toBe('FFD9D9D9'); });
@@ -71,13 +71,13 @@ describe('SWB / ELT data-row borders', () => {
       expect(cell.fill === undefined || cell.fill.pattern === 'none', 'fill r' + r + ' c' + c).toBe(true);
       expect(!cell.border || Object.keys(cell.border).length === 0, 'border r' + r + ' c' + c).toBe(true);
     }
-    expect(String(reg.getCell('A1').value)).toBe('Site S — Switchboard / Enclosure Audit');
-    expect([1, 2, 3, 4, 5].map(r => reg.getRow(r).height)).toEqual([32, 16, 16, 6, 40]);
-    // Row 3 (2026-09-30 fix): one full-width merge (was 3 sub-merges); row 4 is not merged in this sheet (unlike the
-    // shared xjSheet builder / ELT, which do merge their row-4 spacer).
-    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:P3'].sort());
+    expect(String(reg.getCell('A2').value)).toBe('Site S  –  Switchboard / Enclosure Audit  (Visual Inspection)');
+    expect([1, 2, 3, 4, 5, 6].map(r => reg.getRow(r).height)).toEqual([45.75, 31.5, 15.75, 15.75, 6, 43.5]);
+    // all five shared header rows (incl. the spacer) are one full-width merge each — same as every other module now
+    expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:P3', 'A4:P4', 'A5:P5'].sort());
     const board = wb.getWorksheet('MSB');
-    expect(board.getCell('A7').fill.fgColor.argb).toBe('FFD9D9D9');                            // "Audit Summary" heading
+    expect(board.getCell('A6').fill.fgColor.argb).toBe('FFD9D9D9');                            // "Asset Details" heading (styled like Audit Summary)
+    expect(board.getCell('A10').fill.fgColor.argb).toBe('FFD9D9D9');                           // "Audit Summary" heading
   });
 
   it('SWB photos are embedded on the board\'s own sheet (one per row), with the defect row intact', async () => {
@@ -89,9 +89,9 @@ describe('SWB / ELT data-row borders', () => {
     const labels = [];
     ws.eachRow(row => labels.push(String(row.getCell(1).value || '')));
     expect(labels).toEqual(expect.arrayContaining(['Photo 1', 'Photo 2']));
-    expect(String(ws.getCell('A18').value)).toBe('2. Ventilation');
-    expect(String(ws.getCell('C18').value)).toBe('Fail');
-    expect(String(ws.getCell('D18').value)).toBe('D1');
-    expect(String(ws.getCell('E18').value)).toBe('blocked');
+    expect(String(ws.getCell('A21').value)).toBe('2. Ventilation');
+    expect(String(ws.getCell('C21').value)).toBe('Fail');
+    expect(String(ws.getCell('D21').value)).toBe('D1');
+    expect(String(ws.getCell('E21').value)).toBe('blocked');
   });
 });
