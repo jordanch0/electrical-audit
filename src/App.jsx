@@ -450,14 +450,37 @@ async function xjExtractLogo(buf) {
   } catch (_) { return null; }
 }
 const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
-// Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
-function xjResultStyle(v) {
-  const k = String(v == null ? "" : v).toUpperCase(); const ctr = { horizontal: "center", vertical: "center" };
-  if (k === "PASS") return swbXCS(SWB_XC.priorityL_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityL_font } }, ctr, swbXAB());
-  if (k === "FAIL") return swbXCS(SWB_XC.priorityH_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityH_font } }, ctr, swbXAB());
-  if (k === "MONITOR") return swbXCS(SWB_XC.priorityM_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityM_font } }, ctr, swbXAB());
-  if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
-  return null;
+// ── EXPORT COLOUR STANDARD (2026-10-02) — the ONE place every export colour is defined. Nothing else in the export code may hard-code a status / priority colour.
+// Status and priority colour ONLY the cell that holds the word (never the row), always with the word written in it (colour is never the only signal), through xjStatusStyle /
+// xjPriorityStyle below. Untested / blank is always plain (zebra). Priority H / M / L deliberately share Fail / MONITOR / Pass colours; U is the one solid dark fill.
+// Every font / fill pair is >= 4.5:1 (src/export-colours.test.js enforces it). Greys are the table body: darkGrey text, white / lightGrey zebra, midGrey label headings.
+const XJ_COLOURS = {
+  white: "FFFFFFFF", black: "FF000000", darkGrey: "FF2D2D2D", lightGrey: "FFF5F5F5", midGrey: "FFD9D9D9", mutedGrey: "FF666666",
+  status: {
+    pass:    { bg: "FFE2EFDA", font: "FF375623" },
+    fail:    { bg: "FFFFC7CE", font: "FF9C0006" },
+    monitor: { bg: "FFFFD966", font: "FF705300" },
+    na:      { bg: "FFD9D9D9", font: "FF2D2D2D" },
+  },
+  priority: {
+    L: { bg: "FFE2EFDA", font: "FF375623" },
+    M: { bg: "FFFFD966", font: "FF705300" },
+    H: { bg: "FFFFC7CE", font: "FF9C0006" },
+    U: { bg: "FF9B0000", font: "FFFFFFFF", bold: true },
+  },
+};
+// Pass green, Fail red, MONITOR amber, N/A grey — all bold, centred, cell only. Untested / blank returns null (the caller keeps its plain zebra cell). Case-insensitive.
+function xjStatusStyle(v) {
+  const k = String(v == null ? "" : v).trim().toUpperCase();
+  const key = k === "PASS" ? "pass" : k === "FAIL" ? "fail" : k === "MONITOR" ? "monitor" : (k === "N/A" || k === "NA") ? "na" : null;
+  if (!key) return null; const c = XJ_COLOURS.status[key];
+  return swbXCS(c.bg, { bold: true, sz: 10, color: { rgb: c.font } }, { horizontal: "center", vertical: "center" }, swbXAB());
+}
+// Priority / risk: L M H U (or Low / Medium / High / Urgent). U is bold white on solid maroon, the others are not bold. null when blank / unknown. o = { horizontal, vertical, wrap }.
+function xjPriorityStyle(p, o) {
+  const k = String(p == null ? "" : p).trim().toUpperCase(); const L = k === "LOW" ? "L" : k === "MEDIUM" ? "M" : k === "HIGH" ? "H" : k === "URGENT" ? "U" : k;
+  const c = XJ_COLOURS.priority[L]; if (!c) return null; const x = o || {};
+  return swbXCS(c.bg, { bold: !!c.bold, sz: 10, color: { rgb: c.font } }, { horizontal: x.horizontal || "center", vertical: x.vertical || "top", ...(x.wrap ? { wrapText: true } : {}) }, swbXAB());
 }
 // ── SHARED REPORT HEADER (2026-10-02) ────────────────────────────────────────────────────────────────────────────
 // ONE header for every sheet of every export. Reference: SparkCheck-assets/header-reference/Header_Reference_FINAL.xlsx (the authority).
@@ -534,16 +557,16 @@ function xjSheet(wb, name, o) {
   o.headers.forEach((h, i) => { put(XJ_TABLE_START, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
   ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   const first = XJ_TABLE_START + 1;
-  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
+  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const checkCols = new Set(o.headers.map((h, i) => /^(Visual Inspection|Electrical Test)$/.test(h) ? i : -1).filter(i => i >= 0)); const priCol = o.headers.findIndex(h => /^Priority/.test(h));
   o.rows.forEach((cells, ri) => {
-    const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = first + ri;
-    const base = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
-    const ctr = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
+    const bg = ri % 2 === 0 ? XJ_COLOURS.white : XJ_COLOURS.lightGrey; const r = first + ri;
+    const base = swbXCS(bg, { sz: 10, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+    const ctr = swbXCS(bg, { sz: 10, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
     for (let c = 0; c < n; c++) {
       const v = cells[c] == null ? "" : cells[c]; let st = XJ_CENTER.test(o.headers[c]) ? ctr : base;
-      if (c === resultCol) st = xjResultStyle(v) || ctr;
-      if (c === elecCol && String(v).toUpperCase() === "FAIL") st = xjResultStyle("FAIL");   // a check column: Fail red, Pass plain
-      if (c === priCol) { const pc = swbXPC(v); if (pc) st = swbXCS(pc.bg, { bold: pc.bold, sz: 10, color: { rgb: pc.font } }, { horizontal: "center", vertical: "top" }, swbXAB()); }
+      if (c === resultCol) st = xjStatusStyle(v) || ctr;
+      if (checkCols.has(c) && String(v).toUpperCase() === "FAIL") st = xjStatusStyle("FAIL");   // a check column (TAT Visual / Electrical): Fail red, Pass plain
+      if (c === priCol) st = xjPriorityStyle(v) || st;
       put(r, c + 1, v, st);
     }
   });
@@ -986,12 +1009,12 @@ async function exportExcel(results, project, meta, mode) {
     ["Failed circuits", failCount ? `${failCount} — see the Defects sheet` : "None — Defects sheet is empty"],
   ];
   const ss = wb.addWorksheet("Summary");
-  const boxed = swbXCS(SWB_XC.white, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+  const boxed = swbXCS(XJ_COLOURS.white, { sz: 10, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
   ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
   xjHeader(ss, wb, hdr, 2);   // the 2-column Summary is narrower than the header text needs, so xjHeader merges out to column E (as in the reference file) — widths first
   sumRows.forEach((r, i) => r.forEach((v, ci) => {
     const cell = ss.getCell(i + XJ_TABLE_START, ci + 1); cell.value = v;
-    if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjResultStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjResultStyle("PASS") : boxed);
+    if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjStatusStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjStatusStyle("PASS") : boxed);
   }));
   xjPageSetup(ss, false, null);
   const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
@@ -10484,16 +10507,9 @@ function swbSiteCompletedBoards(results, project) {
 // Photo box shared by the SWB and ELT exports: exact 4:3 (phone photos are 4:3) and the row is
 // taller than the image + its top offset, so nothing spills into the next row.
 const EXPORT_PHOTO_W_PX = 140, EXPORT_PHOTO_H_PX = 105, EXPORT_PHOTO_ROW_PT = 90;
-const SWB_XC = {
-  white:"FFFFFFFF",black:"FF000000",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",mutedGrey:"FF888888",
-  priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
-  priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
-};
-function swbXB(s,c){return{style:s||"thin",color:{rgb:c||SWB_XC.midGrey}};}
+function swbXB(s,c){return{style:s||"thin",color:{rgb:c||XJ_COLOURS.midGrey}};}
 function swbXAB(){const b=swbXB();return{top:b,bottom:b,left:b,right:b};}
 function swbXCS(fill,font,align,borders){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...(font||{})},alignment:{vertical:"center",...(align||{})},border:borders||{}};}
-function swbXPC(p){if(p==="U")return{bg:SWB_XC.priorityU_bg,font:SWB_XC.priorityU_font,bold:true};if(p==="H")return{bg:SWB_XC.priorityH_bg,font:SWB_XC.priorityH_font,bold:false};if(p==="M")return{bg:SWB_XC.priorityM_bg,font:SWB_XC.priorityM_font,bold:false};if(p==="L")return{bg:SWB_XC.priorityL_bg,font:SWB_XC.priorityL_font,bold:false};return null;}
-function swbXRS(ri,risk){if(risk){const pc=swbXPC(risk);if(pc)return swbXCS(pc.bg,{sz:10,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},swbXAB());}const bg=ri%2===0?SWB_XC.white:SWB_XC.lightGrey;return swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());}
 function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="number"?"n":"s",s:st};}
 // Applies a swbXCS/swbXRS-shaped style object (SheetJS rgb convention) onto an ExcelJS cell (argb convention).
 function swbApplyXlStyle(cell,st){
@@ -10579,11 +10595,11 @@ async function exportSWBExcel(project, allResults, meta) {
     let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
   }
   const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
-  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
-  const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
-  const cellSt = (bg,extra) => swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
+  const passSt = xjStatusStyle("PASS");
+  const failSt = xjStatusStyle("FAIL");
+  const naSt   = xjStatusStyle("N/A");
+  const headSt = swbXCS(XJ_COLOURS.midGrey,{bold:true,sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
+  const cellSt = (bg,extra) => swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
 
   // ── Register ──
   const ws = wb.addWorksheet("Register");
@@ -10595,12 +10611,13 @@ async function exportSWBExcel(project, allResults, meta) {
   SWB_REGISTER_COLUMNS.forEach((t,i) => { setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
   ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   rows.forEach((row,i) => {
-    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
+    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0 ? XJ_COLOURS.white : XJ_COLOURS.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci) => {
       let st = base;
       if ([2,4,5,6,7,8,9,13,14,15].includes(ci)) st = ctr;
       if (ci===3) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
+      if (/^(Highest Risk|Priority)/.test(SWB_REGISTER_COLUMNS[ci])) st = xjPriorityStyle(String(v).split(/[;,]/)[0]) || st;   // the Priority cell can list several ("U; H; M"), most severe first: coloured by the first
       setCell(cols[ci]+r,v,st);
     });
   });
@@ -10618,13 +10635,13 @@ async function exportSWBExcel(project, allResults, meta) {
     // Asset Details (2026-10-02): the Area / Board that used to sit in header row 3 — a labelled block directly under the header, styled like Audit Summary.
     let rr = XJ_TABLE_START;
     put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
-    [["Area",area.name],["Board",board.name]].forEach(([l,v]) => { put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,cellSt(SWB_XC.white)); rr++; });
+    [["Area",area.name],["Board",board.name]].forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,cellSt(XJ_COLOURS.white)); rr++; });
     rr++;   // blank row
     // Audit summary
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
-    const overallSt = overall==="pass" ? passSt : overall==="fail" ? failSt : naSt;
+    const overallSt = xjStatusStyle(overall) || cellSt(XJ_COLOURS.white,{horizontal:"center"});
     [["Total Items",String(bs.total)],["Pass",String(bs.pass)],["Fail",String(bs.fail)],["N/A",String(bs.na)],["Untested",String(bs.untested)],["Score",scoreLabel(bs.score)],["Overall",overall.toUpperCase()]]
-      .forEach(([l,v]) => { put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,l==="Overall"?overallSt:cellSt(SWB_XC.white,{horizontal:"center"})); rr++; });
+      .forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,(l==="Overall"?overallSt:(l==="Pass"&&+v>0)?passSt:(l==="Fail"&&+v>0)?failSt:cellSt(XJ_COLOURS.white,{horizontal:"center"}))); rr++; });
     // Checklist
     rr++;
     ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((t,i) => put("ABCDEFG"[i]+rr,t,headSt)); rr++;
@@ -10633,21 +10650,21 @@ async function exportSWBExcel(project, allResults, meta) {
       const item = defectGateByStatus(raw);                    // defect details only for FAIL items
       const st = item.status || SWB_STATUS.UNTESTED;
       const resTxt = st===SWB_STATUS.PASS ? "Pass" : st===SWB_STATUS.FAIL ? "Fail" : st===SWB_STATUS.NA ? "N/A" : "";
-      const rs = swbXRS(idx, item.risk || "");
-      const bg = rs.fill.fgColor.rgb;
+      const bg = idx%2===0 ? XJ_COLOURS.white : XJ_COLOURS.lightGrey;   // the row stays plain zebra; only the Risk Rating cell carries the priority colour
+      const rs = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true},swbXAB());
       put('A'+rr,`${idx+1}. ${label}`,rs);
       put('B'+rr,(SWB_GUIDANCE[key]||{}).pass||"",cellSt(bg));
       put('C'+rr,resTxt,st===SWB_STATUS.PASS?passSt:st===SWB_STATUS.FAIL?failSt:st===SWB_STATUS.NA?naSt:cellSt(bg,{horizontal:"center"}));
       put('D'+rr,item.defectId||"",rs);
       put('E'+rr,item.comment||"",rs);
-      put('F'+rr,item.risk||"",swbXCS(bg,{sz:10,color:rs.font.color,bold:rs.font.bold},{wrapText:true,horizontal:"center"},swbXAB()));
+      put('F'+rr,item.risk||"",xjPriorityStyle(item.risk,{vertical:"center",wrap:true}) || swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB()));
       put('G'+rr,(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
       rr++;
     });
     // Photos — this board's photos, one per row
     swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
       rr++;
-      put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
+      put('A'+rr,`Photo ${pi+1}`,cellSt(XJ_COLOURS.white)); put('B'+rr,"",cellSt(XJ_COLOURS.white));
       const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const copy = photoCopies.get(p.id);
       const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
@@ -12054,13 +12071,13 @@ async function exportELTExcel(project, allResults, meta) {
   ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap + centre only (no fill / font / border): a narrow column can carry a long heading
   ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   const rows = eltRegisterRows(project, allResults, meta);
-  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const passSt = xjStatusStyle("PASS");
+  const failSt = xjStatusStyle("FAIL");
   rows.forEach((row,i)=>{
     const r = XJ_TABLE_START + 1 + i;
-    const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
-    const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());
-    const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
+    const bg = i%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
+    const base = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true},swbXAB());
+    const ctr = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
     row.cells.forEach((v,ci)=>{
       let st = base;
       if (ci===0 || (ci>=7 && ci<=13) || ci===15) st = ctr;
@@ -12084,10 +12101,10 @@ async function exportELTExcel(project, allResults, meta) {
     ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+XJ_TABLE_START,t); ds.getCell(dcols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
     ds.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
     defRows.forEach((row,i)=>{
-      const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
-      const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
-      const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
-      row.defect.forEach((v,ci)=>dset(dcols[ci]+(XJ_TABLE_START+1+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
+      const bg = i%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
+      const base = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
+      const ctr = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
+      row.defect.forEach((v,ci)=>dset(dcols[ci]+(XJ_TABLE_START+1+i),v,(ci===5&&xjPriorityStyle(v))||((ci===0||ci===4||ci===5||ci===7)?ctr:base)));
     });
     if (!defRows.length) dset('A'+(XJ_TABLE_START+1),"No defects recorded");
     // Footer — ALWAYS written, even with 0 defects: a blank row, the count (COMPUTED from the real defect rows) and the priority legend, below the table / the "No defects recorded" line
@@ -12116,7 +12133,7 @@ async function exportELTExcel(project, allResults, meta) {
     let pr = XJ_TABLE_START + 1;
     withPhotos.forEach(({asset:a,res:r})=>{
       r.photos.forEach(p=>{
-        const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
+        const rowSt = swbXCS(XJ_COLOURS.white,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
         pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
         const bx = xjPhotoBoxWH(p.w, p.h); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
         const copy = photoCopies.get(p.id);
@@ -15014,11 +15031,11 @@ async function exportWelderExcel(project, allResults, meta) {
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
   const hdr = xjHdr("welder", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
-  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
-  const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
-  const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
+  const passSt = xjStatusStyle("PASS");
+  const failSt = xjStatusStyle("FAIL");
+  const naSt   = xjStatusStyle("N/A");
+  const headSt = swbXCS(XJ_COLOURS.midGrey,{bold:true,sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
+  const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
   const rows = welderRegisterRows(project, allResults, meta);
   // Photos now live in sitePhotoStore (Stage 2, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
   // referenced by this export's own rows into a small export-sized copy BEFORE building any sheet (same pattern as GSD's
@@ -15039,12 +15056,13 @@ async function exportWelderExcel(project, allResults, meta) {
   WELDER_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
   ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   rows.forEach((row,i)=>{
-    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci)=>{
       let st = base;
       if ([1,4,5,7,8,11,12].includes(ci)) st = ctr;
       if (ci===5) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
+      if (/^Priority/.test(WELDER_COLUMNS[ci])) st = xjPriorityStyle(v) || st;
       setCell(cols[ci]+r,v,st);
     });
   });
@@ -15064,18 +15082,18 @@ async function exportWelderExcel(project, allResults, meta) {
     let rr = XJ_TABLE_START;
     put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
     [["Location",a.location||""],["Asset ID",a.assetId||""],["Brand",a.brand||""],["Model",a.model||""],["Serial Number",a.serial||""],["Test Instruments",(meta&&meta.instruments)||""]]
-      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v,cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v,cellSt(XJ_COLOURS.white)); sh.mergeCells(rr,2,rr,5); rr++; });
     rr++;   // blank row
     // Audit summary
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
-    const overallSt = row.overall==="pass"?passSt:row.overall==="fail"?failSt:naSt;
+    const overallSt = xjStatusStyle(row.overall) || cellSt(XJ_COLOURS.white,{horizontal:"center"});
     [["Total Items",String(sum.total)],["Pass",String(sum.pass)],["Fail",String(sum.fail)],["N/A",String(sum.na)],["Score",welderScoreLabel(sum.score)],["Actions Required",String(sum.actions)],["Overall",welderOverallLabel(row.overall)]]
-      .forEach(([l,v],i)=>{ put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,l==="Overall"?overallSt:cellSt(SWB_XC.white,{horizontal:"center"})); rr++; });
+      .forEach(([l,v],i)=>{ put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,(l==="Overall"?overallSt:(l==="Pass"&&+v>0)?passSt:(l==="Fail"&&+v>0)?failSt:cellSt(XJ_COLOURS.white,{horizontal:"center"}))); rr++; });
     // Checklist
     rr++;
     ["Item","Test / Pass Criteria","Result","Measured Value / Notes","Corrective Action Required"].forEach((t,i)=>put("ABCDE"[i]+rr,t,headSt)); rr++;
     WELDER_CHECKLIST.forEach(({key,label,criteria},idx)=>{
-      const it = welderItem(raw,key); const bg = idx%2===0?SWB_XC.white:SWB_XC.lightGrey;
+      const it = welderItem(raw,key); const bg = idx%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
       const resTxt = it.result==="pass"?"Pass":it.result==="fail"?"Fail":it.result==="na"?"N/A":"";
       put('A'+rr,`${idx+1}. ${label}`,cellSt(bg)); put('B'+rr,criteria,cellSt(bg));
       put('C'+rr,resTxt,it.result==="pass"?passSt:it.result==="fail"?failSt:it.result==="na"?naSt:cellSt(bg,{horizontal:"center"}));
@@ -15085,14 +15103,14 @@ async function exportWelderExcel(project, allResults, meta) {
     // already gated by defectGate), then comments
     rr++;
     [["Rectified / Scheduled",r.rectified],["Date Rectified / Scheduled",r.rectifiedDate?fmtDate(r.rectifiedDate):""],["Defect ID",r.defectId],["Responsibility",r.responsibility],["Priority",r.priority?`${r.priority} — ${PRIORITY_LABELS[r.priority]||""}`:""]]
-      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",(l==="Priority"&&xjPriorityStyle(r.priority,{horizontal:"left"}))||cellSt(XJ_COLOURS.white)); sh.mergeCells(rr,2,rr,5); rr++; });
     rr++;
-    put('A'+rr,"Auditor Comments / Overall Notes",headSt); put('B'+rr,(raw.notes||"").trim(),cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5);
+    put('A'+rr,"Auditor Comments / Overall Notes",headSt); put('B'+rr,(raw.notes||"").trim(),cellSt(XJ_COLOURS.white)); sh.mergeCells(rr,2,rr,5);
     sh.getRow(rr).height = 48; rr++;
     // Photos
     (raw.photos||[]).forEach((p,pi)=>{
       rr++;
-      put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
+      put('A'+rr,`Photo ${pi+1}`,cellSt(XJ_COLOURS.white)); put('B'+rr,"",cellSt(XJ_COLOURS.white));
       const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const copy = photoCopies.get(p.id);
       const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
@@ -15403,10 +15421,10 @@ async function exportGSDExcel(project, items, meta) {
   const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
   xjHeader(ws, wb, hdr, GSD_COLS);   // shared rows 1-5 (5 x 140px = 700px, wide enough that the merge is not widened); the report content starts on row 6
-  const white = SWB_XC.white;
+  const white = XJ_COLOURS.white;
   const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
-  const capSt = swbXCS(white, { sz: 9, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" });
-  const detSt = swbXCS(white, { sz: 8, color: { rgb: SWB_XC.mutedGrey } }, { vertical: "top" });
+  const capSt = swbXCS(white, { sz: 9, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, vertical: "top" });
+  const detSt = swbXCS(white, { sz: 8, color: { rgb: XJ_COLOURS.mutedGrey } }, { vertical: "top" });
   const breakSet = new Set(layout.breaks);
   if (!layout.rows.length) { put(5, 1, "No defects recorded"); ws.mergeCells(5 + off, 1, 5 + off, GSD_COLS); }
   layout.rows.forEach((row, i) => {
@@ -15865,7 +15883,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };

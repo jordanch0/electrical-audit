@@ -68,7 +68,7 @@ describe.each(MODULES)('%s export styling (ExcelJS)', (name, run, mainSheet, exp
     const first = word => { const i = expectedResults.findIndex(t => t.toUpperCase() === word); return ws.getCell(7 + i, col); };
     expect(first('FAIL').font.color.argb).toBe('FF9C0006');                                            // Fail text is dark red
     expect(first('PASS').font.color.argb).toBe('FF375623');                                            // Pass text is dark green
-    if (expectedResults.includes('MONITOR')) expect(first('MONITOR').font.color.argb).toBe('FF7F6000');   // MONITOR: dark amber text on amber
+    if (expectedResults.includes('MONITOR')) expect(first('MONITOR').font.color.argb).toBe('FF705300');   // MONITOR: dark amber text on amber
   });
 
   it('other cells alternate white / light-grey zebra rows', async () => {
