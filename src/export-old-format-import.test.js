@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import * as XLSX from 'xlsx';
-import { parseExcelToProject, parseIELExcel, parseTATExcel, parseThermoExcel, parseSWBExcel, parseIRTExcel, parseELTExcel, parseWelderExcel, ELT_DEFAULT_TYPES } from './App.jsx';
+import { parseExcelToProject, parseIELExcel, parseTATExcel, parseThermoExcel, parseSWBExcel, parseIRTExcel, parseELTExcel, parseWelderExcel, ELT_DEFAULT_TYPES, xjSiteFromTitle } from './App.jsx';
 
 const DIR = path.join(__dirname, '__fixtures__', 'old-exports');
 const read = f => XLSX.read(fs.readFileSync(path.join(DIR, f + '.xlsx')), { type: 'buffer' });
@@ -22,11 +22,11 @@ const PARSE = {
   swb: parseSWBExcel, elt: d => parseELTExcel(d, ELT_DEFAULT_TYPES), welder: parseWelderExcel,
 };
 
-// What each OLD title yields as the site name. IEL / TAT / Thermo / IRT titles use an EM dash ("Site — Module Test"), which those four parsers never stripped — a behaviour that
-// predates this work (an old file gave the same value before it); the new en-dash titles ("Site  –  Module  (Type)") do split cleanly. Pinned here so a change is deliberate.
+// What each OLD title yields as the site name: ALWAYS the clean site, for every module. IEL / TAT / Thermo / IRT used to leave module text on an old em-dash title ("Example Quarry — Isolators, E");
+// they now strip the known module tail from the END of the title (xjSiteFromTitle), same as SWB / ELT / Welder.
 const SITE = {
   rcd: n => expect(n).toBe('Example Quarry'),
-  iel: n => expect(n).toMatch(/^Example Quarry/), tat: n => expect(n).toMatch(/^Example Quarry/), thermo: n => expect(n).toMatch(/^Example Quarry/), irt: n => expect(n).toMatch(/^Example Quarry/),
+  iel: n => expect(n).toBe('Example Quarry'), tat: n => expect(n).toBe('Example Quarry'), thermo: n => expect(n).toBe('Example Quarry'), irt: n => expect(n).toBe('Example Quarry'),
   swb: n => expect(n).toBe('Example Quarry - North'), elt: n => expect(n).toBe('Example Quarry - North'), welder: n => expect(n).toBe('Example Quarry - North'),   // exact-suffix strip keeps the hyphen
 };
 const STRUCT = {
@@ -55,6 +55,37 @@ describe.each(Object.keys(PARSE))('OLD-format %s export (real file from the pre-
     SITE[mod](parsed.siteName !== undefined ? parsed.siteName : parsed.name);
     if (hasCompany(mod)) expect({ company: parsed.company, abn: parsed.abn, licence: parsed.licence }).toEqual(co);
     STRUCT[mod](parsed);
+  });
+});
+
+// Hyphenated site names + every known title shape, on the helper AND through each real parser (a workbook whose row 1 is the title).
+describe('IEL / TAT / Thermo / IRT: the site name is the title MINUS the known module tail — never split at a dash', () => {
+  const MODS = {
+    iel:    { parse: parseIELExcel, tail: 'Isolators, E-Stops & Lanyards Test', type: 'Periodic Inspection' },
+    tat:    { parse: parseTATExcel, tail: 'Test & Tag', type: 'In-Service Electrical Equipment' },
+    thermo: { parse: d => parseThermoExcel(d, '', XLSX), tail: 'Thermographic Test', type: 'Infrared Survey' },
+    irt:    { parse: parseIRTExcel, tail: 'Insulation Resistance Test', type: 'Insulation Resistance Readings' },
+  };
+  const SITES = ['Port-Kembla', 'Hearse Rd - North', 'Example Quarry', 'Bunnings Warehouse - Port-Kembla (Stage 2)'];
+  const book = title => { const w = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(w, XLSX.utils.aoa_to_sheet([[title], ['Example Electrical Pty Ltd  |  ABN: 98 765 432 109  |  Electrical Licence: EW123456'], [''], [''], ['Location', 'Type', 'Area', 'Panel / DB', 'Machine', 'Equipment / Circuit', 'Asset ID / Tag', 'Description'], ['Plant', 'estops', 'Plant', 'MCC1', 'M1', 'Motor 1', 'T1', 'Grinder']]), 'S'); return w; };
+  describe.each(Object.keys(MODS))('%s', mod => {
+    const { parse, tail, type } = MODS[mod];
+    it.each(SITES)('"%s": old em-dash title, new en-dash title with a (Test type), and dated / month-tailed old titles all give the site back exactly', site => {
+      const titles = [site + ' — ' + tail, site + '  –  ' + tail + '  (' + type + ')', site + ' — ' + tail + ' — 30/09/2026', site + ' — ' + tail + ' — March 2026'];
+      titles.forEach(t => { expect(xjSiteFromTitle(t, mod), t).toBe(site); const r = parse(book(t)); expect(r.siteName, 'parser: ' + t).toBe(site); });
+    });
+    it('a title with NO known module tail is kept whole (never split at a dash)', () => {
+      expect(xjSiteFromTitle('Port-Kembla - North Pit', mod)).toBe('Port-Kembla - North Pit');
+      expect(parse(book('Port-Kembla')).siteName).toBe('Port-Kembla');
+    });
+    it('the blank import template ("Site Name — enter your site name here") gives a BLANK site name, so the file name is used (as SWB / ELT / Welder already do)', () => {
+      expect(xjSiteFromTitle('Site Name — enter your site name here', mod)).toBe('');
+      expect(parse(book('Site Name — enter your site name here')).siteName).toBe('');
+    });
+  });
+  it('only the END of the title is stripped: the module words inside a site name survive', () => {
+    expect(xjSiteFromTitle('Test & Tag Depot — Test & Tag', 'tat')).toBe('Test & Tag Depot');
+    expect(xjSiteFromTitle('Thermo King Yard - East  –  Thermographic Test  (Infrared Survey)', 'thermo')).toBe('Thermo King Yard - East');
   });
 });
 

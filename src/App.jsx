@@ -781,6 +781,23 @@ map[p] = sibling || p;
 return map;
 }
 // Parse company, ABN, licence from an Excel header row string
+// Site name from a report title — IEL / TAT / Thermo / IRT. The title is "<site>  –  <Module>  (<Test type>)" (current) or "<site> — <Module>" / "<site> — <Module> — <date>" (every older
+// export). The KNOWN module phrase is stripped from the END of the text (same approach as the SWB / ELT / Welder importers) and the title is NEVER split on a dash, so a hyphenated site
+// ("Port-Kembla", "Hearse Rd - North") survives. No known tail found -> the whole trimmed title is kept. The import-template placeholder ("... enter your site name here") -> "" so the
+// caller falls back to the file name, exactly as the SWB / ELT / Welder importers already do.
+const XJ_TITLE_MODULES = {
+  iel:    "Isolators,\\s*E-Stops\\s*(?:&|and)\\s*Lanyards(?:\\s+Test)?",
+  tat:    "Test\\s*(?:&|and)\\s*Tag",
+  thermo: "Thermo(?:graphic)?(?:\\s+Test)?",
+  irt:    "Insulation\\s+Resistance(?:\\s+Test(?:ing)?)?",
+};
+function xjSiteFromTitle(raw, key) {
+  const t = String(raw == null ? "" : raw).trim();
+  if (!t || /enter your site name/i.test(t)) return "";
+  const D = "[\\u2014\\u2013-]+";   // em dash, en dash or hyphen
+  const re = new RegExp("\\s*" + D + "\\s*" + XJ_TITLE_MODULES[key] + "(?:\\s*\\([^)]*\\))?(?:\\s*" + D + "\\s*[^\\u2014\\u2013]*)?\\s*$", "i");   // [ (Test type) ] [ — date / month ]
+  return t.replace(re, "").trim() || t;
+}
 function parseCompanyRow(cellValue) {
   const s = String(cellValue||"").trim();
   if(!s) return {company:"", abn:"", licence:""};
@@ -2935,7 +2952,7 @@ function parseIELExcel(data){
   const cDef=col("defect"),cResp=col("responsib"),cNotes=header.findIndex(h=>h.includes("note")||h.includes("recommend")),cPri=col("priority");
   const rowOff=rowOff0;
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[rowOff]&&rows[rowOff][0]){siteName=xjSiteFromTitle(rows[rowOff][0],"iel");}
   // Company/ABN/licence live in row 2 (index 1), not the title row
   if(rows[1+rowOff]&&rows[1+rowOff][0]){
     const p=parseCompanyRow(rows[1+rowOff][0]);
@@ -5066,7 +5083,7 @@ function parseTATExcel(data) {
   const cType=col("type")||col("equip");
   const cFreq=col("freq");
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[rowOff]&&rows[rowOff][0]){siteName=xjSiteFromTitle(rows[rowOff][0],"tat");}
   if(rows[1+rowOff]&&rows[1+rowOff][0]){const p=parseCompanyRow(rows[1+rowOff][0]);const raw=String(rows[1+rowOff][0]).toLowerCase();const looksLikeTitle=raw.includes(" test")||/\d{4}/.test(raw)&&!raw.includes("abn");if(!looksLikeTitle){parsedCompany=p.company||"";}parsedAbn=p.abn||"";parsedLicence=p.licence||"";}
   const areaMap={};
   for(let i=headerIdx+1;i<rows.length;i++){
@@ -6598,8 +6615,8 @@ function parseThermoExcel(data, overrideName, XLSX) {
   let siteName = overrideName || "";
   if (!siteName && rows[rowOff] && rows[rowOff][0]) {
     const raw = String(rows[rowOff][0]).trim();
-    // Strip "— Thermographic Test — March 2026" suffix patterns
-    siteName = raw.split(/\s*[-–]\s*(?:thermographic|thermo)/i)[0].trim() || raw;
+    // Strip the known "— Thermographic Test [— March 2026]" / "–  Thermographic Test  (Infrared Survey)" tail from the END (never split on a dash)
+    siteName = xjSiteFromTitle(raw, "thermo");
   }
 
   // ── Auto-detect company / ABN / licence from row 1 ───────────────────
@@ -12946,7 +12963,7 @@ function parseIRTExcel(data){
     // A logo strip (2026-09-27) pushes every header row down by one \u2014 row 0 is then blank instead of the title.
     const rowOff=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
     let siteName="",company="",abn="",licence="";
-    if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]).trim();siteName=t.split(/\s*[-\u2013]\s*/)[0].trim()||t;}
+    if(rows[rowOff]&&rows[rowOff][0]){siteName=xjSiteFromTitle(rows[rowOff][0],"irt");}
     if(rows[1+rowOff]&&rows[1+rowOff][0]){const parts=String(rows[1+rowOff][0]).split(/\s*\|\s*/);parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});}
     let hi=-1;
     for(let i=0;i<Math.min(rows.length,10);i++){if(rows[i].some(c=>String(c).length>60))continue;const r=rows[i].map(c=>String(c).toLowerCase());if(r.some(c=>c==="area"||c==="location")){hi=i;break;}}
@@ -15837,7 +15854,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, xjSiteFromTitle, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };

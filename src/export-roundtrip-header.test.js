@@ -73,3 +73,18 @@ describe.each(Object.keys(JOBS))('NEW-format %s export -> import round trip', mo
     } finally { if (variant === 'logo') await siteLogoStore.del(mod, pid); }
   });
 });
+
+// A hyphenated site name must survive export -> import for the four parsers that used to split the title at the first dash (IEL / TAT / Thermo / IRT).
+describe.each([['Port-Kembla'], ['Hearse Rd - North']])('hyphenated site "%s": export -> import returns the site exactly (IEL / TAT / Thermo / IRT)', site => {
+  const proj = (pid, areas) => ({ id: pid, name: site, ...co, areas });
+  const CASES = {
+    iel: { run: pid => exportIELExcel(proj(pid, [{ id: 'a', name: 'Plant', panels: [{ id: 'p1', name: 'estops', circuits: ['x'], machineNames: { x: 'Conv 1' } }] }]), {}, meta), parse: parseIELExcel },
+    tat: { run: pid => exportTATExcel(proj(pid, [{ id: 'a', name: 'Workshop', defaultFreq: '3', items: ['x'], itemNames: { x: 'Grinder' }, itemTags: { x: 'T1' }, itemEquipTypes: {}, itemFreqs: {} }]), {}, meta), parse: parseTATExcel },
+    thermo: { run: pid => exportThermoExcel(proj(pid, [{ id: 'a', name: 'Plant', boards: [{ id: 'b', name: 'MSB', circuits: ['c1'], circuitNames: { c1: 'One' } }] }]), {}, meta), parse: d => parseThermoExcel(d, '', XLSX) },
+    irt: { run: pid => exportIRTExcel(proj(pid, [{ id: 'a', name: 'Plant', panels: [{ id: 'pn', name: 'MCC1', items: ['x'], itemNames: { x: 'Motor 1' } }] }]), {}, meta), parse: parseIRTExcel },
+  };
+  it.each(Object.keys(CASES))('%s', async mod => {
+    await CASES[mod].run('p-hy-' + mod); const parsed = CASES[mod].parse(wbOut());
+    expect(parsed.siteName).toBe(site); expect({ company: parsed.company, abn: parsed.abn, licence: parsed.licence }).toEqual(co);
+  });
+});
