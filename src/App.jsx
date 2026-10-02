@@ -1938,10 +1938,10 @@ setNewVals(v => ({...v,[key]:""}));
 const removeItem = (key,val) => setDropdowns(d => ({...d,[key]:(_nullishCoalesce(d[key], () => ([]))).filter(x=>x!==val)}));
 const resetKey   = (key, def) => setDropdowns(d => ({...d,[key]:def}));
 const LISTS = [
-{ key:"cbType",         label:"CB / RCD TYPE",        defaults:DEFAULT_CB_TYPE,        color:"#1d4ed8", desc:"Available in both monthly push test and annual injection test forms" },
-{ key:"ampRating",      label:"AMP RATING",           defaults:DEFAULT_AMP_RATING,     color:"#14532d", desc:"Available in both monthly push test and annual injection test forms" },
-{ key:"responsibility", label:"RESPONSIBILITY",        defaults:DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Used in annual injection test form" },
-{ key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION",defaults:DEFAULT_RECTIFIED,      color:"#92400e", desc:"Used in annual injection test form" },
+{ key:"cbType",         label:"CB / RCD TYPE",        defaults:DEFAULT_CB_TYPE,        color:"#1d4ed8", desc:"Available in both the push test and injection test forms" },
+{ key:"ampRating",      label:"AMP RATING",           defaults:DEFAULT_AMP_RATING,     color:"#14532d", desc:"Available in both the push test and injection test forms" },
+{ key:"responsibility", label:"RESPONSIBILITY",        defaults:DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Used in the injection test form" },
+{ key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION",defaults:DEFAULT_RECTIFIED,      color:"#92400e", desc:"Used in the injection test form" },
 ];
 return (
 React.createElement('div', { style: S.listWrap,}
@@ -2590,7 +2590,7 @@ return(React.createElement('div', { style: S.circuitWrap,}
 )
 , !isPush && (
 React.createElement('div', { style: {fontSize:12,color:"#1d4ed8",background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"8px 12px",marginBottom:12},}, moduleIcon("rcd_inject",15), " "
-, React.createElement('strong', null, "Annual mode" ), " — tap any circuit to open the injection test form"
+, React.createElement('strong', null, "Injection mode" ), " — tap any circuit to open the injection test form"
 )
 )
 , React.createElement('div', { style: S.circuitGrid,}
@@ -3357,7 +3357,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:SI.siteCardName},proj.name)
-            ,React.createElement('div',{style:SI.siteCardSub},proj.company?proj.company+" · ":"" ,nw(proj.areas.length,"area")," · ",nw(total,"item")," · 3-month cycle")
+            ,React.createElement('div',{style:SI.siteCardSub},proj.company?proj.company+" · ":"" ,nw(proj.areas.length,"area")," · ",nw(total,"item"),"")
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fails>0?"#dc2626":tested===total&&total>0?"#16a34a":"#047857",transition:"width 0.4s"}})
             )
@@ -3700,7 +3700,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
       ,React.createElement('div',{style:SI.modalHeader}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:"#18181b"}},catI.icon," ",machineName)
-          ,React.createElement('div',{style:{fontSize:12,color:"#6e6a66",marginTop:3}},catI.label," · ",area&&area.name," · 3-month cycle")
+          ,React.createElement('div',{style:{fontSize:12,color:"#6e6a66",marginTop:3}},catI.label," · ",area&&area.name,"")
         )
         ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},sm.label)
       )

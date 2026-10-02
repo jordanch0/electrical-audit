@@ -96,3 +96,25 @@ describe('real UI: save meta, change ONLY the test date -> items keep lastTested
     expect(screen.getByText('OVERDUE')).toBeTruthy();
   });
 });
+
+// No interval wording in the IEL screens: the auditor can pick any next-due date, so "3-month cycle" could contradict it. Only the real "Due:" date and the OVERDUE / DUE SOON badges say when.
+describe('IEL screens carry no hard-coded interval wording', () => {
+  const INTERVAL = /\b(3|three)[- ]?month(ly|s)?\b|quarterly|every 3 months|\bcycle\b/i;
+  const project = { id: 'p1', name: 'Example Quarry', company: 'Example Electrical Pty Ltd', abn: '', licence: '', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'e1', name: 'estops', circuits: ['x'], machineNames: { x: 'Conv 1' } }] }] };
+  it('site list, site Home, area list, panel list and item list show no interval text', async () => {
+    cleanup(); localStorage.clear();
+    localStorage.setItem('iel-projects-v2', JSON.stringify([project])); localStorage.setItem('iel-results-v2', JSON.stringify({ p1: { a: { estops: { x: { status: 'pass', lastTested: '2026-07-13' } } } } }));
+    localStorage.setItem('iel-meta-v2', JSON.stringify({ p1: { auditor: 'J', testDate: '2026-07-13', nextTestDate: '2026-11-15', notes: '' } }));
+    const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByText('IEL TESTING'));
+    const text = () => document.body.textContent;
+    await screen.findByText('Example Quarry', { selector: 'div' }); expect(text()).not.toMatch(INTERVAL);          // site list (the site card's sub-line)
+    await user.click(screen.getByText('Example Quarry', { selector: 'div' })); await screen.findByText('NEXT TEST DUE'); expect(text()).not.toMatch(INTERVAL);
+    await user.click(screen.getAllByText('E-Stops')[0]); await user.click(await screen.findByText('Plant')); expect(text()).not.toMatch(INTERVAL);
+    await user.click(await screen.findByText('E-Stops')); await screen.findByText('Conv 1'); expect(text()).not.toMatch(INTERVAL);
+    expect(screen.getByText('Due: 15/11/2026')).toBeTruthy();                                                           // the date is still there
+  });
+  it('the source has no "3-month cycle" text either', () => {
+    const src = require('fs').readFileSync(require('path').resolve(__dirname, 'App.jsx'), 'utf8');
+    expect(src).not.toMatch(/3-month cycle/i);
+  });
+});
