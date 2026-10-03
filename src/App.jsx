@@ -1412,7 +1412,7 @@ const project = projects.find(p=>p.id===activeProject);
 const _rcdProg=project?rcdProgressOf(allResults,project):{push:false,inject:false};
 const _rcdEntry=activeMap[activeProject];
 const auditActive=!!_rcdEntry||_rcdProg.push||_rcdProg.inject;     // completed-but-not-archived counts as active
-const showGate=gateArmed||!auditActive;     // the gate shows when armed by Back, or when there is no active audit
+const showGate=gateArmed||!auditActive||auditorIsBlank(allMeta,activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
 const mode=(_rcdEntry&&_rcdEntry.mode)||(_rcdProg.push?"push":_rcdProg.inject?"inject":null);
 const setMode=m=>setActiveMap(prev=>m?auditActiveSet(prev,activeProject,{mode:m}):auditActiveClear(prev,activeProject));
 const _rcdMeta = _nullishCoalesce(allMeta[activeProject], () => ({auditor:"",pushDate:new Date().toISOString().slice(0,10),injectDate:new Date().toISOString().slice(0,10),notes:""}));
@@ -1521,11 +1521,11 @@ onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[ac
 , isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#a3530f",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
 , isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(AreaListView, { project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>setActiveAreaId(id),})
 , isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(PanelListView, { area: area, project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>{setActivePanelId(id);setView("panel");},})
-, !detailInfo&&view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
+, !showGate&&!detailInfo&&view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
 onCycle: c=>cycleCircuit(activeAreaId,activePanelId,c),
 onSetAll: s=>setAllPanel(activeAreaId,activePanelId,panel.circuits,s),
 onOpenDetail: c=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,circuit:c}),})
-, detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns, onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch), onClose: ()=>setDetailInfo(null),})
+, !showGate&&detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns, onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch), onClose: ()=>setDetailInfo(null),})
 , !detailInfo&&view==="report"&&project&&React.createElement(ReportView, { project: project, results: allResults, meta: meta, onBack:()=>setView("home"),})
 , !detailInfo&&view==="manage"&&project&&React.createElement(ManageView, { project: project, dropdowns: dropdowns, onUpdateProject: updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)), onBack:()=>setView("home"),})
 , !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode),
@@ -1544,7 +1544,7 @@ onContinueFromSnap: (snap)=>{
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
 , React.createElement(NavBtn, { icon: NAV_ICON_HOME,      label: "Home",      active: view==="home",     onClick: ()=>{setDetailInfo(null);goHome();}, color: "#334155",})
-, React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{setDetailInfo(null);if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}, color: "#334155",})
+, React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}, color: "#334155",})
 , React.createElement(NavBtn, { icon: NAV_ICON_REPORT,    label: "Report",    active: view==="report",   onClick: ()=>{setDetailInfo(null);setView("report");}, color: "#334155",})
 , React.createElement(NavBtn, { icon: NAV_ICON_HISTORY,   label: "History",   active: view==="history",  onClick: ()=>{setDetailInfo(null);setView("history");}, color: "#334155",})
 , React.createElement(NavBtn, { icon: NAV_ICON_MANAGE,    label: "Manage",    active: view==="manage",   onClick: ()=>{setDetailInfo(null);setView("manage");}, color: "#334155",})
@@ -3162,7 +3162,7 @@ function IELApp({ onGoHome }) {
   const _ielEntry=activeMap[activeProject];
   const _ielProgCat=project?ielProgressCat(allResults,project):null;
   const auditActive=!!_ielEntry||!!_ielProgCat;     // completed-but-not-archived counts as active
-  const showGate=gateArmed||!auditActive;     // the gate shows when armed by Back, or when there is no active audit
+  const showGate=gateArmed||!auditActive||auditorIsBlank(allMeta,activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
   const activeCat=(_ielEntry&&_ielEntry.cat)||_ielProgCat||null;
   const setActiveCat=c=>setActiveMap(prev=>c?auditActiveSet(prev,activeProject,{cat:c}):auditActiveClear(prev,activeProject));
   const _ielMeta = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
@@ -3245,8 +3245,8 @@ function IELApp({ onGoHome }) {
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
       ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
-      ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
-      ,detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
+      ,!showGate&&!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
+      ,!showGate&&detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns,onBack:()=>setView("home")})
@@ -3267,7 +3267,7 @@ function IELApp({ onGoHome }) {
     // ── Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:SI.bottomNav}
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#334155",onClick:()=>{setDetailInfo(null);goHome();}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{setDetailInfo(null);if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}})
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{setDetailInfo(null);setView("report");}})
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{setDetailInfo(null);setView("history");}})
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{setDetailInfo(null);setView("manage");}})
@@ -4903,6 +4903,8 @@ function auditActiveParse(raw) { return raw && raw.v === AUDIT_ACTIVE_VERSION &&
 function migrateAuditActive(projects, entryFor) { const sites = {}; (projects || []).forEach(p => { const e = entryFor(p); if (e) sites[p.id] = e; }); return sites; }
 function auditActiveSet(map, id, entry) { return { ...map, [id]: entry }; }
 function auditActiveClear(map, id) { if (!(id in map)) return map; const n = { ...map }; delete n[id]; return n; }
+// A blank / whitespace auditor (Start needs a name, but the Home field can be cleared afterwards). Used by every module's `showGate`.
+function auditorIsBlank(allMeta, id) { const m = allMeta && allMeta[id]; return !(m && typeof m.auditor === "string" && m.auditor.trim()); }
 // `getEntryFor` is called once, after the module has loaded, and returns the `entryFor(project)` function (it closes over the loaded results / meta).
 function useAuditActive(key, loaded, getEntryFor) {
   const [map, setMap] = React.useState(() => auditActiveParse(readLegacyJSON(key)));   // null = never migrated
@@ -5281,7 +5283,7 @@ function TATApp({ onGoHome }) {
 
   const project=projects.find(p=>p.id===activeProject);
   const auditActive=!!activeMap[activeProject]||(project?tatHasProgress(allResults,project):false);     // completed-but-not-archived counts as active
-  const showGate=gateArmed||!auditActive;     // the gate shows when armed by Back, or when there is no active audit
+  const showGate=gateArmed||!auditActive||auditorIsBlank(allMeta,activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
   const meta=allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
   const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
   const area=project&&project.areas.find(a=>a.id===activeAreaId);
@@ -5374,7 +5376,7 @@ function TATApp({ onGoHome }) {
           setDetailItemId(itemId);
         },
       })
-      ,detailItemId&&area&&React.createElement(TATItemModal,{dropdowns:tatDropdowns,equipTypes,freqOptions,itemId:detailItemId,area,project,results:allResults,meta,onPatch:patch=>patchItem(activeProject,activeAreaId,detailItemId,patch),onClose:()=>setDetailItemId(null)})
+      ,detailItemId&&area&&!(isAudit&&showGate)&&React.createElement(TATItemModal,{dropdowns:tatDropdowns,equipTypes,freqOptions,itemId:detailItemId,area,project,results:allResults,meta,onPatch:patch=>patchItem(activeProject,activeAreaId,detailItemId,patch),onClose:()=>setDetailItemId(null)})
       ,!detailItemId&&view==="report"&&project&&React.createElement(TATReportView,{project,results:allResults,meta,
         onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),onBack:()=>setView("home")})
       ,!detailItemId&&view==="manage"&&project&&React.createElement(TATManageView,{project,equipTypes,freqOptions,tatDefaults,applianceNames,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
@@ -5390,7 +5392,7 @@ function TATApp({ onGoHome }) {
     // Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:ST.bottomNav}
       ,React.createElement(TATNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#334155",onClick:()=>{setDetailItemId(null);goHome();}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{if(isAudit){setDetailItemId(null);setView("audit");setActiveAreaId(null);}else{setView("audit");if(!area){setActiveAreaId(null);setDetailItemId(null);}}}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{if(showGate){setDetailItemId(null);setView("audit");return;}if(isAudit){setDetailItemId(null);setView("audit");setActiveAreaId(null);}else{setView("audit");if(!area){setActiveAreaId(null);setDetailItemId(null);}}}})
       ,React.createElement(TATNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{setDetailItemId(null);setView("report");}})
       ,React.createElement(TATNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{setDetailItemId(null);setView("history");}})
       ,React.createElement(TATNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{setDetailItemId(null);setView("manage");}})
@@ -9641,7 +9643,7 @@ function ThermoApp({
   const [activeMap, setActiveMap] = useAuditActive(K_THERMO_ACTIVE, loaded, () => ({ projects, entryFor: pr => thermoHasProgress(allResults, pr) ? {} : null }));
   const project = projects.find(p => p.id === activeProject);
   const auditActive = !!activeMap[activeProject] || (project ? thermoHasProgress(allResults, project) : false);     // completed-but-not-archived counts as active
-  const showGate = gateArmed || !auditActive;     // the gate shows when armed by Back, or when there is no active audit
+  const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
   const _thermoMeta = allMeta[activeProject] || {
     auditor: "",
     testDate: new Date().toISOString().slice(0, 10),
@@ -9848,7 +9850,7 @@ function ThermoApp({
     },
     onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta),
     onCompleteAudit: completeAudit
-  }), view === "audit" && project && showGate && /*#__PURE__*/React.createElement(AuditGatePage, {
+  }), isAudit && project && showGate && /*#__PURE__*/React.createElement(AuditGatePage, {
     accent: THERMO_COLOR,
     hasActiveAudit: auditActive,
     hasAuditor: !!(meta && meta.auditor && meta.auditor.trim()),
@@ -9861,7 +9863,7 @@ function ThermoApp({
       setActiveAreaId(id);
       setView("area");
     }
-  }), view === "area" && area && !activeBoardId && /*#__PURE__*/React.createElement(ThermoBoardListView, {
+  }), !showGate && view === "area" && area && !activeBoardId && /*#__PURE__*/React.createElement(ThermoBoardListView, {
     area: area,
     project: project,
     results: allResults[activeProject] || {},
@@ -9869,7 +9871,7 @@ function ThermoApp({
       setActiveBoardId(id);
       setView("board");
     }
-  }), view === "board" && board && /*#__PURE__*/React.createElement(ThermoCircuitView, {
+  }), !showGate && view === "board" && board && /*#__PURE__*/React.createElement(ThermoCircuitView, {
     area: area,
     board: board,
     project: project,
@@ -9879,7 +9881,7 @@ function ThermoApp({
       setActiveCircuitName(cname);
       setView("circuit");
     }
-  }), view === "circuit" && board && activeCircuitId && /*#__PURE__*/React.createElement(PhotoPage, {
+  }), !showGate && view === "circuit" && board && activeCircuitId && /*#__PURE__*/React.createElement(PhotoPage, {
     circuitId: activeCircuitId,
     circuitName: activeCircuitName,
     board: board,
@@ -9949,6 +9951,7 @@ function ThermoApp({
     label: "Audit",
     active: isAudit,
     onClick: () => {
+      if (showGate) { setView("audit"); return; }
       const v = lastAuditViewRef.current;
       const ok = isAudit ? false : v === "circuit" ? !!(board && activeCircuitId) : v === "board" ? !!board : v === "area" ? !!area : (!activeAreaId || !!area);
       if (ok) { setView(v); return; }
@@ -10778,7 +10781,7 @@ function SWBApp({ onGoHome }) {
 
   const project=projects.find(p=>p.id===activeProject);
   const auditActive=!!activeMap[activeProject]||(project?swbHasProgress(allResults,project):false);     // completed-but-not-archived counts as active
-  const showGate=gateArmed||!auditActive;     // the gate shows when armed by Back, or when there is no active audit
+  const showGate=gateArmed||!auditActive||auditorIsBlank(allMeta,activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
   const _swbMeta=allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10),notes:""};
   const meta = {
     ..._swbMeta,
@@ -10876,12 +10879,12 @@ function SWBApp({ onGoHome }) {
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
       ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");setGateArmed(false);},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});sitePhotoStore.delPhotoList(swbPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(swbPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));setActiveMap(prev=>auditActiveClear(prev,pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();clearSiteResults();setActiveMap(prev=>auditActiveClear(prev,activeProject));setGateArmed(false);},onReset:discardSiteResults,auditActive})
-      ,view==="audit"&&project&&showGate&&React.createElement(AuditGatePage,{accent:SWB_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);}})
+      ,["audit","board","item"].includes(view)&&project&&showGate&&React.createElement(AuditGatePage,{accent:SWB_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&!showGate&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&!showGate&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
-      ,view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
-      ,view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
+      ,!showGate&&view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
+      ,!showGate&&view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home"),
           onRemoveArea:areaId=>sitePhotoStore.delPhotoList(swbAreaPhotoList(allResults[activeProject],areaId)),
@@ -10901,7 +10904,7 @@ function SWBApp({ onGoHome }) {
     )
     ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",                                  onClick:goHome,                                                                                     color:"#334155"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:["audit","board","item"].includes(view),         onClick:()=>{const v=lastAuditViewRef.current;const inAudit=["audit","board","item"].includes(view);const ok=inAudit?false:v==="item"?!!(board&&activeItemKey):v==="board"?!!board:(!activeAreaId||!!area);if(ok){setView(v);return;}setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#334155"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:["audit","board","item"].includes(view),         onClick:()=>{if(showGate){setView("audit");return;}const v=lastAuditViewRef.current;const inAudit=["audit","board","item"].includes(view);const ok=inAudit?false:v==="item"?!!(board&&activeItemKey):v==="board"?!!board:(!activeAreaId||!!area);if(ok){setView(v);return;}setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#334155"})
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",                                 onClick:()=>setView("report"),                                                                     color:"#334155"})
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history",                                onClick:()=>setView("history"),                                                                    color:"#334155"})
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",                                 onClick:()=>setView("manage"),                                                                     color:"#334155"})
@@ -13668,7 +13671,7 @@ function IRTApp({onGoHome}){
   const [activeMap,setActiveMap]=useAuditActive(K_IRT_ACTIVE,loaded,()=>({projects,entryFor:pr=>irtHasProgress(allResults,pr)?{}:null}));
   const project=projects.find(p=>p.id===activeProject)||null;
   const auditActive=!!activeMap[activeProject]||(project?irtHasProgress(allResults,project):false);     // completed-but-not-archived counts as active
-  const showGate=gateArmed||!auditActive;     // the gate shows when armed by Back, or when there is no active audit
+  const showGate=gateArmed||!auditActive||auditorIsBlank(allMeta,activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
   const _irtMeta=allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10)};
   const meta = {
     ..._irtMeta,
@@ -13720,11 +13723,11 @@ function IRTApp({onGoHome}){
     React.createElement("div",{style:SS.main,ref:irtMainRef},
       view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");setGateArmed(false);},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{siteLogoStore.del("irt",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}}),
       view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setGateArmed(false);},onReset:()=>{setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));setGateArmed(false);},auditActive}),
-      view==="audit"&&project&&showGate&&React.createElement(AuditGatePage,{accent:IRT_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}}),
+      isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:IRT_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}}),
       view==="audit"&&project&&!showGate&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
-      view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
-      view==="panel"&&panel&&React.createElement(IRTItemListView,{panel,area,project,results:allResults,onSelect:(itemId,name)=>{setActiveItemId(itemId);setActiveItemName(name);setView("item");},onBack:()=>{setActivePanelId(null);setView("area");}}),
-      view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");},onShowGuide:()=>setShowGuide(true)}),
+      !showGate&&view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
+      !showGate&&view==="panel"&&panel&&React.createElement(IRTItemListView,{panel,area,project,results:allResults,onSelect:(itemId,name)=>{setActiveItemId(itemId);setActiveItemName(name);setView("item");},onBack:()=>{setActivePanelId(null);setView("area");}}),
+      !showGate&&view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");},onShowGuide:()=>setShowGuide(true)}),
       view==="report"&&project&&React.createElement(IRTReportView,{project,results:allResults,meta,onBack:()=>setView("home")}),
       view==="manage"&&project&&React.createElement(IRTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")}),
       view==="dropdowns"&&React.createElement(IRTDropdownsView,{dropdowns:irtDropdowns,setDropdowns:setIrtDropdowns,onBack:()=>setView("home")}),
@@ -13735,7 +13738,7 @@ function IRTApp({onGoHome}){
     // Bottom nav — matches SWBApp exactly
     view!=="projects"&&React.createElement("nav",{style:SS.bottomNav},
       React.createElement(IRTNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     onClick:goHome,                                                                           color:"#334155"}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{const v=lastAuditViewRef.current;const ok=isAudit?false:v==="item"?!!(panel&&activeItemId):v==="panel"?!!panel:v==="area"?!!area:true;if(ok){setView(v);return;}setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{if(showGate){setView("audit");return;}const v=lastAuditViewRef.current;const ok=isAudit?false:v==="item"?!!(panel&&activeItemId):v==="panel"?!!panel:v==="area"?!!area:true;if(ok){setView(v);return;}setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}}),
       React.createElement(IRTNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>setView("report")}),
       React.createElement(IRTNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>setView("history")}),
       React.createElement(IRTNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>setView("manage")}),
