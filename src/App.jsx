@@ -1506,7 +1506,7 @@ onExportInject: ()=>exportExcel(allResults,project,meta,"inject"),
 activeMode: mode,
 auditEntered: auditEntered,
 onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:new Date().toISOString().slice(0,10)}:{injectDate:new Date().toISOString().slice(0,10)}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);},})
-, isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:mode?modeColor:"#a3530f",moduleLabel:"RCD TEST",auditLabel:mode?modeLabel:"",hasActiveAudit:!!mode,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:true})
+, isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{accent:"#a3530f",hasActiveAudit:!!mode,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true)})
 , isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(AreaListView, { project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>setActiveAreaId(id),})
 , isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(PanelListView, { area: area, project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>{setActivePanelId(id);setView("panel");},})
 , !detailInfo&&view==="panel"&&panel&&React.createElement(CircuitGrid, { area: area, panel: panel, project: project, results: allResults, mode: mode, modeColor: modeColor,
@@ -3218,7 +3218,7 @@ function IELApp({ onGoHome }) {
     ,React.createElement('main',{style:SI.main,ref:mainElRef}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{const proj=projects.find(p=>p.id===id);const hasProgress=IEL_CATEGORIES.some(cat=>{const s=ielSiteSummary(allResults,proj,cat.key);return s.total>0&&(s.pass+s.fail+s.na)>0;});setAuditEntered(hasProgress);setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setAuditEntered(true);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditEntered,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setActiveCat(null);setAuditEntered(false);setActiveAreaId(null);setActivePanelId(null);}})
-      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:activeCat?catColor:"#047857",moduleLabel:"IEL TEST",auditLabel:activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"",hasActiveAudit:!!activeCat,onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
+      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:!!activeCat,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true)})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&auditEntered&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
       ,!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
@@ -4820,20 +4820,27 @@ function CompleteAuditBtn({ color, label, onComplete }) {
 
 
 // ─────────────────────────────────────────────────────────────────────────
-// AUDIT GATE PAGE — shown in audit tab when no audit is in progress
+// AUDIT GATE PAGE — the ONE gate screen for all six audit modules (RCD, IEL, TAT, Thermo, SWB, IRT).
+// Two states: "AUDIT IN PROGRESS" (Continue Audit + Back to Home) and "NO ACTIVE AUDIT" (Go to Home to Start Audit).
+// Layout, copy, icons, button styling and spacing are IDENTICAL in every module; ONLY `accent` (icon + button fill) changes.
+// Title and body text are dark (accent text is below 4.5:1 for several modules); the white label on the accent fill is >= 4.5:1 and the
+// icon >= 3:1 for every module accent (src/audit-gate.test.jsx). No gate text may state a test interval (CLAUDE.md).
+// Start needs an auditor name but the Home field can be cleared afterwards, so with a BLANK auditor Continue is disabled (grey, still readable) and the
+// reason is stated in the line directly under it (not by colour alone); Back to Home stays enabled. Identical in all six modules.
 // ─────────────────────────────────────────────────────────────────────────
-function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome, onEnterAudit, isRCD}) {
+const AUDIT_GATE_LINE = "#7c7c86";   // the "Back to Home" outline: >= 3:1 on the page background (it was #e4e4e7, ~1:1 — practically invisible)
+const AUDIT_GATE_ICON_PROPS = {viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}};
+function AuditGatePage({accent, hasActiveAudit, hasAuditor = true, onGoHome, onEnterAudit}) {
+  const checkIcon = () => React.createElement('svg',AUDIT_GATE_ICON_PROPS,React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}));
+  const clipboardIcon = () => React.createElement('svg',AUDIT_GATE_ICON_PROPS,React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16}));
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
-    ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},hasActiveAudit?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:hasActiveAudit?color:"#52525b",marginBottom:8,letterSpacing:0.5}}
+    ,React.createElement('div',{style:{fontSize:52,marginBottom:16,color:accent},'data-testid':'gate-icon'},hasActiveAudit?checkIcon():clipboardIcon())
+    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:hasActiveAudit?"#18181b":"#52525b",marginBottom:8,letterSpacing:0.5}}
       ,hasActiveAudit?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT"
     )
     ,hasActiveAudit
       ? React.createElement('div',{style:{fontSize:13,color:"#52525b",marginBottom:28,lineHeight:1.6}}
-          ,"Currently running: "
-          ,React.createElement('strong',{style:{color:color}},auditLabel)
-          ,React.createElement('br',null)
-          ,"Tap Continue to test items, or complete the audit when done."
+          ,"Tap Continue to test items, or go Home to complete the audit."
         )
       : React.createElement('div',{style:{fontSize:13,color:"#52525b",marginBottom:28,lineHeight:1.6}}
           ,"No audit is currently in progress."
@@ -4841,13 +4848,15 @@ function AuditGatePage({color, moduleLabel, auditLabel, hasActiveAudit, onGoHome
           ,"Go to Home, enter your auditor name, then tap Start Audit."
         )
     ,!hasActiveAudit&&React.createElement('button',{
-      style:{padding:"14px 32px",background:color,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},
+      style:{padding:"14px 32px",background:accent,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},
       onClick:onGoHome},"⌂ Go to Home to Start Audit")
     ,hasActiveAudit&&React.createElement('button',{
-      style:{padding:"14px 32px",background:color,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:12,width:"100%",maxWidth:320},
-      onClick:onEnterAudit},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
+      disabled:!hasAuditor,
+      style:{padding:"14px 32px",background:hasAuditor?accent:"#e4e4e7",color:hasAuditor?"#fff":"#52525b",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:hasAuditor?12:6,width:"100%",maxWidth:320},
+      onClick:hasAuditor?onEnterAudit:undefined},checkIcon()," Continue Audit →")
+    ,hasActiveAudit&&!hasAuditor&&React.createElement('div',{role:'status',style:{fontSize:12,color:"#b91c1c",marginBottom:12,lineHeight:1.4,maxWidth:320}},"Enter the auditor name on Home to continue.")
     ,hasActiveAudit&&React.createElement('button',{
-      style:{padding:"12px 32px",background:"transparent",color:"#52525b",border:"1px solid #e4e4e7",borderRadius:12,fontSize:13,cursor:"pointer",marginBottom:12,width:"100%",maxWidth:320},
+      style:{padding:"12px 32px",background:"transparent",color:"#52525b",border:`1px solid ${AUDIT_GATE_LINE}`,borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},
       onClick:onGoHome},"⌂ Back to Home")
   );
 }
@@ -5292,7 +5301,7 @@ function TATApp({ onGoHome }) {
         auditEntered,
         onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),notes:""}}));setAuditEntered(false);},
       })
-      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{color:TAT_COLOR,moduleLabel:"TEST & TAG",auditLabel:"Test & Tag Audit",hasActiveAudit:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true),isRCD:false})
+      ,isAudit&&project&&!auditEntered&&React.createElement(AuditGatePage,{accent:TAT_COLOR,hasActiveAudit:!!(meta&&meta.auditor&&meta.auditor.trim()),hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setAuditEntered(true)})
       ,isAudit&&project&&auditEntered&&!activeAreaId&&React.createElement(TATAreaListView,{project,results:allResults,onSelect:id=>setActiveAreaId(id)})
       ,!detailItemId&&isAudit&&project&&auditEntered&&activeAreaId&&area&&React.createElement(TATItemGrid,{area,project,results:allResults,meta,freqOptions,
         onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,itemId,patch),
@@ -7181,22 +7190,6 @@ function ThermoCompleteAuditBtn({onComplete}) {
   return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: "Complete Thermographic Audit", onComplete});
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// AUDIT GATE — shown when audit tab tapped with no board selected
-// ─────────────────────────────────────────────────────────────────────────
-function SWBAuditGate({summary, hasAuditor, onGoHome, onEnterAudit}) {
-  const auditInProgress = summary.total>0 && (summary.pass+summary.fail+summary.na)>0;
-  return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
-    ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},auditInProgress?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?"#7e22ce": "#52525b",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
-    ,auditInProgress
-      ?React.createElement('div',{style:{fontSize:13,color:"#52525b",marginBottom:28,lineHeight:1.6}},"Tap Continue to test boards, or go Home to complete the audit.")
-      :React.createElement('div',{style:{fontSize:13,color:"#52525b",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
-    ,!auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:"#7e22ce",color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Go to Home to Start")
-    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?"#7e22ce":"#e4e4e7",color:hasAuditor?"#fff": "#52525b",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
-    ,auditInProgress&&React.createElement('button',{style:{padding:"12px 32px",background:"transparent",color:"#52525b",border:"1px solid #e4e4e7",borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Back to Home")
-  );
-}
 
 // ─────────────────────────────────────────────────────────────────────────
 // AREA LIST VIEW — select area (no boards shown here)
@@ -9788,13 +9781,11 @@ function ThermoApp({
     onExport: () => exportThermoExcel(project, allResults[activeProject] || {}, meta),
     onCompleteAudit: completeAudit
   }), view === "audit" && project && !auditEntered && /*#__PURE__*/React.createElement(AuditGatePage, {
-    color: "#c2410c",
-    moduleLabel: "THERMO TEST",
-    auditLabel: "Thermographic Audit",
+    accent: THERMO_COLOR,
     hasActiveAudit: !!(meta && meta.auditor && meta.auditor.trim()),
+    hasAuditor: !!(meta && meta.auditor && meta.auditor.trim()),
     onGoHome: goHome,
-    onEnterAudit: () => setAuditEntered(true),
-    isRCD: false
+    onEnterAudit: () => setAuditEntered(true)
   }), view === "audit" && project && auditEntered && !activeAreaId && /*#__PURE__*/React.createElement(ThermoAreaListView, {
     project: project,
     results: allResults[activeProject] || {},
@@ -10803,7 +10794,7 @@ function SWBApp({ onGoHome }) {
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
       ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");const proj=projects.find(p=>p.id===pid);if(proj){const s=swbSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});sitePhotoStore.delPhotoList(swbPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(swbPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
       ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportSWBExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();clearSiteResults();setAuditEntered(false);},onReset:discardSiteResults,auditEntered})
-      ,view==="audit"&&project&&!auditEntered&&React.createElement(SWBAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
+      ,view==="audit"&&project&&!auditEntered&&React.createElement(AuditGatePage,{accent:SWB_COLOR,hasActiveAudit:summary.total>0&&(summary.pass+summary.fail+summary.na)>0,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&auditEntered&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&auditEntered&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
@@ -13570,19 +13561,6 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 }
 
 // ─── Main app shell ────────────────────────────────────────────────────────
-function IRTAuditGate({summary, hasAuditor, onGoHome, onEnterAudit}) {
-  const auditInProgress = summary.total>0 && (summary.pass+summary.fail+summary.na)>0;
-  return React.createElement('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 24px",textAlign:"center",minHeight:"60vh",gap:0}}
-    ,React.createElement('div',{style:{fontSize:52,marginBottom:16}},auditInProgress?React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'})):React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:9,y:2,width:6,height:4,rx:1}),React.createElement('path',{d:'M9 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2h-3'}),React.createElement('line',{x1:9,y1:12,x2:15,y2:12}),React.createElement('line',{x1:9,y1:16,x2:13,y2:16})))
-    ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:auditInProgress?IRT_COLOR: "#52525b",marginBottom:8,letterSpacing:0.5}},auditInProgress?"AUDIT IN PROGRESS":"NO ACTIVE AUDIT")
-    ,auditInProgress
-      ?React.createElement('div',{style:{fontSize:13,color:"#52525b",marginBottom:28,lineHeight:1.6}},"Tap Continue to test boards, or go Home to complete the audit.")
-      :React.createElement('div',{style:{fontSize:13,color:"#52525b",marginBottom:28,lineHeight:1.6}},"No audit is currently in progress.",React.createElement('br',null),"Go to Home, enter your auditor name, then tap Start Audit.")
-    ,!auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:IRT_COLOR,color:"#fff",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:"pointer",marginBottom:16,width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Go to Home to Start")
-    ,auditInProgress&&React.createElement('button',{style:{padding:"14px 32px",background:hasAuditor?IRT_COLOR:"#e4e4e7",color:hasAuditor?"#fff": "#52525b",border:"none",borderRadius:14,fontSize:15,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",marginBottom:12,width:"100%",maxWidth:320},onClick:()=>hasAuditor&&onEnterAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Continue Audit →")
-    ,auditInProgress&&React.createElement('button',{style:{padding:"12px 32px",background:"transparent",color:"#52525b",border:"1px solid #e4e4e7",borderRadius:12,fontSize:13,cursor:"pointer",width:"100%",maxWidth:320},onClick:onGoHome},"⌂ Back to Home")
-  );
-}
 
 function IRTApp({onGoHome}){
   const [projects,setProjects]=React.useState([]);const [allResults,setAllResults]=React.useState({});const [allMeta,setAllMeta]=React.useState({});const [history,setHistory]=React.useState([]);
@@ -13653,7 +13631,7 @@ function IRTApp({onGoHome}){
     React.createElement("div",{style:SS.main,ref:irtMainRef},
       view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");const proj=projects.find(p=>p.id===id);if(proj){const s=irtSiteSummary(allResults,proj);setAuditEntered(s.total>0&&(s.pass+s.fail+s.na)>0);}},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{siteLogoStore.del("irt",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));if(activeProject===id)goProjects();}}),
       view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10)}}));setAuditEntered(false);},onReset:()=>{setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:new Date().toISOString().slice(0,10),nextTestDate:""}}));setAuditEntered(false);},auditEntered}),
-      view==="audit"&&project&&!auditEntered&&React.createElement(IRTAuditGate,{summary,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);}}),
+      view==="audit"&&project&&!auditEntered&&React.createElement(AuditGatePage,{accent:IRT_COLOR,hasActiveAudit:summary.total>0&&(summary.pass+summary.fail+summary.na)>0,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setAuditEntered(true);setActiveAreaId(null);setActivePanelId(null);}}),
       view==="audit"&&project&&auditEntered&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
       view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
       view==="panel"&&panel&&React.createElement(IRTItemListView,{panel,area,project,results:allResults,onSelect:(itemId,name)=>{setActiveItemId(itemId);setActiveItemName(name);setView("item");},onBack:()=>{setActivePanelId(null);setView("area");}}),
@@ -15675,4 +15653,5 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
+export { AuditGatePage };
 export default AppRoot;
