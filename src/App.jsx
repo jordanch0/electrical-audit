@@ -1307,15 +1307,17 @@ function GSDCounts({ defects, areas, photos, urgent, mb = 16 }) {
     React.createElement(StatusPill, { kind: 'fail', count: urgent, label: 'HIGH / URGENT', alert: urgent > 0, compact: true }));
 }
 // items: [{ title, tag?:{text,color}, badge?:{text,color}, path, defectId, comment, lines?:[string], priorityText, responsibility, rectified }]
+// Chip text on its own 13% tint over the pale-red Failed Items card: the standard red #b91c1c is only 4.3:1 there, so the chip TEXT uses #991b1b (>= 6:1); the tint keeps the original colour.
+const reportChipText = c => (String(c).toLowerCase() === '#b91c1c' ? '#991b1b' : c);
 function ReportFailedItems({ items, accent = '#7e22ce' }) {
   if (!items || !items.length) return null;
   return React.createElement('div', { style: { marginBottom: 20 } },
     React.createElement('div', { style: { fontSize: 13, fontWeight: 800, color: '#b91c1c', marginBottom: 10 } }, 'Failed Items'),
     items.map((f, i) => React.createElement('div', { key: i, style: { padding: '10px 12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 6, fontSize: 13 } },
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' } },
-        f.tag && React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: f.tag.color, background: f.tag.color + '22', borderRadius: 4, padding: '1px 6px' } }, f.tag.text),
+        f.tag && React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: reportChipText(f.tag.color), background: f.tag.color + '22', borderRadius: 4, padding: '1px 6px' } }, f.tag.text),
         React.createElement('span', { style: { fontWeight: 700, color: '#18181b' } }, f.title),
-        f.badge && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 11, fontWeight: 800, color: f.badge.color, background: f.badge.color + '22', borderRadius: 5, padding: '2px 6px' } }, f.badge.text)
+        f.badge && React.createElement('span', { style: { marginLeft: 'auto', fontSize: 11, fontWeight: 800, color: reportChipText(f.badge.color), background: f.badge.color + '22', borderRadius: 5, padding: '2px 6px' } }, f.badge.text)
       ),
       f.path && React.createElement('div', { style: { fontSize: 11, color: '#52525b' } }, f.path),
       f.defectId && React.createElement('div', { style: { fontSize: 11, color: '#92400e', marginTop: 4 } }, 'Defect ID: ', f.defectId),

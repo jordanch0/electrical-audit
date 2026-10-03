@@ -84,6 +84,16 @@ describe('app status colours are all readable (>= 4.5:1), and the old low-contra
     must('#1d4ed8', ['surface', 'white', 'page']);       // IRT unit label (was #93c5fd: 1.7)
     must('#166534', Object.keys(BG)); must('#b91c1c', Object.keys(BG)); // standard green / red text, incl. the pale chip fills
   });
+  it('Failed Items chips (priority badge + tag): H / U-red text is #991b1b on its 13% tint over the pale-red card, >= 4.5:1 (the standard #b91c1c was 4.29 there)', () => {
+    const over = (fg, bg, a) => '#' + [0, 2, 4].map(i => Math.round(parseInt(fg.slice(1).substr(i, 2), 16) * a + parseInt(bg.slice(1).substr(i, 2), 16) * (1 - a)).toString(16).padStart(2, '0')).join('');
+    const tint = over('#b91c1c', '#fee2e2', 0x22 / 255);
+    expect(ratio('#b91c1c', tint), 'old chip text').toBeLessThan(4.5);                 // documents why the chip needs its own darker text colour
+    expect(ratio('#991b1b', tint), 'new chip text').toBeGreaterThanOrEqual(4.5);
+    // the other priority colours already pass on their own tint over that card, and must keep doing so
+    ['#166534', '#92400e', '#9B0000'].forEach(c => expect(ratio(c, over(c, '#fee2e2', 0x22 / 255)), c).toBeGreaterThanOrEqual(4.5));
+    expect(src).toMatch(/color: reportChipText\(f\.badge\.color\)/); expect(src).toMatch(/color: reportChipText\(f\.tag\.color\)/);
+    expect(src).toMatch(/reportChipText = c => \(String\(c\)\.toLowerCase\(\) === '#b91c1c' \? '#991b1b' : c\)/);
+  });
   it('index.html styles ::placeholder with a >= 4.5:1 colour and full opacity (the browser default #757575 was 3.7:1 on the page)', () => {
     const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
     const m = /::placeholder\s*\{\s*color:\s*(#[0-9a-fA-F]{6})\s*;\s*opacity:\s*1\s*;?\s*\}/.exec(html);
