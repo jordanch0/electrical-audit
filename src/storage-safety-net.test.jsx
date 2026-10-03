@@ -30,7 +30,7 @@ describe('Global Settings: Storage used line', () => {
     render(<AppRoot />);
     render(<GlobalSettingsView onGoHome={() => {}} />);
     const line = await screen.findByText(/Storage used: .* of ~5 MB \(\d+%, approximate\)/);
-    expect(line.style.color).not.toBe('rgb(220, 38, 38)');
+    expect(line.style.color).not.toBe('rgb(185, 28, 28)');
     expect(line.style.color).not.toBe('rgb(180, 83, 9)');
   });
   it('turns amber above 60% and red above 85%', async () => {
@@ -44,7 +44,7 @@ describe('Global Settings: Storage used line', () => {
     localStorage.setItem('k', pad(STORAGE_QUOTA_ASSUMED_BYTES * 0.9));
     render(<GlobalSettingsView onGoHome={() => {}} />);
     line = await screen.findByText(/Storage used:/);
-    expect(line.style.color).toBe('rgb(220, 38, 38)'); // red #dc2626
+    expect(line.style.color).toBe('rgb(185, 28, 28)'); // red #b91c1c (was #dc2626, 3.8:1; now >= 4.5:1)
   });
   it('label says approximate and excludes photos', async () => {
     render(<GlobalSettingsView onGoHome={() => {}} />);
