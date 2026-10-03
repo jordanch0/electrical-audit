@@ -1,9 +1,21 @@
-// AUDIT-GATES MATRIX (rows are added commit by commit; the full matrix lands in its own commit).
-// Rows here: the PER-SITE ACTIVE-AUDIT FLAG — archived / discarded / never-audited / imported -> NO ACTIVE AUDIT; started -> AUDIT IN PROGRESS and it
-// survives switching site and switching module; site delete clears it; a blank auditor disables Continue in all six modules.
+// AUDIT-GATES MATRIX — every scenario row, for every module (RCD, IEL, TAT, Thermo, SWB, IRT). Where each row lives:
+//   start -> Back -> Audit tab (in progress) ............. per-site active audit; gate marker
+//   start -> Back -> other tab -> Audit tab (no gate) ..... gate marker (Report / History / Manage / Dropdowns); folder level kept (level rows, incl. IEL)
+//   start -> Home TAB directly -> Audit tab (no gate) ...... gate marker
+//   start -> Modules -> back in -> Audit tab ................ per-site active audit (switch MODULE)
+//   gate Back to Home -> Audit tab again (gate again) ...... gate marker
+//   audit completed, not archived (in progress) ............ completed-but-not-archived rows (RCD/TAT/SWB/IRT) + src/audit-active-migration.test.jsx (IEL/Thermo incl. completed)
+//   audit archived / active audit discarded (NO ACTIVE) .... per-site active audit (discard also without Back first)
+//   site deleted (flag, meta, history cleared; old orphans kept) ... site delete
+//   new site never audited (NO ACTIVE, even with an auditor) ........ per-site active audit
+//   imported site (NO ACTIVE) ................................... imported rows (structure only; TAT / IEL carry untested results)
+//   switch module or site while active (never lost) ....... per-site active audit (switch SITE / switch MODULE)
+//   Continue from the gate, then Back again ................ gate marker
+//   refresh toast / relaunch (data intact; marker not restored; flag survives) ... gate marker (relaunch) + src/audit-active-migration.test.jsx + src/async-write-window.test.jsx
+//   blank auditor (Continue disabled + reason in text; Back to Home works) ...... per-site active audit
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppRoot from './App.jsx';
 
@@ -226,5 +238,57 @@ describe('IEL TESTING — folder level kept across another tab (real seed labels
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
     await back(user); expect(screen.queryByText('Feed Conveyor 1')).toBeNull(); expect(screen.getAllByText('E-Stops').length).toBeGreaterThan(0);   // one Back = the panel list of the area
     await back(user); expect(screen.queryByText('E-Stops')).toBeNull();                                                                   // another Back = the area list
+  });
+});
+
+// ── Commit 6 rows: the rest of the matrix. A COMPLETED-but-not-archived audit (every item marked) is in progress; an IMPORTED site (structure only, no
+// auditor, nothing marked) has no active audit. Both for all six modules.
+const SWB_KEYS = ['enclosure', 'ventilation', 'moisture', 'insulation', 'busbars', 'terminations', 'protection', 'contactors', 'mounting', 'labelling', 'earthing'];
+const A = (areas) => areas;
+const COMPLETE = [
+  { tile: 'RCD TESTING', pk: 'rcd-projects-v6', mk: 'rcd-meta-v6', rk: 'rcd-results-v6', hk: 'rcd-history-v6', areas: A([{ id: 'a1', name: 'Plant', panels: [{ id: 'p1', name: 'MSB1', circuits: ['1', '2'] }] }]),
+    results: { a1: { p1: { 1: { push: { status: 'pass' }, inject: {} }, 2: { push: { status: 'pass' }, inject: {} } } } } },
+  { tile: 'TEST & TAG', pk: 'tat-projects-v1', mk: 'tat-meta-v1', rk: 'tat-results-v1', hk: 'tat-history-v1', areas: A([{ id: 'a1', name: 'Plant', defaultFreq: '6', items: ['i1', 'i2'], itemNames: {}, itemTags: {}, itemEquipTypes: {}, itemFreqs: {} }]),
+    results: { a1: { i1: { status: 'pass' }, i2: { status: 'pass' } } } },
+  { tile: 'SWITCHBOARD', pk: 'swb-projects-v1', mk: 'swb-meta-v1', rk: 'swb-results-v1', hk: 'swb-history-v1', areas: A([{ id: 'a1', name: 'Plant', boards: [{ id: 'b1', name: 'MSB1' }] }]),
+    results: { a1: { b1: Object.fromEntries(SWB_KEYS.map(k => [k, { status: 'pass' }])) } } },
+  { tile: 'INSULATION RESISTANCE TESTING', pk: 'irt-projects-v1', mk: 'irt-meta-v1', rk: 'irt-results-v1', hk: 'irt-history-v1', areas: A([{ id: 'a1', name: 'Plant', panels: [{ id: 'p1', name: 'MSB1', items: ['m1', 'm2'] }] }]),
+    results: { a1: { p1: { m1: { status: 'pass', readings: {}, testVoltage: '500V' }, m2: { status: 'pass', readings: {}, testVoltage: '500V' } } } } },
+];
+describe.each(COMPLETE)('$tile — completed but not archived', c => {
+  it('every item marked: Back then Audit shows AUDIT IN PROGRESS; archiving it then shows NO ACTIVE AUDIT and keeps a History snapshot', async () => {
+    localStorage.setItem(c.pk, JSON.stringify([{ id: 's1', name: 'Site One', company: '', abn: '', licence: '', areas: c.areas }])); localStorage.setItem(c.mk, JSON.stringify({ s1: { auditor: 'Jane', testDate: '2026-10-01' } }));
+    localStorage.setItem(c.rk, JSON.stringify({ s1: c.results }));
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText(c.tile, { exact: true })); await user.click(await screen.findByText('Site One', { selector: 'div' }));
+    expect(screen.getByText('COMPLETE ACTIVE AUDIT')).toBeInTheDocument();                         // all marked = still in progress, with its Complete card
+    await auditTab(user); await back(user); await auditTab(user);
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Back to Home/ }));
+    await user.click(screen.getByRole('button', { name: /^Complete/ })); await user.click(await screen.findByRole('button', { name: /^Yes/ }));
+    await auditTab(user);
+    expect(await screen.findByText('NO ACTIVE AUDIT')).toBeInTheDocument();
+    expect(JSON.parse(localStorage.getItem(c.hk)).length).toBe(1);
+  });
+});
+
+// Imported / structure-only sites. TAT and IEL imports carry untested results; the others carry none.
+import pillSeedC6 from './test/pill-seed.cjs';
+const IMPORTED = [
+  ['RCD TESTING', 'rcd-projects-v6', COMPLETE[0].areas, null, null], ['TEST & TAG', 'tat-projects-v1', COMPLETE[1].areas, 'tat-results-v1', { a1: { i1: { status: 'untested' }, i2: { status: 'untested' } } }],
+  ['SWITCHBOARD', 'swb-projects-v1', COMPLETE[2].areas, null, null], ['INSULATION RESISTANCE TESTING', 'irt-projects-v1', COMPLETE[3].areas, null, null],
+  ['THERMOGRAPHIC', 'thermo-projects-v1', [{ id: 'a1', name: 'Plant', boards: [{ id: 'b1', name: 'MSB1', circuits: ['c1'], circuitNames: { c1: 'Main' } }] }], null, null],
+  ['IEL TESTING', 'iel-projects-v2', pillSeedC6.build('iel', 'nologo').ls['iel-projects-v2'][0].areas, 'iel-results-v2', { a1: { estops: { x1: { status: 'untested' } } } }],
+];
+describe.each(IMPORTED)('%s — imported site', (tile, pk, areas, rk, results) => {
+  it('structure only, no auditor, nothing marked: NO ACTIVE AUDIT, no Complete card, nothing stored as active', async () => {
+    localStorage.setItem(pk, JSON.stringify([{ id: 'imp', name: 'Imported Site', company: '', abn: '', licence: '', areas }]));
+    if (rk) localStorage.setItem(rk, JSON.stringify({ imp: results }));
+    const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText(tile, { exact: true })); await user.click(await screen.findByText('Imported Site', { selector: 'div' }));
+    expect(screen.queryByText('COMPLETE ACTIVE AUDIT')).toBeNull();
+    await auditTab(user);
+    expect(await screen.findByText('NO ACTIVE AUDIT')).toBeInTheDocument();
+    await waitFor(() => { const k = Object.keys(localStorage).find(x => x.endsWith('-audit-active-v1')); expect(JSON.parse(localStorage.getItem(k)).sites).toEqual({}); });
   });
 });
