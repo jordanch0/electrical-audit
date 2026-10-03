@@ -40,7 +40,7 @@ describe('RCD: old-format data (global rcd-mode-v6 = "push")', () => {
   };
   const OLD_KEYS = ['rcd-projects-v6', 'rcd-meta-v6', 'rcd-results-v6', 'rcd-mode-v6'];
   const gateOf = async (user, name) => {
-    await user.click(await screen.findByText(name, { selector: 'div' })); await auditTab(user);
+    await user.click(await screen.findByText(name, { selector: 'div' })); await auditTab(user); await back(user); await auditTab(user);   // Audit, Back (arms the gate), Audit
     const inProg = screen.queryByText('AUDIT IN PROGRESS'), none = screen.queryByText('NO ACTIVE AUDIT');
     const out = inProg ? 'IN-PROGRESS' : none ? 'NO-ACTIVE' : 'FOLDERS';
     const cont = inProg ? screen.getByRole('button', { name: /Continue Audit/ }).disabled : null;
@@ -55,7 +55,7 @@ describe('RCD: old-format data (global rcd-mode-v6 = "push")', () => {
     const r1 = {}; for (const n of ['Started Empty', 'Blank Auditor', 'With Progress', 'Untouched']) r1[n] = await gateOf(user, n);
     expect(r1['Started Empty']).toMatchObject({ out: 'IN-PROGRESS', continueDisabled: false });         // started before the change: still in progress
     expect(r1['Blank Auditor']).toMatchObject({ out: 'IN-PROGRESS', continueDisabled: true });          // auditor cleared: in progress, Continue disabled
-    expect(r1['With Progress'].out).toBe('FOLDERS');                                                    // marked items: active, straight into the folders
+    expect(r1['With Progress'].out).toBe('IN-PROGRESS');                                                // marked items: active — Back then Audit shows the in-progress gate
     expect(r1['Untouched']).toMatchObject({ out: 'NO-ACTIVE' });                                        // never touched: not active
     const key1 = localStorage.getItem('rcd-audit-active-v1');
     expect(JSON.parse(key1).v).toBe(1); expect(Object.keys(JSON.parse(key1).sites).sort()).toEqual(['s1', 's2', 's3']);
@@ -101,7 +101,7 @@ describe('IEL: old-format data (global iel-cat-v2 = "estops")', () => {
     localStorage.setItem('iel-projects-v2', JSON.stringify([{ id: 's1', name: 'Started Empty', areas: [] }, { id: 's2', name: 'Blank Auditor', areas: [] }, { id: 's3', name: 'Untouched', areas: [] }]));
     localStorage.setItem('iel-meta-v2', JSON.stringify({ s1: { auditor: 'Jane' }, s2: { auditor: '' } })); localStorage.setItem('iel-cat-v2', JSON.stringify('estops'));
     const before = snapshot(OLD_KEYS);
-    const gate = async (user, name) => { await user.click(await screen.findByText(name, { selector: 'div' })); await auditTab(user); const g = screen.queryByText('AUDIT IN PROGRESS') ? 'IN-PROGRESS' : screen.queryByText('NO ACTIVE AUDIT') ? 'NO-ACTIVE' : 'OTHER'; const dis = g === 'IN-PROGRESS' ? screen.getByRole('button', { name: /Continue Audit/ }).disabled : null; await toList(user); return [g, dis]; };
+    const gate = async (user, name) => { await user.click(await screen.findByText(name, { selector: 'div' })); await auditTab(user); await back(user); await auditTab(user); const g = screen.queryByText('AUDIT IN PROGRESS') ? 'IN-PROGRESS' : screen.queryByText('NO ACTIVE AUDIT') ? 'NO-ACTIVE' : 'OTHER'; const dis = g === 'IN-PROGRESS' ? screen.getByRole('button', { name: /Continue Audit/ }).disabled : null; await toList(user); return [g, dis]; };
     const run = async () => { const user = userEvent.setup(); const r = render(<AppRoot />); await user.click(screen.getByText('IEL TESTING', { exact: true })); const out = []; for (const n of ['Started Empty', 'Blank Auditor', 'Untouched']) out.push(await gate(user, n)); r.unmount(); cleanup(); return out; };
     const one = await run(); expect(one).toEqual([['IN-PROGRESS', false], ['IN-PROGRESS', true], ['NO-ACTIVE', null]]);
     const key1 = localStorage.getItem('iel-audit-active-v1'); expect(JSON.parse(key1).sites).toEqual({ s1: { cat: 'estops' }, s2: { cat: 'estops' } });
@@ -127,6 +127,9 @@ describe('TAT / SWB / IRT: old data with marked items becomes active (no loss); 
     await run(); expect(localStorage.getItem(ak)).toBe(key1);
     [pk, mk, rk].forEach(k => expect(JSON.parse(localStorage.getItem(k))).toEqual(JSON.parse(before[k])));
     const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByText(tile, { exact: true }));
+    await user.click(await screen.findByText('Worked', { selector: 'div' })); await auditTab(user); await back(user); await auditTab(user);
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();                      // marked items: active, so Back then Audit shows the in-progress gate
+    await toList(user);
     await user.click(await screen.findByText('Name Only', { selector: 'div' })); await auditTab(user);
     expect(await screen.findByText('NO ACTIVE AUDIT')).toBeInTheDocument();
   });
@@ -134,7 +137,7 @@ describe('TAT / SWB / IRT: old data with marked items becomes active (no loss); 
 
 // ── IEL and Thermo with MARKED items (the shared fictional seed, src/test/pill-seed.cjs): in the old format there is no active-flag key at all, so the
 // migration must make these sites active from their marked items. Includes a COMPLETED-but-unarchived audit (every item marked) — it counts as in
-// progress (no third state) until it is archived. (That the in-progress GATE then shows after Back is asserted in the gate-marker commit's rows.)
+// progress (no third state) until it is archived. The in-progress GATE then shows after Back (Back arms it).
 import seed from './test/pill-seed.cjs';
 describe.each([
   ['iel', 'IEL TESTING', 'iel-audit-active-v1', { cat: 'estops' }, /Complete IEL Audit/],
@@ -153,6 +156,9 @@ describe.each([
     expect(JSON.parse(localStorage.getItem(ak)).sites).toEqual({ [pid]: entry });
     expect(screen.getByText('COMPLETE ACTIVE AUDIT')).toBeInTheDocument();                       // the Home card for an active audit
     expect(screen.getByRole('button', { name: completeRe })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^Audit$/ })); await user.click(screen.getAllByText('Back')[0]); await user.click(screen.getByRole('button', { name: /^Audit$/ }));
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();                      // the migrated audit (completed or not) shows the in-progress gate after Back
+    await user.click(screen.getByRole('button', { name: /Back to Home/ }));
     const key1 = localStorage.getItem(ak); r.unmount(); cleanup();
     const second = await run();
     expect(localStorage.getItem(ak)).toBe(key1); expect(screen.getByText('COMPLETE ACTIVE AUDIT')).toBeInTheDocument();

@@ -170,7 +170,8 @@ describe('blank auditor in the app (the modules that can reach the in-progress g
       if (pk.startsWith('iel')) localStorage.setItem('iel-cat-v2', JSON.stringify('estops')); else localStorage.setItem('rcd-mode-v6', JSON.stringify('push'));
       const user = userEvent.setup(); render(<AppRoot />);
       await user.click(screen.getByText(tile, { exact: true })); await user.click(await screen.findByText('Demo Site', { selector: 'div' }));
-      await user.click(screen.getByRole('button', { name: /^Audit$/ }));
+      await user.click(screen.getByRole('button', { name: /^Audit$/ }));                 // reopening a site goes straight to the folders...
+      await user.click(screen.getAllByText('Back')[0]); await user.click(screen.getByRole('button', { name: /^Audit$/ }));   // ...Back arms the gate
       expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
       expect(screen.queryByText(BLANK_MSG)).toBeNull();
       await user.click(screen.getByRole('button', { name: /Continue Audit/ }));
