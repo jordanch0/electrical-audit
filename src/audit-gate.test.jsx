@@ -91,7 +91,7 @@ describe('NO ACTIVE AUDIT gate in each module (site never audited)', () => {
   });
 });
 
-describe('AUDIT IN PROGRESS gate where it is reachable today (RCD after Start+Back; TAT / Thermo with an auditor)', () => {
+describe('AUDIT IN PROGRESS gate after Start + Back to Home (RCD, TAT, Thermo)', () => {
   const site = { id: 's1', name: 'Demo Site', company: '', abn: '', licence: '', areas: [] };
   it('RCD: Start Push Test, Back to Home, Audit tab', async () => {
     localStorage.setItem('rcd-projects-v6', JSON.stringify([site])); localStorage.setItem('rcd-meta-v6', JSON.stringify({ s1: { auditor: 'Jane' } }));
@@ -103,10 +103,11 @@ describe('AUDIT IN PROGRESS gate where it is reachable today (RCD after Start+Ba
     expect(screen.getByTestId('gate-icon').style.color).toBe(rgb('#a3530f'));
   });
   [['TEST & TAG', 'tat-projects-v1', 'tat-meta-v1', '#1d4ed8'], ['THERMOGRAPHIC', 'thermo-projects-v1', 'thermo-meta-v1', '#c2410c']].forEach(([tile, pk, mk, accent]) => {
-    it(`${tile}: auditor entered, Audit tab`, async () => {
+    it(`${tile}: Start, Back to Home, Audit tab`, async () => {
       localStorage.setItem(pk, JSON.stringify([site])); localStorage.setItem(mk, JSON.stringify({ s1: { auditor: 'Jane', testDate: '2026-10-01' } }));
       const user = userEvent.setup(); render(<AppRoot />);
       await user.click(screen.getByText(tile, { exact: true })); await user.click(await screen.findByText('Demo Site', { selector: 'div' }));
+      await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ })); await user.click(screen.getAllByText('Back')[0]);
       await user.click(screen.getByRole('button', { name: /^Audit$/ }));
       expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
       IN_PROGRESS.forEach(t => expect(document.body.textContent).toContain(t));

@@ -141,8 +141,7 @@ describe('Thermo MONITOR', () => {
     render(<AppRoot />);
     await user.click(screen.getByText('THERMOGRAPHIC'));
     await user.click(await screen.findByText('Site H', { selector: 'div' }));
-    await user.click(screen.getByRole('button', { name: 'Audit' }));
-    await user.click(await screen.findByRole('button', { name: /Continue Audit/ }));
+    await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));   // Start from Home: the Audit tab alone no longer offers Continue for a never-started site
     await user.click(await screen.findByText('Switchroom'));
     await user.click(await screen.findByText('MSB1'));
     await user.click(await screen.findByText('CB1'));
