@@ -97,9 +97,9 @@ describe('Complete audit, History, Reset, deletes — photos follow their owner'
       expect(!!within(num.parentElement).queryByTestId('gsd-pri-H')).toBe(dot);
     }
   });
-  it('Report tab: tiles, per-area defects with #, and the empty state', async () => {
+  it('Report tab: plain counts + a HIGH / URGENT pill, per-area defects with #, and the empty state', async () => {
     await seedItems(); const user = userEvent.setup(); await open(user, 'Report');
-    expect(await screen.findByText('SITE DEFECTS REPORT · Jane')).toBeInTheDocument(); expect(screen.getByText(/^defects$/i)).toBeInTheDocument(); expect(screen.getByText('High / Urgent', { exact: false })).toBeInTheDocument();
+    expect(await screen.findByText('SITE DEFECTS REPORT · Jane')).toBeInTheDocument(); expect(screen.getByText('2 defects · 2 areas · 3 photos')).toBeInTheDocument(); expect(screen.getByText('2 HIGH / URGENT')).toBeInTheDocument();
     expect(screen.getByText('Defect i1')).toBeInTheDocument(); expect(screen.getAllByText('Guarding · High · Site Manager').length).toBe(2);
     expect(screen.queryAllByText('Defect i1', { exact: false })).toHaveLength(1);       // the description is shown once — it is also the title, so no second line
     cleanup(); localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [] })); await open(userEvent.setup(), 'Report'); expect(await screen.findByText('✓ No defects recorded')).toBeInTheDocument();
@@ -152,7 +152,7 @@ describe('GSD History matches ELT: accordion cards, View Results / Export / Dele
     await seedHistory(); const user = userEvent.setup(); await open(user, 'History');
     await user.click(within(await screen.findByTestId('gsd-history-card')).getByRole('button', { expanded: false })); await user.click(screen.getByRole('button', { name: 'View Results' }));
     expect(await screen.findByText('Site Defects Snapshot')).toBeInTheDocument(); expect(screen.getByText(/Read-only/)).toBeInTheDocument();
-    for (const [label, v] of [['Defects', '3'], ['High / Urgent', '2'], ['Photos', '3']]) expect(screen.getByText(label).previousElementSibling).toHaveTextContent(v);
+    expect(screen.getByText('3 defects · 2 areas · 3 photos')).toBeInTheDocument(); expect(screen.getByText('2 HIGH / URGENT', { selector: '[data-statuspill]' })).toBeInTheDocument();
     const rows = screen.getAllByTestId('gsd-snap-row'); expect(rows).toHaveLength(3);
     await waitFor(() => expect(rows[0].querySelector('img')).not.toBeNull());                                    // #1 has a photo -> a real thumbnail (from the archived IndexedDB record)
     expect(rows[1].querySelector('img')).toBeNull();                                                              // #2 (Loose cable) has none -> placeholder

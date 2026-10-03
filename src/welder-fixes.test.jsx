@@ -22,7 +22,7 @@ const seed = extra => {
 };
 const card = i => screen.getByText(new RegExp(`^${i + 1}\\. ${WELDER_CHECKLIST[i].label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)).parentElement;
 const setResult = (user, i, label) => user.click(within(card(i)).getByRole('button', { name: label }));
-const score = () => screen.getByText('SCORE').parentElement.textContent.match(/(\d+\.\d%|—)/)[0];
+const score = () => screen.getByText(/(\d+\.\d%|—) SCORE$/).textContent.match(/(\d+\.\d%|—)/)[0];
 async function openWelder(user, tab) {
   render(<AppRoot />);
   await user.click(screen.getByText('WELDER TESTING'));
@@ -56,7 +56,7 @@ describe('Welder score, live in the UI', () => {
     const user = userEvent.setup();
     cleanup();
     await openWelder(user, 'Report');
-    expect(screen.queryByText('SCORE')).not.toBeInTheDocument();
+    expect(screen.queryByText(/SCORE/)).not.toBeInTheDocument();
   });
 });
 

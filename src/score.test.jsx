@@ -59,7 +59,7 @@ describe('SWB board score (11 items, N/A removes an item)', () => {
 });
 
 describe('live UI', () => {
-  const score = () => screen.getByText('SCORE').parentElement.textContent.match(/(\d+\.\d%|—)/)[0];
+  const score = () => screen.getByText(/(\d+\.\d%|—) SCORE$/).textContent.match(/(\d+\.\d%|—)/)[0];
 
   it('ELT fitting page: AUDIT SUMMARY with SCORE that moves as the checks are tapped (live-saved)', async () => {
     localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site E', assets: [

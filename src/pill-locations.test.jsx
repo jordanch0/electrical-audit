@@ -17,6 +17,7 @@ const ROW = {
   full: /^\d+ PASS \| \d+ FAIL \| \d+ N\/A \| \d+ (UNTESTED|—)( \| ([\d.]+% SCORE|— SCORE))?$/,
   noNA: /^\d+ PASS \| \d+ FAIL \| \d+ (UNTESTED|—)$/,
   thermo: /^\d+ PASS \| \d+ FAIL \| \d+ MONITOR$/,
+  noNAScore: /^\d+ PASS \| \d+ FAIL \| \d+ (UNTESTED|—) \| ([\d.]+% SCORE|— SCORE)$/,
 };
 // [module key for the seed, model, screen name, steps, options]   steps: btn:X (button) · t:X (first text) · T:X (last text) · complete:X (complete + confirm)
 //   site: false = stay on the site list   min: minimum pill rows on the screen   noBadge: no bare FAIL / "N FAIL" text outside a pill
@@ -33,7 +34,7 @@ const LOCATIONS = [
   L('iel', 'full', 'IEL item-grid header', ['t:E-Stops', 't:Wash Plant', 'T:E-Stops'], { min: 1, counts: { '4 items': 1 } }), L('iel', 'full', 'IEL history', ['complete:Complete IEL Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '12 items': 1 } }),
   // TAT
   L('tat', 'full', 'TAT site list', [], { site: false, min: 1, noBadge: true, counts: { '10 items': 1 } }), L('tat', 'full', 'TAT home', [], { min: 1, counts: { '10 items': 1 } }), L('tat', 'full', 'TAT areas', ['btn:Audit'], { min: 2, noBadge: true, counts: { '6 items': 1, '4 items': 1 } }),
-  L('tat', 'full', 'TAT item-grid header', ['btn:Audit', 't:Workshop'], { min: 1, counts: { '6 items': 1 } }), L('tat', 'full', 'TAT report area rows', ['btn:Report'], { min: 2, counts: { '6 items': 1, '4 items': 1 } }),
+  L('tat', 'full', 'TAT item-grid header', ['btn:Audit', 't:Workshop'], { min: 1, counts: { '6 items': 1 } }), L('tat', 'full', 'TAT report (summary + area rows)', ['btn:Report'], { min: 3, counts: { '10 items': 1, '6 items': 1, '4 items': 1 } }),
   L('tat', 'full', 'TAT history', ['complete:Complete Test & Tag Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '10 items': 1 } }),
   // SWB
   L('swb', 'full', 'SWB site list', [], { site: false, min: 1, noBadge: true, counts: { '3 boards': 1 } }), L('swb', 'full', 'SWB home', [], { min: 1, counts: { '33 checklist points': 1 } }), L('swb', 'full', 'SWB areas', ['btn:Audit'], { min: 2, noBadge: true, counts: { '2 boards': 1, '1 board': 1 } }),
@@ -42,11 +43,11 @@ const LOCATIONS = [
   // ELT
   L('elt', 'noNA', 'ELT site list', [], { site: false, min: 1, noBadge: true, counts: { '5 fittings': 1 } }), L('elt', 'noNA', 'ELT home', [], { min: 1, counts: { '5 fittings': 1 } }),
   L('elt', 'noNA', 'ELT audit list (header + area groups)', ['btn:Audit'], { min: 3, counts: { '3 fittings': 1, '2 fittings': 1 } }),
-  L('elt', 'noNA', 'ELT report area summary', ['btn:Report'], { min: 2, counts: { '3 fittings': 1, '2 fittings': 1 } }), L('elt', 'noNA', 'ELT history', ['complete:Complete Emergency Lighting Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '5 fittings': 1 } }),
+  L('elt', 'noNA', 'ELT report (summary + area rows)', ['btn:Report'], { min: 3, counts: { '3 fittings': 1, '2 fittings': 1 } }), L('elt', 'noNA', 'ELT history', ['complete:Complete Emergency Lighting Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '5 fittings': 1 } }),
   // Welder
   L('welder', 'noNA', 'Welder site list', [], { site: false, min: 1, noBadge: true, counts: { '3 welders': 1 } }), L('welder', 'noNA', 'Welder home', [], { min: 1, counts: { '3 welders': 1 } }),
   L('welder', 'noNA', 'Welder audit list (header + area groups)', ['btn:Audit'], { min: 2, counts: { '3 welders': 1 } }),
-  L('welder', 'noNA', 'Welder report area summary', ['btn:Report'], { min: 1, counts: { '3 welders': 1 } }), L('welder', 'noNA', 'Welder history', ['complete:Complete Welder Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '3 welders': 1 } }),
+  L('welder', 'noNA', 'Welder report (summary + area row)', ['btn:Report'], { min: 2, counts: { '3 welders': 1 } }), L('welder', 'noNA', 'Welder history', ['complete:Complete Welder Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '3 welders': 1 } }),
   // IRT
   L('irt', 'full', 'IRT site list', [], { site: false, min: 1, noBadge: true, counts: { '5 items': 1 } }), L('irt', 'full', 'IRT home', [], { min: 1, counts: { '5 items': 1 } }), L('irt', 'full', 'IRT areas', ['btn:Audit'], { min: 2, noBadge: true, counts: { '3 items': 1, '2 items': 1 } }),
   L('irt', 'full', 'IRT panels', ['btn:Audit', 't:Wash Plant'], { min: 1, noBadge: true, counts: { '3 items': 1 } }), L('irt', 'full', 'IRT report panel rows', ['btn:Report'], { min: 2 }),
@@ -55,6 +56,22 @@ const LOCATIONS = [
   L('thermo', 'thermo', 'Thermo site list', [], { site: false, min: 1, noBadge: true, counts: { '7 photos': 1 } }), L('thermo', 'thermo', 'Thermo home', [], { min: 1, counts: { '7 photos': 1 } }),
   L('thermo', 'thermo', 'Thermo areas', ['btn:Audit'], { min: 1, noBadge: true, counts: { '7 photos': 1 } }), L('thermo', 'thermo', 'Thermo boards', ['btn:Audit', 't:Wash Plant'], { min: 2, noBadge: true, counts: { '5 photos': 1, '2 photos': 1 } }),
   L('thermo', 'thermo', 'Thermo report board rows', ['btn:Report'], { min: 2 }), L('thermo', 'thermo', 'Thermo history', ['complete:Complete Thermographic Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '7 photos': 1 } }),
+  // ---- TILE screens (commit b): Report summaries, History snapshot summaries, ELT / Welder asset pages — status pills only, count as text once
+  L('rcd-push', 'full', 'RCD report (both modes)', ['btn:Report'], { min: 2, counts: { '10 circuits': 2 } }),
+  L('rcd-push', 'full', 'RCD history snapshot summary', ['complete:Complete Push Test', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('iel', 'full', 'IEL report (per category)', ['btn:Report'], { min: 3, counts: { '6 items': 1, '3 items': 2 } }),
+  L('iel', 'full', 'IEL history snapshot summary', ['complete:Complete IEL Audit', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('tat', 'full', 'TAT history snapshot summary', ['complete:Complete Test & Tag Audit', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('swb', 'full', 'SWB report (summary + board rows)', ['btn:Report'], { min: 4, counts: { '33 checklist points': 1 } }),
+  L('swb', 'full', 'SWB history snapshot summary', ['complete:Complete Switchboard Audit', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('elt', 'noNAScore', 'ELT asset page', ['btn:Audit', 't:North Door'], { min: 1 }),
+  L('elt', 'noNA', 'ELT history snapshot summary', ['complete:Complete Emergency Lighting Audit', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('welder', 'full', 'Welder asset page (PASS FAIL N/A — SCORE)', ['btn:Audit', 't:W002'], { min: 1 }),
+  L('welder', 'noNA', 'Welder history snapshot summary', ['complete:Complete Welder Audit', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('irt', 'full', 'IRT report (summary + panel rows)', ['btn:Report'], { min: 3, counts: { '5 items': 1 } }),
+  L('irt', 'full', 'IRT history snapshot summary', ['complete:Complete IR Testing Audit', 'btn:History', 'r:^Archived ', 'btn:View Results'], { min: 1 }),
+  L('thermo', 'thermo', 'Thermo report (summary + board rows)', ['btn:Report'], { min: 3, counts: { '7 photos': 1 } }),
+  L('thermo', 'thermo', 'Thermo history snapshot summary', ['complete:Complete Thermographic Audit', 'btn:History', 'r:^Archived ', 'btn:View'], { min: 1 }),
 ];
 
 const leafTexts = root => [...root.querySelectorAll('div,span,button,p,td')].filter(e => !e.querySelector('div,span,button') && !e.closest('[data-statuspill]') && !e.closest('nav') && e.textContent.trim()).map(e => e.textContent.trim().replace(/\s+/g, ' '));
@@ -69,6 +86,7 @@ async function open(loc) {
   for (const s of loc.steps) {
     if (s.startsWith('btn:')) await user.click((await screen.findAllByRole('button', { name: s.slice(4) }))[0]);
     else if (s.startsWith('t:')) await user.click((await screen.findAllByText(s.slice(2)))[0]);
+    else if (s.startsWith('r:')) await user.click((await screen.findAllByText(new RegExp(s.slice(2))))[0]);
     else if (s.startsWith('T:')) { const a = await screen.findAllByText(s.slice(2)); await user.click(a[a.length - 1]); }
     else if (s.startsWith('complete:')) { await user.click((await screen.findAllByRole('button', { name: new RegExp(s.slice(9)) }))[0]); await user.click((await screen.findAllByRole('button', { name: /Yes, Complete/ }))[0]); await new Promise(r => setTimeout(r, 150)); }
     await new Promise(r => setTimeout(r, 60));

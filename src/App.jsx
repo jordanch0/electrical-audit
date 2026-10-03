@@ -1290,17 +1290,21 @@ function StatusSet({ model, s, dash, score, compact, style }) {
   return React.createElement(StatusPills, { compact: compact !== false, style, pills: spPills(model, s, { dash, score }) });
 }
 function StatusPills({ pills, compact, style }) {
-  const list = (pills || []).filter(Boolean); const big = list.some(q => (parseInt(q[1], 10) || 0) >= 100);
+  const list = (pills || []).filter(Boolean); const big = list.some(q => q[0] !== "score" && (parseInt(q[1], 10) || 0) >= 100);   // a SCORE like "100.0%" is not a count
   return React.createElement('span', { "data-statuspills": "", style: { display: "flex", flexWrap: "wrap", gap: compact ? 5 : 8, alignItems: "center", ...(style || {}) } },
     list.map((q, i) => React.createElement(StatusPill, { key: i + ":" + q[0], kind: q[0], count: q[1], label: q[2] === undefined && q[0] === "untested" && big ? "—" : q[2], compact, ...(q[3] || {}) })));
 }
-function ReportStatTiles({ rows, mb = 20 }) {
-  return React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: mb, flexWrap: 'wrap' } },
-    rows.map(([l, v, c]) => React.createElement('div', { key: l, style: { flex: 1, minWidth: 48, textAlign: 'center', background: '#f7f6f3', borderRadius: 10, border: `1px solid ${c}33`, padding: '10px 4px' } },
-      React.createElement('div', { style: { fontSize: 22, fontWeight: 800, color: c } }, v),
-      React.createElement('div', { style: { fontSize: 9, color: '#6e6a66', marginTop: 2 } }, l.toUpperCase())
-    ))
-  );
+// Report summary: the module's status pills (StatusSet) with the item count as plain text, once (right of an optional title). Replaces the old big count tiles.
+function ReportStatPills({ model, s, count, unit, title, score, mb = 20 }) {
+  return React.createElement('div', { style: { marginBottom: mb } },
+    (title || count != null) && React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 8 } }, title || null, count != null ? React.createElement('span', { style: { fontSize: 12, color: '#52525b' } }, nw(count, unit)) : null),
+    React.createElement(StatusSet, { model, s, score }));
+}
+// GSD has no pass / fail: counts as plain text, once, plus the one status pill it has (HIGH / URGENT; red alert when > 0)
+function GSDCounts({ defects, areas, photos, urgent, mb = 16 }) {
+  return React.createElement('div', { style: { marginBottom: mb } },
+    React.createElement('div', { style: { fontSize: 12, color: '#52525b', marginBottom: 8 } }, [nw(defects, 'defect'), areas != null ? nw(areas, 'area') : null, nw(photos, 'photo')].filter(Boolean).join(' · ')),
+    React.createElement(StatusPill, { kind: 'fail', count: urgent, label: 'HIGH / URGENT', alert: urgent > 0, compact: true }));
 }
 // items: [{ title, tag?:{text,color}, badge?:{text,color}, path, defectId, comment, lines?:[string], priorityText, responsibility, rectified }]
 function ReportFailedItems({ items, accent = '#7e22ce' }) {
@@ -1874,14 +1878,7 @@ const st=snap.mode==="inject"?(_nullishCoalesce(_optionalChain([d, 'optionalAcce
 if(st===STATUS.PASS)pass++;else if(st===STATUS.FAIL)fail++;else if(st===STATUS.NA)na++;
 })));
 return (
-React.createElement('div', { style: {display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"},}
-, [["Pass",pass,"#16a34a"],["Fail",fail,"#dc2626"],["N/A",na,"#334155"],["Untested",total-pass-fail-na,"#92400e"]].map(([l,v,c])=>(
-React.createElement('div', { key: l, style: {background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"},}
-, React.createElement('div', { style: {fontSize:18,fontWeight:800,color:c},}, v)
-, React.createElement('div', { style: {fontSize:10,color:"#6e6a66"},}, l)
-)
-))
-)
+React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na},style:{marginBottom:16}})
 );
 })()
 , React.createElement('div', { style: {fontSize:11,color:"#52525b",marginBottom:12},}, "Tap an area to view circuit results"      )
@@ -2692,10 +2689,7 @@ return(React.createElement('div',{style:S.summaryWrap}
     ,_optionalChain([meta,'optionalAccess',_179=>_179.injectDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#93c5fd",color:"#1d4ed8",padding:"7px 12px"}},moduleIcon("rcd_inject",15)," Injection: ",fmtDate(meta.injectDate)," → next ",(meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(meta.injectDate,1)))
   )
   ,[["PUSH TEST",pushSum,"#a3530f"],["INJECTION TEST",injectSum,"#1d4ed8"]].map(([lbl,sum,col])=>(
-    React.createElement('div',{key:lbl,style:{marginBottom:20}}
-      ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:col,letterSpacing:0.8,marginBottom:8}},lbl)
-      ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:0})
-    )
+    React.createElement(ReportStatPills,{key:lbl,model:"full",s:sum,count:sum.total,unit:"circuit",mb:20,title:React.createElement('div',{style:{fontSize:12,fontWeight:700,color:col,letterSpacing:0.8}},lbl)})
   ))
   ,React.createElement(ReportFailedItems,{accent:"#a3530f",items:[...pushFails.map(f=>({title:f.circuit,tag:{text:"Push",color:"#a3530f"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified})),...injectFails.map(f=>({title:f.circuit,tag:{text:"Injection",color:"#1d4ed8"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))]})
   ,(pushSum.fail===0&&injectSum.fail===0)&&React.createElement(ReportNoDefects)
@@ -3866,10 +3860,7 @@ function IELReportView({project,results,meta,onBack}){
     )
     ,IEL_CATEGORIES.map(cat=>{
       const sum=ielSiteSummary(results,project,cat.key);
-      return React.createElement('div',{key:cat.key,style:{marginBottom:20}}
-        ,React.createElement('div',{style:{fontSize:13,fontWeight:800,color:cat.color,marginBottom:8}},cat.icon," ",cat.label)
-        ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:0})
-      );
+      return React.createElement(ReportStatPills,{key:cat.key,model:"full",s:sum,count:sum.total,unit:"item",mb:20,title:React.createElement('div',{style:{fontSize:13,fontWeight:800,color:cat.color}},cat.icon," ",cat.label)});
     })
     ,React.createElement(ReportFailedItems,{accent:"#047857",items:allFails.map(f=>({title:f.name,tag:{text:f.cat.label,color:f.cat.color},badge:reportPriorityBadge(f.priority),path:f.area,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))})
     ,allFails.length===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
@@ -4118,14 +4109,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       // Summary pills
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",totPass,"#16a34a"],["Fail",totFail,"#dc2626"],["N/A",totNa,"#334155"],["Untested",totAll-totPass-totFail-totNa,"#92400e"]].map(([l,v,c])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:{pass:totPass,fail:totFail,na:totNa,untested:totAll-totPass-totFail-totNa},style:{marginBottom:16}})
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view items")
       // Area cards — mirrors RCD exactly
       ,project&&project.areas.map(area=>{
@@ -5807,7 +5791,7 @@ function TATReportView({project,results,meta,onBack}){
       ,React.createElement('div',{style:{fontSize:12,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
     )
     ,meta.machine&&meta.machine.trim()&&React.createElement('div',{"data-testid":"tat-report-machine",style:{fontSize:12,color:"#52525b",marginTop:-8,marginBottom:16}},"Machine: ",meta.machine.trim())
-    ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:20})
+    ,React.createElement(ReportStatPills,{model:"full",s:sum,count:sum.total,unit:"item",mb:20})
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:TAT_COLOR,letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY")
       ,project.areas.map(area=>{
@@ -6196,14 +6180,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,React.createElement('button',{style:{...ST.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#1d4ed8"],["Fail",fail,"#dc2626"],["N/A",na,"#334155"],["Untested",unt,"#92400e"]].map(([l,v,c])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},style:{marginBottom:16}})
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results")
       ,project&&project.areas.map(area=>{
         const aItems=(area.items||[]);
@@ -8560,7 +8537,7 @@ function ThermoReportView({
     style: STH.summaryTitle
   }, project.name), project.company && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#6e6a66",marginTop:2,marginBottom:4}}, project.company), /*#__PURE__*/React.createElement("div", {
     style: STH.summaryMeta
-  }, "THERMOGRAPHIC REPORT", meta.auditor ? ` · ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{...STH.duePill,borderColor:`${THERMO_COLOR}55`,color:THERMO_COLOR,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):fmtDate(addYearsISO(meta.testDate,1))))), /*#__PURE__*/React.createElement(ReportStatTiles,{rows:[["Total", rows.length, "#334155"], ["Pass", rows.filter(r => r.photo.result === "PASS").length, "#16a34a"], ["Fail", fails.length, "#dc2626"], ["Monitor", monitors.length, "#92400e"]],mb:20}),
+  }, "THERMOGRAPHIC REPORT", meta.auditor ? ` · ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{...STH.duePill,borderColor:`${THERMO_COLOR}55`,color:THERMO_COLOR,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):fmtDate(addYearsISO(meta.testDate,1))))), React.createElement(ReportStatPills,{model:"thermo",s:{pass:rows.filter(r => r.photo.result === "PASS").length,fail:fails.length,monitor:monitors.length},count:rows.length,unit:"photo",mb:20}),
   React.createElement("div",{style:{marginBottom:20}},
     React.createElement("div",{style:{fontSize:12,fontWeight:700,color:THERMO_COLOR,letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY"),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
@@ -9322,35 +9299,7 @@ function ThermoHistoryView({
         fontWeight: 700
       },
       onClick: () => onExportSnap(snap)
-    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        marginBottom: 16
-      }
-    }, [["Photos", totalPhotos, "#1d4ed8"], ["Fail", failPhotos, "#dc2626"], ["Pass", totalPhotos - failPhotos, "#16a34a"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
-      key: l,
-      style: {
-        flex: 1,
-        textAlign: "center",
-        background: "#f7f6f3",
-        border: `1px solid ${c}33`,
-        borderRadius: 10,
-        padding: "10px 4px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 800,
-        color: c
-      }
-    }, v), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#6e6a66",
-        marginTop: 2
-      }
-    }, l.toUpperCase())))), /*#__PURE__*/React.createElement("div", {
+    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), React.createElement(StatusSet,{model:"thermo",s:siteCounts(snapResults, project || { areas: [] }),style:{marginBottom:16}}), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: "#52525b",
@@ -11239,7 +11188,7 @@ function SWBReportView({project,results,meta,onBack}) {
     ,testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{...SS.duePill,borderColor:"#d8b4fe",color:"#7e22ce",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):swbAddYear(testDate)))
     )
-    ,React.createElement(ReportStatTiles,{rows:[["Total",summary.total,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["N/A",summary.na,"#334155"],["Untested",summary.untested,"#92400e"]],mb:20})
+    ,React.createElement(ReportStatPills,{model:"full",s:summary,count:summary.total,unit:"checklist point",mb:20})
     ,React.createElement('div',{style:{marginBottom:20}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#7e22ce",letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY")
       ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{marginBottom:12}}
@@ -11400,14 +11349,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,React.createElement('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#16a34a"],["Fail",fail,"#dc2626"],["N/A",na,"#334155"],["Untested",unt,"#92400e"]].map(([l,v,col])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:col}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},style:{marginBottom:16}})
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results")
       ,project&&(project.areas||[]).map(area=>{
         let aFail=0,aPass=0,aNa=0,aTotal=0;
@@ -12541,10 +12483,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
-    ,eltEl('div',{style:{display:"flex",gap:6,marginBottom:14}},(()=>{ const sum = eltFittingSummary(r);
-      return [["TOTAL",sum.total,"#334155"],["PASS",sum.pass,"#16a34a"],["FAIL",sum.fail,"#dc2626"],["—",sum.untested,"#92400e"],["SCORE",scoreLabel(sum.score),"#334155"]].map(([l,v,col])=>
-        eltEl('div',{key:l,style:{flex:1,minWidth:56,textAlign:"center",background:"#f7f6f3",borderRadius:8,border:`1px solid ${col}33`,padding:"6px 2px"}}
-          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:col}},v),eltEl('div',{style:{fontSize:9,color:"#6e6a66",fontWeight:700}},l))); })())
+    ,(()=>{ const sum = eltFittingSummary(r); return React.createElement(StatusSet,{model:"noNA",s:sum,score:scoreLabel(sum.score),style:{marginBottom:14}}); })()
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"TESTS")
     ,ELT_CHECKS.map(({key,label})=>
       eltEl('div',{key,style:{display:"flex",alignItems:"center",gap:10,background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:12,padding:"10px 12px",marginBottom:6}}
@@ -12597,14 +12536,8 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
   );
 }
 
-function ELTSummaryPills({total, pass, fail}) {
-  return eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-    ,[["Total Items Tested",total,"#334155"],["Items Passed",pass,"#16a34a"],["Items Failed",fail,"#dc2626"]].map(([l,v,c])=>
-      eltEl('div',{key:l,style:{flex:1,minWidth:90,background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}
-        ,eltEl('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
-        ,eltEl('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-      ))
-  );
+function ELTSummaryPills({total, pass, fail, assets}) {
+  return React.createElement(StatusSet,{model:"noNA",s:{pass,fail,untested:Math.max(0,assets-total)}});
 }
 
 function ELTReportView({project, results, meta, summary}) {
@@ -12630,7 +12563,7 @@ function ELTReportView({project, results, meta, summary}) {
     ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,eltEl('div',{style:{...SS.duePill,borderColor:ELT_COLOR_BORDER,color:ELT_COLOR,padding:"7px 12px"}},eltEl('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('rect',{x:3,y:4,width:18,height:18,rx:2}),eltEl('line',{x1:16,y1:2,x2:16,y2:6}),eltEl('line',{x1:8,y1:2,x2:8,y2:6}),eltEl('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
-    ,eltEl(ReportStatTiles,{rows:[["Total",summary.assets,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["Untested",Math.max(0,summary.assets-summary.total),"#92400e"]]})
+    ,React.createElement(ReportStatPills,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:Math.max(0,summary.assets-summary.total)},})
     ,eltEl(AreaSummaryRows,{nounOne:"fitting",areas:project.areas,accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:ELT_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
@@ -12740,7 +12673,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
         )
         ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
       )
-      ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail}))
+      ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail,assets:s.assets}))
       ,groupRowsByArea(rows).map(g=>eltEl('div',{key:g.id,"data-area":g.name}
         ,eltEl('div',{style:AREA_HDR_STYLE},g.name)
         ,g.rows.map(row=>{
@@ -13477,7 +13410,7 @@ function IRTReportView({project,results,meta,onBack}){
     testDate&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}},
       React.createElement("div",{style:{fontSize:12,background:"#f7f6f3",border:`1px solid ${IRT_COLOR}55`,color:IRT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," \u2192 next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):irtAddYear(testDate)))
     ),
-    React.createElement(ReportStatTiles,{rows:[["Total",summary.total,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["N/A",summary.na,"#334155"],["Untested",summary.untested,"#92400e"]],mb:20}),
+    React.createElement(ReportStatPills,{model:"full",s:summary,count:summary.total,unit:"item",mb:20}),
     React.createElement("div",{style:{marginBottom:20}},
       React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#1d4ed8",letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY"),
       (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
@@ -13583,14 +13516,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ),
         React.createElement("button",{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       ),
-      React.createElement("div",{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}},
-        [["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]].map(([l,v,col])=>
-          React.createElement("div",{key:l,style:{background:"#f7f6f3",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}},
-            React.createElement("div",{style:{fontSize:18,fontWeight:800,color:col}},v),
-            React.createElement("div",{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      ),
+      React.createElement(StatusSet,{model:"full",s:sum,style:{marginBottom:16}}),
       React.createElement("div",{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results"),
       project&&(project.areas||[]).map(area=>{
         let aFail=0,aPass=0,aNa=0,aTotal=0;
@@ -14628,8 +14554,6 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     ,eltEl('div',{style:{fontSize:9,color:"#6e6a66",letterSpacing:0.8,fontWeight:700}},lbl)
     ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
   const nextDue = meta.nextTestDate;
-  const box = (l,v,c)=>eltEl('div',{key:l,style:{flex:1,minWidth:56,textAlign:"center",background:"#f7f6f3",borderRadius:8,border:`1px solid ${c}33`,padding:"6px 2px"}}
-    ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:c}},v),eltEl('div',{style:{fontSize:9,color:"#6e6a66",fontWeight:700}},l));
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,eltEl(ELTBackBtn,{onClick:onClose})
     ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:10}}
@@ -14645,10 +14569,8 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     )
     // live Audit Summary
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"4px 0 8px"}},"AUDIT SUMMARY")
-    ,eltEl('div',{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}
-      ,box("TOTAL",sum.total,"#334155"),box("PASS",sum.pass,"#16a34a"),box("FAIL",sum.fail,"#dc2626"),box("N/A",sum.na,"#64748b"),box("SCORE",welderScoreLabel(sum.score),"#334155"),box("ACTIONS",sum.actions,"#92400e")
-    )
-    ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginBottom:14}},overall==="untested"?`Overall: Untested — ${nw(sum.untested,"item")} still to answer`:`Overall: ${welderOverallLabel(overall)}`)
+    ,React.createElement(StatusSet,{model:"full",s:sum,dash:true,score:welderScoreLabel(sum.score),style:{marginBottom:6}})
+    ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginBottom:14}},overall==="untested"?`Overall: Untested — ${nw(sum.untested,"item")} still to answer`:`Overall: ${welderOverallLabel(overall)}`+(sum.actions>0?` · ${nw(sum.actions,"action")} required`:""))
     // checklist
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"CHECKLIST")
     ,WELDER_CHECKLIST.map(({key,label,criteria},idx)=>{
@@ -14735,7 +14657,7 @@ function WelderReportView({project, results, meta}) {
     ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,eltEl('div',{style:{...SS.duePill,borderColor:WELDER_COLOR_BORDER,color:WELDER_COLOR,padding:"7px 12px"}},"Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
-    ,eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]})
+    ,React.createElement(ReportStatPills,{model:"noNA",s:s})
     ,eltEl(AreaSummaryRows,{nounOne:"welder",areas:project.areas,accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:WELDER_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
@@ -14836,7 +14758,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
         )
         ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
       )
-      ,eltEl('div',{style:{marginBottom:14}},eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]}))
+      ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
       ,groupRowsByArea(rows).map(g=>eltEl('div',{key:g.id,"data-area":g.name}
         ,eltEl('div',{style:AREA_HDR_STYLE},g.name)
         ,g.rows.map(row=>{
@@ -15643,7 +15565,7 @@ function GSDReportView({ project, items, meta }) {
     , gsdEl("div", { style: SS.summaryMeta }, "SITE DEFECTS REPORT" + (meta.auditor ? ` · ${meta.auditor}` : ""))
     , meta.testDate && gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 8, marginBottom: 16, flexWrap: "wrap" } }
       , gsdEl("div", { style: { ...SS.duePill, borderColor: GSD_COLOR_BORDER, color: GSD_COLOR, padding: "7px 12px" } }, "Audited: ", fmtDate(meta.testDate), " → next due: ", meta.nextTestDate ? fmtDate(meta.nextTestDate) : "—"))
-    , gsdEl(ReportStatTiles, { rows: [["Defects", total, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Areas", sections.length, "#334155"], ["Photos", photos, "#92400e"]] })
+    , React.createElement(GSDCounts, { defects: total, areas: sections.length, photos, urgent })
     , total === 0 && gsdEl(ReportNoDefects)
     , sections.map(sec => gsdEl("div", { key: sec.area.id, style: { marginBottom: 16 } }
       , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, letterSpacing: 0.8, marginBottom: 6, textTransform: "uppercase" } }, sec.area.name, " · ", nw(sec.entries.length, "defect"))
@@ -15698,12 +15620,6 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
 
 const gsdHighUrgent = items => (items || []).filter(i => i.priority === "H" || i.priority === "U").length;
 const gsdPhotoCount = items => (items || []).reduce((n, i) => n + (i.photos || []).length, 0);
-function GSDSummaryPills({ defects, urgent, photos }) {
-  return gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
-    , [["Defects", defects, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Photos", photos, "#92400e"]].map(([l, v, col]) =>
-      gsdEl("div", { key: l, style: { flex: 1, minWidth: 90, background: "#f7f6f3", border: `1px solid ${col}33`, borderRadius: 8, padding: "6px 12px", textAlign: "center" } }
-        , gsdEl("div", { style: { fontSize: 18, fontWeight: 800, color: col } }, v), gsdEl("div", { style: { fontSize: 10, color: "#6e6a66" } }, l))));
-}
 function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error }) {
   const SS = swbStyles();
   const [expanded, setExpanded] = React.useState(null);
@@ -15713,7 +15629,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
       , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 10 } }
         , gsdEl("div", { style: { flex: 1 } }, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Snapshot"), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor", " · Read-only"))
         , gsdEl("button", { style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac" }, onClick: () => onExportSnap(snap) }, "Export"))
-      , gsdEl("div", { style: { marginBottom: 14 } }, gsdEl(GSDSummaryPills, { defects: (snap.items || []).length, urgent: gsdHighUrgent(snap.items), photos: gsdPhotoCount(snap.items) }))
+      , React.createElement(GSDCounts, { defects: (snap.items || []).length, areas: sections.length, photos: gsdPhotoCount(snap.items), urgent: gsdHighUrgent(snap.items), mb: 14 })
       , sections.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No defects in this snapshot.")
       , sections.map(sec => gsdEl("div", { key: sec.area.id, "data-area": sec.area.name }, gsdEl("div", { style: AREA_HDR_STYLE }, sec.area.name)
         , sec.entries.map(e => gsdEl("div", { key: e.item.id, "data-testid": "gsd-snap-row", style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, marginBottom: 4, minWidth: 0, overflow: "hidden" } }
