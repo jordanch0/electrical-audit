@@ -472,6 +472,7 @@ Run `npm run build` after all changes to confirm no build errors.
 - **Process:** When ready to go live, merge `dev` → `main` → push `main` → Actions runs `npm run build` → deploys `dist/` to GitHub Pages
 - **GitHub Pages setting:** Source must be set to "GitHub Actions" (not "Deploy from branch")
 - **Never push directly to `main`** — always merge from `dev` after testing
+- **Branch status (2026-10-03):** `main` is at `a50446e` (the floating pill nav + its bug report; deployed; `main` == `origin/main`). Every commit from `dff11a3` onward on `dev` is unpushed and not yet deployed. Update this line when `dev` is pushed or merged.
 - **PWA caching:** Handled by `vite-plugin-pwa` (Workbox `generateSW` mode), configured in `vite.config.js`. It precaches the real hashed build output — a fresh content hash every deploy, no manual cache-version bump needed. `registerType: 'prompt'`: a new build activates only after the user taps "Refresh" on the in-app toast (`src/main.jsx`, `UpdateToast`, via the `virtual:pwa-register/react` hook) — it will not silently swap the bundle out from under an in-progress audit. See "PWA / Service Worker" below for the full picture and history.
 
 ---

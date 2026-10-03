@@ -17,7 +17,7 @@ Terminology: **reference** = the module to copy from. **Shared** = a helper/comp
 - [ ] **Phase 1 — investigate, then propose. Write no implementation code.** Read CLAUDE.md, this guide, and the reference
   modules' code. Present a plan and **wait for approval**. Decisions the user hasn't made are questions, not assumptions.
 - [ ] Before building anything, list the existing shared pieces and say what is reusable vs genuinely new. Shared pieces today:
-  `DeleteButton`, `ConfirmReset`, `failFill` / `useFailDefaults`, `defectGate` / `defectGateByStatus`, `ReportStatTiles` /
+  `DeleteButton`, `ConfirmReset`, `failFill` / `useFailDefaults`, `defectGate` / `defectGateByStatus`, `ReportStatPills` /
   `ReportFailedItems` / `ReportNoDefects` / `reportPriorityBadge`, `DefectListCards`, `SWBDropdownsView`,
   `IELEditableDropdown`, `CompleteAuditBtn`, `NavBtn` (+ `NAV_ICON_*`), `deliverExportFile`, `resizeImageToDataUrl`,
   `parseCompanyRow`, `ImportErrorBoundary`, `nw()`, `slugify`, `uid`, `fmtDate`, `load` / `save`, and, for Site → Area → Assets modules, `AreaManager`, `AreaAuditGroups`, `AreaSummaryRows`, `groupAssetsIntoAreas`, `areaAssets`, `loadVersioned`, `removeAssetResults`.
@@ -162,9 +162,7 @@ Reference: **`SWBReportView`, `IRTReportView`** (originals), **`ELTReportView`**
   (`RCD AUDIT REPORT`, `EMERGENCY LIGHTING REPORT`, …).
 - [ ] **Date pill** (`duePill`, module accent border + text, calendar icon): `Tested: <date> → next due: <date>` (RCD shows one per
   test: `Push: … → next …`).
-- [ ] **`ReportStatTiles`** — `rows=[[label, value, colour], …]`; colours Total `#334155`, Pass `#16a34a`, Fail `#dc2626`,
-  N/A `#334155`, Untested `#92400e`. **Tile count/labels reflect the module's real result types — never an always-zero tile**
-  (ELT dropped N/A: Total, Pass, Fail, Untested; Thermo has Total, Pass, Fail, Monitor).
+- [ ] **`ReportStatPills`** (2026-10-02 — the old `ReportStatTiles` and its TOTAL tile are gone) — `<ReportStatPills model s count unit title? score? />`: the module's STATUS pills (`StatusSet`, model `full` = PASS FAIL N/A UNTESTED, `noNA` for ELT / Welder, `thermo` = PASS FAIL MONITOR), zeros shown, SCORE last where the module has one, and the item count as plain text with the unit, once. **The pill set reflects the module's real result types — never an always-zero pill.** See CLAUDE.md > "Status pills".
 - [ ] **Score / completion percentage (only if the module needs one — Welder is the only module that has it).** Formula: **Score = Pass / (Total − N/A) × 100**, one decimal. Untested / blank and FAIL items STAY in the denominator, so a Fail never moves the score; only N/A removes an item from it (which raises the weight of every remaining Pass). Show `—` only when every item is N/A; a brand-new asset is `0.0%`. Derive it in a pure helper (never store it) and show it on the item page's live summary and in the export's summary block (an incomplete asset exports its partial score) — NOT on the Report tab tiles or the register (Welder shows no score there). Reference: `src/welder.test.js`, `src/welder-fixes.test.jsx`. (The earlier Pass / (Pass + Fail) formula printed 100% after one Pass — do not reintroduce it.)
 - [ ] **Section label**: 12px, weight 700, letterSpacing 0.8, module accent (`BOARD SUMMARY`, `AREA SUMMARY`, `FITTING REGISTER`),
   with area / board / item breakdown rows beneath where the module has hierarchy.

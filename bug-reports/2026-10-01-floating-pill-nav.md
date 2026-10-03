@@ -1,6 +1,6 @@
 # 2026-10-01 — Floating pill bottom nav (+ keyboard hide, + iOS standalone viewport height)
 
-**Status: committed as `9640df4` on `dev`, verified on iPhone via the dev server, NOT yet verified on the deployed build.**
+**Status (checked against git, 2026-10-03): committed as `9640df4` (this report: `da43bc6`); merged to `main` (`a50446e`) and pushed, so it is on `origin/main` and was deployed by that push. Verified on the iPhone via the dev server; NOT yet verified on the deployed build.** Later work on `dev` (export header / colours / pills, listed in CLAUDE.md > Deployment) is a separate, still-unpushed stream and is not part of this report.
 
 Reference: Facebook's iOS floating tab bar (`IMG_0200.PNG`, 428x926 @3x): pill ~47pt tall, bottom edge ~19pt from the screen bottom, ~11pt side margins, soft shadow, pale active highlight.
 
