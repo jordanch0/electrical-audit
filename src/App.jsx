@@ -1266,6 +1266,34 @@ function useFailDefaults(isFail, values, defaults, apply) {
 }
 
 // ── Report building blocks shared by every module's Report tab (the SWB / IRT design) ──────────────────────
+// ── STATUS PILLS (2026-10-02) — the ONE status / count indicator. Based on the SWB board page pill: bordered, rounded, "N WORD" in one string. StatusPill = one pill, StatusPills = a
+// wrapping row of them. pills = [[kind, count, label?, {alert}?], ...] (falsy entries are skipped). kinds: pass fail na untested score info monitor warn. Standard size 12px / 4x10 padding;
+// compact (11px / 2x6, gap 5) inside rows and cards. Colours are the contrast-checked text colours (green #166534, red #b91c1c: >= 4.5:1 on the pill background). `alert` (OVERDUE, FAIL badges) = the
+// same shape on a light red (warn: amber) fill. Words: PASS FAIL N/A UNTESTED SCORE (pills are STATUS ONLY — never a TOTAL pill; the item count is plain text, once); pass "—" as the label in compact places (cards / History); a row with a 3-digit count switches
+// UNTESTED to "—" so it still fits at 390px. Never hand-write a count span: use these.
+const SP_COLOURS = { pass: "#166534", fail: "#b91c1c", na: "#334155", untested: "#92400e", score: "#334155", info: "#334155", monitor: "#92400e", warn: "#92400e" };
+const SP_WORDS = { pass: "PASS", fail: "FAIL", na: "N/A", untested: "UNTESTED", score: "SCORE", info: "", monitor: "MONITOR", warn: "" };
+function StatusPill({ kind, count, label, compact, alert, title }) {
+  const c = SP_COLOURS[kind] || SP_COLOURS.info; const word = label != null ? label : (SP_WORDS[kind] || "");
+  const bg = alert ? (kind === "warn" ? "#fef3c7" : "#fee2e2") : "#f7f6f3"; const bd = alert ? (kind === "warn" ? "#fcd34d" : "#fca5a5") : c + "33";
+  const text = count == null || count === "" ? word : (word ? count + " " + word : String(count));
+  return React.createElement('span', { "data-statuspill": kind, title: title || undefined, style: { display: "inline-block", whiteSpace: "nowrap", flex: "0 0 auto", background: bg, border: "1px solid " + bd, borderRadius: 6, padding: compact ? "2px 6px" : "4px 10px", fontSize: compact ? 11 : 12, fontWeight: 700, lineHeight: 1.3, color: c } }, text);
+}
+const SP_SETS = { full: ["pass", "fail", "na", "untested"], noNA: ["pass", "fail", "untested"], thermo: ["pass", "fail", "monitor"] };
+function spPills(model, s, o) {
+  const x = o || {}; const kinds = SP_SETS[model] || SP_SETS.full;
+  const list = kinds.map(k => (k === "untested" ? [k, s.untested || 0, x.dash ? "—" : undefined] : [k, s[k] || 0]));
+  if (x.score != null) list.push(["score", x.score]);
+  return list;
+}
+function StatusSet({ model, s, dash, score, compact, style }) {
+  return React.createElement(StatusPills, { compact: compact !== false, style, pills: spPills(model, s, { dash, score }) });
+}
+function StatusPills({ pills, compact, style }) {
+  const list = (pills || []).filter(Boolean); const big = list.some(q => (parseInt(q[1], 10) || 0) >= 100);
+  return React.createElement('span', { "data-statuspills": "", style: { display: "flex", flexWrap: "wrap", gap: compact ? 5 : 8, alignItems: "center", ...(style || {}) } },
+    list.map((q, i) => React.createElement(StatusPill, { key: i + ":" + q[0], kind: q[0], count: q[1], label: q[2] === undefined && q[0] === "untested" && big ? "—" : q[2], compact, ...(q[3] || {}) })));
+}
 function ReportStatTiles({ rows, mb = 20 }) {
   return React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: mb, flexWrap: 'wrap' } },
     rows.map(([l, v, c]) => React.createElement('div', { key: l, style: { flex: 1, minWidth: 48, textAlign: 'center', background: '#f7f6f3', borderRadius: 10, border: `1px solid ${c}33`, padding: '10px 4px' } },
@@ -1582,19 +1610,19 @@ React.createElement('div', { style: S.listWrap,}
 , projects.length===0&&React.createElement('div', { style: {color:"#52525b",fontSize:14,marginBottom:16},}, "No projects yet."  )
 
 , projects.map(proj=>{
-let total=0,tested=0,fail=0;
-proj.areas.forEach(a=>a.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(allResults,proj.id,a.id,p.id,c,"push");if(v!==STATUS.UNTESTED)tested++;if(v===STATUS.FAIL)fail++;})));
+let total=0,tested=0,fail=0,pass=0,na=0;
+proj.areas.forEach(a=>a.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(allResults,proj.id,a.id,p.id,c,"push");if(v!==STATUS.UNTESTED)tested++;if(v===STATUS.FAIL)fail++;else if(v===STATUS.PASS)pass++;else if(v===STATUS.NA)na++;})));
 const pct=total>0?Math.round((tested/total)*100):0;
 return(
 React.createElement('div', { key: proj.id, style: {...S.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"},}
 , React.createElement('button', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"}, onClick: ()=>onSelect(proj.id),}
 , React.createElement('div', { style: {flex:1},}
 , React.createElement('div', { style: S.siteCardName,}, proj.name)
-, React.createElement('div', { style: S.siteCardSub,}, proj.company||"", " · ",nw(proj.areas.length,"area")," · ",nw(total,"circuit")," · ", tested, "/", total, " tested")
+, React.createElement('div', { style: S.siteCardSub,}, proj.company||"", " · ",nw(proj.areas.length,"area")," · ",nw(total,"circuit"))
+, React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-tested},dash:true,style:{marginTop:6}})
 , React.createElement('div', { style: {...S.siteCardBar,marginTop:8},}, React.createElement('div', { style: {...S.siteCardBarFill,width:`${pct}%`,background:fail>0?"#dc2626":tested===total&&total>0?"#16a34a":"#a3530f"},}))
 )
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginLeft:16},}
-, fail>0&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 , React.createElement('span', { style: S.arrow,}, "›")
 )
 )
@@ -1716,13 +1744,13 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_push",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Push Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${pushPct}%`,background:"#a3530f"},}))
-, React.createElement('span', { style: S.modeBtnPct,}, pushPct, "% · "  , pushSum.fail>0?`${pushSum.fail} FAIL`:"clear")
+, React.createElement('span', { style: S.modeBtnPct,}, React.createElement(StatusPills,{compact:true,pills:[pushSum.fail>0?["fail",pushSum.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",pushPct+"%"]]}))
 )
 , React.createElement('button', { style: {...S.modeBtnInject,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartInject:undefined,}
 , React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_inject",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Injection Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${injectPct}%`,background:"#1d4ed8"},}))
-, React.createElement('span', { style: S.modeBtnPct,}, injectPct, "% · "  , injectSum.fail>0?`${injectSum.fail} FAIL`:"clear")
+, React.createElement('span', { style: S.modeBtnPct,}, React.createElement(StatusPills,{compact:true,pills:[injectSum.fail>0?["fail",injectSum.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",injectPct+"%"]]}))
 )
 )
 /* Complete audit button */
@@ -1858,21 +1886,21 @@ React.createElement('div', { key: l, style: {background:"#f7f6f3",border:`1px so
 })()
 , React.createElement('div', { style: {fontSize:11,color:"#52525b",marginBottom:12},}, "Tap an area to view circuit results"      )
 , _optionalChain([project, 'optionalAccess', _124 => _124.areas, 'access', _125 => _125.map, 'call', _126 => _126(area=>{
-let pass=0,fail=0,total=0;
+let pass=0,fail=0,na=0,total=0;
 area.panels.forEach(p=>p.circuits.forEach(c=>{
 total++;
 const d=_optionalChain([snap, 'access', _127 => _127.results, 'optionalAccess', _128 => _128[area.id], 'optionalAccess', _129 => _129[p.id], 'optionalAccess', _130 => _130[c]]);
 const st=snap.mode==="inject"?(_nullishCoalesce(_optionalChain([d, 'optionalAccess', _131 => _131.inject, 'optionalAccess', _132 => _132.status]), () => (STATUS.UNTESTED))):(_nullishCoalesce(_optionalChain([d, 'optionalAccess', _133 => _133.push, 'optionalAccess', _134 => _134.status]), () => (STATUS.UNTESTED)));
-if(st===STATUS.PASS||st===STATUS.NA)pass++;else if(st===STATUS.FAIL)fail++;
+if(st===STATUS.PASS)pass++;else if(st===STATUS.NA)na++;else if(st===STATUS.FAIL)fail++;
 }));
 return (
 React.createElement('button', { key: area.id, style: {...S.siteCard,...(fail>0?S.siteCardFail:{})}, onClick: ()=>setViewArea(area.id),}
 , React.createElement('div', { style: S.siteCardLeft,}
 , React.createElement('div', { style: S.siteCardName,}, area.name)
 , React.createElement('div', { style: S.siteCardSub,},nw(total,"circuit") )
+, React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na},dash:true,style:{marginTop:6}})
 )
 , React.createElement('div', { style: S.siteCardRight,}
-, fail>0&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 , React.createElement('span', { style: S.arrow,}, "›")
 )
 )
@@ -1914,16 +1942,10 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , React.createElement('span', { style: {fontSize:11,padding:"2px 8px",borderRadius:5,background:snap.mode==="inject"?"#dbeafe":"#fdecdc",color:snap.mode==="inject"?"#1d4ed8":"#a3530f",border:`1px solid ${snap.mode==="inject"?"#93c5fd":"#fdba74"}`},}
 , snap.mode==="inject"?React.createElement(React.Fragment,null,moduleIcon("rcd_inject",15)," Injection"):React.createElement(React.Fragment,null,moduleIcon("rcd_push",15)," Push")
 )
-, hasFail&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 )
-, React.createElement('div', { style: {fontSize:12,color:"#52525b"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor")
+, React.createElement('div', { style: {fontSize:12,color:"#52525b"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor", " · ", nw(total,"circuit"))
 , React.createElement('div', { style: {fontSize:11,color:"#52525b",marginTop:2},}, "Archived " , fmtDateTime(snap.archivedAt))
-, total>0&&React.createElement('div', { style: {display:"flex",gap:8,marginTop:6},}
-, React.createElement('span', { style: {fontSize:11,color:"#166534"},}, pass, " Pass" )
-, React.createElement('span', { style: {fontSize:11,color:"#b91c1c"},}, fail, " Fail" )
-, React.createElement('span', { style: {fontSize:11,color:"#334155"},}, na, " N/A" )
-, React.createElement('span', { style: {fontSize:11,color:"#92400e"},}, total-pass-fail-na, " Untested" )
-)
+, total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
 )
 , React.createElement('span', { style: {...S.arrow,color:expanded===snap.id?"#a3530f": "#52525b"},}, expanded===snap.id?"▾":"›")
 )
@@ -2564,13 +2586,13 @@ function AreaListView({project,results,mode,modeColor,onSelect}){
 return(React.createElement('div', { style: S.listWrap,}, React.createElement('div', { style: S.listTitle,}, "Select Area" )
 , project.areas.length===0&&React.createElement('div', { style: {color:"#52525b",fontSize:14},}, "No areas. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add areas."        )
 , project.areas.map(area=>{
-let total=0,pass=0,fail=0,untested=0;
-area.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(results,project.id,area.id,p.id,c,mode);if(v===STATUS.PASS||v===STATUS.NA)pass++;else if(v===STATUS.FAIL)fail++;else untested++;}));
-const pct=total>0?Math.round(((pass+fail)/total)*100):0;
+let total=0,pass=0,fail=0,na=0,untested=0;
+area.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(results,project.id,area.id,p.id,c,mode);if(v===STATUS.PASS)pass++;else if(v===STATUS.NA)na++;else if(v===STATUS.FAIL)fail++;else untested++;}));
+const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
 return(React.createElement('button', { key: area.id, style: {...S.siteCard,...(fail>0?S.siteCardFail:{})}, onClick: ()=>onSelect(area.id),}
-, React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, area.name), React.createElement('div', { style: S.siteCardSub,},nw(area.panels.length,"panel")," · "   ,nw(total,"circuit") )
+, React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, area.name), React.createElement('div', { style: S.siteCardSub,},nw(area.panels.length,"panel")," · "   ,nw(total,"circuit") ), React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
 , React.createElement('div', { style: S.siteCardBar,}, React.createElement('div', { style: {...S.siteCardBarFill,width:`${pct}%`,background:fail>0?"#dc2626":untested>0?modeColor:"#16a34a"},})))
-, React.createElement('div', { style: S.siteCardRight,}, fail>0&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" ), untested>0&&React.createElement('span', { style: S.untestedBadge,}, untested), React.createElement('span', { style: S.arrow,}, "›"))
+, React.createElement('div', { style: S.siteCardRight,}, React.createElement('span', { style: S.arrow,}, "›"))
 ));
 })
 ));
@@ -2583,14 +2605,9 @@ const ps=panelSummary(results,project.id,area.id,pnl,mode);
 const total=pnl.circuits.length;
 return(React.createElement('button', { key: pnl.id, style: {...S.siteCard,...(ps.fail>0?S.siteCardFail:ps.untested===0?S.siteCardDone:{})}, onClick: ()=>onSelect(pnl.id),}
 , React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, pnl.name), React.createElement('div', { style: S.siteCardSub,}, total, " circuit" , total!==1?"s":"")
-, React.createElement('div', { style: {display:"flex",gap:6,marginTop:6},}
-, ps.pass>0&&React.createElement('span', { style: {fontSize:11,color:"#166534",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.pass, " Pass" )
-, ps.fail>0&&React.createElement('span', { style: {fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.fail, " Fail" )
-, ps.na>0&&React.createElement('span', { style: {fontSize:11,color:"#334155",background:"#f1f5f9",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.na, " N/A" )
-, ps.untested>0&&React.createElement('span', { style: {fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.untested, " untested" )
+, React.createElement(StatusSet,{model:"full",s:ps,dash:true,style:{marginTop:6}})
 )
-)
-, React.createElement('div', { style: S.siteCardRight,}, ps.fail>0&&React.createElement('span', { style: S.failBadge,}, "FAIL"), ps.untested===0&&ps.fail===0&&React.createElement('span', { style: {color:"#14532d",fontSize:18,fontWeight:800},}, "✓"), React.createElement('span', { style: S.arrow,}, "›"))
+, React.createElement('div', { style: S.siteCardRight,}, ps.untested===0&&ps.fail===0&&React.createElement('span', { style: {color:"#14532d",fontSize:18,fontWeight:800},}, "✓"), React.createElement('span', { style: S.arrow,}, "›"))
 ));
 })
 ));
@@ -2600,11 +2617,8 @@ const circuits=panel.circuits;const ps=panelSummary(results,project.id,area.id,p
 const total=circuits.length;
 return(React.createElement('div', { style: S.circuitWrap,}
 , React.createElement('div', { style: S.panelHeader,}, React.createElement('div', null, React.createElement('div', { style: S.panelTitle,}, panel.name), React.createElement('div', { style: S.panelSub,}, area.name, " · "  , total, " circuit" , total!==1?"s":""))
-, React.createElement('div', { style: S.panelStats,}
-, React.createElement('span', { style: {color:"#166534"},}, ps.pass, "P")
-, React.createElement('span', { style: {color:"#b91c1c"},}, ps.fail, "F")
-, React.createElement('span', { style: {color:"#92400e",fontSize:12},}, ps.untested, " untested" )
-))
+)
+, React.createElement(StatusSet,{model:"full",s:{...ps,total},style:{marginBottom:10}})
 , React.createElement('div', { style: S.quickRow,}, React.createElement('span', { style: S.quickLabel,}, "Set all:" )
 , React.createElement('button', { style: {...S.quickBtn,background:"#dcfce7",color:"#14532d",borderColor:"#16a34a"}, onClick: ()=>onSetAll(STATUS.PASS),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Pass" )
 , React.createElement('button', { style: {...S.quickBtn,background:"#fee2e2",color:"#991b1b",borderColor:"#dc2626"}, onClick: ()=>onSetAll(STATUS.FAIL),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18}))," Fail" )
@@ -2703,9 +2717,6 @@ function StatusBadge({status}){
 const sm=SM[status];
 return (React.createElement('div', { style: {padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,letterSpacing:0.5,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`},}, sm.label));
 }
-function StatPill({label,val,col}){
-return (React.createElement('div', { style: {display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"},}, React.createElement('span', { style: {fontSize:10,color:col,fontWeight:700,letterSpacing:0.5},}, label), React.createElement('span', { style: {fontSize:14,color:col,fontWeight:800},}, val)));
-}
 const NAV_ICON_HOME=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"}),React.createElement('polyline',{points:"9 22 9 12 15 12 15 22"}));
 const NAV_ICON_AUDIT=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"9 11 12 14 22 4"}),React.createElement('path',{d:"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"}));
 const NAV_ICON_REPORT=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"}),React.createElement('polyline',{points:"14 2 14 8 20 8"}),React.createElement('line',{x1:16,y1:13,x2:8,y2:13}),React.createElement('line',{x1:16,y1:17,x2:8,y2:17}));
@@ -2796,8 +2807,8 @@ siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,ma
 siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
 siteCardBar:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:10,overflow:"hidden"},
 siteCardBarFill:{height:"100%",borderRadius:2,transition:"width 0.4s"},
-failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
-untestedBadge:{fontSize:11,fontWeight:700,color:"#78350f",background:"#fef3c7",borderRadius:6,padding:"3px 8px"},
+failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
+untestedBadge:{fontSize:11,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:6,padding:"2px 7px",border:"1px solid #fcd34d",lineHeight:1.3,whiteSpace:"nowrap"},
 arrow:{fontSize:22,color:"#52525b",lineHeight:1},
 addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
 circuitWrap:{padding:"16px"},
@@ -3364,14 +3375,14 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,projects.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel below.")
 
     ,projects.map(proj=>{
-      let total=0,tested=0,fails=0;
+      let total=0,tested=0,fails=0,passN=0,naN=0;
       IEL_CATEGORIES.forEach(cat=>{
         proj.areas.forEach(a=>a.panels.forEach(p=>{
           if(p.name===cat.key)p.circuits.forEach(id=>{
             total++;
             const st=ielGetStatus(allResults,proj.id,a.id,cat.key,id);
             if(st!==IEL_STATUS.UNTESTED)tested++;
-            if(st===IEL_STATUS.FAIL)fails++;
+            if(st===IEL_STATUS.FAIL)fails++;else if(st===IEL_STATUS.PASS)passN++;else if(st===IEL_STATUS.NA)naN++;
           });
         }));
       });
@@ -3384,11 +3395,10 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fails>0?"#dc2626":tested===total&&total>0?"#16a34a":"#047857",transition:"width 0.4s"}})
             )
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:4}},tested," / ",total," tested")
+            ,React.createElement(StatusSet,{model:"full",s:{pass:passN,fail:fails,na:naN,untested:total-tested},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,fails>0&&React.createElement('span',{style:SI.failBadge},fails," FAIL")
-            ,React.createElement('span',{style:SI.arrow},"›")
+                        ,React.createElement('span',{style:SI.arrow},"›")
           )
         )
         ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}}
@@ -3502,23 +3512,18 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       const sum=ielSiteSummary(results,project,cat.key);
       const pct=sum.total>0?Math.round(((sum.pass+sum.fail+sum.na)/sum.total)*100):0;
       return React.createElement('button',{key:cat.key,
-        style:{...SI.catBtn,borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
+        style:{...SI.catBtn,flexWrap:"wrap",borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
         onClick:()=>hasAuditor&&onStartCat(cat.key)}
         ,React.createElement('span',{style:{fontSize:28,marginRight:4}},cat.icon)
         ,React.createElement('div',{style:{flex:1,textAlign:"left"}}
-          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#52525b",letterSpacing:0.3}},cat.label)
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#52525b",letterSpacing:0.3}},cat.label),React.createElement('span',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(sum.total,"item")))
           ,React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginTop:1}},cat.desc)
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:6,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:sum.fail>0?"#dc2626":cat.color,transition:"width 0.4s"}})
           )
-          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}
-            ,sum.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#166534"}},sum.pass," Pass")
-            ,sum.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},sum.fail," FAIL")
-            ,sum.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},sum.untested," untested")
-            ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},sum.total," total")
-          )
         )
         ,React.createElement('span',{style:{fontSize:22,color:hasAuditor?cat.color+"88":"#52525b"}},"›")
+        ,React.createElement(StatusSet,{model:"full",s:sum,style:{flex:"0 0 100%",marginTop:8}})
       );
     })
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
@@ -3540,22 +3545,21 @@ function IELAreaListView({project,results,cat,catColor,onSelect}){
       // Only count panels for this cat
       const catPanel=area.panels.find(p=>p.name===cat);
       const items=catPanel?catPanel.circuits:[];
-      let pass=0,fail=0,untested=0;
-      items.forEach(id=>{const v=ielGetStatus(results,project.id,area.id,cat,id);if(v===IEL_STATUS.PASS||v===IEL_STATUS.NA)pass++;else if(v===IEL_STATUS.FAIL)fail++;else untested++;});
+      let pass=0,fail=0,na=0,untested=0;
+      items.forEach(id=>{const v=ielGetStatus(results,project.id,area.id,cat,id);if(v===IEL_STATUS.PASS)pass++;else if(v===IEL_STATUS.NA)na++;else if(v===IEL_STATUS.FAIL)fail++;else untested++;});
       const total=items.length;
-      const pct=total>0?Math.round(((pass+fail)/total)*100):0;
+      const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
       return React.createElement('button',{key:area.id,style:{...SI.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>onSelect(area.id)}
         ,React.createElement('div',{style:SI.siteCardLeft}
           ,React.createElement('div',{style:SI.siteCardName},area.name)
           ,React.createElement('div',{style:SI.siteCardSub},nw(total,"item"))
+          ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":untested>0?catColor:"#16a34a"}})
           )
         )
         ,React.createElement('div',{style:SI.siteCardRight}
-          ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
-          ,untested>0&&React.createElement('span',{style:{fontSize:11,fontWeight:700,color:"#78350f",background:"#fef3c7",borderRadius:6,padding:"3px 8px"}},untested)
-          ,React.createElement('span',{style:SI.arrow},"›")
+                    ,React.createElement('span',{style:SI.arrow},"›")
         )
       );
     })
@@ -3580,15 +3584,10 @@ function IELPanelListView({area,project,results,cat,catColor,onSelect}){
       ,React.createElement('div',{style:SI.siteCardLeft}
         ,React.createElement('div',{style:SI.siteCardName},catI.icon," ",catI.label)
         ,React.createElement('div',{style:SI.siteCardSub},items.length," item",items.length!==1?"s":"")
-        ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:6}}
-          ,s.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#166534",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.pass," Pass")
-          ,s.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.fail," Fail")
-          ,s.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.untested," untested")
-        )
+,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
       )
       ,React.createElement('div',{style:SI.siteCardRight}
-        ,s.fail>0&&React.createElement('span',{style:SI.failBadge},"FAIL")
-        ,s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
+                ,s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
         ,React.createElement('span',{style:SI.arrow},"›")
       )
     )
@@ -3609,12 +3608,8 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
         ,React.createElement('div',{style:SI.panelTitle},catI.icon," ",catI.label)
         ,React.createElement('div',{style:SI.panelSub},area.name," · ",items.length," item",items.length!==1?"s":"")
       )
-      ,React.createElement('div',{style:SI.panelStats}
-        ,React.createElement('span',{style:{color:"#166534"}},s.pass,"P")
-        ,React.createElement('span',{style:{color:"#b91c1c"}},s.fail,"F")
-        ,React.createElement('span',{style:{color:"#92400e",fontSize:12}},s.untested," untested")
-      )
     )
+    ,React.createElement(StatusSet,{model:"full",s:{...s,total:items.length},style:{marginBottom:10}})
     ,React.createElement('div',{style:{fontSize:12,color:catColor,background:"#f0eeea",border:`1px solid ${catColor}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},catI.icon," Tap any item to open the test form")
     ,items.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
@@ -3634,8 +3629,8 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
           ,React.createElement('div',{style:{flex:1,padding:"12px 14px",minWidth:0}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
               ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#18181b"}},machineName)
-              ,overdue&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",background:"#fee2e2",borderRadius:4,padding:"1px 6px",border:"1px solid #fca5a5"}},"OVERDUE")
-              ,dueSoon&&React.createElement('span',{style:{fontSize:10,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px"}},"DUE SOON")
+              ,overdue&&React.createElement(StatusPill,{kind:"fail",label:"OVERDUE",alert:true,compact:true})
+              ,dueSoon&&React.createElement(StatusPill,{kind:"warn",label:"DUE SOON",alert:true,compact:true})
             )
             ,React.createElement('div',{style:{display:"flex",gap:10,marginTop:4,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
@@ -4041,14 +4036,10 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:cat&&cat.color||"#18181b"}},cat&&cat.icon," ",cat&&cat.label)
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
+            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},area&&area.name," · ",nw(pass+fail+na+unt,"item")," · ",fmtDate(snap.testDate)," · Read-only")
           )
-          ,React.createElement('div',{style:{display:"flex",gap:6,marginLeft:"auto"}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#166534",background:"#dcfce7",borderRadius:4,padding:"2px 7px",fontWeight:700}},pass,"P")
-            ,fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"2px 7px",fontWeight:700}},fail,"F")
-            ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"2px 7px",fontWeight:700}},unt," left")
           )
-        )
+        ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt,total:pass+fail+na+unt},style:{marginBottom:10}})
         ,(!cp||!cp.circuits.length)&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items for this category in this area.")
         ,(cp&&cp.circuits||[]).map(id=>{
           const mn=(cp.machineNames||{})[id]||id;
@@ -4091,7 +4082,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           let pass=0,fail=0,na=0,unt=0;
           cp.circuits.forEach(id=>{const v=((((snap.results||{})[area.id]||{})[cat.key])||{})[id];const st=(v&&v.status)||IEL_STATUS.UNTESTED;if(st===IEL_STATUS.PASS)pass++;else if(st===IEL_STATUS.FAIL)fail++;else if(st===IEL_STATUS.NA)na++;else unt++;});
           const total=cp.circuits.length;
-          const pct=total>0?Math.round(((pass+na)/total)*100):0;
+          const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
           return React.createElement('button',{key:cat.key,
             style:{...SI.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:unt===0?{background:"#dcfce7",borderColor:"#86efac"}:{})},
             onClick:()=>setViewCat(cat.key)}
@@ -4101,14 +4092,9 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
                 ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":cat.color}})
               )
-              ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-                ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},pass," Pass")
-                ,fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},fail," Fail")
-                ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},unt," untested")
-              )
+              ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},dash:true,style:{marginTop:6}})
             )
             ,React.createElement('div',{style:SI.siteCardRight}
-              ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
               ,unt===0&&fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
               ,React.createElement('span',{style:SI.arrow},"›")
             )
@@ -4143,7 +4129,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view items")
       // Area cards — mirrors RCD exactly
       ,project&&project.areas.map(area=>{
-        let aPass=0,aFail=0,aTotal=0;
+        let aPass=0,aFail=0,aNa=0,aTotal=0;
         IEL_CATEGORIES.forEach(cat=>{
           const cp=area.panels.find(p=>p.name===cat.key);
           if(!cp)return;
@@ -4151,21 +4137,22 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             aTotal++;
             const v=((((snap.results||{})[area.id]||{})[cat.key])||{})[id];
             const st=(v&&v.status)||IEL_STATUS.UNTESTED;
-            if(st===IEL_STATUS.PASS||st===IEL_STATUS.NA)aPass++;
+            if(st===IEL_STATUS.PASS)aPass++;
+            else if(st===IEL_STATUS.NA)aNa++;
             else if(st===IEL_STATUS.FAIL)aFail++;
           });
         });
-        const pct=aTotal>0?Math.round(((aPass+aFail)/aTotal)*100):0;
+        const pct=aTotal>0?Math.round(((aPass+aFail+aNa)/aTotal)*100):0;
         return React.createElement('button',{key:area.id,
           style:{...SI.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},
           onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:SI.siteCardLeft}
             ,React.createElement('div',{style:SI.siteCardName},area.name)
             ,React.createElement('div',{style:SI.siteCardSub},nw(aTotal,"item"))
+            ,React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('div',{style:SI.siteCardRight}
-            ,aFail>0&&React.createElement('span',{style:SI.failBadge},aFail," FAIL")
-            ,aFail===0&&aTotal>0&&aPass===aTotal&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
+            ,aFail===0&&aTotal>0&&aPass+aNa===aTotal&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
             ,React.createElement('span',{style:SI.arrow},"›")
           )
         );
@@ -4187,16 +4174,10 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#047857"}},snap.label||"IEL Audit")
-              ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
-            )
-            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+              )
+            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"item"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#b91c1c"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
-              ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
-            )
+            ,total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('span',{style:{...SI.arrow,color:expanded===snap.id?"#047857": "#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -4216,7 +4197,6 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 // ─────────────────────────────────────────────────────────────────────────
 // IEL SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────
-function IELStatPill({label,val,col}){return React.createElement('div',{style:{display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"}},React.createElement('span',{style:{fontSize:10,color:col,fontWeight:700,letterSpacing:0.5}},label),React.createElement('span',{style:{fontSize:14,color:col,fontWeight:800}},val));}
 function IELNavBtn(props){return React.createElement(NavBtn,props);}
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -4250,7 +4230,7 @@ const SI={
   siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
   siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
   siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-  failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
+  failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
   arrow:{fontSize:22,color:"#52525b",lineHeight:1},
   addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
   panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
@@ -5435,13 +5415,13 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:ST.siteCardName},proj.name)
             ,React.createElement('div',{style:ST.siteCardSub},nw(proj.areas.reduce((s,a)=>s+(a.items||[]).length,0),"item")," · ",nw(proj.areas.length,"area"))
+            ,React.createElement(StatusSet,{model:"full",s:sum,dash:true,style:{marginTop:6}})
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:sum.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
             )
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,sum.fail>0&&React.createElement('span',{style:ST.failBadge},sum.fail," FAIL")
-            ,React.createElement('span',{style:ST.arrow},"›")
+                        ,React.createElement('span',{style:ST.arrow},"›")
           )
         )
         ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}}
@@ -5534,17 +5514,12 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"item"))
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,React.createElement('span',{style:{fontSize:11,color:"#1d4ed8"}},summary.pass," Pass")
-        ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-        ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},summary.untested," untested")
-        ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},summary.total," total")
-      )
+      ,React.createElement(StatusSet,{model:"full",s:summary})
     )
     ,React.createElement('button',{
       style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?TAT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?TAT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},
@@ -5574,13 +5549,13 @@ function TATAreaListView({project,results,onSelect}){
         onClick:()=>onSelect(area.id)}
         ,React.createElement('div',{style:ST.siteCardLeft}
           ,React.createElement('div',{style:ST.siteCardName},area.name)
-          ,React.createElement('div',{style:ST.siteCardSub},nw(s.total,"item")," · ",s.pass+s.na," / ",s.total," tested")
+          ,React.createElement('div',{style:ST.siteCardSub},nw(s.total,"item"))
+          ,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:s.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
           )
         )
         ,React.createElement('div',{style:ST.siteCardRight}
-          ,s.fail>0&&React.createElement('span',{style:ST.failBadge},s.fail," FAIL")
           ,pct===100&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
           ,React.createElement('span',{style:ST.arrow},"›")
         )
@@ -5602,12 +5577,8 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
         ,React.createElement('div',{style:ST.panelTitle},area.name)
         ,React.createElement('div',{style:ST.panelSub},nw(areaItems.length,"item"))
       )
-      ,React.createElement('div',{style:ST.panelStats}
-        ,React.createElement('span',{style:{color:"#1d4ed8"}},s.pass,"P")
-        ,React.createElement('span',{style:{color:"#b91c1c"}},s.fail,"F")
-        ,React.createElement('span',{style:{color:"#92400e",fontSize:12}},s.untested," untested")
-      )
     )
+    ,React.createElement(StatusSet,{model:"full",s:{...s,total:areaItems.length},style:{marginBottom:10}})
     ,React.createElement('div',{style:{fontSize:12,color:TAT_COLOR,background:"#dbeafe",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7}))," Tap any item to open the test form")
     ,areaItems.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
@@ -5845,12 +5816,12 @@ function TATReportView({project,results,meta,onBack}){
         return React.createElement('div',{key:area.id,style:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 14px",marginBottom:8}}
           ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},area.name)
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},as.pass+as.na," / ",as.total)
+            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},nw(as.total,"item"))
           )
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:as.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
           )
-          ,as.fail>0&&React.createElement('div',{style:{fontSize:11,color:"#991b1b",marginTop:4,fontWeight:700}},as.fail," FAIL")
+          ,React.createElement(StatusSet,{model:"full",s:as,dash:true,style:{marginTop:6}})
         );
       })
     )
@@ -6237,20 +6208,20 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       ,project&&project.areas.map(area=>{
         const aItems=(area.items||[]);
         if(!aItems.length)return null;
-        let aPass=0,aFail=0,aTotal=aItems.length;
-        aItems.forEach(id=>{const v=(((snap.results||{})[area.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS||st===TAT_STATUS.NA)aPass++;else if(st===TAT_STATUS.FAIL)aFail++;});
-        const pct=aTotal>0?Math.round(((aPass+aFail)/aTotal)*100):0;
+        let aPass=0,aFail=0,aNa=0,aTotal=aItems.length;
+        aItems.forEach(id=>{const v=(((snap.results||{})[area.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)aPass++;else if(st===TAT_STATUS.NA)aNa++;else if(st===TAT_STATUS.FAIL)aFail++;});
+        const pct=aTotal>0?Math.round(((aPass+aFail+aNa)/aTotal)*100):0;
         return React.createElement('button',{key:area.id,style:{...ST.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:ST.siteCardLeft}
             ,React.createElement('div',{style:ST.siteCardName},area.name)
             ,React.createElement('div',{style:ST.siteCardSub},aTotal," item",aTotal!==1?"s":"")
+            ,React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:aFail>0?"#dc2626":TAT_COLOR}})
             )
           )
           ,React.createElement('div',{style:ST.siteCardRight}
-            ,aFail>0&&React.createElement('span',{style:ST.failBadge},aFail," FAIL")
-            ,React.createElement('span',{style:ST.arrow},"›")
+                        ,React.createElement('span',{style:ST.arrow},"›")
           )
         );
       })
@@ -6271,16 +6242,10 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:TAT_COLOR}},"Test & Tag Audit")
-              ,fail>0&&React.createElement('span',{style:ST.failBadge},fail," FAIL")
-            )
-            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+              )
+            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"item"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#1d4ed8"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#b91c1c"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
-              ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
-            )
+            ,total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('span',{style:{...ST.arrow,color:expanded===snap.id?TAT_COLOR: "#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -6445,7 +6410,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
   siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
   siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-  failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
+  failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
   arrow:{fontSize:22,color:"#52525b",lineHeight:1},
   addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
   panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
@@ -6558,6 +6523,12 @@ function boardHasFail(results, areaId, boardId, board) {
 function boardHasMonitor(results, areaId, boardId, board) {
   return boardCircuitIds(board).some(cid => getPhotos(results, areaId, boardId, cid).some(p => p.result === "MONITOR"));
 }
+// Thermo status counts (photos by result; anything that is not FAIL / MONITOR counts as PASS, as on Home)
+function thermoCountPhotos(photos) { let pass = 0, fail = 0, monitor = 0; (photos || []).forEach(p => { if (p.result === "FAIL") fail++; else if (p.result === "MONITOR") monitor++; else pass++; }); return { pass, fail, monitor }; }
+function thermoAddCounts(a, b) { return { pass: a.pass + b.pass, fail: a.fail + b.fail, monitor: a.monitor + b.monitor }; }
+function boardCounts(results, areaId, boardId, board) { return boardCircuitIds(board).reduce((s, cid) => thermoAddCounts(s, thermoCountPhotos(getPhotos(results, areaId, boardId, cid))), { pass: 0, fail: 0, monitor: 0 }); }
+function areaCounts(results, area) { return (area.boards || []).reduce((s, b) => thermoAddCounts(s, boardCounts(results, area.id, b.id, b)), { pass: 0, fail: 0, monitor: 0 }); }
+function siteCounts(results, project) { return (project.areas || []).reduce((s, a) => thermoAddCounts(s, areaCounts(results, a)), { pass: 0, fail: 0, monitor: 0 }); }
 function sitePhotoCount(results, project) {
   let count = 0;
   (project.areas || []).forEach(area => (area.boards || []).forEach(board => count += boardPhotoCount(results, area.id, board.id, board)));
@@ -6986,12 +6957,14 @@ const STH = {
   },
   failBadge: {
     fontSize: 11,
-    fontWeight: 800,
-    color: "#991b1b",
+    fontWeight: 700,
+    color: "#b91c1c",
     background: "#fee2e2",
     borderRadius: 6,
-    padding: "3px 8px",
-    border: "1px solid #dc2626"
+    padding: "2px 7px",
+    border: "1px solid #fca5a5",
+    lineHeight: 1.3,
+    whiteSpace: "nowrap"
   },
   arrow: {
     fontSize: 22,
@@ -7257,12 +7230,12 @@ function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
     ,React.createElement('div',{style:SS.listTitle},"Select Area")
     ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure to add areas and boards.")
     ,(project.areas||[]).map(area=>{
-      let pass=0,fail=0,untested=0,total=0;
+      let pass=0,fail=0,na=0,untested=0,total=0;
       (area.boards||[]).forEach(b=>{
         const bs=swbBoardSummary(results,project.id,area.id,b.id);
-        pass+=bs.pass; fail+=bs.fail; untested+=bs.untested; total+=bs.total;
+        pass+=bs.pass; fail+=bs.fail; na+=bs.na; untested+=bs.untested; total+=bs.total;
       });
-      const pct=total>0?Math.round((pass+fail)/total*100):0;
+      const pct=total>0?Math.round((pass+fail+na)/total*100):0;
       const allDone=(area.boards||[]).length>0&&(area.boards||[]).every(b=>swbBoardComplete(results,project.id,area.id,b.id));
       return React.createElement('button',{key:area.id,
         style:{...SS.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:allDone?{background:"#dcfce7",borderColor:"#86efac"}:{})},
@@ -7270,12 +7243,12 @@ function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
         ,React.createElement('div',{style:SS.siteCardLeft}
           ,React.createElement('div',{style:SS.siteCardName},area.name)
           ,React.createElement('div',{style:SS.siteCardSub},nw((area.boards||[]).length,"board"))
+          ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:fail>0?"#dc2626":allDone?"#16a34a":"#7e22ce"}})
           )
         )
         ,React.createElement('div',{style:SS.siteCardRight}
-          ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
           ,allDone&&fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
           ,React.createElement('span',{style:SS.arrow},"›")
         )
@@ -7301,13 +7274,12 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
         onClick:()=>onSelectBoard(b.id)}
         ,React.createElement('div',{style:SS.siteCardLeft}
           ,React.createElement('div',{style:SS.siteCardName},b.name)
-          ,React.createElement('div',{style:SS.siteCardSub},bs.pass," pass · ",bs.fail," fail · ",bs.na," N/A · ",bs.untested," untested")
+          ,React.createElement(StatusSet,{model:"full",s:bs,dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:bs.fail>0?"#dc2626":isComp?"#16a34a":"#7e22ce"}})
           )
         )
         ,React.createElement('div',{style:SS.siteCardRight}
-          ,bs.fail>0&&React.createElement('span',{style:SS.failBadge},bs.fail," F")
           ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
           ,React.createElement('span',{style:SS.arrow},"›")
         )
@@ -7489,6 +7461,7 @@ function ThermoProjectListView({
     projects.map(proj => {
     const photoCount = sitePhotoCount(allResults[proj.id] || {}, proj);
     const hasFail = siteHasFail(allResults[proj.id] || {}, proj);
+    const tcs = siteCounts(allResults[proj.id] || {}, proj);
     return /*#__PURE__*/React.createElement("div", {
       key: proj.id,
       style: {
@@ -7520,16 +7493,14 @@ function ThermoProjectListView({
       style: STH.siteCardName
     }, proj.name), /*#__PURE__*/React.createElement("div", {
       style: STH.siteCardSub
-    },nw(proj.areas.length,"location")," \xB7 ",nw(photoCount,"photo")," logged")), /*#__PURE__*/React.createElement("div", {
+    },nw(proj.areas.length,"location")," \xB7 ",nw(photoCount,"photo")," logged"), React.createElement(StatusSet,{model:"thermo",s:tcs,dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8,
         marginLeft: 16
       }
-    }, hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A"))), /*#__PURE__*/React.createElement("div", {
       style: {padding: "6px 18px", borderTop: "1px solid #e4e4e7", display: "flex", justifyContent: "flex-end"}
@@ -7817,7 +7788,7 @@ function ThermoHomeView({
     }, /*#__PURE__*/React.createElement("div", {
       style: {display: "flex", justifyContent: "space-between", marginBottom: 8}
     }, /*#__PURE__*/React.createElement("div", {style: {fontSize: 13, fontWeight: 700, color: "#18181b"}}, "Overall Progress"),
-      /*#__PURE__*/React.createElement("div", {style: {fontSize: 12, color: "#52525b"}}, passCount, " / ", total, " pass")
+      React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(total,"photo"))
     ), /*#__PURE__*/React.createElement("div", {
       style: {width: "100%", height: 8, background: "#e4e4e7", borderRadius: 4, overflow: "hidden", marginBottom: 10}
     }, /*#__PURE__*/React.createElement("div", {
@@ -7826,13 +7797,7 @@ function ThermoHomeView({
         width: `${pct}%`,
         background: failCount > 0 ? "#dc2626" : pct === 100 && total > 0 ? "#16a34a" : THERMO_COLOR
       }
-    })), /*#__PURE__*/React.createElement("div", {style: {display: "flex", gap: 8, flexWrap: "wrap"}},
-      /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#1d4ed8"}}, photoCount, " Photos"),
-      passCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#166534"}}, passCount, " Pass"),
-      monitorCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#92400e", fontWeight: 800}}, monitorCount, " Monitor"),
-      failCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#991b1b", fontWeight: 800}}, failCount, " FAIL"),
-      /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#52525b"}}, total, " total")
-    ));
+    })), React.createElement(StatusSet,{model:"thermo",s:{pass:passCount,fail:failCount,monitor:monitorCount}}));
   })(), /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
@@ -7904,6 +7869,7 @@ function ThermoAreaListView({
   }, "No locations yet \u2014 go to \u2699 Structure to add areas and boards."), project.areas.map(area => {
     const photoCount = (area.boards || []).reduce((s, board) => s + boardPhotoCount(results, area.id, board.id, board), 0);
     const hasFail = (area.boards || []).some(board => boardHasFail(results, area.id, board.id, board));
+    const tca = areaCounts(results, area);
     return /*#__PURE__*/React.createElement("button", {
       key: area.id,
       style: {
@@ -7922,15 +7888,13 @@ function ThermoAreaListView({
       style: STH.siteCardName
     }, area.name), /*#__PURE__*/React.createElement("div", {
       style: STH.siteCardSub
-    },nw((area.boards || []).length,"board")," \xB7 ",nw(photoCount,"photo")," logged")), /*#__PURE__*/React.createElement("div", {
+    },nw((area.boards || []).length,"board")," \xB7 ",nw(photoCount,"photo")," logged"), React.createElement(StatusSet,{model:"thermo",s:tca,dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8
       }
-    }, hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A")));
   }));
@@ -7957,6 +7921,7 @@ function ThermoBoardListView({
   }, "No boards in this area \u2014 go to \u2699 Structure to add boards."), (area.boards || []).map(board => {
     const photoCount = boardPhotoCount(results, area.id, board.id, board);
     const hasFail = boardHasFail(results, area.id, board.id, board);
+    const tcb = boardCounts(results, area.id, board.id, board);
     return /*#__PURE__*/React.createElement("button", {
       key: board.id,
       style: {
@@ -7975,15 +7940,13 @@ function ThermoBoardListView({
       style: STH.siteCardName
     }, board.name), /*#__PURE__*/React.createElement("div", {
       style: STH.siteCardSub
-    }, (board.circuits || []).length > 0 ? `${nw((board.circuits || []).length,"circuit")} · ` : "No circuits (board-level) · ",nw(photoCount,"photo")," logged")), /*#__PURE__*/React.createElement("div", {
+    }, (board.circuits || []).length > 0 ? `${nw((board.circuits || []).length,"circuit")} · ` : "No circuits (board-level) · ",nw(photoCount,"photo")," logged"), React.createElement(StatusSet,{model:"thermo",s:tcb,dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8
       }
-    }, hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A")));
   }));
@@ -8079,19 +8042,7 @@ function ThermoCircuitView({
         color: "#52525b",
         marginTop: 2
       }
-    }, photos.length === 0 ? "No photos logged" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), !hasFail && hasMonitor && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        fontWeight: 800,
-        color: "#92400e",
-        background: "#fef3c7",
-        borderRadius: 6,
-        padding: "3px 8px",
-        border: "1px solid #fcd34d"
-      }
-    }, "MONITOR"), /*#__PURE__*/React.createElement("span", {
+    }, photos.length === 0 ? "No photos logged" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`), React.createElement(StatusSet,{model:"thermo",s:thermoCountPhotos(photos),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A")));
   }));
@@ -8621,9 +8572,7 @@ function ThermoReportView({
         const bPass=bRows.filter(r=>r.photo.result==="PASS").length;
         return React.createElement("div",{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bFail>0?"#fca5a5":THERMO_COLOR+"22"}`,borderRadius:8,marginBottom:4}},
           React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},board.name),
-          bPass>0&&React.createElement("span",{style:{fontSize:11,color:"#166534"}},bPass," P"),
-          bFail>0&&React.createElement("span",{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},bFail," F"),
-          bMon>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},bMon," M"),
+          React.createElement(StatusSet,{model:"thermo",s:{pass:bPass,fail:bFail,monitor:bMon}}),
           bRows.length===0&&React.createElement("span",{style:{fontSize:11,color:"#52525b"}},"No photos")
         );
       })
@@ -9278,20 +9227,7 @@ function ThermoHistoryView({
             color: "#52525b",
             marginTop: 2
           }
-        }, photos.length === 0 ? "No photos" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
-          style: STH.failBadge
-        }, "FAIL"), !hasFail && hasMonitor && /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 11,
-            fontWeight: 800,
-            color: "#92400e",
-            background: "#fef3c7",
-            borderRadius: 6,
-            padding: "3px 8px",
-            border: "1px solid #fcd34d",
-            marginRight: 8
-          }
-        }, "MONITOR"), /*#__PURE__*/React.createElement("span", {
+        }, photos.length === 0 ? "No photos" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`), React.createElement(StatusSet,{model:"thermo",s:thermoCountPhotos(photos),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
           style: STH.arrow
         }, "\u203A"));
       }));
@@ -9343,9 +9279,7 @@ function ThermoHistoryView({
           style: STH.siteCardName
         }, board.name), /*#__PURE__*/React.createElement("div", {
           style: STH.siteCardSub
-        }, count, " photo", count !== 1 ? "s" : "", " logged")), hasFail && /*#__PURE__*/React.createElement("span", {
-          style: STH.failBadge
-        }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+        }, count, " photo", count !== 1 ? "s" : "", " logged"), React.createElement(StatusSet,{model:"thermo",s:boardCounts(snapResults, viewArea, board.id, board),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
           style: STH.arrow
         }, "\u203A"));
       }));
@@ -9443,9 +9377,7 @@ function ThermoHistoryView({
         style: STH.siteCardName
       }, area.name), /*#__PURE__*/React.createElement("div", {
         style: STH.siteCardSub
-      }, aCount, " photo", aCount !== 1 ? "s" : "", " logged")), aFail && /*#__PURE__*/React.createElement("span", {
-        style: STH.failBadge
-      }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+      }, aCount, " photo", aCount !== 1 ? "s" : "", " logged"), React.createElement(StatusSet,{model:"thermo",s:areaCounts(snapResults, area),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
         style: STH.arrow
       }, "\u203A"));
     }));
@@ -9534,35 +9466,13 @@ function ThermoHistoryView({
         fontSize: 12,
         color: "#52525b"
       }
-    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor"), /*#__PURE__*/React.createElement("div", {
+    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor", " \xB7 ", nw(totalPhotos, "photo")), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: "#52525b",
         marginTop: 2
       }
-    }, "Archived ", fmtDateTime(snap.archivedAt)), totalPhotos > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        marginTop: 6
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#166534"
-      }
-    }, passPhotos, " Pass"), failPhotos > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#991b1b",
-        fontWeight: 800
-      }
-    }, failPhotos, " Fail"), monitorPhotos > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#92400e"
-      }
-    }, monitorPhotos, " Monitor"))), /*#__PURE__*/React.createElement("span", {
+    }, "Archived ", fmtDateTime(snap.archivedAt)), totalPhotos > 0 && React.createElement(StatusSet,{model:"thermo",s:{pass:passPhotos,fail:failPhotos,monitor:monitorPhotos,total:totalPhotos},dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 22,
         color: isExpanded ? THERMO_COLOR : "#52525b"
@@ -11018,18 +10928,18 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,projects.map(proj=>{
       const cb=swbSiteCompletedBoards(allResults,proj);
       const s=swbSiteSummary(allResults,proj);
-      const pct=cb.total>0?Math.round(cb.complete/cb.total*100):0;
+      const pct=s.total>0?Math.round((s.pass+s.fail+s.na)/s.total*100):0;
       return React.createElement('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{onSelect(proj.id);}}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:SS.siteCardName},proj.name)
-            ,React.createElement('div',{style:SS.siteCardSub},`${nw((proj.areas||[]).length,"area")} · ${cb.complete} / ${nw(cb.total,"board")} complete`)
+            ,React.createElement('div',{style:SS.siteCardSub},`${nw((proj.areas||[]).length,"area")} · ${nw(cb.total,"board")}`)
+            ,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:s.fail>0?"#dc2626":"#7e22ce"}})
             )
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,s.fail>0&&React.createElement('span',{style:SS.failBadge},s.fail," FAIL")
             ,cb.complete>0&&cb.complete===cb.total&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
             ,React.createElement('span',{style:SS.arrow},"›")
           )
@@ -11126,17 +11036,12 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:"1px solid #d8b4fe",borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"checklist point"))
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":"#7e22ce"}})
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,React.createElement('span',{style:{fontSize:11,color:"#7e22ce"}},summary.pass," Pass")
-        ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-        ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},summary.untested," untested")
-        ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},summary.total," total")
-      )
+      ,React.createElement(StatusSet,{model:"full",s:summary})
     )
     ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#7e22ce":"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?"#7e22ce":"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
@@ -11189,11 +11094,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
         )
         ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-        ,[["PASS",bs.pass,"#16a34a"],["FAIL",bs.fail,"#dc2626"],["N/A",bs.na,"#334155"],["—",bs.untested,"#92400e"],["SCORE",scoreLabel(bs.score),"#334155"]].map(([l,v,c])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l)
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:bs,dash:true,score:scoreLabel(bs.score),style:{marginTop:10}})
       ,bs.untested<SWB_CHECKLIST.length&&React.createElement('div',{style:{marginTop:10}}
         ,React.createElement(ConfirmReset,{onConfirm:onResetBoard,prompt:"Reset all results for this board?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:open},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")})
       )
@@ -11346,13 +11247,9 @@ function SWBReportView({project,results,meta,onBack}) {
         ,(area.boards||[]).map(board=>{
           const bs=swbBoardSummary(results,project.id,area.id,board.id);
           const isComp=swbBoardComplete(results,project.id,area.id,board.id);
-          return React.createElement('div',{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bs.fail>0?"#fca5a5":"#f3e8ff"}`,borderRadius:8,marginBottom:4}}
-            ,React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},board.name)
-            ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},bs.pass," P")
-            ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},bs.fail," F")
-            ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#334155"}},bs.na," N/A")
-            ,bs.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},bs.untested," U")
-            ,React.createElement('span',{style:{fontSize:11,color:"#334155",fontWeight:700}},scoreLabel(bs.score))
+          return React.createElement('div',{key:board.id,style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bs.fail>0?"#fca5a5":"#f3e8ff"}`,borderRadius:8,marginBottom:4}}
+            ,React.createElement('span',{style:{flex:"1 0 60%",fontSize:13,fontWeight:600,color:"#18181b"}},board.name)
+            ,React.createElement(StatusSet,{model:"full",s:bs,dash:true,score:scoreLabel(bs.score)})
             ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#166534",fontWeight:800,fontSize:12}},"✓")
           );
         })
@@ -11513,22 +11410,22 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       )
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results")
       ,project&&(project.areas||[]).map(area=>{
-        let aFail=0,aTotal=0;
+        let aFail=0,aPass=0,aNa=0,aTotal=0;
         (area.boards||[]).forEach(board=>{
           SWB_CHECKLIST.forEach(({key})=>{
             aTotal++;
             const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];
             const st=(v&&v.status)||SWB_STATUS.UNTESTED;
-            if(st===SWB_STATUS.FAIL)aFail++;
+            if(st===SWB_STATUS.FAIL)aFail++;else if(st===SWB_STATUS.PASS)aPass++;else if(st===SWB_STATUS.NA)aNa++;
           });
         });
         return React.createElement('button',{key:area.id,style:{...SS.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:SS.siteCardLeft}
             ,React.createElement('div',{style:SS.siteCardName},area.name)
             ,React.createElement('div',{style:SS.siteCardSub},(area.boards||[]).length," board",((area.boards||[]).length!==1?"s":""))
+            ,React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('div',{style:SS.siteCardRight}
-            ,aFail>0&&React.createElement('span',{style:SS.failBadge},aFail," FAIL")
             ,React.createElement('span',{style:SS.arrow},"›")
           )
         );
@@ -11551,16 +11448,10 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#7e22ce"}},"Switchboard Audit")
-              ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
-            )
-            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+              )
+            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"checklist point"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#166534"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#b91c1c"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
-              ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
-            )
+            ,total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('span',{style:{...SS.arrow,color:expanded===snap.id?"#7e22ce": "#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -11673,8 +11564,8 @@ function swbStyles() {
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
     siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
     siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-    failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
-    untestedBadge:{fontSize:11,fontWeight:700,color:"#78350f",background:"#fef3c7",borderRadius:6,padding:"3px 8px"},
+    failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
+    untestedBadge:{fontSize:11,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:6,padding:"2px 7px",border:"1px solid #fcd34d",lineHeight:1.3,whiteSpace:"nowrap"},
     arrow:{fontSize:22,color:"#52525b",lineHeight:1},
     addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
     summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#6e6a66",marginTop:4,marginBottom:16},
@@ -11904,14 +11795,14 @@ function AreaAuditGroups({areas, nounOne, accent, statusOf, renderRow}) {
   const SS = swbStyles();
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:14}}
     ,(areas||[]).filter(a=>(a.assets||[]).length>0).map(area=>{
-      const list = area.assets; let tested=0, fail=0;
-      list.forEach(a=>{ const s=statusOf(a); if(s!=="untested") tested++; if(s==="fail") fail++; });
+      const list = area.assets; let tested=0, fail=0, pass=0;
+      list.forEach(a=>{ const s=statusOf(a); if(s!=="untested") tested++; if(s==="fail") fail++; else if(s==="pass") pass++; });
       return React.createElement('div',{key:area.id,"data-area":area.name}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,margin:"0 2px 6px",minWidth:0}}
           ,React.createElement('div',{style:{fontSize:12,fontWeight:800,color:accent,letterSpacing:0.6,textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},area.name)
-          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0,whiteSpace:"nowrap"}},`${nw(list.length,nounOne)} · ${tested} tested`)
-          ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
+          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0,whiteSpace:"nowrap"}},nw(list.length,nounOne))
         )
+        ,React.createElement(StatusSet,{model:"noNA",s:{pass,fail,untested:list.length-tested},dash:true,style:{margin:"0 2px 8px"}})
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}},list.map(renderRow))
       );
     })
@@ -11919,7 +11810,7 @@ function AreaAuditGroups({areas, nounOne, accent, statusOf, renderRow}) {
 }
 
 // Report tab "AREA SUMMARY" (same treatment as TAT / IRT / SWB): per area, tested / total with a progress bar.
-function AreaSummaryRows({areas, accent, statusOf}) {
+function AreaSummaryRows({areas, accent, statusOf, nounOne}) {
   const rows = (areas||[]).filter(a=>(a.assets||[]).length>0);
   if(rows.length===0) return null;
   return React.createElement('div',{style:{marginBottom:16}}
@@ -11930,11 +11821,12 @@ function AreaSummaryRows({areas, accent, statusOf}) {
       return React.createElement('div',{key:area.id,style:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 14px",marginBottom:8}}
         ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}
           ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
-          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0}},`${pass} pass · ${fail} fail · ${total-tested} untested`)
+          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(total,nounOne||"item"))
         )
         ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,overflow:"hidden"}}
           ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":pct===100?"#16a34a":accent}})
         )
+        ,React.createElement(StatusSet,{model:"noNA",s:{pass,fail,untested:total-tested,total},dash:true,style:{marginTop:6}})
       );
     })
   );
@@ -12484,10 +12376,11 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:SS.siteCardName},proj.name)
-            ,eltEl('div',{style:SS.siteCardSub},`${nw(s.assets,"fitting")} · ${s.total} tested`)
+            ,eltEl('div',{style:SS.siteCardSub},nw(s.assets,"fitting"))
+            ,React.createElement(StatusSet,{model:"noNA",s:{pass:s.pass,fail:s.fail,untested:s.assets-s.total},dash:true,style:{marginTop:6}})
           )
           ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            
             ,eltEl('span',{style:SS.arrow},"›")
           )
         )
@@ -12568,12 +12461,9 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
     ,eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:14,padding:"14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Progress")
-        ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},summary.total," / ",nw(summary.assets,"fitting")," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.assets,"fitting"))
       )
-      ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,eltEl('span',{style:{fontSize:11,color:ELT_COLOR}},summary.pass," Pass")
-        ,summary.fail>0&&eltEl('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-      )
+      ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total}})
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No fittings yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit()},"Start / Continue Testing")
@@ -12590,10 +12480,7 @@ function ELTAuditView({project, results, meta, summary, onOpen}) {
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
   return eltEl('div',{style:SS.listWrap}
-    ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
-      ,[["TESTED",summary.total,"#334155"],["PASS",summary.pass,"#16a34a"],["FAIL",summary.fail,"#dc2626"],[summary.assets===1?"FITTING":"FITTINGS",summary.assets,"#92400e"]].map(([l,v,c])=>
-        eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
-    )
+    ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total},style:{marginBottom:14}})
     ,summary.assets===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add an area, then add fittings in the Manage tab.")
     ,eltEl(AreaAuditGroups,{areas:project.areas,nounOne:"fitting",accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id)),renderRow:a=>{
       const r = eltGetRes(results,project.id,a.id); const o = eltOverall(r); const sm = SM[o];
@@ -12744,7 +12631,7 @@ function ELTReportView({project, results, meta, summary}) {
       ,eltEl('div',{style:{...SS.duePill,borderColor:ELT_COLOR_BORDER,color:ELT_COLOR,padding:"7px 12px"}},eltEl('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('rect',{x:3,y:4,width:18,height:18,rx:2}),eltEl('line',{x1:16,y1:2,x2:16,y2:6}),eltEl('line',{x1:8,y1:2,x2:8,y2:6}),eltEl('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
     ,eltEl(ReportStatTiles,{rows:[["Total",summary.assets,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["Untested",Math.max(0,summary.assets-summary.total),"#92400e"]]})
-    ,eltEl(AreaSummaryRows,{areas:project.areas,accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id))})
+    ,eltEl(AreaSummaryRows,{nounOne:"fitting",areas:project.areas,accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:ELT_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -12879,15 +12766,11 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,eltEl('span',{style:{fontSize:13,fontWeight:800,color:ELT_COLOR}},"Emergency Lighting Audit")
-              ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+              
             )
-            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(s.assets,"fitting"))
             ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.total," tested")
-              ,eltEl('span',{style:{fontSize:11,color:"#166534"}},s.pass," Pass")
-              ,eltEl('span',{style:{fontSize:11,color:"#b91c1c"}},s.fail," Fail")
-            )
+            ,React.createElement(StatusSet,{model:"noNA",s:{pass:s.pass,fail:s.fail,untested:s.assets-s.total,total:s.assets},dash:true,style:{marginTop:6}})
           )
           ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?ELT_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -12945,7 +12828,7 @@ function irtStyles(){
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
     siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
     siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-    failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
+    failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
     arrow:{fontSize:22,color:"#52525b",lineHeight:1},
     addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
@@ -13288,11 +13171,11 @@ function IRTPanelListView({area,project,results,onSelect,onBack}){
     React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:1}},project.name))),
     (area.panels||[]).length===0&&React.createElement("div",{style:{color:"#52525b",fontSize:13,textAlign:"center",padding:"24px 0"}},"No panels \u2014 add in \u2699 Structure"),
     (area.panels||[]).map(panel=>{
-      let pass=0,fail=0,unt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else unt++;});
+      let pass=0,fail=0,na=0,unt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="na")na++;else unt++;});
       const hasFail=fail>0;
       return React.createElement("button",{key:panel.id,style:{...SS.siteCard,...(hasFail?{background:"#fee2e2",border:"1px solid #fca5a5"}:{})},onClick:()=>onSelect(panel.id)},
-        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:SS.siteCardSub},nw((panel.items||[]).length,"item"))),
-        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#166534"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:SS.siteCardSub},nw((panel.items||[]).length,"item")),React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},dash:true,style:{marginTop:6}})),
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},React.createElement("span",{style:SS.arrow},"\u203a"))
       );
     })
   );
@@ -13304,10 +13187,10 @@ function IRTAreaListView({project,results,onSelect}){
     React.createElement("div",{style:SS.listTitle},"Select Location"),
     (project.areas||[]).length===0&&React.createElement("div",{style:{color:"#52525b",fontSize:14}},"No locations \u2014 go to \u2699 Structure to add areas."),
     (project.areas||[]).map(area=>{
-      let pass=0,fail=0,total=0;(area.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,area.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;}));const hasFail=fail>0;
+      let pass=0,fail=0,na=0,total=0;(area.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,area.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="na")na++;}));const hasFail=fail>0;
       return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(hasFail?{background:"#fee2e2",border:"1px solid #fca5a5"}:{})},onClick:()=>onSelect(area.id)},
-        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:SS.siteCardSub},nw((area.panels||[]).length,"panel")," \u00b7 ",nw(total,"item"))),
-        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#166534"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:SS.siteCardSub},nw((area.panels||[]).length,"panel")," \u00b7 ",nw(total,"item")),React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na},dash:true,style:{marginTop:6}})),
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},React.createElement("span",{style:SS.arrow},"\u203a"))
       );
     })
   );
@@ -13328,14 +13211,9 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       React.createElement("div",{style:{marginTop:8}},React.createElement("div",{style:SS.metaLabelText},"NEXT TEST DUE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement("input",{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
     ),
     React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${IRT_COLOR}33`,borderRadius:14,padding:"14px"}},
-      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress"),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},summary.pass," / ",summary.total," tested")),
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress"),React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"item"))),
       React.createElement("div",{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}},React.createElement("div",{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":IRT_COLOR}})),
-      React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-        React.createElement("span",{style:{fontSize:11,color:"#1d4ed8"}},summary.pass," Pass"),
-        summary.fail>0&&React.createElement("span",{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL"),
-        summary.untested>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},summary.untested," untested"),
-        React.createElement("span",{style:{fontSize:11,color:"#52525b"}},summary.total," total")
-      )
+      React.createElement(StatusSet,{model:"full",s:summary})
     ),
     React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?IRT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},moduleIcon("irt",15)," Start / Continue Audit"),
     auditEntered===true&&React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}},
@@ -13377,8 +13255,8 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       const total=(proj.areas||[]).reduce((acc,a)=>(a.panels||[]).reduce((acc2,p)=>acc2+(p.items||[]).length,acc),0);
       return React.createElement("div",{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{onSelect(proj.id);}},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},proj.name),React.createElement("div",{style:SS.siteCardSub},nw((proj.areas||[]).length,"area")," \u00b7 ",nw(total,"item")+(proj.company?` \u00b7 ${proj.company}`:""))),
-          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},s.fail>0&&React.createElement("span",{style:SS.failBadge},s.fail," FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},proj.name),React.createElement("div",{style:SS.siteCardSub},nw((proj.areas||[]).length,"area")," \u00b7 ",nw(total,"item")+(proj.company?` \u00b7 ${proj.company}`:"")),React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})),
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},React.createElement("span",{style:SS.arrow},"\u203a"))
         ),
         React.createElement("div",{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}},React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" }))
       );
@@ -13605,8 +13483,8 @@ function IRTReportView({project,results,meta,onBack}){
       (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
         React.createElement("div",{style:{fontSize:11,color:"#52525b",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
         (area.panels||[]).map(panel=>{
-          let pPass=0,pFail=0,pUnt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pPass++;else if(s==="fail")pFail++;else pUnt++;});
-          return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${pFail>0?"#fca5a5":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},panel.name),React.createElement("span",{style:{fontSize:11,color:"#166534"}},pPass," P"),pFail>0&&React.createElement("span",{style:{fontSize:11,color:"#b91c1c",fontWeight:800}},pFail," F"),pUnt>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},pUnt," U"));
+          let pPass=0,pFail=0,pNa=0,pUnt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pPass++;else if(s==="fail")pFail++;else if(s==="na")pNa++;else pUnt++;});
+          return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${pFail>0?"#fca5a5":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},panel.name),React.createElement(StatusSet,{model:"full",s:{pass:pPass,fail:pFail,na:pNa,untested:pUnt},dash:true}));
         })
       ))
     ),
@@ -13680,15 +13558,15 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ),
         area&&(area.panels||[]).map(panel=>{
           const items=panel.items||[];if(!items.length)return null;
-          let pFail=0;
-          items.forEach(id=>{const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(eff==="fail")pFail++;});
+          let pFail=0,pPass=0,pNa=0;
+          items.forEach(id=>{const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(eff==="fail")pFail++;else if(eff==="pass")pPass++;else if(eff==="na")pNa++;});
           return React.createElement("button",{key:panel.id,style:{...SS.siteCard,...(pFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewPanel(panel.id)},
             React.createElement("div",{style:SS.siteCardLeft},
               React.createElement("div",{style:SS.siteCardName},panel.name),
-              React.createElement("div",{style:SS.siteCardSub},items.length," item",items.length!==1?"s":"")
+              React.createElement("div",{style:SS.siteCardSub},items.length," item",items.length!==1?"s":""),
+              React.createElement(StatusSet,{model:"full",s:{pass:pPass,fail:pFail,na:pNa,untested:items.length-pPass-pFail-pNa},dash:true,style:{marginTop:6}})
             ),
             React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},
-              pFail>0&&React.createElement("span",{style:SS.failBadge},pFail," FAIL"),
               React.createElement("span",{style:SS.arrow},"›")
             )
           );
@@ -13715,22 +13593,21 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       ),
       React.createElement("div",{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results"),
       project&&(project.areas||[]).map(area=>{
-        let aFail=0,aTotal=0;
+        let aFail=0,aPass=0,aNa=0,aTotal=0;
         (area.panels||[]).forEach(panel=>(panel.items||[]).forEach(id=>{
           aTotal++;
           const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);
           const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;
-          if(eff==="fail")aFail++;
+          if(eff==="fail")aFail++;else if(eff==="pass")aPass++;else if(eff==="na")aNa++;
         }));
-        const aPass=aTotal-aFail;
-        const pct=aTotal>0?Math.round((aPass/aTotal)*100):0;
+        const pct=aTotal>0?Math.round(((aPass+aFail+aNa)/aTotal)*100):0;
         return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewArea(area.id)},
           React.createElement("div",{style:SS.siteCardLeft},
             React.createElement("div",{style:SS.siteCardName},area.name),
-            React.createElement("div",{style:SS.siteCardSub},aTotal," item",aTotal!==1?"s":"")
+            React.createElement("div",{style:SS.siteCardSub},aTotal," item",aTotal!==1?"s":""),
+            React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
           ),
           React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},
-            aFail>0&&React.createElement("span",{style:SS.failBadge},aFail," FAIL"),
             React.createElement("span",{style:SS.arrow},"\u203a")
           )
         );
@@ -13748,7 +13625,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       const sum=irtSiteSummary(snap.results&&project?{[project.id]:snap.results}:{},project||{areas:[],id:""});
       return React.createElement("div",{key:snap.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#1d4ed8"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#166534"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#b91c1c"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#334155"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#92400e"}},sum.untested," Untested"))),
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#1d4ed8"}},"IR Test Audit")),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 ",nw(sum.total,"item")),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement(StatusSet,{model:"full",s:sum,dash:true,style:{marginTop:6}})),
           React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#1d4ed8": "#52525b"}},expanded===snap.id?"\u25be":"\u203a")
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}},
@@ -14596,10 +14473,11 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:SS.siteCardName},proj.name)
-            ,eltEl('div',{style:SS.siteCardSub},`${nw(s.total,"welder")} · ${s.tested} tested`)
+            ,eltEl('div',{style:SS.siteCardSub},nw(s.total,"welder"))
+            ,React.createElement(StatusSet,{model:"noNA",s:s,dash:true,style:{marginTop:6}})
           )
           ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            
             ,eltEl('span',{style:SS.arrow},"›")
           )
         )
@@ -14685,12 +14563,9 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
     ,eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:14,padding:"14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Progress")
-        ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},summary.tested," / ",nw(summary.total,"welder")," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"welder"))
       )
-      ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,eltEl('span',{style:{fontSize:11,color:WELDER_COLOR}},summary.pass," Pass")
-        ,summary.fail>0&&eltEl('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-      )
+      ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.untested}})
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No welders yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:ready?WELDER_COLOR:"#f7f6f3",color:ready?"#fff":"#52525b",border:`2px solid ${ready?WELDER_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:ready?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>ready&&onStartAudit()},"Start / Continue Audit")
@@ -14708,10 +14583,7 @@ function WelderAuditView({project, results, meta, onOpen}) {
   const s = welderSiteSummary(project,results);
   if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
   return eltEl('div',{style:SS.listWrap}
-    ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
-      ,[["TESTED",s.tested,"#334155"],["PASS",s.pass,"#16a34a"],["FAIL",s.fail,"#dc2626"],[s.total===1?"WELDER":"WELDERS",s.total,"#92400e"]].map(([l,v,c])=>
-        eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
-    )
+    ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
     ,s.total===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add an area, then add welders in the Manage tab.")
     ,eltEl(AreaAuditGroups,{areas:project.areas,nounOne:"welder",accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id)),renderRow:a=>{
       const o = welderOverall(welderGetRes(results,project.id,a.id)); const sm = welderSM(o);
@@ -14864,7 +14736,7 @@ function WelderReportView({project, results, meta}) {
       ,eltEl('div',{style:{...SS.duePill,borderColor:WELDER_COLOR_BORDER,color:WELDER_COLOR,padding:"7px 12px"}},"Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
     ,eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]})
-    ,eltEl(AreaSummaryRows,{areas:project.areas,accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id))})
+    ,eltEl(AreaSummaryRows,{nounOne:"welder",areas:project.areas,accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:WELDER_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -14990,15 +14862,11 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,eltEl('span',{style:{fontSize:13,fontWeight:800,color:WELDER_COLOR}},"Welder Audit")
-              ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+              
             )
-            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(s.total,"welder"))
             ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.tested," tested")
-              ,eltEl('span',{style:{fontSize:11,color:"#166534"}},s.pass," Pass")
-              ,eltEl('span',{style:{fontSize:11,color:"#b91c1c"}},s.fail," Fail")
-            )
+            ,React.createElement(StatusSet,{model:"noNA",s:s,dash:true,style:{marginTop:6}})
           )
           ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?WELDER_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -15885,7 +15753,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };

@@ -55,9 +55,9 @@ describe.each(Object.values(MODS))('$name: Site -> Area -> Assets', m => {
     await openSite(user, m, 'Audit');
     expect(areaNames()).toEqual(['Shed', 'Yard', 'Site A']);                        // 3 areas — not 5, not 4
     const shed = within(document.querySelector('[data-area="Shed"]'));
-    expect(shed.getByText(new RegExp(`2 ${m.noun}s · 0 tested`))).toBeInTheDocument();
+    expect(shed.getByText(`2 ${m.noun}s`)).toBeInTheDocument(); expect([...document.querySelector('[data-area="Shed"]').querySelectorAll('[data-statuspill]')].map(e => e.textContent)).toEqual(['0 PASS', '0 FAIL', '2 —']);   // unit subtitle + the compact set, no "N tested"
     expect(shed.getAllByRole('button').map(b => b.textContent)).toEqual([expect.stringContaining(m.title(1)), expect.stringContaining(m.title(3))]);
-    expect(within(document.querySelector('[data-area="Site A"]')).getByText(new RegExp(`1 ${m.noun} · 0 tested`))).toBeInTheDocument(); // blank Location -> site-name area
+    expect(within(document.querySelector('[data-area="Site A"]')).getByText(`1 ${m.noun}`)).toBeInTheDocument(); // blank Location -> site-name area
     await waitFor(() => expect(ls(p('projects-v2'))).toHaveLength(1));
     const v2 = ls(p('projects-v2'))[0];
     expect(v2.assets).toBeUndefined();

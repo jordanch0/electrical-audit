@@ -93,6 +93,6 @@ describe('live UI', () => {
     expect(screen.getByText(/10\.0% SCORE/)).toBeInTheDocument();     // chip in the board's counter row
     await user.click(screen.getByRole('button', { name: /^Report$/ }));
     await waitFor(() => expect(screen.getByText('BOARD SUMMARY')).toBeInTheDocument());
-    expect(screen.getAllByText('10.0%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/10.0%/).length).toBeGreaterThan(0);      // the per-board score pill ("10.0% SCORE")
   });
 });
