@@ -1,4 +1,4 @@
-// Report tab standardisation: every module uses the shared stat tiles + "Failed Items" list (SWB/IRT design),
+// Report tab standardisation: every module uses the shared status pills (no tiles, no TOTAL) + "Failed Items" list (SWB/IRT design),
 // the same "✓ No defects recorded" empty state, and no Export button on the Report tab (export lives in History).
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/react';
@@ -66,7 +66,7 @@ beforeEach(() => localStorage.clear());
 afterEach(() => cleanup());
 
 describe.each(Object.entries(SEEDS))('%s Report tab', (name, { card, site, seed }) => {
-  it('has the standard title, date pill, five stat tiles and a "Failed Items" list', async () => {
+  it('has the standard title, date pill, the status pills (no TOTAL) and a "Failed Items" list', async () => {
     const user = userEvent.setup();
     seed();
     await openReport(user, card, site);
@@ -78,7 +78,8 @@ describe.each(Object.entries(SEEDS))('%s Report tab', (name, { card, site, seed 
     expect(bigTitle.style.letterSpacing).toBe('1.5px');
     // date pill: "Tested: … → next due: …" (RCD has one per test: "Push: … → next …")
     expect(screen.getAllByText(name === 'RCD' ? /Push:/ : /Tested:/).length).toBeGreaterThan(0);
-    for (const l of ['TOTAL', 'PASS', 'FAIL']) expect(screen.getAllByText(l).length).toBeGreaterThan(0);
+    for (const l of [/^\d+ PASS$/, /^\d+ FAIL$/]) expect(screen.getAllByText(l).length).toBeGreaterThan(0);
+    expect(screen.queryByText('TOTAL')).not.toBeInTheDocument(); expect(document.querySelector('[data-statuspill="total"]')).toBeNull();
     expect(failedHeadings()).toHaveLength(1);
     expect(screen.queryByText(/Failed Circuits|Issues Requiring Attention/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Export xlsx/)).not.toBeInTheDocument();
@@ -122,23 +123,24 @@ describe('empty states and module-specific report details', () => {
     expect(screen.getByText('Removed from Service')).toBeInTheDocument();
   });
 
-  it('TAT PASS tile is green like every other module', async () => {
+  it('TAT PASS pill is the standard green (#166534) like every other module', async () => {
     const user = userEvent.setup();
     SEEDS.TAT.seed();
     await openReport(user, SEEDS.TAT.card, SEEDS.TAT.site);
-    const tile = (await screen.findByText('PASS')).previousSibling;
-    expect(tile.style.color).toBe('rgb(22, 163, 74)');
+    const pill = (await screen.findAllByText(/^\d+ PASS$/))[0];
+    expect(pill.style.color).toBe('rgb(22, 101, 52)');
   });
 
-  it('ELT keeps its register table below the summary, with an ELT subtitle and standard tiles', async () => {
+  it('ELT keeps its register table below the summary, with an ELT subtitle and the standard status pills', async () => {
     const user = userEvent.setup();
     SEEDS.ELT.seed();
     await openReport(user, SEEDS.ELT.card, SEEDS.ELT.site);
     expect(await screen.findByText(/EMERGENCY LIGHTING REPORT/)).toBeInTheDocument();
     expect(screen.getByText('FITTING REGISTER')).toBeInTheDocument();
     expect(screen.getByRole('table')).toBeInTheDocument();
-    for (const l of ['TOTAL', 'PASS', 'FAIL', 'UNTESTED']) expect(screen.getAllByText(l).length).toBeGreaterThan(0);
-    expect(screen.queryByText('N/A')).not.toBeInTheDocument(); // ELT has no N/A result, so no always-zero tile
+    for (const l of [/^\d+ PASS$/, /^\d+ FAIL$/, /^\d+ UNTESTED$/]) expect(screen.getAllByText(l).length).toBeGreaterThan(0);
+    expect(screen.queryByText('TOTAL')).not.toBeInTheDocument();
+    expect(screen.queryByText(/N\/A/)).not.toBeInTheDocument(); // ELT has no N/A result, so no always-zero pill
     expect(screen.getByText(/Failed: 90-Minute Discharge Test/)).toBeInTheDocument();
   });
 

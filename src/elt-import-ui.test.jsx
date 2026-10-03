@@ -61,7 +61,7 @@ describe('ELT site list: Manual / Import toggle', () => {
 
     await user.click(screen.getByRole('button', { name: /Import Site/ }));
     expect(await screen.findByText('Hearse Road - Firestone')).toBeInTheDocument();
-    expect(screen.getByText(/2 fittings · 0 tested/)).toBeInTheDocument();
+    expect(screen.getByText('2 fittings')).toBeInTheDocument(); expect(screen.getByText('2 —')).toBeInTheDocument();   // unit subtitle + the compact set (no "N tested")
     const proj = ls('elt-projects-v2')[0];
     expect(proj).toMatchObject({ name: 'Hearse Road - Firestone', company: 'Co Pty Ltd', abn: '98 765 432 109' });
     expect(proj.assets).toBeUndefined();

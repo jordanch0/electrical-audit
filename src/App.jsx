@@ -8,7 +8,7 @@ function _interopRequireWildcard(obj) { if (obj && obj.__esModule) { return obj;
 // ─────────────────────────────────────────────────────────────────────────
 const STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const SM = {
-[STATUS.UNTESTED]: { label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
+[STATUS.UNTESTED]: { label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
 [STATUS.PASS]:     { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },
 [STATUS.FAIL]:     { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
 [STATUS.NA]:       { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
@@ -153,28 +153,14 @@ function xjPhotoBox(dataUrl) { const s = xjImageSize(dataUrl); const W = s && s.
 // than re-parsing them out of a data URL — used once photos live in IndexedDB and the pointer already carries its own size.
 function xjPhotoBoxWH(w, h) { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const k = Math.min(XJ_PHOTO_BOX / W, XJ_PHOTO_BOX / H); return { w: Math.max(1, Math.round(W * k)), h: Math.max(1, Math.round(H * k)) }; }
 const xjPhotoRowPt = hPx => Math.ceil(hPx * 0.75 + 14);   // the row is the photo's height plus a margin, so the image can never be clipped
-// ── Company logo (Global Settings, 2026-09-27): a centred image strip in row 1, full sheet width, above the existing header block —
-// ONLY when a logo is set in Global Settings (no logo = today's exact output, byte-identical). Every direct-write header sheet reserves
-// row 1 for it by shifting its own rows down by `off` (0 or 1) BEFORE writing anything, then calls xjLogo once every column width is final
-// (centring needs the real widths). xjSheet (the shared builder for RCD/IEL/TAT/Thermo/IRT/GSD-Register/every Defects sheet) does this itself.
-function xjColPx(ws, c) { return (ws.getColumn(c).width || 8.43) * 7 + 5; }
+// ── Company logo geometry helpers (Global Settings, 2026-09-27) — used by the shared header (xjHeader / xjLogoPlace, below): real column widths in pixels, so the logo can be centred.
+// A column's width in px AS THE FILE WILL RENDER IT. ExcelJS writes no <col> entry for a width of exactly 9 (it treats 9 as "default") and the file declares no default column
+// width, so Excel shows such a column at ITS default, 8.43 characters (64 px) — not the 68 px that "9" would be. Mirror that here, or a logo "centred" over a sheet with a width-9 column is off.
+function xjColPx(ws, c) { const w = ws.getColumn(c).width; return (w == null || w === 9 ? 8.43 : w) * 7 + 5; }
 function xjSheetWidthPx(ws, n) { let w = 0; for (let c = 1; c <= n; c++) w += xjColPx(ws, c); return w; }
-function xjPxToAnchor(ws, px) { let x = 0, c = 1; while (c < 1000) { const w = xjColPx(ws, c); if (x + w > px) return (c - 1) + Math.max(0, px - x) / w; x += w; c++; } return c - 1; }
-const XJ_LOGO_ROW_PT = 46;      // the reserved row's height
-const XJ_LOGO_MAX_H_PX = 50;    // the logo image never taller than this, leaving a margin inside the row
-function xjLogo(ws, wb, dataUrl, n) {
-  if (!dataUrl) return;
-  const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || ""); if (!m) return;
-  let ext = m[1] === "jpg" ? "jpeg" : m[1]; if (!["jpeg", "png", "gif"].includes(ext)) ext = "jpeg";
-  const size = xjImageSize(dataUrl) || { w: 200, h: 60 }; const totalPx = xjSheetWidthPx(ws, n);
-  const k = Math.min(XJ_LOGO_MAX_H_PX / size.h, (totalPx * 0.6) / size.w, 1);
-  const w = Math.max(1, Math.round(size.w * k)), h = Math.max(1, Math.round(size.h * k));
-  ws.getRow(1).height = XJ_LOGO_ROW_PT;
-  for (let c = 1; c <= n; c++) ws.getCell(1, c).border = { bottom: { style: "thin", color: { argb: "FF4472C4" } } };
-  const rowPx = XJ_LOGO_ROW_PT * (96 / 72);
-  const imgId = wb.addImage({ base64: dataUrl, extension: ext });
-  ws.addImage(imgId, { tl: { col: xjPxToAnchor(ws, (totalPx - w) / 2), row: 0 + (rowPx - h) / 2 / rowPx }, ext: { width: w, height: h }, editAs: "oneCell" });
-}
+// An x position in px -> { nativeCol (0-based column), nativeColOff (EMU inside it) }. Passed straight to ExcelJS as an ABSOLUTE anchor: ExcelJS's own fractional-column anchor
+// assumes a column is (width x 10000) EMU wide, ~6.7x narrower than a real column (7 px per character), which would drop a "centred" logo far to the left on any wide column.
+function xjPxToNative(ws, px) { let x = 0, c = 1; while (c < 1000) { const w = xjColPx(ws, c); if (x + w > px) return { nativeCol: c - 1, nativeColOff: Math.round(Math.max(0, px - x) * 9525) }; x += w; c++; } return { nativeCol: c - 1, nativeColOff: 0 }; }
 // ── Global Settings: one app-wide business identity + logo, pre-filling every module's "Add Site" form (2026-09-27) ──────────────────
 // { businessName, abn, licence, logoId }. Purely a PRE-FILL source for NEW sites — saving a site copies whatever's in the form at that
 // moment; already-saved sites are never touched, and there is no migration. logoId is null or a fixed id into appLogoStore below.
@@ -464,60 +450,132 @@ async function xjExtractLogo(buf) {
   } catch (_) { return null; }
 }
 const XJ_CENTER = /^(#|Date|Test Date|Next|Pass|Priority|Defect ID|Amp|Mech|Circuit Iso|Lanyard|Photo|Temp|Frequency|Visual|Electrical|Test Voltage|Score|L\d|N-E)/;
-// Pass green, Fail red (bold), N/A grey, MONITOR amber; Untested / blank stays a plain zebra cell
-function xjResultStyle(v) {
-  const k = String(v == null ? "" : v).toUpperCase(); const ctr = { horizontal: "center", vertical: "center" };
-  if (k === "PASS") return swbXCS(SWB_XC.priorityL_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityL_font } }, ctr, swbXAB());
-  if (k === "FAIL") return swbXCS(SWB_XC.priorityH_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityH_font } }, ctr, swbXAB());
-  if (k === "MONITOR") return swbXCS(SWB_XC.priorityM_bg, { bold: true, sz: 10, color: { rgb: SWB_XC.priorityM_font } }, ctr, swbXAB());
-  if (k === "N/A") return swbXCS(SWB_XC.midGrey, { bold: true, sz: 10, color: { rgb: SWB_XC.darkGrey } }, ctr, swbXAB());
-  return null;
+// ── EXPORT COLOUR STANDARD (2026-10-02) — the ONE place every export colour is defined. Nothing else in the export code may hard-code a status / priority colour.
+// Status and priority colour ONLY the cell that holds the word (never the row), always with the word written in it (colour is never the only signal), through xjStatusStyle /
+// xjPriorityStyle below. Untested / blank is always plain (zebra). Priority H / M / L deliberately share Fail / MONITOR / Pass colours; U is the one solid dark fill.
+// Every font / fill pair is >= 4.5:1 (src/export-colours.test.js enforces it). Greys are the table body: darkGrey text, white / lightGrey zebra, midGrey label headings.
+const XJ_COLOURS = {
+  white: "FFFFFFFF", black: "FF000000", darkGrey: "FF2D2D2D", lightGrey: "FFF5F5F5", midGrey: "FFD9D9D9", mutedGrey: "FF666666",
+  status: {
+    pass:    { bg: "FFE2EFDA", font: "FF375623" },
+    fail:    { bg: "FFFFC7CE", font: "FF9C0006" },
+    monitor: { bg: "FFFFD966", font: "FF705300" },
+    na:      { bg: "FFD9D9D9", font: "FF2D2D2D" },
+  },
+  priority: {
+    L: { bg: "FFE2EFDA", font: "FF375623" },
+    M: { bg: "FFFFD966", font: "FF705300" },
+    H: { bg: "FFFFC7CE", font: "FF9C0006" },
+    U: { bg: "FF9B0000", font: "FFFFFFFF", bold: true },
+  },
+};
+// Pass green, Fail red, MONITOR amber, N/A grey — all bold, centred, cell only. Untested / blank returns null (the caller keeps its plain zebra cell). Case-insensitive.
+function xjStatusStyle(v) {
+  const k = String(v == null ? "" : v).trim().toUpperCase();
+  const key = k === "PASS" ? "pass" : k === "FAIL" ? "fail" : k === "MONITOR" ? "monitor" : (k === "N/A" || k === "NA") ? "na" : null;
+  if (!key) return null; const c = XJ_COLOURS.status[key];
+  return swbXCS(c.bg, { bold: true, sz: 10, color: { rgb: c.font } }, { horizontal: "center", vertical: "center" }, swbXAB());
 }
-// The header block's title / company / auditor-meta rows are merged across the sheet's REAL column count (already
-// correct everywhere — confirmed by reading back real generated files) but were never actually CENTERED within
-// that merge (2026-09-30 bug: `put`/`setCell` only applies a style when one is passed, and none of these calls
-// ever passed one, so `cell.alignment` stayed undefined and Excel/Sheets render the text flush-left in a wide
-// merged cell instead of centred). No fill/font/border is added — the header block stays deliberately plain — only
-// `alignment`. Shared by xjSheet/xjSplit AND every direct-write header block (SWB/Welder per-asset sheets, ELT
-// Register/Defects, GSD Report) so the fix can't drift out of sync between them again.
-const XJ_HEADER_CENTER = { alignment: { horizontal: "center", vertical: "center" } };
-// o = { title, coLine, meta:[cells of row 3 at columns 1,3,5], headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape, logo }
+// Priority / risk: L M H U (or Low / Medium / High / Urgent). U is bold white on solid maroon, the others are not bold. null when blank / unknown. o = { horizontal, vertical, wrap }.
+function xjPriorityStyle(p, o) {
+  const k = String(p == null ? "" : p).trim().toUpperCase(); const L = k === "LOW" ? "L" : k === "MEDIUM" ? "M" : k === "HIGH" ? "H" : k === "URGENT" ? "U" : k;
+  const c = XJ_COLOURS.priority[L]; if (!c) return null; const x = o || {};
+  return swbXCS(c.bg, { bold: !!c.bold, sz: 10, color: { rgb: c.font } }, { horizontal: x.horizontal || "center", vertical: x.vertical || "top", ...(x.wrap ? { wrapText: true } : {}) }, swbXAB());
+}
+// ── SHARED REPORT HEADER (2026-10-02) ────────────────────────────────────────────────────────────────────────────
+// ONE header for every sheet of every export. Reference: SparkCheck-assets/header-reference/Header_Reference_FINAL.xlsx (the authority).
+// Rows 1-5, each MERGED across the sheet's table width (widened to >= XJ_HEADER_MIN_PX so the company line never clips): R1 logo (45.75pt,
+// ALWAYS reserved, blank when there is no logo), R2 title (31.5), R3 company line (15.75), R4 auditor / dates (15.75), R5 6pt spacer. Plain
+// Calibri 11, not bold, horizontal-centre only, no fill, NO border. The table (or first content row) starts on row 6 of every sheet.
+// The wording of every title lives in XJ_REPORT_TITLES (edit it THERE). RULE: no title / sheet name / filename states a test interval — the
+// interval is shown only by the real next-due date in row 4 (the date the auditor chose, else the module default).
+const XJ_HEADER_H = [45.75, 31.5, 15.75, 15.75, 6];
+const XJ_TABLE_START = 6;          // the table headings (or first content row) are ALWAYS on this row
+const XJ_HEADING_H = 43.5;         // the table-heading row's height (reference)
+const XJ_HEADER_MIN_PX = 640;      // minimum merged header width (the reference merges its 2-column Summary out to column E = 642 px)
+const XJ_HEADER_EXT_W = 8.71;      // width of an extension column added to reach XJ_HEADER_MIN_PX
+const XJ_LOGO_BOX_W = 105, XJ_LOGO_BOX_H = 50;
+const XJ_PRIORITY_LEGEND = "Priority: L Low · M Medium · H High · U Urgent";
+// { module, type, next } per module (RCD has one entry per test type). `next` is the label in front of the next-due date in row 4.
+const XJ_REPORT_TITLES = {
+  rcd:    { module: "RCD & ELR Test", variants: { push: { type: "Push Test", next: "Next Push Test Due" }, inject: { type: "Injection Test", next: "Next Injection Test Due" } } },
+  iel:    { module: "Isolators, E-Stops & Lanyards Test", type: "Periodic Inspection", next: "Next Test Due" },
+  tat:    { module: "Test & Tag", type: "In-Service Electrical Equipment", next: "Next Test Due (earliest)" },
+  thermo: { module: "Thermographic Test", type: "Infrared Survey", next: "Next Test Due" },
+  swb:    { module: "Switchboard / Enclosure Audit", type: "Visual Inspection", next: "Next Audit Due" },
+  irt:    { module: "Insulation Resistance Test", type: "Insulation Resistance Readings", next: "Next Test Due" },
+  elt:    { module: "Emergency Lighting Test", type: "AS/NZS 2293.2:2019", next: "Next Test Due" },
+  welder: { module: "Welder Test", type: "Inspection & Audit Checklist", next: "Next Test Due" },
+  gsd:    { module: "General Site Defects", type: "Punch-List Report", next: "Next Audit Due" },
+};
+// The header spec every export builds ONCE and hands to every sheet of that export. o = { variant (RCD only), site, company, abn, licence, auditor, testDate, nextDue, logo }
+// (testDate / nextDue are already-formatted display strings).
+function xjHdr(key, o) {
+  const t = XJ_REPORT_TITLES[key]; const v = t.variants ? t.variants[o.variant] : t;
+  return {
+    key, logo: o.logo || null,
+    title: `${o.site || "Site"}  –  ${t.module}  (${v.type})`,
+    coLine: [o.company || "SparkCheck", o.abn ? `ABN: ${o.abn}` : "", o.licence ? `Electrical Licence: ${o.licence}` : ""].filter(Boolean).join("  |  "),
+    metaLine: `Auditor: ${o.auditor || ""}  |  Date Tested: ${o.testDate || ""}  |  ${v.next}: ${o.nextDue || ""}`,
+  };
+}
+// The five header rows as [text, height] — what xjHeader writes, and what the regression tests compare every sheet against.
+function xjHeaderRows(hdr) { return [["", XJ_HEADER_H[0]], [hdr.title, XJ_HEADER_H[1]], [hdr.coLine, XJ_HEADER_H[2]], [hdr.metaLine, XJ_HEADER_H[3]], ["", XJ_HEADER_H[4]]]; }
+// Writes rows 1-5 of `ws` (column widths must already be set: the merge width and the logo's centring both come from the REAL widths).
+// n = the table's column count; returns the merged width in columns (n, or more when the sheet is narrower than XJ_HEADER_MIN_PX).
+function xjHeader(ws, wb, hdr, n) {
+  let nEff = n; let px = xjSheetWidthPx(ws, nEff);
+  while (px < XJ_HEADER_MIN_PX) { nEff++; if (!ws.getColumn(nEff).width) ws.getColumn(nEff).width = XJ_HEADER_EXT_W; px += xjColPx(ws, nEff); }
+  xjHeaderRows(hdr).forEach(([text, h], i) => {
+    const r = i + 1; const cell = ws.getCell(r, 1);
+    if (text !== "") { cell.value = text; cell.alignment = { horizontal: "center" }; }
+    ws.mergeCells(r, 1, r, nEff); ws.getRow(r).height = h;
+  });
+  xjLogoPlace(ws, wb, hdr.logo, nEff);
+  return nEff;
+}
+// The logo: fit inside XJ_LOGO_BOX_W x XJ_LOGO_BOX_H keeping its aspect, never enlarged past its native size, never wider than the sheet; centred
+// horizontally over the merged width (from the real column widths) and vertically inside row 1. No border, no row-height side effects.
+function xjLogoPlace(ws, wb, dataUrl, n) {
+  if (!dataUrl) return;
+  const m = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl); if (!m) return;
+  let ext = m[1] === "jpg" ? "jpeg" : m[1]; if (!["jpeg", "png", "gif"].includes(ext)) ext = "jpeg";
+  const size = xjImageSize(dataUrl) || { w: XJ_LOGO_BOX_W, h: XJ_LOGO_BOX_H }; const totalPx = xjSheetWidthPx(ws, n);
+  const k = Math.min(XJ_LOGO_BOX_W / size.w, XJ_LOGO_BOX_H / size.h, totalPx / size.w, 1);
+  const w = Math.max(1, Math.round(size.w * k)), h = Math.max(1, Math.round(size.h * k));
+  const rowPx = XJ_HEADER_H[0] * (96 / 72);
+  ws.addImage(wb.addImage({ base64: dataUrl, extension: ext }), { tl: { ...xjPxToNative(ws, (totalPx - w) / 2), nativeRow: 0, nativeRowOff: Math.round((rowPx - h) / 2 * 9525) }, ext: { width: w, height: h }, editAs: "oneCell" });
+}
+// o = { hdr (from xjHdr), headers, widths, rows:[array per data row], footer:[rows], emptyText, landscape }. Header rows 1-5 come from xjHeader; the table
+// headings are ALWAYS on row 6 (xjHeader needs the column widths first, so they are set before anything else).
 function xjSheet(wb, name, o) {
   const ws = wb.addWorksheet(name); const n = o.headers.length;
-  const off = o.logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
-  const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
-  put(1, 1, o.title, XJ_HEADER_CENTER); put(2, 1, o.coLine, XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): used to be 3 separate sub-merges (auditor / date / next-due), each centred within its
-  // OWN narrow span — not one line. Now ONE joined string in ONE full-width cell, matching row 2 (coLine)'s own
-  // "  |  "-joined, single-merge, centred format exactly.
-  const metaLine = o.meta.filter(v => v !== "" && v != null).join("  |  ");
-  if (metaLine) put(3, 1, metaLine, XJ_HEADER_CENTER);
-  [[1, 1, 1, n], [2, 1, 2, n], [3, 1, 3, n], [4, 1, 4, n]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
-  // Rows 1-4 are plain (no fill / font / border); the headings row carries wrap + centring only, so a narrow column can hold a long heading
-  o.headers.forEach((h, i) => { put(5, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
-  [32, 16, 16, 6, 44].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
-  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const elecCol = o.headers.findIndex(h => h === "Electrical Test"); const priCol = o.headers.findIndex(h => h === "Priority");
+  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
+  xjHeader(ws, wb, o.hdr, n);
+  const put = (r, c, v, st) => { const cell = ws.getCell(r, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
+  // The headings row is plain (no fill / font / border): wrap + horizontal centring only, so a narrow column can hold a long heading (reference)
+  o.headers.forEach((h, i) => { put(XJ_TABLE_START, i + 1, h).alignment = { wrapText: true, vertical: "center", horizontal: "center" }; });
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
+  const first = XJ_TABLE_START + 1;
+  const resultCol = o.headers.findIndex(h => /^Pass \/ Fail$/.test(h)); const checkCols = new Set(o.headers.map((h, i) => /^(Visual Inspection|Electrical Test)$/.test(h) ? i : -1).filter(i => i >= 0)); const priCol = o.headers.findIndex(h => /^Priority/.test(h));
   o.rows.forEach((cells, ri) => {
-    const bg = ri % 2 === 0 ? SWB_XC.white : SWB_XC.lightGrey; const r = 6 + ri;
-    const base = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
-    const ctr = swbXCS(bg, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
+    const bg = ri % 2 === 0 ? XJ_COLOURS.white : XJ_COLOURS.lightGrey; const r = first + ri;
+    const base = swbXCS(bg, { sz: 10, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
+    const ctr = swbXCS(bg, { sz: 10, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, horizontal: "center", vertical: "top" }, swbXAB());
     for (let c = 0; c < n; c++) {
       const v = cells[c] == null ? "" : cells[c]; let st = XJ_CENTER.test(o.headers[c]) ? ctr : base;
-      if (c === resultCol) st = xjResultStyle(v) || ctr;
-      if (c === elecCol && String(v).toUpperCase() === "FAIL") st = xjResultStyle("FAIL");   // a check column: Fail red, Pass plain
-      if (c === priCol) { const pc = swbXPC(v); if (pc) st = swbXCS(pc.bg, { bold: pc.bold, sz: 10, color: { rgb: pc.font } }, { horizontal: "center", vertical: "top" }, swbXAB()); }
+      if (c === resultCol) st = xjStatusStyle(v) || ctr;
+      if (checkCols.has(c) && String(v).toUpperCase() === "FAIL") st = xjStatusStyle("FAIL");   // a check column (TAT Visual / Electrical): Fail red, Pass plain
+      if (c === priCol) st = xjPriorityStyle(v) || st;
       put(r, c + 1, v, st);
     }
   });
-  if (!o.rows.length && o.emptyText) put(6, 1, o.emptyText);
-  (o.footer || []).forEach((row, i) => put(6 + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
+  if (!o.rows.length && o.emptyText) put(first, 1, o.emptyText);
+  (o.footer || []).forEach((row, i) => put(first + Math.max(o.rows.length, o.emptyText && !o.rows.length ? 1 : 0) + i, 1, row[0]));
   // A date is written as "dd/mm/yyyy" TEXT in a wrapping cell, and Excel / Sheets break it at a "/" if the column is even slightly tight (their
-  // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W, whatever a module asks for.
-  // The result column has the same problem: "UNTESTED" / "Untested" (8 characters, bold-ish caps in IRT) is longer than PASS / FAIL / N/A, so a
-  // column sized for the short words wraps it. Forced to at least XJ_RESULT_W.
-  o.widths.forEach((w, i) => { ws.getColumn(i + 1).width = xjColWidth(o.headers[i], w); });
-  xjPageSetup(ws, o.landscape !== false, 5 + off);
-  if (o.logo) xjLogo(ws, wb, o.logo, n);
+  // font metrics differ from ours). Every date column is therefore forced to at least XJ_DATE_W (xjColWidth, applied above), whatever a module
+  // asks for. The result column has the same problem ("UNTESTED" / "Untested" is longer than PASS / FAIL / N/A): forced to at least XJ_RESULT_W.
+  xjPageSetup(ws, o.landscape !== false, XJ_TABLE_START);
   return ws;
 }
 // Minimum widths that apply to EVERY export column of that kind (also used by ELT's own sheets)
@@ -528,14 +586,16 @@ function xjColWidth(heading, w) {
 const XJ_RESULT_W = 11;  // fits "UNTESTED" / "Untested" (8 characters) and "MONITOR" on ONE line, with a margin
 const XJ_DATE_W = 13;   // fits "21/09/2026" (10 characters) on ONE line with a margin for Excel / Google Sheets metrics
 const XJ_DEFECT_TAIL_W = [9, 9, 20, 14, 15, 24];
-// Main results sheet + Defects sheet (FAIL rows only, always present) on one ExcelJS workbook; returns the defect count.
-// o = { title, defectTitle, coLine, meta, defectMeta, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
+// Main results sheet + Defects sheet (ALWAYS present) on one ExcelJS workbook; returns the defect count. Both sheets carry the SAME header (o.hdr).
+// The Defects footer is ALWAYS written, even with 0 defects: below the table (and its "No defects recorded" line) a blank row, then the count — COMPUTED from the
+// real defect rows, never typed — then the priority legend.
+// o = { hdr, mainSheet, headers, widths (WITHOUT #), idHeaders, idWidths, rows:[{cells, defect}], footer }
 function xjSplit(wb, o) {
-  xjSheet(wb, o.mainSheet, { title: o.title, coLine: o.coLine, meta: o.meta, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer, logo: o.logo });
-  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings) — each closure passes its own `logo` through to its xjSheet call
+  xjSheet(wb, o.mainSheet, { hdr: o.hdr, headers: ["#", ...o.headers], widths: [5, ...o.widths], rows: o.rows.map((r, i) => [i + 1, ...r.cells]), footer: o.footer });
+  if (o.between) o.between(wb);   // extra sheets that sit between the main table and Defects (IRT's Readings) — each closure passes the same `hdr` to its xjSheet call
   const defects = o.rows.map((r, i) => r.defect && [i + 1, ...r.defect.ids, r.defect.defectId || "", r.defect.priority || "", r.defect.rectified || "", r.defect.rectifiedDate ? fmtDate(r.defect.rectifiedDate) : "", r.defect.responsibility || "", r.defect.notes || ""]).filter(Boolean);
-  xjSheet(wb, "Defects", { title: o.defectTitle, coLine: o.coLine, meta: [`Defects recorded: ${defects.length}`, "", ...(o.defectMeta || [])],
-    headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded", logo: o.logo });
+  xjSheet(wb, "Defects", { hdr: o.hdr, headers: ["#", ...o.idHeaders, ...XJ_DEFECT_TAIL], widths: [5, ...o.idWidths, ...XJ_DEFECT_TAIL_W], rows: defects, emptyText: "No defects recorded",
+    footer: [[""], [`Defects recorded: ${defects.length}`], [XJ_PRIORITY_LEGEND]] });
   return defects.length;
 }
 
@@ -744,6 +804,23 @@ map[p] = sibling || p;
 return map;
 }
 // Parse company, ABN, licence from an Excel header row string
+// Site name from a report title — IEL / TAT / Thermo / IRT. The title is "<site>  –  <Module>  (<Test type>)" (current) or "<site> — <Module>" / "<site> — <Module> — <date>" (every older
+// export). The KNOWN module phrase is stripped from the END of the text (same approach as the SWB / ELT / Welder importers) and the title is NEVER split on a dash, so a hyphenated site
+// ("Port-Kembla", "Hearse Rd - North") survives. No known tail found -> the whole trimmed title is kept. The import-template placeholder ("... enter your site name here") -> "" so the
+// caller falls back to the file name, exactly as the SWB / ELT / Welder importers already do.
+const XJ_TITLE_MODULES = {
+  iel:    "Isolators,\\s*E-Stops\\s*(?:&|and)\\s*Lanyards(?:\\s+Test)?",
+  tat:    "Test\\s*(?:&|and)\\s*Tag",
+  thermo: "Thermo(?:graphic)?(?:\\s+Test)?",
+  irt:    "Insulation\\s+Resistance(?:\\s+Test(?:ing)?)?",
+};
+function xjSiteFromTitle(raw, key) {
+  const t = String(raw == null ? "" : raw).trim();
+  if (!t || /enter your site name/i.test(t)) return "";
+  const D = "[\\u2014\\u2013-]+";   // em dash, en dash or hyphen
+  const re = new RegExp("\\s*" + D + "\\s*" + XJ_TITLE_MODULES[key] + "(?:\\s*\\([^)]*\\))?(?:\\s*" + D + "\\s*[^\\u2014\\u2013]*)?\\s*$", "i");   // [ (Test type) ] [ — date / month ]
+  return t.replace(re, "").trim() || t;
+}
 function parseCompanyRow(cellValue) {
   const s = String(cellValue||"").trim();
   if(!s) return {company:"", abn:"", licence:""};
@@ -895,7 +972,7 @@ async function exportExcel(results, project, meta, mode) {
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
   const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
   const label    = isInject ? "Injection Test" : "Push Test";
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("rcd", { variant: isInject ? "inject" : "push", site: project.name, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: fmtDate(testDate), nextDue, logo });
   // A defect is only exported for FAIL rows (a >300 ms injection result counts as Fail whatever the stored status), so data
   // retained from an earlier FAIL never shows up on a PASS / N/A / untested row.
   const rows = [];
@@ -915,14 +992,12 @@ async function exportExcel(results, project, meta, mode) {
   })));
   const wb = new ExcelJS.Workbook();
   const failCount = xjSplit(wb, {
-    title: `${project.name}  –  RCD & ELR Test  (${label})`, defectTitle: `${project.name}  –  RCD & ELR Test  (${label})  –  Defects`, coLine,
-    meta: [`Auditor: ${(meta && meta.auditor) || ""}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next ${label} Due: ${nextDue}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: label.slice(0, 31),
     headers: isInject ? ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date", "Injection Test Result + (ms)", "Injection Test Result - (ms)", "Pass / Fail", "Notes / Recommendations", "Next Test Required"] : ["Area", "Panel / Asset Name", "Device Type", "Amp Rating", "Date Tested", "Pass / Fail", "Notes / Comments", "Next Test Required"],
     widths: isInject ? [16, 22, 12, 8, 10, 11, 11, 9, 24, 11] : [16, 22, 12, 8, 11, 9, 26, 11],
     idHeaders: ["Area", "Panel / Asset Name"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   // Summary sheet: counts only — the failed-circuit list it used to carry is now the Defects sheet (same rows, more fields)
   const sum = summariseProject(results, project, mode);
@@ -934,12 +1009,13 @@ async function exportExcel(results, project, meta, mode) {
     ["Failed circuits", failCount ? `${failCount} — see the Defects sheet` : "None — Defects sheet is empty"],
   ];
   const ss = wb.addWorksheet("Summary");
-  const boxed = swbXCS(SWB_XC.white, { sz: 10, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
-  sumRows.forEach((r, i) => r.forEach((v, ci) => {
-    const cell = ss.getCell(i + 1, ci + 1); cell.value = v;
-    if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjResultStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjResultStyle("PASS") : boxed);
-  }));
+  const boxed = swbXCS(XJ_COLOURS.white, { sz: 10, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, vertical: "top" }, swbXAB());
   ss.getColumn(1).width = 18; ss.getColumn(2).width = 44;
+  xjHeader(ss, wb, hdr, 2);   // the 2-column Summary is narrower than the header text needs, so xjHeader merges out to column E (as in the reference file) — widths first
+  sumRows.forEach((r, i) => r.forEach((v, ci) => {
+    const cell = ss.getCell(i + XJ_TABLE_START, ci + 1); cell.value = v;
+    if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjStatusStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjStatusStyle("PASS") : boxed);
+  }));
   xjPageSetup(ss, false, null);
   const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -1141,7 +1217,7 @@ function dropdownAdd(items, raw, reserved) {
 const DD_ROW_BG = "#e8e6e2", DD_ROW_BORDER = "#f7f6f3", DD_STAR_BORDER = "#fcd34d", DD_LIST_GAP = 5;
 const ddRowStyle = isDefault => ({ display: "flex", alignItems: "center", gap: 8, background: DD_ROW_BG, border: `1px solid ${isDefault ? DD_STAR_BORDER : DD_ROW_BORDER}`, borderRadius: 7, padding: "7px 10px" });
 const ddListStyle = extra => ({ display: "flex", flexDirection: "column", gap: DD_LIST_GAP, ...(extra || {}) });
-function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#dc2626" } }, text) : null; }
+function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#b91c1c" } }, text) : null; }
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
   const boxRef = React.useRef(null);
@@ -1190,19 +1266,51 @@ function useFailDefaults(isFail, values, defaults, apply) {
 }
 
 // ── Report building blocks shared by every module's Report tab (the SWB / IRT design) ──────────────────────
-function ReportStatTiles({ rows, mb = 20 }) {
-  return React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: mb, flexWrap: 'wrap' } },
-    rows.map(([l, v, c]) => React.createElement('div', { key: l, style: { flex: 1, minWidth: 48, textAlign: 'center', background: '#f7f6f3', borderRadius: 10, border: `1px solid ${c}33`, padding: '10px 4px' } },
-      React.createElement('div', { style: { fontSize: 22, fontWeight: 800, color: c } }, v),
-      React.createElement('div', { style: { fontSize: 9, color: '#6e6a66', marginTop: 2 } }, l.toUpperCase())
-    ))
-  );
+// ── STATUS PILLS (2026-10-02) — the ONE status / count indicator. Based on the SWB board page pill: bordered, rounded, "N WORD" in one string. StatusPill = one pill, StatusPills = a
+// wrapping row of them. pills = [[kind, count, label?, {alert}?], ...] (falsy entries are skipped). kinds: pass fail na untested score info monitor warn. Standard size 12px / 4x10 padding;
+// compact (11px / 2x6, gap 5) inside rows and cards. Colours are the contrast-checked text colours (green #166534, red #b91c1c: >= 4.5:1 on the pill background). `alert` (OVERDUE, FAIL badges) = the
+// same shape on a light red (warn: amber) fill. Words: PASS FAIL N/A UNTESTED SCORE (pills are STATUS ONLY — never a TOTAL pill; the item count is plain text, once); pass "—" as the label in compact places (cards / History); a row with a 3-digit count switches
+// UNTESTED to "—" so it still fits at 390px. Never hand-write a count span: use these.
+const SP_COLOURS = { pass: "#166534", fail: "#b91c1c", na: "#334155", untested: "#92400e", score: "#334155", info: "#334155", monitor: "#92400e", warn: "#92400e" };
+const SP_WORDS = { pass: "PASS", fail: "FAIL", na: "N/A", untested: "UNTESTED", score: "SCORE", info: "", monitor: "MONITOR", warn: "" };
+function StatusPill({ kind, count, label, compact, alert, title }) {
+  const c = SP_COLOURS[kind] || SP_COLOURS.info; const word = label != null ? label : (SP_WORDS[kind] || "");
+  const bg = alert ? (kind === "warn" ? "#fef3c7" : "#fee2e2") : "#f7f6f3"; const bd = alert ? (kind === "warn" ? "#fcd34d" : "#fca5a5") : c + "33";
+  const text = count == null || count === "" ? word : (word ? count + " " + word : String(count));
+  return React.createElement('span', { "data-statuspill": kind, title: title || undefined, style: { display: "inline-block", whiteSpace: "nowrap", flex: "0 0 auto", background: bg, border: "1px solid " + bd, borderRadius: 6, padding: compact ? "2px 6px" : "4px 10px", fontSize: compact ? 11 : 12, fontWeight: 700, lineHeight: 1.3, color: c } }, text);
+}
+const SP_SETS = { full: ["pass", "fail", "na", "untested"], noNA: ["pass", "fail", "untested"], thermo: ["pass", "fail", "monitor"] };
+function spPills(model, s, o) {
+  const x = o || {}; const kinds = SP_SETS[model] || SP_SETS.full;
+  const list = kinds.map(k => (k === "untested" ? [k, s.untested || 0, x.dash ? "—" : undefined] : [k, s[k] || 0]));
+  if (x.score != null) list.push(["score", x.score]);
+  return list;
+}
+function StatusSet({ model, s, dash, score, compact, style }) {
+  return React.createElement(StatusPills, { compact: compact !== false, style, pills: spPills(model, s, { dash, score }) });
+}
+function StatusPills({ pills, compact, style }) {
+  const list = (pills || []).filter(Boolean); const big = list.some(q => q[0] !== "score" && (parseInt(q[1], 10) || 0) >= 100);   // a SCORE like "100.0%" is not a count
+  return React.createElement('span', { "data-statuspills": "", style: { display: "flex", flexWrap: "wrap", gap: compact ? 5 : 8, alignItems: "center", ...(style || {}) } },
+    list.map((q, i) => React.createElement(StatusPill, { key: i + ":" + q[0], kind: q[0], count: q[1], label: q[2] === undefined && q[0] === "untested" && big ? "—" : q[2], compact, ...(q[3] || {}) })));
+}
+// Report summary: the module's status pills (StatusSet) with the item count as plain text, once (right of an optional title). Replaces the old big count tiles.
+function ReportStatPills({ model, s, count, unit, title, score, mb = 20 }) {
+  return React.createElement('div', { style: { marginBottom: mb } },
+    (title || count != null) && React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, marginBottom: 8 } }, title || null, count != null ? React.createElement('span', { style: { fontSize: 12, color: '#52525b' } }, nw(count, unit)) : null),
+    React.createElement(StatusSet, { model, s, score }));
+}
+// GSD has no pass / fail: counts as plain text, once, plus the one status pill it has (HIGH / URGENT; red alert when > 0)
+function GSDCounts({ defects, areas, photos, urgent, mb = 16 }) {
+  return React.createElement('div', { style: { marginBottom: mb } },
+    React.createElement('div', { style: { fontSize: 12, color: '#52525b', marginBottom: 8 } }, [nw(defects, 'defect'), areas != null ? nw(areas, 'area') : null, nw(photos, 'photo')].filter(Boolean).join(' · ')),
+    React.createElement(StatusPill, { kind: 'fail', count: urgent, label: 'HIGH / URGENT', alert: urgent > 0, compact: true }));
 }
 // items: [{ title, tag?:{text,color}, badge?:{text,color}, path, defectId, comment, lines?:[string], priorityText, responsibility, rectified }]
 function ReportFailedItems({ items, accent = '#7e22ce' }) {
   if (!items || !items.length) return null;
   return React.createElement('div', { style: { marginBottom: 20 } },
-    React.createElement('div', { style: { fontSize: 13, fontWeight: 800, color: '#dc2626', marginBottom: 10 } }, 'Failed Items'),
+    React.createElement('div', { style: { fontSize: 13, fontWeight: 800, color: '#b91c1c', marginBottom: 10 } }, 'Failed Items'),
     items.map((f, i) => React.createElement('div', { key: i, style: { padding: '10px 12px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 8, marginBottom: 6, fontSize: 13 } },
       React.createElement('div', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4, flexWrap: 'wrap' } },
         f.tag && React.createElement('span', { style: { fontSize: 11, fontWeight: 700, color: f.tag.color, background: f.tag.color + '22', borderRadius: 4, padding: '1px 6px' } }, f.tag.text),
@@ -1222,7 +1330,7 @@ function ReportFailedItems({ items, accent = '#7e22ce' }) {
   );
 }
 function ReportNoDefects() {
-  return React.createElement('div', { style: { textAlign: 'center', color: '#16a34a', fontSize: 13, fontWeight: 700, padding: '20px 0' } }, '✓ No defects recorded');
+  return React.createElement('div', { style: { textAlign: 'center', color: '#166534', fontSize: 13, fontWeight: 700, padding: '20px 0' } }, '✓ No defects recorded');
 }
 const reportPriorityBadge = p => (p ? { text: PRIORITY_LABELS[p] || p, color: PRIORITY_COLORS[p] || '#92400e' } : null);
 // ─────────────────────────────────────────────────────────────────────────
@@ -1506,19 +1614,19 @@ React.createElement('div', { style: S.listWrap,}
 , projects.length===0&&React.createElement('div', { style: {color:"#52525b",fontSize:14,marginBottom:16},}, "No projects yet."  )
 
 , projects.map(proj=>{
-let total=0,tested=0,fail=0;
-proj.areas.forEach(a=>a.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(allResults,proj.id,a.id,p.id,c,"push");if(v!==STATUS.UNTESTED)tested++;if(v===STATUS.FAIL)fail++;})));
+let total=0,tested=0,fail=0,pass=0,na=0;
+proj.areas.forEach(a=>a.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(allResults,proj.id,a.id,p.id,c,"push");if(v!==STATUS.UNTESTED)tested++;if(v===STATUS.FAIL)fail++;else if(v===STATUS.PASS)pass++;else if(v===STATUS.NA)na++;})));
 const pct=total>0?Math.round((tested/total)*100):0;
 return(
 React.createElement('div', { key: proj.id, style: {...S.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"},}
 , React.createElement('button', { style: {display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"}, onClick: ()=>onSelect(proj.id),}
 , React.createElement('div', { style: {flex:1},}
 , React.createElement('div', { style: S.siteCardName,}, proj.name)
-, React.createElement('div', { style: S.siteCardSub,}, proj.company||"", " · ",nw(proj.areas.length,"area")," · ",nw(total,"circuit")," · ", tested, "/", total, " tested")
+, React.createElement('div', { style: S.siteCardSub,}, proj.company||"", " · ",nw(proj.areas.length,"area")," · ",nw(total,"circuit"))
+, React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-tested},dash:true,style:{marginTop:6}})
 , React.createElement('div', { style: {...S.siteCardBar,marginTop:8},}, React.createElement('div', { style: {...S.siteCardBarFill,width:`${pct}%`,background:fail>0?"#dc2626":tested===total&&total>0?"#16a34a":"#a3530f"},}))
 )
 , React.createElement('div', { style: {display:"flex",alignItems:"center",gap:8,marginLeft:16},}
-, fail>0&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 , React.createElement('span', { style: S.arrow,}, "›")
 )
 )
@@ -1604,7 +1712,7 @@ React.createElement('div', { style: S.homeWrap,}
 , project.company&&React.createElement('div', { style: S.siteSub,}, project.company)
 , React.createElement('div', { style: S.metaCard,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
-, !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#dc2626",marginTop:4}}, "⚠ Enter auditor name to enable testing")
+, !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#b91c1c",marginTop:4}}, "⚠ Enter auditor name to enable testing")
 , React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:10,width:"100%",boxSizing:"border-box"}}
 , React.createElement('div',{style:{width:"100%",boxSizing:"border-box",background:"#e8e6e2",border:"1px solid #fdecdc",borderRadius:10,padding:"10px 12px"}}
   ,React.createElement('div',{style:{fontSize:10,color:"#a3530f",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"PUSH TEST")
@@ -1640,13 +1748,13 @@ React.createElement('div', { style: S.homeWrap,}
 , React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_push",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Push Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${pushPct}%`,background:"#a3530f"},}))
-, React.createElement('span', { style: S.modeBtnPct,}, pushPct, "% · "  , pushSum.fail>0?`${pushSum.fail} FAIL`:"clear")
+, React.createElement('span', { style: S.modeBtnPct,}, React.createElement(StatusPills,{compact:true,pills:[pushSum.fail>0?["fail",pushSum.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",pushPct+"%"]]}))
 )
 , React.createElement('button', { style: {...S.modeBtnInject,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartInject:undefined,}
 , React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_inject",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Injection Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${injectPct}%`,background:"#1d4ed8"},}))
-, React.createElement('span', { style: S.modeBtnPct,}, injectPct, "% · "  , injectSum.fail>0?`${injectSum.fail} FAIL`:"clear")
+, React.createElement('span', { style: S.modeBtnPct,}, React.createElement(StatusPills,{compact:true,pills:[injectSum.fail>0?["fail",injectSum.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",injectPct+"%"]]}))
 )
 )
 /* Complete audit button */
@@ -1770,33 +1878,26 @@ const st=snap.mode==="inject"?(_nullishCoalesce(_optionalChain([d, 'optionalAcce
 if(st===STATUS.PASS)pass++;else if(st===STATUS.FAIL)fail++;else if(st===STATUS.NA)na++;
 })));
 return (
-React.createElement('div', { style: {display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"},}
-, [["Pass",pass,"#16a34a"],["Fail",fail,"#dc2626"],["N/A",na,"#334155"],["Untested",total-pass-fail-na,"#92400e"]].map(([l,v,c])=>(
-React.createElement('div', { key: l, style: {background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"},}
-, React.createElement('div', { style: {fontSize:18,fontWeight:800,color:c},}, v)
-, React.createElement('div', { style: {fontSize:10,color:"#6e6a66"},}, l)
-)
-))
-)
+React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na},style:{marginBottom:16}})
 );
 })()
 , React.createElement('div', { style: {fontSize:11,color:"#52525b",marginBottom:12},}, "Tap an area to view circuit results"      )
 , _optionalChain([project, 'optionalAccess', _124 => _124.areas, 'access', _125 => _125.map, 'call', _126 => _126(area=>{
-let pass=0,fail=0,total=0;
+let pass=0,fail=0,na=0,total=0;
 area.panels.forEach(p=>p.circuits.forEach(c=>{
 total++;
 const d=_optionalChain([snap, 'access', _127 => _127.results, 'optionalAccess', _128 => _128[area.id], 'optionalAccess', _129 => _129[p.id], 'optionalAccess', _130 => _130[c]]);
 const st=snap.mode==="inject"?(_nullishCoalesce(_optionalChain([d, 'optionalAccess', _131 => _131.inject, 'optionalAccess', _132 => _132.status]), () => (STATUS.UNTESTED))):(_nullishCoalesce(_optionalChain([d, 'optionalAccess', _133 => _133.push, 'optionalAccess', _134 => _134.status]), () => (STATUS.UNTESTED)));
-if(st===STATUS.PASS||st===STATUS.NA)pass++;else if(st===STATUS.FAIL)fail++;
+if(st===STATUS.PASS)pass++;else if(st===STATUS.NA)na++;else if(st===STATUS.FAIL)fail++;
 }));
 return (
 React.createElement('button', { key: area.id, style: {...S.siteCard,...(fail>0?S.siteCardFail:{})}, onClick: ()=>setViewArea(area.id),}
 , React.createElement('div', { style: S.siteCardLeft,}
 , React.createElement('div', { style: S.siteCardName,}, area.name)
 , React.createElement('div', { style: S.siteCardSub,},nw(total,"circuit") )
+, React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na},dash:true,style:{marginTop:6}})
 )
 , React.createElement('div', { style: S.siteCardRight,}
-, fail>0&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 , React.createElement('span', { style: S.arrow,}, "›")
 )
 )
@@ -1838,16 +1939,10 @@ onClick: ()=>setExpanded(expanded===snap.id?null:snap.id),}
 , React.createElement('span', { style: {fontSize:11,padding:"2px 8px",borderRadius:5,background:snap.mode==="inject"?"#dbeafe":"#fdecdc",color:snap.mode==="inject"?"#1d4ed8":"#a3530f",border:`1px solid ${snap.mode==="inject"?"#93c5fd":"#fdba74"}`},}
 , snap.mode==="inject"?React.createElement(React.Fragment,null,moduleIcon("rcd_inject",15)," Injection"):React.createElement(React.Fragment,null,moduleIcon("rcd_push",15)," Push")
 )
-, hasFail&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" )
 )
-, React.createElement('div', { style: {fontSize:12,color:"#52525b"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor")
+, React.createElement('div', { style: {fontSize:12,color:"#52525b"},}, fmtDate(snap.testDate), " · "  , snap.auditor||"No auditor", " · ", nw(total,"circuit"))
 , React.createElement('div', { style: {fontSize:11,color:"#52525b",marginTop:2},}, "Archived " , fmtDateTime(snap.archivedAt))
-, total>0&&React.createElement('div', { style: {display:"flex",gap:8,marginTop:6},}
-, React.createElement('span', { style: {fontSize:11,color:"#16a34a"},}, pass, " Pass" )
-, React.createElement('span', { style: {fontSize:11,color:"#dc2626"},}, fail, " Fail" )
-, React.createElement('span', { style: {fontSize:11,color:"#334155"},}, na, " N/A" )
-, React.createElement('span', { style: {fontSize:11,color:"#92400e"},}, total-pass-fail-na, " Untested" )
-)
+, total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
 )
 , React.createElement('span', { style: {...S.arrow,color:expanded===snap.id?"#a3530f": "#52525b"},}, expanded===snap.id?"▾":"›")
 )
@@ -1885,10 +1980,10 @@ setNewVals(v => ({...v,[key]:""}));
 const removeItem = (key,val) => setDropdowns(d => ({...d,[key]:(_nullishCoalesce(d[key], () => ([]))).filter(x=>x!==val)}));
 const resetKey   = (key, def) => setDropdowns(d => ({...d,[key]:def}));
 const LISTS = [
-{ key:"cbType",         label:"CB / RCD TYPE",        defaults:DEFAULT_CB_TYPE,        color:"#1d4ed8", desc:"Available in both monthly push test and annual injection test forms" },
-{ key:"ampRating",      label:"AMP RATING",           defaults:DEFAULT_AMP_RATING,     color:"#14532d", desc:"Available in both monthly push test and annual injection test forms" },
-{ key:"responsibility", label:"RESPONSIBILITY",        defaults:DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Used in annual injection test form" },
-{ key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION",defaults:DEFAULT_RECTIFIED,      color:"#92400e", desc:"Used in annual injection test form" },
+{ key:"cbType",         label:"CB / RCD TYPE",        defaults:DEFAULT_CB_TYPE,        color:"#1d4ed8", desc:"Available in both the push test and injection test forms" },
+{ key:"ampRating",      label:"AMP RATING",           defaults:DEFAULT_AMP_RATING,     color:"#14532d", desc:"Available in both the push test and injection test forms" },
+{ key:"responsibility", label:"RESPONSIBILITY",        defaults:DEFAULT_RESPONSIBILITY, color:"#6b21a8", desc:"Used in the injection test form" },
+{ key:"rectified",      label:"RECTIFIED / SCHEDULED ACTION",defaults:DEFAULT_RECTIFIED,      color:"#92400e", desc:"Used in the injection test form" },
 ];
 return (
 React.createElement('div', { style: S.listWrap,}
@@ -1997,7 +2092,7 @@ style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,curs
 )
 /* FAIL-ONLY SECTION — only shown when result is FAIL */
 , pushIsFail && React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4},}
-, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
+, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED ACTION")
 , React.createElement(EditableDropdown, {
@@ -2027,7 +2122,7 @@ placeholder: "Select or type…",})
         style: {
           padding: "10px 14px",
           background: (push.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-          color: (push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+          color: (push.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
           border: `1px solid ${(push.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
           borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
         },
@@ -2101,7 +2196,7 @@ return React.createElement('button', { key: s, onClick: ()=>onPatch({inject:{...
 /* Fail-only section — red panel matching push test standard */
 , (inj.status===STATUS.FAIL)&&(
 React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4},}
-, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
+, React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "RECTIFIED / SCHEDULED ACTION")
 , React.createElement(EditableDropdown, {options:rectOptions, value:_nullishCoalesce(inj.rectified,()=>(rectOptions[0]||"")), onChange:v=>onPatch({inject:{...inj,rectified:v}}), placeholder:"Select or type…",})
@@ -2123,7 +2218,7 @@ React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca
         style: {
           padding: "10px 14px",
           background: (inj.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-          color: (inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+          color: (inj.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
           border: `1px solid ${(inj.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
           borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
         },
@@ -2488,13 +2583,13 @@ function AreaListView({project,results,mode,modeColor,onSelect}){
 return(React.createElement('div', { style: S.listWrap,}, React.createElement('div', { style: S.listTitle,}, "Select Area" )
 , project.areas.length===0&&React.createElement('div', { style: {color:"#52525b",fontSize:14},}, "No areas. Go to ", React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'})), " Manage to add areas."        )
 , project.areas.map(area=>{
-let total=0,pass=0,fail=0,untested=0;
-area.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(results,project.id,area.id,p.id,c,mode);if(v===STATUS.PASS||v===STATUS.NA)pass++;else if(v===STATUS.FAIL)fail++;else untested++;}));
-const pct=total>0?Math.round(((pass+fail)/total)*100):0;
+let total=0,pass=0,fail=0,na=0,untested=0;
+area.panels.forEach(p=>p.circuits.forEach(c=>{total++;const v=getCircuitStatus(results,project.id,area.id,p.id,c,mode);if(v===STATUS.PASS)pass++;else if(v===STATUS.NA)na++;else if(v===STATUS.FAIL)fail++;else untested++;}));
+const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
 return(React.createElement('button', { key: area.id, style: {...S.siteCard,...(fail>0?S.siteCardFail:{})}, onClick: ()=>onSelect(area.id),}
-, React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, area.name), React.createElement('div', { style: S.siteCardSub,},nw(area.panels.length,"panel")," · "   ,nw(total,"circuit") )
+, React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, area.name), React.createElement('div', { style: S.siteCardSub,},nw(area.panels.length,"panel")," · "   ,nw(total,"circuit") ), React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
 , React.createElement('div', { style: S.siteCardBar,}, React.createElement('div', { style: {...S.siteCardBarFill,width:`${pct}%`,background:fail>0?"#dc2626":untested>0?modeColor:"#16a34a"},})))
-, React.createElement('div', { style: S.siteCardRight,}, fail>0&&React.createElement('span', { style: S.failBadge,}, fail, " FAIL" ), untested>0&&React.createElement('span', { style: S.untestedBadge,}, untested), React.createElement('span', { style: S.arrow,}, "›"))
+, React.createElement('div', { style: S.siteCardRight,}, React.createElement('span', { style: S.arrow,}, "›"))
 ));
 })
 ));
@@ -2507,14 +2602,9 @@ const ps=panelSummary(results,project.id,area.id,pnl,mode);
 const total=pnl.circuits.length;
 return(React.createElement('button', { key: pnl.id, style: {...S.siteCard,...(ps.fail>0?S.siteCardFail:ps.untested===0?S.siteCardDone:{})}, onClick: ()=>onSelect(pnl.id),}
 , React.createElement('div', { style: S.siteCardLeft,}, React.createElement('div', { style: S.siteCardName,}, pnl.name), React.createElement('div', { style: S.siteCardSub,}, total, " circuit" , total!==1?"s":"")
-, React.createElement('div', { style: {display:"flex",gap:6,marginTop:6},}
-, ps.pass>0&&React.createElement('span', { style: {fontSize:11,color:"#16a34a",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.pass, " Pass" )
-, ps.fail>0&&React.createElement('span', { style: {fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.fail, " Fail" )
-, ps.na>0&&React.createElement('span', { style: {fontSize:11,color:"#334155",background:"#f1f5f9",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.na, " N/A" )
-, ps.untested>0&&React.createElement('span', { style: {fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px",fontWeight:700},}, ps.untested, " untested" )
+, React.createElement(StatusSet,{model:"full",s:ps,dash:true,style:{marginTop:6}})
 )
-)
-, React.createElement('div', { style: S.siteCardRight,}, ps.fail>0&&React.createElement('span', { style: S.failBadge,}, "FAIL"), ps.untested===0&&ps.fail===0&&React.createElement('span', { style: {color:"#14532d",fontSize:18,fontWeight:800},}, "✓"), React.createElement('span', { style: S.arrow,}, "›"))
+, React.createElement('div', { style: S.siteCardRight,}, ps.untested===0&&ps.fail===0&&React.createElement('span', { style: {color:"#14532d",fontSize:18,fontWeight:800},}, "✓"), React.createElement('span', { style: S.arrow,}, "›"))
 ));
 })
 ));
@@ -2524,11 +2614,8 @@ const circuits=panel.circuits;const ps=panelSummary(results,project.id,area.id,p
 const total=circuits.length;
 return(React.createElement('div', { style: S.circuitWrap,}
 , React.createElement('div', { style: S.panelHeader,}, React.createElement('div', null, React.createElement('div', { style: S.panelTitle,}, panel.name), React.createElement('div', { style: S.panelSub,}, area.name, " · "  , total, " circuit" , total!==1?"s":""))
-, React.createElement('div', { style: S.panelStats,}
-, React.createElement('span', { style: {color:"#16a34a"},}, ps.pass, "P")
-, React.createElement('span', { style: {color:"#dc2626"},}, ps.fail, "F")
-, React.createElement('span', { style: {color:"#92400e",fontSize:12},}, ps.untested, " untested" )
-))
+)
+, React.createElement(StatusSet,{model:"full",s:{...ps,total},style:{marginBottom:10}})
 , React.createElement('div', { style: S.quickRow,}, React.createElement('span', { style: S.quickLabel,}, "Set all:" )
 , React.createElement('button', { style: {...S.quickBtn,background:"#dcfce7",color:"#14532d",borderColor:"#16a34a"}, onClick: ()=>onSetAll(STATUS.PASS),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('polyline',{points:'20 6 9 17 4 12'}))," Pass" )
 , React.createElement('button', { style: {...S.quickBtn,background:"#fee2e2",color:"#991b1b",borderColor:"#dc2626"}, onClick: ()=>onSetAll(STATUS.FAIL),}, React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round'},React.createElement('line',{x1:18,y1:6,x2:6,y2:18}),React.createElement('line',{x1:6,y1:6,x2:18,y2:18}))," Fail" )
@@ -2537,7 +2624,7 @@ return(React.createElement('div', { style: S.circuitWrap,}
 )
 , !isPush && (
 React.createElement('div', { style: {fontSize:12,color:"#1d4ed8",background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:8,padding:"8px 12px",marginBottom:12},}, moduleIcon("rcd_inject",15), " "
-, React.createElement('strong', null, "Annual mode" ), " — tap any circuit to open the injection test form"
+, React.createElement('strong', null, "Injection mode" ), " — tap any circuit to open the injection test form"
 )
 )
 , React.createElement('div', { style: S.circuitGrid,}
@@ -2602,10 +2689,7 @@ return(React.createElement('div',{style:S.summaryWrap}
     ,_optionalChain([meta,'optionalAccess',_179=>_179.injectDate])&&React.createElement('div',{style:{...S.duePill,borderColor:"#93c5fd",color:"#1d4ed8",padding:"7px 12px"}},moduleIcon("rcd_inject",15)," Injection: ",fmtDate(meta.injectDate)," → next ",(meta.nextInjectDate?fmtDate(meta.nextInjectDate):addYears(meta.injectDate,1)))
   )
   ,[["PUSH TEST",pushSum,"#a3530f"],["INJECTION TEST",injectSum,"#1d4ed8"]].map(([lbl,sum,col])=>(
-    React.createElement('div',{key:lbl,style:{marginBottom:20}}
-      ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:col,letterSpacing:0.8,marginBottom:8}},lbl)
-      ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:0})
-    )
+    React.createElement(ReportStatPills,{key:lbl,model:"full",s:sum,count:sum.total,unit:"circuit",mb:20,title:React.createElement('div',{style:{fontSize:12,fontWeight:700,color:col,letterSpacing:0.8}},lbl)})
   ))
   ,React.createElement(ReportFailedItems,{accent:"#a3530f",items:[...pushFails.map(f=>({title:f.circuit,tag:{text:"Push",color:"#a3530f"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified})),...injectFails.map(f=>({title:f.circuit,tag:{text:"Injection",color:"#1d4ed8"},badge:reportPriorityBadge(f.priority),path:`${f.area} › ${f.panel}`,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))]})
   ,(pushSum.fail===0&&injectSum.fail===0)&&React.createElement(ReportNoDefects)
@@ -2626,9 +2710,6 @@ React.createElement('div', { style: {marginBottom:10},}
 function StatusBadge({status}){
 const sm=SM[status];
 return (React.createElement('div', { style: {padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,letterSpacing:0.5,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`},}, sm.label));
-}
-function StatPill({label,val,col}){
-return (React.createElement('div', { style: {display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"},}, React.createElement('span', { style: {fontSize:10,color:col,fontWeight:700,letterSpacing:0.5},}, label), React.createElement('span', { style: {fontSize:14,color:col,fontWeight:800},}, val)));
 }
 const NAV_ICON_HOME=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"}),React.createElement('polyline',{points:"9 22 9 12 15 12 15 22"}));
 const NAV_ICON_AUDIT=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"9 11 12 14 22 4"}),React.createElement('path',{d:"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"}));
@@ -2682,7 +2763,7 @@ topbar:{display:"flex",alignItems:"center",justifyContent:"space-between",paddin
 topbarLeft:{display:"flex",alignItems:"center",gap:12},topbarRight:{display:"flex",alignItems:"center",gap:8},
 appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#a3530f"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
 backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
-saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
+saveIndicator:{fontSize:11,color:"#166534",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
 breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
 bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
 main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
@@ -2720,8 +2801,8 @@ siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,ma
 siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
 siteCardBar:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:10,overflow:"hidden"},
 siteCardBarFill:{height:"100%",borderRadius:2,transition:"width 0.4s"},
-failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
-untestedBadge:{fontSize:11,fontWeight:700,color:"#78350f",background:"#fef3c7",borderRadius:6,padding:"3px 8px"},
+failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
+untestedBadge:{fontSize:11,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:6,padding:"2px 7px",border:"1px solid #fcd34d",lineHeight:1.3,whiteSpace:"nowrap"},
 arrow:{fontSize:22,color:"#52525b",lineHeight:1},
 addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
 circuitWrap:{padding:"16px"},
@@ -2771,14 +2852,14 @@ const IEL_DEFAULT_RESPONSIBILITY = ["Site Electrician","Site Manager","Contracto
 const IEL_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair","Replacement Required","Under Investigation","No Action Required"];
 
 const IEL_CATEGORIES = [
-  { key:"estops",    label:"E-Stops",   icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#dc2626',stroke:'none'},React.createElement('circle',{cx:12,cy:12,r:10})), color:"#dc2626", desc:"Emergency stop buttons & devices" },
+  { key:"estops",    label:"E-Stops",   icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#dc2626',stroke:'none'},React.createElement('circle',{cx:12,cy:12,r:10})), color:"#b91c1c", desc:"Emergency stop buttons & devices" },
   { key:"lanyards",  label:"Lanyards",  icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round'},React.createElement('path',{d:'M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'}),React.createElement('path',{d:'M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'})), color:"#047857", desc:"Safety lanyards & fall arrest equipment" },
   { key:"isolators", label:"Isolators", icon:React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'#a3530f',stroke:'none'},React.createElement('path',{d:'M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z'})), color:"#92400e", desc:"Electrical isolators & lockout points" },
 ];
 const IEL_TYPE_LABEL  = { estops:"Estop", lanyards:"Lanyard", isolators:"Isolator" };
 const IEL_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const IEL_SM = {
-  untested: { label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
+  untested: { label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
   pass:     { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },
   fail:     { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
   na:       { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
@@ -2805,6 +2886,19 @@ function ielTypeToKey(t){
 }
 
 // ─── IEL data helpers ────────────────────────────────────────────────────
+// IEL per-item due date. The auditor-chosen next-due date (Home -> NEXT TEST DUE) wins when one was set; otherwise last tested + 3 months. meta.nextTestDate is ALWAYS populated
+// (it defaults to testDate + 3 months and follows the test date until edited), so "chosen" means "differs from that default" - no stored flag, works on saved audits and History snapshots.
+function ielChosenNextDue(meta){
+  const n=meta&&meta.nextTestDate;
+  if(!n)return null;
+  return n!==addMonthsISO(meta.testDate,3)?n:null;
+}
+function ielItemDue(item,meta){
+  if(!item||!item.lastTested)return{iso:null,label:""};
+  const chosen=ielChosenNextDue(meta);
+  if(chosen)return{iso:chosen,label:fmtDate(chosen)};
+  return{iso:addMonthsISO(item.lastTested,3),label:addMonths(item.lastTested,3)};
+}
 function ielGetItem(results,siteId,areaId,cat,itemId){
   return((((results[siteId]||{})[areaId]||{})[cat]||{})[itemId])||{status:IEL_STATUS.UNTESTED,mechCheck:false,circuitIso:false,lanyardCond:false,notes:"",priority:"",rectified:"",lastTested:""};
 }
@@ -2838,7 +2932,7 @@ async function exportIELExcel(project, results, meta) {
   const auditor = (meta && meta.auditor) || "";
   const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
   const sName = project.name || "Site";
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("iel", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue, logo });
   const rows = [];
   const catOrder = ["estops", "lanyards", "isolators"];
   // Organised by AREA first, then category within each area — no separator rows
@@ -2852,7 +2946,7 @@ async function exportIELExcel(project, results, meta) {
         const item = defectGateByStatus((((results[area.id] || {})[catKey]) || {})[itemId] || { status: IEL_STATUS.UNTESTED, mechCheck: false, circuitIso: false, lanyardCond: false, notes: "", priority: "", rectified: "", lastTested: "" });
         const st = item.status || IEL_STATUS.UNTESTED;
         const pf = st === IEL_STATUS.PASS ? "Pass" : st === IEL_STATUS.FAIL ? "Fail" : st === IEL_STATUS.NA ? "N/A" : "Untested";
-        const dueDate = item.lastTested ? addMonths(item.lastTested, 3) : "";
+        const dueDate = ielItemDue(item, meta).label;
         rows.push({
           cells: [area.name, catLabel, machineName, fmtDate(item.lastTested), item.mechCheck ? "yes" : "", item.circuitIso ? "yes" : "", catKey === "lanyards" ? (item.lanyardCond ? "yes" : "") : "", pf, item.notes || "", dueDate],
           defect: pf === "Fail" ? { ids: [area.name, machineName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
@@ -2862,14 +2956,12 @@ async function exportIELExcel(project, results, meta) {
   });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
-    title: `${sName} — Isolators, E-Stops & Lanyards Test`, defectTitle: `${sName} — Isolators, E-Stops & Lanyards Test — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${nextDue}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Isolators EStops Lanyards",
     headers: ["Location", "Type", "Machine", "Date", "Mechanism / Reset Check", "Circuit Isolation Verified", "Lanyard Tension / Cond.", "Pass / Fail", "Notes / Recommendations", "Next Test Due"],
     widths: [16, 10, 20, 11, 12, 12, 12, 9, 22, 11],
     idHeaders: ["Location", "Machine"], idWidths: [16, 22],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -2901,7 +2993,7 @@ function parseIELExcel(data){
   const cDef=col("defect"),cResp=col("responsib"),cNotes=header.findIndex(h=>h.includes("note")||h.includes("recommend")),cPri=col("priority");
   const rowOff=rowOff0;
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[rowOff]&&rows[rowOff][0]){siteName=xjSiteFromTitle(rows[rowOff][0],"iel");}
   // Company/ABN/licence live in row 2 (index 1), not the title row
   if(rows[1+rowOff]&&rows[1+rowOff][0]){
     const p=parseCompanyRow(rows[1+rowOff][0]);
@@ -3277,14 +3369,14 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,projects.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:14,marginBottom:16}},"No sites yet — add one or import from Excel below.")
 
     ,projects.map(proj=>{
-      let total=0,tested=0,fails=0;
+      let total=0,tested=0,fails=0,passN=0,naN=0;
       IEL_CATEGORIES.forEach(cat=>{
         proj.areas.forEach(a=>a.panels.forEach(p=>{
           if(p.name===cat.key)p.circuits.forEach(id=>{
             total++;
             const st=ielGetStatus(allResults,proj.id,a.id,cat.key,id);
             if(st!==IEL_STATUS.UNTESTED)tested++;
-            if(st===IEL_STATUS.FAIL)fails++;
+            if(st===IEL_STATUS.FAIL)fails++;else if(st===IEL_STATUS.PASS)passN++;else if(st===IEL_STATUS.NA)naN++;
           });
         }));
       });
@@ -3293,15 +3385,14 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:SI.siteCardName},proj.name)
-            ,React.createElement('div',{style:SI.siteCardSub},proj.company?proj.company+" · ":"" ,nw(proj.areas.length,"area")," · ",nw(total,"item")," · 3-month cycle")
+            ,React.createElement('div',{style:SI.siteCardSub},proj.company?proj.company+" · ":"" ,nw(proj.areas.length,"area")," · ",nw(total,"item"),"")
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fails>0?"#dc2626":tested===total&&total>0?"#16a34a":"#047857",transition:"width 0.4s"}})
             )
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:4}},tested," / ",total," tested")
+            ,React.createElement(StatusSet,{model:"full",s:{pass:passN,fail:fails,na:naN,untested:total-tested},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,fails>0&&React.createElement('span',{style:SI.failBadge},fails," FAIL")
-            ,React.createElement('span',{style:SI.arrow},"›")
+                        ,React.createElement('span',{style:SI.arrow},"›")
           )
         )
         ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}}
@@ -3394,12 +3485,12 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
     ,project.company&&React.createElement('div',{style:SI.siteSub},project.company)
-    ,lastArchivedAt&&React.createElement('div',{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:999,padding:"4px 10px",alignSelf:"flex-start"}},"✓ Last completed ",fmtDateTime(lastArchivedAt))
+    ,lastArchivedAt&&React.createElement('div',{style:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:700,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:999,padding:"4px 10px",alignSelf:"flex-start"}},"✓ Last completed ",fmtDateTime(lastArchivedAt))
     ,React.createElement('div',{style:SI.metaCard}
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SI.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...SI.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',{style:{marginBottom:8}}
         ,React.createElement('div',{style:SI.metaLabelText},"TEST DATE")
@@ -3415,23 +3506,18 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       const sum=ielSiteSummary(results,project,cat.key);
       const pct=sum.total>0?Math.round(((sum.pass+sum.fail+sum.na)/sum.total)*100):0;
       return React.createElement('button',{key:cat.key,
-        style:{...SI.catBtn,borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
+        style:{...SI.catBtn,flexWrap:"wrap",borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
         onClick:()=>hasAuditor&&onStartCat(cat.key)}
         ,React.createElement('span',{style:{fontSize:28,marginRight:4}},cat.icon)
         ,React.createElement('div',{style:{flex:1,textAlign:"left"}}
-          ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#52525b",letterSpacing:0.3}},cat.label)
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#52525b",letterSpacing:0.3}},cat.label),React.createElement('span',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(sum.total,"item")))
           ,React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginTop:1}},cat.desc)
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:6,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:sum.fail>0?"#dc2626":cat.color,transition:"width 0.4s"}})
           )
-          ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}
-            ,sum.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},sum.pass," Pass")
-            ,sum.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#dc2626",fontWeight:800}},sum.fail," FAIL")
-            ,sum.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},sum.untested," untested")
-            ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},sum.total," total")
-          )
         )
         ,React.createElement('span',{style:{fontSize:22,color:hasAuditor?cat.color+"88":"#52525b"}},"›")
+        ,React.createElement(StatusSet,{model:"full",s:sum,style:{flex:"0 0 100%",marginTop:8}})
       );
     })
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
@@ -3453,22 +3539,21 @@ function IELAreaListView({project,results,cat,catColor,onSelect}){
       // Only count panels for this cat
       const catPanel=area.panels.find(p=>p.name===cat);
       const items=catPanel?catPanel.circuits:[];
-      let pass=0,fail=0,untested=0;
-      items.forEach(id=>{const v=ielGetStatus(results,project.id,area.id,cat,id);if(v===IEL_STATUS.PASS||v===IEL_STATUS.NA)pass++;else if(v===IEL_STATUS.FAIL)fail++;else untested++;});
+      let pass=0,fail=0,na=0,untested=0;
+      items.forEach(id=>{const v=ielGetStatus(results,project.id,area.id,cat,id);if(v===IEL_STATUS.PASS)pass++;else if(v===IEL_STATUS.NA)na++;else if(v===IEL_STATUS.FAIL)fail++;else untested++;});
       const total=items.length;
-      const pct=total>0?Math.round(((pass+fail)/total)*100):0;
+      const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
       return React.createElement('button',{key:area.id,style:{...SI.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>onSelect(area.id)}
         ,React.createElement('div',{style:SI.siteCardLeft}
           ,React.createElement('div',{style:SI.siteCardName},area.name)
           ,React.createElement('div',{style:SI.siteCardSub},nw(total,"item"))
+          ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":untested>0?catColor:"#16a34a"}})
           )
         )
         ,React.createElement('div',{style:SI.siteCardRight}
-          ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
-          ,untested>0&&React.createElement('span',{style:{fontSize:11,fontWeight:700,color:"#78350f",background:"#fef3c7",borderRadius:6,padding:"3px 8px"}},untested)
-          ,React.createElement('span',{style:SI.arrow},"›")
+                    ,React.createElement('span',{style:SI.arrow},"›")
         )
       );
     })
@@ -3493,15 +3578,10 @@ function IELPanelListView({area,project,results,cat,catColor,onSelect}){
       ,React.createElement('div',{style:SI.siteCardLeft}
         ,React.createElement('div',{style:SI.siteCardName},catI.icon," ",catI.label)
         ,React.createElement('div',{style:SI.siteCardSub},items.length," item",items.length!==1?"s":"")
-        ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:6}}
-          ,s.pass>0&&React.createElement('span',{style:{fontSize:11,color:"#16a34a",background:"#dcfce7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.pass," Pass")
-          ,s.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.fail," Fail")
-          ,s.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px",fontWeight:700}},s.untested," untested")
-        )
+,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
       )
       ,React.createElement('div',{style:SI.siteCardRight}
-        ,s.fail>0&&React.createElement('span',{style:SI.failBadge},"FAIL")
-        ,s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
+                ,s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
         ,React.createElement('span',{style:SI.arrow},"›")
       )
     )
@@ -3522,12 +3602,8 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
         ,React.createElement('div',{style:SI.panelTitle},catI.icon," ",catI.label)
         ,React.createElement('div',{style:SI.panelSub},area.name," · ",items.length," item",items.length!==1?"s":"")
       )
-      ,React.createElement('div',{style:SI.panelStats}
-        ,React.createElement('span',{style:{color:"#16a34a"}},s.pass,"P")
-        ,React.createElement('span',{style:{color:"#dc2626"}},s.fail,"F")
-        ,React.createElement('span',{style:{color:"#92400e",fontSize:12}},s.untested," untested")
-      )
     )
+    ,React.createElement(StatusSet,{model:"full",s:{...s,total:items.length},style:{marginBottom:10}})
     ,React.createElement('div',{style:{fontSize:12,color:catColor,background:"#f0eeea",border:`1px solid ${catColor}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},catI.icon," Tap any item to open the test form")
     ,items.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
@@ -3536,8 +3612,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
         const st=d.status||IEL_STATUS.UNTESTED;
         const sm=IEL_SM[st]||IEL_SM.untested;
         const machineName=machineNames[itemId]||itemId;
-        const nextDueISO=d.lastTested?addMonthsISO(d.lastTested,3):null;
-        const nextDue=d.lastTested?addMonths(d.lastTested,3):null;
+        const _due=ielItemDue(d,meta);const nextDueISO=_due.iso;const nextDue=_due.label||null;
         const overdue=nextDueISO&&isOverdue(nextDueISO);
         const dueSoon=nextDueISO&&!overdue&&isDueSoon(nextDueISO);
         const hasNote=!!(d.notes);
@@ -3548,8 +3623,8 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
           ,React.createElement('div',{style:{flex:1,padding:"12px 14px",minWidth:0}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
               ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#18181b"}},machineName)
-              ,overdue&&React.createElement('span',{style:{fontSize:10,fontWeight:800,color:"#dc2626",background:"#fee2e2",borderRadius:4,padding:"1px 6px",border:"1px solid #fca5a5"}},"OVERDUE")
-              ,dueSoon&&React.createElement('span',{style:{fontSize:10,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"1px 6px"}},"DUE SOON")
+              ,overdue&&React.createElement(StatusPill,{kind:"fail",label:"OVERDUE",alert:true,compact:true})
+              ,dueSoon&&React.createElement(StatusPill,{kind:"warn",label:"DUE SOON",alert:true,compact:true})
             )
             ,React.createElement('div',{style:{display:"flex",gap:10,marginTop:4,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
@@ -3627,8 +3702,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
     onPatch({status:s,...(s===IEL_STATUS.PASS||s===IEL_STATUS.FAIL?{lastTested:testDate}:{})});
   };
 
-  const nextDue=item.lastTested?addMonths(item.lastTested,3):null;
-  const nextDueISO=item.lastTested?addMonthsISO(item.lastTested,3):null;
+  const _due=ielItemDue(item,meta);const nextDue=_due.label||null;const nextDueISO=_due.iso;
   const overdue=nextDueISO&&isOverdue(nextDueISO);
   const sm=IEL_SM[item.status||IEL_STATUS.UNTESTED]||IEL_SM.untested;
 
@@ -3638,7 +3712,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
       ,React.createElement('div',{style:SI.modalHeader}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:"#18181b"}},catI.icon," ",machineName)
-          ,React.createElement('div',{style:{fontSize:12,color:"#6e6a66",marginTop:3}},catI.label," · ",area&&area.name," · 3-month cycle")
+          ,React.createElement('div',{style:{fontSize:12,color:"#6e6a66",marginTop:3}},catI.label," · ",area&&area.name,"")
         )
         ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},sm.label)
       )
@@ -3717,7 +3791,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
 
       // Notes
       ,(item.status===IEL_STATUS.FAIL)&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:SI.modalField}
           ,React.createElement('label',{style:SI.modalLabel},"RECTIFIED / SCHEDULED ACTION")
           ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED,value:item.rectified||(((dropdowns&&dropdowns.rectified)||IEL_DEFAULT_RECTIFIED)[0]||""),onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…"})
@@ -3739,7 +3813,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
                 style: {
                   padding: "10px 14px",
                   background: (item.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+                  color: (item.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
                   border: `1px solid ${(item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
                   borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
                 },
@@ -3786,13 +3860,10 @@ function IELReportView({project,results,meta,onBack}){
     )
     ,IEL_CATEGORIES.map(cat=>{
       const sum=ielSiteSummary(results,project,cat.key);
-      return React.createElement('div',{key:cat.key,style:{marginBottom:20}}
-        ,React.createElement('div',{style:{fontSize:13,fontWeight:800,color:cat.color,marginBottom:8}},cat.icon," ",cat.label)
-        ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:0})
-      );
+      return React.createElement(ReportStatPills,{key:cat.key,model:"full",s:sum,count:sum.total,unit:"item",mb:20,title:React.createElement('div',{style:{fontSize:13,fontWeight:800,color:cat.color}},cat.icon," ",cat.label)});
     })
     ,React.createElement(ReportFailedItems,{accent:"#047857",items:allFails.map(f=>({title:f.name,tag:{text:f.cat.label,color:f.cat.color},badge:reportPriorityBadge(f.priority),path:f.area,defectId:f.defectId,comment:f.comment,responsibility:f.responsibility,rectified:f.rectified}))})
-    ,allFails.length===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
+    ,allFails.length===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -3956,14 +4027,10 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:12,marginBottom:16}}
           ,React.createElement('div',null
             ,React.createElement('div',{style:{fontSize:16,fontWeight:800,color:cat&&cat.color||"#18181b"}},cat&&cat.icon," ",cat&&cat.label)
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},area&&area.name," · ",fmtDate(snap.testDate)," · Read-only")
+            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},area&&area.name," · ",nw(pass+fail+na+unt,"item")," · ",fmtDate(snap.testDate)," · Read-only")
           )
-          ,React.createElement('div',{style:{display:"flex",gap:6,marginLeft:"auto"}}
-            ,React.createElement('span',{style:{fontSize:11,color:"#16a34a",background:"#dcfce7",borderRadius:4,padding:"2px 7px",fontWeight:700}},pass,"P")
-            ,fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",background:"#fee2e2",borderRadius:4,padding:"2px 7px",fontWeight:700}},fail,"F")
-            ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e",background:"#fef3c7",borderRadius:4,padding:"2px 7px",fontWeight:700}},unt," left")
           )
-        )
+        ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt,total:pass+fail+na+unt},style:{marginBottom:10}})
         ,(!cp||!cp.circuits.length)&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items for this category in this area.")
         ,(cp&&cp.circuits||[]).map(id=>{
           const mn=(cp.machineNames||{})[id]||id;
@@ -4006,7 +4073,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           let pass=0,fail=0,na=0,unt=0;
           cp.circuits.forEach(id=>{const v=((((snap.results||{})[area.id]||{})[cat.key])||{})[id];const st=(v&&v.status)||IEL_STATUS.UNTESTED;if(st===IEL_STATUS.PASS)pass++;else if(st===IEL_STATUS.FAIL)fail++;else if(st===IEL_STATUS.NA)na++;else unt++;});
           const total=cp.circuits.length;
-          const pct=total>0?Math.round(((pass+na)/total)*100):0;
+          const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
           return React.createElement('button',{key:cat.key,
             style:{...SI.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:unt===0?{background:"#dcfce7",borderColor:"#86efac"}:{})},
             onClick:()=>setViewCat(cat.key)}
@@ -4016,14 +4083,9 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
               ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
                 ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":cat.color}})
               )
-              ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:4}}
-                ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},pass," Pass")
-                ,fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},fail," Fail")
-                ,unt>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},unt," untested")
-              )
+              ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},dash:true,style:{marginTop:6}})
             )
             ,React.createElement('div',{style:SI.siteCardRight}
-              ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
               ,unt===0&&fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
               ,React.createElement('span',{style:SI.arrow},"›")
             )
@@ -4047,18 +4109,11 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       // Summary pills
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",totPass,"#16a34a"],["Fail",totFail,"#dc2626"],["N/A",totNa,"#334155"],["Untested",totAll-totPass-totFail-totNa,"#92400e"]].map(([l,v,c])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:{pass:totPass,fail:totFail,na:totNa,untested:totAll-totPass-totFail-totNa},style:{marginBottom:16}})
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view items")
       // Area cards — mirrors RCD exactly
       ,project&&project.areas.map(area=>{
-        let aPass=0,aFail=0,aTotal=0;
+        let aPass=0,aFail=0,aNa=0,aTotal=0;
         IEL_CATEGORIES.forEach(cat=>{
           const cp=area.panels.find(p=>p.name===cat.key);
           if(!cp)return;
@@ -4066,21 +4121,22 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
             aTotal++;
             const v=((((snap.results||{})[area.id]||{})[cat.key])||{})[id];
             const st=(v&&v.status)||IEL_STATUS.UNTESTED;
-            if(st===IEL_STATUS.PASS||st===IEL_STATUS.NA)aPass++;
+            if(st===IEL_STATUS.PASS)aPass++;
+            else if(st===IEL_STATUS.NA)aNa++;
             else if(st===IEL_STATUS.FAIL)aFail++;
           });
         });
-        const pct=aTotal>0?Math.round(((aPass+aFail)/aTotal)*100):0;
+        const pct=aTotal>0?Math.round(((aPass+aFail+aNa)/aTotal)*100):0;
         return React.createElement('button',{key:area.id,
           style:{...SI.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},
           onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:SI.siteCardLeft}
             ,React.createElement('div',{style:SI.siteCardName},area.name)
             ,React.createElement('div',{style:SI.siteCardSub},nw(aTotal,"item"))
+            ,React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('div',{style:SI.siteCardRight}
-            ,aFail>0&&React.createElement('span',{style:SI.failBadge},aFail," FAIL")
-            ,aFail===0&&aTotal>0&&aPass===aTotal&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
+            ,aFail===0&&aTotal>0&&aPass+aNa===aTotal&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
             ,React.createElement('span',{style:SI.arrow},"›")
           )
         );
@@ -4102,16 +4158,10 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#047857"}},snap.label||"IEL Audit")
-              ,fail>0&&React.createElement('span',{style:SI.failBadge},fail," FAIL")
-            )
-            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+              )
+            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"item"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#dc2626"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
-              ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
-            )
+            ,total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('span',{style:{...SI.arrow,color:expanded===snap.id?"#047857": "#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -4131,7 +4181,6 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
 // ─────────────────────────────────────────────────────────────────────────
 // IEL SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────
-function IELStatPill({label,val,col}){return React.createElement('div',{style:{display:"flex",alignItems:"center",gap:4,background:"#f7f6f3",border:`1px solid ${col}44`,borderRadius:6,padding:"3px 8px"}},React.createElement('span',{style:{fontSize:10,color:col,fontWeight:700,letterSpacing:0.5}},label),React.createElement('span',{style:{fontSize:14,color:col,fontWeight:800}},val));}
 function IELNavBtn(props){return React.createElement(NavBtn,props);}
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -4146,7 +4195,7 @@ const SI={
   appTitle:{fontSize:16,fontWeight:800,letterSpacing:1,color:"#047857"},appSub:{fontSize:10,letterSpacing:0.5,transition:"color 0.3s"},
   backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
   homeModuleBtn:{fontSize:11,color:"#52525b",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
-  saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
+  saveIndicator:{fontSize:11,color:"#166534",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
@@ -4165,7 +4214,7 @@ const SI={
   siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
   siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
   siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-  failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
+  failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
   arrow:{fontSize:22,color:"#52525b",lineHeight:1},
   addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
   panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
@@ -4203,7 +4252,7 @@ const K_CAL_EVENTS = "cal-events-v1";
 const CAL_TYPES = [
   { key:"rcd_push",    label:"RCD Testing · Push",          color:"#a3530f", icon:moduleIcon("rcd_push",15), period:"Monthly"    },
   { key:"rcd_inject",  label:"RCD Testing · Injection",     color:"#1d4ed8", icon:moduleIcon("rcd_inject",15), period:"Annual"     },
-  { key:"iel_estop",   label:"IEL Testing · E-Stops",            color:"#dc2626", icon:moduleIcon("iel",15), period:"3-Monthly"  },
+  { key:"iel_estop",   label:"IEL Testing · E-Stops",            color:"#b91c1c", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"iel_lanyard", label:"IEL Testing · Lanyards",           color:"#047857", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"iel_iso",     label:"IEL Testing · Isolators",          color:"#92400e", icon:moduleIcon("iel",15), period:"3-Monthly"  },
   { key:"tat",         label:"Test & Tag",             color:"#1d4ed8", icon:moduleIcon("tat",15), period:"Variable"   },
@@ -4286,7 +4335,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
             ? ev.recur==="3-Monthly"?"3-Monthly (Bldg/Const)":ev.recur==="6-Monthly"?"6-Monthly (Factory/Whs)":ev.recur==="Annual"?"Annual (Hostile)":ev.recur
             : ev.recur
         )):"")
-        ,ev.completed&&ev.completedAt&&React.createElement('div',{style:{fontSize:10,color:"#16a34a",marginTop:2}},"✓ Completed ",fmtDate(ev.completedAt.slice(0,10)))
+        ,ev.completed&&ev.completedAt&&React.createElement('div',{style:{fontSize:10,color:"#166534",marginTop:2}},"✓ Completed ",fmtDate(ev.completedAt.slice(0,10)))
         ,ev.notes&&React.createElement('div',{style:{fontSize:11,color:"#6e6a66",marginTop:3}},ev.notes)
         ,ev.seriesId&&React.createElement('div',{style:{fontSize:10,color:"#4338ca",marginTop:3}},"↻ ",ev.recur," · ",ev.seriesIndex!==undefined?`${ev.seriesIndex+1} of ${ev.seriesTotal}`:"series")
       )
@@ -4299,7 +4348,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
             ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " All ",ev.seriesTotal," in series")
             ,React.createElement('button',{style:SI.smallBtn,onClick:closeDel},"Keep")
           )
-          :React.createElement('button',{style:{...SI.smallBtn,color:"#dc2626",borderColor:"#fca5a5"},onClick:openDel},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
+          :React.createElement('button',{style:{...SI.smallBtn,color:"#b91c1c",borderColor:"#fca5a5"},onClick:openDel},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})))
       )
       ,!compact&&ev.completed&&React.createElement('button',{style:{...SI.smallBtn,color:"#52525b",marginLeft:8},onClick:()=>onToggleComplete&&onToggleComplete(ev.id)},"↩ Undo")
     )
@@ -4332,7 +4381,7 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
 
     // ── DUE THIS WEEK ─────────────────────────────────────────────────
     ,upcoming7.length>0&&React.createElement('div',{style:{marginBottom:14}}
-      ,React.createElement(SectionHeader,{color:"#dc2626",icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#a3530f",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})),label:"DUE THIS WEEK",count:upcoming7.length})
+      ,React.createElement(SectionHeader,{color:"#b91c1c",icon:React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",width:13,height:13,fill:"#a3530f",stroke:"none"},React.createElement('path',{d:"M13 2L4.5 13.5H11L10 22L19.5 10.5H13Z"})),label:"DUE THIS WEEK",count:upcoming7.length})
       ,upcoming7.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete,onDeleteSeries,onStartEdit}))
     )
 
@@ -4362,10 +4411,10 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
         style:{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"10px 14px",cursor:"pointer",color:"inherit",marginBottom:showCompleted?8:0},
         onClick:()=>setShowCompleted(x=>!x)}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8}}
-          ,React.createElement('span',{style:{fontSize:11,color:"#16a34a",fontWeight:700,letterSpacing:1}},"✓ COMPLETED")
-          ,React.createElement('span',{style:{fontSize:10,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"1px 7px",fontWeight:600}},completedEvents.length)
+          ,React.createElement('span',{style:{fontSize:11,color:"#166534",fontWeight:700,letterSpacing:1}},"✓ COMPLETED")
+          ,React.createElement('span',{style:{fontSize:10,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:10,padding:"1px 7px",fontWeight:600}},completedEvents.length)
         )
-        ,React.createElement('span',{style:{fontSize:14,color:"#16a34a"}},showCompleted?"▾":"▸")
+        ,React.createElement('span',{style:{fontSize:14,color:"#166534"}},showCompleted?"▾":"▸")
       )
       ,showCompleted&&completedEvents.map(ev=>React.createElement(EventCard,{key:ev.id,ev,onToggleComplete:toggleComplete,onDelete,onDeleteSeries,onStartEdit}))
     )
@@ -4655,7 +4704,7 @@ function CalendarApp({ onGoHome }) {
               ,React.createElement('span',{style:{fontSize:13,fontWeight:700,color:form.type===t.key?t.color:"#6e6a66"}},t.label)
             ))
           )
-          ,validErr.type&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:6}},"Select a type")
+          ,validErr.type&&React.createElement('div',{style:{color:"#b91c1c",fontSize:12,marginTop:6}},"Select a type")
         )
         // Site / Location — direct input when no sites exist; dropdown + custom otherwise
         ,React.createElement('div',{style:{marginBottom:12}}
@@ -4679,13 +4728,13 @@ function CalendarApp({ onGoHome }) {
                   boxStyle:{background:"#f7f6f3",border:`1px solid ${validErr.site?"#dc2626":"#d4d4d8"}`,borderRadius:8,padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box"},wrapStyle:{marginBottom:6}})
                 ,React.createElement('div',{style:{fontSize:10,color:"#52525b",marginTop:4}},"Sites auto-filled from all modules")
               )
-          ,validErr.site&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:4}},"Select or enter a site")
+          ,validErr.site&&React.createElement('div',{style:{color:"#b91c1c",fontSize:12,marginTop:4}},"Select or enter a site")
         )
         // Due date
         ,React.createElement('div',{style:{marginBottom:12,width:"100%",boxSizing:"border-box",overflow:"hidden"}}
           ,React.createElement('div',{style:{fontSize:10,color:validErr.date?"#dc2626": "#6e6a66",letterSpacing:0.8,fontWeight:700,marginBottom:5}},"DUE DATE")
           ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{width:"100%",background:"#f7f6f3",border:`1px solid ${validErr.date?"#dc2626":"#d4d4d8"}`,borderRadius:8,color:"#18181b",padding:"10px 12px",fontSize:13,outline:"none",boxSizing:"border-box",cursor:"pointer",textAlign:"center"}},form.dueDate?fmtDate(form.dueDate):"Select date…"),React.createElement('input',{type:"date",value:form.dueDate,onChange:e=>{setForm(f=>({...f,dueDate:e.target.value}));setValidErr(v=>({...v,date:false}));},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
-          ,validErr.date&&React.createElement('div',{style:{color:"#dc2626",fontSize:12,marginTop:4}},"Select a due date")
+          ,validErr.date&&React.createElement('div',{style:{color:"#b91c1c",fontSize:12,marginTop:4}},"Select a due date")
         )
         // Series edit mode picker — shown when editing a recurring event
         ,editId&&(()=>{
@@ -4836,8 +4885,8 @@ const K_TAT_HISTORY  = "tat-history-v1";
 
 const TAT_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const TAT_SM = {
-  untested:{ label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
-  pass:    { label:"PASS", bg:"#dbeafe", fg:"#1d4ed8", border:"#1d4ed8" },
+  untested:{ label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
+  pass:    { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },   // green, same as every other module (blue was a one-off)
   fail:    { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
   na:      { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
 };
@@ -4968,8 +5017,8 @@ async function exportTATExcel(project, results, meta) {
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
   const sName = project.name || "Site";
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
   const rows = [];
+  const passDues = [];   // ISO due dates of the items PASSED in this report (row 4's "Next Test Due (earliest)" — each item has its own frequency, so there is no single report-level due date)
   project.areas.forEach(area => {
     (area.items || []).forEach(itemId => {
       // results is pre-stripped of projectId — lookup directly by areaId
@@ -4985,6 +5034,7 @@ async function exportTATExcel(project, results, meta) {
       const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
+      if (st === TAT_STATUS.PASS && item.lastTested) passDues.push(addTATMonths(item.lastTested, parseInt(areaFreq)));   // only PASSED items count: failed / N/A / untested / undated are excluded
       rows.push({
         cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck === "pass" ? "Pass" : item.visualCheck === "fail" ? "Fail" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
         defect: pf === "Fail" ? { ids: [area.name, areaTag, cleanName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
@@ -4992,15 +5042,16 @@ async function exportTATExcel(project, results, meta) {
     });
   });
   const wb = new ExcelJS.Workbook();
+  const earliestDue = passDues.length ? passDues.slice().sort()[0] : "";   // ISO dates sort chronologically; blank when no item qualifies
+  const hdr = xjHdr("tat", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue: earliestDue ? fmtDate(earliestDue) : "", logo });
   xjSplit(wb, {
-    title: `${sName} — Test & Tag`, defectTitle: `${sName} — Test & Tag — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Machine Used: ${(meta && meta.machine) || ""}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Test & Tag",
     headers: ["Area", "Asset ID / Tag", "Description", "Equipment Type", "Visual Inspection", "Electrical Test", "Pass / Fail", "Date Tested", "Test Frequency", "Next Test Due", "Notes / Comments"],
     widths: [14, 12, 22, 11, 10, 10, 9, 11, 10, 11, 20],
     idHeaders: ["Area", "Asset ID / Tag", "Description"], idWidths: [16, 15, 24],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    // "Test Machine" is report-level (meta.machine, typed once on Home) and no longer lives in the header: footer line directly above Notes
+    rows, footer: [[""], [`Test Machine: ${(meta && meta.machine) || ""}`], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -5030,7 +5081,7 @@ function parseTATExcel(data) {
   const cType=col("type")||col("equip");
   const cFreq=col("freq");
   let siteName="",parsedCompany="",parsedAbn="",parsedLicence="";
-  if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]);siteName=t.split(/\s*[-–]\s*/)[0].trim()||t;}
+  if(rows[rowOff]&&rows[rowOff][0]){siteName=xjSiteFromTitle(rows[rowOff][0],"tat");}
   if(rows[1+rowOff]&&rows[1+rowOff][0]){const p=parseCompanyRow(rows[1+rowOff][0]);const raw=String(rows[1+rowOff][0]).toLowerCase();const looksLikeTitle=raw.includes(" test")||/\d{4}/.test(raw)&&!raw.includes("abn");if(!looksLikeTitle){parsedCompany=p.company||"";}parsedAbn=p.abn||"";parsedLicence=p.licence||"";}
   const areaMap={};
   for(let i=headerIdx+1;i<rows.length;i++){
@@ -5348,13 +5399,13 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:ST.siteCardName},proj.name)
             ,React.createElement('div',{style:ST.siteCardSub},nw(proj.areas.reduce((s,a)=>s+(a.items||[]).length,0),"item")," · ",nw(proj.areas.length,"area"))
+            ,React.createElement(StatusSet,{model:"full",s:sum,dash:true,style:{marginTop:6}})
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:sum.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
             )
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,sum.fail>0&&React.createElement('span',{style:ST.failBadge},sum.fail," FAIL")
-            ,React.createElement('span',{style:ST.arrow},"›")
+                        ,React.createElement('span',{style:ST.arrow},"›")
           )
         )
         ,React.createElement('div',{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}}
@@ -5432,7 +5483,7 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:ST.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...ST.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
@@ -5447,17 +5498,12 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}33`,borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"item"))
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,React.createElement('span',{style:{fontSize:11,color:"#1d4ed8"}},summary.pass," Pass")
-        ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-        ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},summary.untested," untested")
-        ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},summary.total," total")
-      )
+      ,React.createElement(StatusSet,{model:"full",s:summary})
     )
     ,React.createElement('button',{
       style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?TAT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?TAT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},
@@ -5487,13 +5533,13 @@ function TATAreaListView({project,results,onSelect}){
         onClick:()=>onSelect(area.id)}
         ,React.createElement('div',{style:ST.siteCardLeft}
           ,React.createElement('div',{style:ST.siteCardName},area.name)
-          ,React.createElement('div',{style:ST.siteCardSub},nw(s.total,"item")," · ",s.pass+s.na," / ",s.total," tested")
+          ,React.createElement('div',{style:ST.siteCardSub},nw(s.total,"item"))
+          ,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:s.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
           )
         )
         ,React.createElement('div',{style:ST.siteCardRight}
-          ,s.fail>0&&React.createElement('span',{style:ST.failBadge},s.fail," FAIL")
           ,pct===100&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
           ,React.createElement('span',{style:ST.arrow},"›")
         )
@@ -5515,12 +5561,8 @@ function TATItemGrid({area,project,results,meta,freqOptions,onPatch,onOpenDetail
         ,React.createElement('div',{style:ST.panelTitle},area.name)
         ,React.createElement('div',{style:ST.panelSub},nw(areaItems.length,"item"))
       )
-      ,React.createElement('div',{style:ST.panelStats}
-        ,React.createElement('span',{style:{color:"#1d4ed8"}},s.pass,"P")
-        ,React.createElement('span',{style:{color:"#dc2626"}},s.fail,"F")
-        ,React.createElement('span',{style:{color:"#92400e",fontSize:12}},s.untested," untested")
-      )
     )
+    ,React.createElement(StatusSet,{model:"full",s:{...s,total:areaItems.length},style:{marginBottom:10}})
     ,React.createElement('div',{style:{fontSize:12,color:TAT_COLOR,background:"#dbeafe",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round'},React.createElement('path',{d:'M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z'}),React.createElement('line',{x1:7,y1:7,x2:7.01,y2:7}))," Tap any item to open the test form")
     ,areaItems.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
@@ -5680,7 +5722,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 
       // Notes
       ,item.status===TAT_STATUS.FAIL&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:ST.modalField}
           ,React.createElement('label',{style:ST.modalLabel},"RECTIFIED / SCHEDULED ACTION")
           ,React.createElement(IELEditableDropdown,{options:(dropdowns&&dropdowns.rectified)||DEFAULT_RECTIFIED,value:item.rectified||"",onChange:v=>onPatch({rectified:v}),placeholder:"Select or type…",color:TAT_COLOR,colorBg:"#dbeafe"})
@@ -5702,7 +5744,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
                 style: {
                   padding: "10px 14px",
                   background: (item.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-                  color: (item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+                  color: (item.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
                   border: `1px solid ${(item.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
                   borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
                 },
@@ -5749,7 +5791,7 @@ function TATReportView({project,results,meta,onBack}){
       ,React.createElement('div',{style:{fontSize:12,background:"#f7f6f3",border:`1px solid ${TAT_COLOR}55`,color:TAT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate))
     )
     ,meta.machine&&meta.machine.trim()&&React.createElement('div',{"data-testid":"tat-report-machine",style:{fontSize:12,color:"#52525b",marginTop:-8,marginBottom:16}},"Machine: ",meta.machine.trim())
-    ,React.createElement(ReportStatTiles,{rows:[["Total",sum.total,"#334155"],["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]],mb:20})
+    ,React.createElement(ReportStatPills,{model:"full",s:sum,count:sum.total,unit:"item",mb:20})
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:TAT_COLOR,letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY")
       ,project.areas.map(area=>{
@@ -5758,17 +5800,17 @@ function TATReportView({project,results,meta,onBack}){
         return React.createElement('div',{key:area.id,style:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 14px",marginBottom:8}}
           ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}
             ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},area.name)
-            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},as.pass+as.na," / ",as.total)
+            ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},nw(as.total,"item"))
           )
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:as.fail>0?"#dc2626":pct===100?"#16a34a":TAT_COLOR}})
           )
-          ,as.fail>0&&React.createElement('div',{style:{fontSize:11,color:"#991b1b",marginTop:4,fontWeight:700}},as.fail," FAIL")
+          ,React.createElement(StatusSet,{model:"full",s:as,dash:true,style:{marginTop:6}})
         );
       })
     )
     ,React.createElement(ReportFailedItems,{accent:TAT_COLOR,items:fails.map(f=>({title:f.name,tag:f.tag?{text:f.tag,color:TAT_COLOR}:null,badge:reportPriorityBadge(f.priority),path:f.area,lines:[...(f.visual==="fail"?["Visual Inspection: FAIL"]:[]),...(f.electrical==="fail"?["Electrical test: FAIL"]:[])],defectId:f.defectId,comment:f.notes,responsibility:f.responsibility,rectified:f.rectified}))})
-    ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
+    ,fails.length===0&&sum.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -6138,32 +6180,25 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,React.createElement('button',{style:{...ST.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#1d4ed8"],["Fail",fail,"#dc2626"],["N/A",na,"#334155"],["Untested",unt,"#92400e"]].map(([l,v,c])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},style:{marginBottom:16}})
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results")
       ,project&&project.areas.map(area=>{
         const aItems=(area.items||[]);
         if(!aItems.length)return null;
-        let aPass=0,aFail=0,aTotal=aItems.length;
-        aItems.forEach(id=>{const v=(((snap.results||{})[area.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS||st===TAT_STATUS.NA)aPass++;else if(st===TAT_STATUS.FAIL)aFail++;});
-        const pct=aTotal>0?Math.round(((aPass+aFail)/aTotal)*100):0;
+        let aPass=0,aFail=0,aNa=0,aTotal=aItems.length;
+        aItems.forEach(id=>{const v=(((snap.results||{})[area.id]||{})[id]);const st=(v&&v.status)||TAT_STATUS.UNTESTED;if(st===TAT_STATUS.PASS)aPass++;else if(st===TAT_STATUS.NA)aNa++;else if(st===TAT_STATUS.FAIL)aFail++;});
+        const pct=aTotal>0?Math.round(((aPass+aFail+aNa)/aTotal)*100):0;
         return React.createElement('button',{key:area.id,style:{...ST.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:ST.siteCardLeft}
             ,React.createElement('div',{style:ST.siteCardName},area.name)
             ,React.createElement('div',{style:ST.siteCardSub},aTotal," item",aTotal!==1?"s":"")
+            ,React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:aFail>0?"#dc2626":TAT_COLOR}})
             )
           )
           ,React.createElement('div',{style:ST.siteCardRight}
-            ,aFail>0&&React.createElement('span',{style:ST.failBadge},aFail," FAIL")
-            ,React.createElement('span',{style:ST.arrow},"›")
+                        ,React.createElement('span',{style:ST.arrow},"›")
           )
         );
       })
@@ -6184,16 +6219,10 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:TAT_COLOR}},"Test & Tag Audit")
-              ,fail>0&&React.createElement('span',{style:ST.failBadge},fail," FAIL")
-            )
-            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+              )
+            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"item"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#1d4ed8"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#dc2626"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
-              ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
-            )
+            ,total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('span',{style:{...ST.arrow,color:expanded===snap.id?TAT_COLOR: "#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -6341,7 +6370,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   appTitle:{fontSize:16,fontWeight:800,letterSpacing:1},appSub:{fontSize:10,letterSpacing:0.5},
   backBtn:{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,fontWeight:600,color:"#52525b",background:"#f0eeea",border:"1px solid rgba(0,0,0,0.06)",borderRadius:10,padding:"8px 12px",cursor:"pointer",flexShrink:0},
   homeModuleBtn:{fontSize:11,color:"#52525b",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:8,padding:"5px 10px",cursor:"pointer",fontWeight:600,whiteSpace:"nowrap"},
-  saveIndicator:{fontSize:11,color:"#16a34a",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
+  saveIndicator:{fontSize:11,color:"#166534",fontWeight:600,transition:"opacity 0.4s",pointerEvents:"none"},
   breadcrumb:{display:"flex",alignItems:"center",gap:6,padding:"8px 16px",background:"#f7f6f3",borderBottom:"1px solid #f7f6f3",fontSize:12,flexWrap:"wrap",flexShrink:0},
   bcItem:{color:"#52525b",cursor:"pointer"},bcSep:{color:"#52525b"},
   main:{flex:1,overflowY:"auto",overflowX:"hidden",WebkitOverflowScrolling:"touch",minHeight:0,paddingBottom:NAV_CLEARANCE},
@@ -6358,7 +6387,7 @@ const ST = {...(typeof SI !== 'undefined' ? SI : {}),
   siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
   siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
   siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-  failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
+  failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
   arrow:{fontSize:22,color:"#52525b",lineHeight:1},
   addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
   panelHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14},
@@ -6407,21 +6436,23 @@ const PRIORITY_LABELS = {
   U: "Urgent"
 };
 const PRIORITY_COLORS = {
-  L: "#16a34a",
+  L: "#166534",
   M: "#92400e",
-  H: "#dc2626",
+  H: "#b91c1c",
   U: "#9B0000"
 };
 const PRIORITY_BG = {
   L: "#dcfce7",
   M: "#fef3c7",
   H: "#fee2e2",
-  U: "#fee2e2"
+  U: "#9B0000"      // URGENT is a solid dark maroon (white text, PRIORITY_FG) so it is never mistaken for H, which keeps the pale red
 };
+// Text colour to put ON a PRIORITY_BG fill (L / M / H are their own colour on the pale tint; U is white on the solid maroon)
+const PRIORITY_FG = { L: "#166534", M: "#92400e", H: "#b91c1c", U: "#FFFFFF" };   // L / H darkened (same hues) so every priority text is >= 4.5:1 on its tint
 const RESULT_OPTIONS = ["PASS", "FAIL", "MONITOR"];
 const RESULT_COLORS = {
-  PASS: "#16a34a",
-  FAIL: "#dc2626",
+  PASS: "#166534",
+  FAIL: "#b91c1c",
   MONITOR: "#92400e",
   UNTESTED: "#52525b"
 };
@@ -6469,6 +6500,12 @@ function boardHasFail(results, areaId, boardId, board) {
 function boardHasMonitor(results, areaId, boardId, board) {
   return boardCircuitIds(board).some(cid => getPhotos(results, areaId, boardId, cid).some(p => p.result === "MONITOR"));
 }
+// Thermo status counts (photos by result; anything that is not FAIL / MONITOR counts as PASS, as on Home)
+function thermoCountPhotos(photos) { let pass = 0, fail = 0, monitor = 0; (photos || []).forEach(p => { if (p.result === "FAIL") fail++; else if (p.result === "MONITOR") monitor++; else pass++; }); return { pass, fail, monitor }; }
+function thermoAddCounts(a, b) { return { pass: a.pass + b.pass, fail: a.fail + b.fail, monitor: a.monitor + b.monitor }; }
+function boardCounts(results, areaId, boardId, board) { return boardCircuitIds(board).reduce((s, cid) => thermoAddCounts(s, thermoCountPhotos(getPhotos(results, areaId, boardId, cid))), { pass: 0, fail: 0, monitor: 0 }); }
+function areaCounts(results, area) { return (area.boards || []).reduce((s, b) => thermoAddCounts(s, boardCounts(results, area.id, b.id, b)), { pass: 0, fail: 0, monitor: 0 }); }
+function siteCounts(results, project) { return (project.areas || []).reduce((s, a) => thermoAddCounts(s, areaCounts(results, a)), { pass: 0, fail: 0, monitor: 0 }); }
 function sitePhotoCount(results, project) {
   let count = 0;
   (project.areas || []).forEach(area => (area.boards || []).forEach(board => count += boardPhotoCount(results, area.id, board.id, board)));
@@ -6501,7 +6538,7 @@ async function exportThermoExcel(project, results, meta) {
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
   const nextDue = meta && meta.nextTestDate ? meta.nextTestDate : (testDate ? addYearsISO(testDate, 1) : "");
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("thermo", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue: fmtDate(nextDue), logo });
   const rows = [];
   // FAIL and MONITOR photos carry defect details (the MONITOR panel collects the same fields on purpose); PASS never does
   const add = (area, board, cName, photo0) => {
@@ -6527,14 +6564,12 @@ async function exportThermoExcel(project, results, meta) {
   });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
-    title: `${sName} — Thermographic Test`, defectTitle: `${sName} — Thermographic Test — Defects`, coLine,
-    meta: [`Auditor: ${auditor}`, "", `Date Tested: ${fmtDate(testDate)}`, "", `Next Test Due: ${fmtDate(nextDue)}`],
-    defectMeta: [`Date Tested: ${fmtDate(testDate)}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Thermographic Test",
     headers: ["Location", "Board", "Circuit", "Date", "Photo Number", "Temperature (°C)", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 18, 18, 11, 9, 11, 9, 22],
     idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
-    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]], logo,
+    rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
   const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -6564,8 +6599,8 @@ function parseThermoExcel(data, overrideName, XLSX) {
   let siteName = overrideName || "";
   if (!siteName && rows[rowOff] && rows[rowOff][0]) {
     const raw = String(rows[rowOff][0]).trim();
-    // Strip "— Thermographic Test — March 2026" suffix patterns
-    siteName = raw.split(/\s*[-–]\s*(?:thermographic|thermo)/i)[0].trim() || raw;
+    // Strip the known "— Thermographic Test [— March 2026]" / "–  Thermographic Test  (Infrared Survey)" tail from the END (never split on a dash)
+    siteName = xjSiteFromTitle(raw, "thermo");
   }
 
   // ── Auto-detect company / ABN / licence from row 1 ───────────────────
@@ -6815,7 +6850,7 @@ const STH = {
   },
   saveIndicator: {
     fontSize: 11,
-    color: "#16a34a",
+    color: "#166534",
     fontWeight: 700,
     transition: "opacity 0.3s"
   },
@@ -6899,12 +6934,14 @@ const STH = {
   },
   failBadge: {
     fontSize: 11,
-    fontWeight: 800,
-    color: "#991b1b",
+    fontWeight: 700,
+    color: "#b91c1c",
     background: "#fee2e2",
     borderRadius: 6,
-    padding: "3px 8px",
-    border: "1px solid #dc2626"
+    padding: "2px 7px",
+    border: "1px solid #fca5a5",
+    lineHeight: 1.3,
+    whiteSpace: "nowrap"
   },
   arrow: {
     fontSize: 22,
@@ -7170,12 +7207,12 @@ function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
     ,React.createElement('div',{style:SS.listTitle},"Select Area")
     ,(project.areas||[]).length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:14}},"No areas yet. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Structure to add areas and boards.")
     ,(project.areas||[]).map(area=>{
-      let pass=0,fail=0,untested=0,total=0;
+      let pass=0,fail=0,na=0,untested=0,total=0;
       (area.boards||[]).forEach(b=>{
         const bs=swbBoardSummary(results,project.id,area.id,b.id);
-        pass+=bs.pass; fail+=bs.fail; untested+=bs.untested; total+=bs.total;
+        pass+=bs.pass; fail+=bs.fail; na+=bs.na; untested+=bs.untested; total+=bs.total;
       });
-      const pct=total>0?Math.round((pass+fail)/total*100):0;
+      const pct=total>0?Math.round((pass+fail+na)/total*100):0;
       const allDone=(area.boards||[]).length>0&&(area.boards||[]).every(b=>swbBoardComplete(results,project.id,area.id,b.id));
       return React.createElement('button',{key:area.id,
         style:{...SS.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:allDone?{background:"#dcfce7",borderColor:"#86efac"}:{})},
@@ -7183,12 +7220,12 @@ function SWBAreaListView({project, results, onSelectArea, onSelectBoard}) {
         ,React.createElement('div',{style:SS.siteCardLeft}
           ,React.createElement('div',{style:SS.siteCardName},area.name)
           ,React.createElement('div',{style:SS.siteCardSub},nw((area.boards||[]).length,"board"))
+          ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:fail>0?"#dc2626":allDone?"#16a34a":"#7e22ce"}})
           )
         )
         ,React.createElement('div',{style:SS.siteCardRight}
-          ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
           ,allDone&&fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
           ,React.createElement('span',{style:SS.arrow},"›")
         )
@@ -7214,13 +7251,12 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
         onClick:()=>onSelectBoard(b.id)}
         ,React.createElement('div',{style:SS.siteCardLeft}
           ,React.createElement('div',{style:SS.siteCardName},b.name)
-          ,React.createElement('div',{style:SS.siteCardSub},bs.pass," pass · ",bs.fail," fail · ",bs.na," N/A · ",bs.untested," untested")
+          ,React.createElement(StatusSet,{model:"full",s:bs,dash:true,style:{marginTop:6}})
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:bs.fail>0?"#dc2626":isComp?"#16a34a":"#7e22ce"}})
           )
         )
         ,React.createElement('div',{style:SS.siteCardRight}
-          ,bs.fail>0&&React.createElement('span',{style:SS.failBadge},bs.fail," F")
           ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
           ,React.createElement('span',{style:SS.arrow},"›")
         )
@@ -7402,6 +7438,7 @@ function ThermoProjectListView({
     projects.map(proj => {
     const photoCount = sitePhotoCount(allResults[proj.id] || {}, proj);
     const hasFail = siteHasFail(allResults[proj.id] || {}, proj);
+    const tcs = siteCounts(allResults[proj.id] || {}, proj);
     return /*#__PURE__*/React.createElement("div", {
       key: proj.id,
       style: {
@@ -7433,16 +7470,14 @@ function ThermoProjectListView({
       style: STH.siteCardName
     }, proj.name), /*#__PURE__*/React.createElement("div", {
       style: STH.siteCardSub
-    },nw(proj.areas.length,"location")," \xB7 ",nw(photoCount,"photo")," logged")), /*#__PURE__*/React.createElement("div", {
+    },nw(proj.areas.length,"location")," \xB7 ",nw(photoCount,"photo")," logged"), React.createElement(StatusSet,{model:"thermo",s:tcs,dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8,
         marginLeft: 16
       }
-    }, hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A"))), /*#__PURE__*/React.createElement("div", {
       style: {padding: "6px 18px", borderTop: "1px solid #e4e4e7", display: "flex", justifyContent: "flex-end"}
@@ -7680,7 +7715,7 @@ function ThermoHomeView({
   }), !hasAuditor && /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: 11,
-      color: "#dc2626",
+      color: "#b91c1c",
       marginTop: 4
     }
   }, "\u26A0 Enter auditor name to enable testing")), /*#__PURE__*/React.createElement("div", {
@@ -7730,7 +7765,7 @@ function ThermoHomeView({
     }, /*#__PURE__*/React.createElement("div", {
       style: {display: "flex", justifyContent: "space-between", marginBottom: 8}
     }, /*#__PURE__*/React.createElement("div", {style: {fontSize: 13, fontWeight: 700, color: "#18181b"}}, "Overall Progress"),
-      /*#__PURE__*/React.createElement("div", {style: {fontSize: 12, color: "#52525b"}}, passCount, " / ", total, " pass")
+      React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(total,"photo"))
     ), /*#__PURE__*/React.createElement("div", {
       style: {width: "100%", height: 8, background: "#e4e4e7", borderRadius: 4, overflow: "hidden", marginBottom: 10}
     }, /*#__PURE__*/React.createElement("div", {
@@ -7739,13 +7774,7 @@ function ThermoHomeView({
         width: `${pct}%`,
         background: failCount > 0 ? "#dc2626" : pct === 100 && total > 0 ? "#16a34a" : THERMO_COLOR
       }
-    })), /*#__PURE__*/React.createElement("div", {style: {display: "flex", gap: 8, flexWrap: "wrap"}},
-      /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#1d4ed8"}}, photoCount, " Photos"),
-      passCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#16a34a"}}, passCount, " Pass"),
-      monitorCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#92400e", fontWeight: 800}}, monitorCount, " Monitor"),
-      failCount > 0 && /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#991b1b", fontWeight: 800}}, failCount, " FAIL"),
-      /*#__PURE__*/React.createElement("span", {style: {fontSize: 11, color: "#52525b"}}, total, " total")
-    ));
+    })), React.createElement(StatusSet,{model:"thermo",s:{pass:passCount,fail:failCount,monitor:monitorCount}}));
   })(), /*#__PURE__*/React.createElement("button", {
     style: {
       width: "100%",
@@ -7817,6 +7846,7 @@ function ThermoAreaListView({
   }, "No locations yet \u2014 go to \u2699 Structure to add areas and boards."), project.areas.map(area => {
     const photoCount = (area.boards || []).reduce((s, board) => s + boardPhotoCount(results, area.id, board.id, board), 0);
     const hasFail = (area.boards || []).some(board => boardHasFail(results, area.id, board.id, board));
+    const tca = areaCounts(results, area);
     return /*#__PURE__*/React.createElement("button", {
       key: area.id,
       style: {
@@ -7835,15 +7865,13 @@ function ThermoAreaListView({
       style: STH.siteCardName
     }, area.name), /*#__PURE__*/React.createElement("div", {
       style: STH.siteCardSub
-    },nw((area.boards || []).length,"board")," \xB7 ",nw(photoCount,"photo")," logged")), /*#__PURE__*/React.createElement("div", {
+    },nw((area.boards || []).length,"board")," \xB7 ",nw(photoCount,"photo")," logged"), React.createElement(StatusSet,{model:"thermo",s:tca,dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8
       }
-    }, hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A")));
   }));
@@ -7870,6 +7898,7 @@ function ThermoBoardListView({
   }, "No boards in this area \u2014 go to \u2699 Structure to add boards."), (area.boards || []).map(board => {
     const photoCount = boardPhotoCount(results, area.id, board.id, board);
     const hasFail = boardHasFail(results, area.id, board.id, board);
+    const tcb = boardCounts(results, area.id, board.id, board);
     return /*#__PURE__*/React.createElement("button", {
       key: board.id,
       style: {
@@ -7888,15 +7917,13 @@ function ThermoBoardListView({
       style: STH.siteCardName
     }, board.name), /*#__PURE__*/React.createElement("div", {
       style: STH.siteCardSub
-    }, (board.circuits || []).length > 0 ? `${nw((board.circuits || []).length,"circuit")} · ` : "No circuits (board-level) · ",nw(photoCount,"photo")," logged")), /*#__PURE__*/React.createElement("div", {
+    }, (board.circuits || []).length > 0 ? `${nw((board.circuits || []).length,"circuit")} · ` : "No circuits (board-level) · ",nw(photoCount,"photo")," logged"), React.createElement(StatusSet,{model:"thermo",s:tcb,dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("div", {
       style: {
         display: "flex",
         alignItems: "center",
         gap: 8
       }
-    }, hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+    }, /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A")));
   }));
@@ -7992,19 +8019,7 @@ function ThermoCircuitView({
         color: "#52525b",
         marginTop: 2
       }
-    }, photos.length === 0 ? "No photos logged" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
-      style: STH.failBadge
-    }, "FAIL"), !hasFail && hasMonitor && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        fontWeight: 800,
-        color: "#92400e",
-        background: "#fef3c7",
-        borderRadius: 6,
-        padding: "3px 8px",
-        border: "1px solid #fcd34d"
-      }
-    }, "MONITOR"), /*#__PURE__*/React.createElement("span", {
+    }, photos.length === 0 ? "No photos logged" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`), React.createElement(StatusSet,{model:"thermo",s:thermoCountPhotos(photos),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
       style: STH.arrow
     }, "\u203A")));
   }));
@@ -8267,7 +8282,7 @@ function PhotoPage({
       style: {
         fontSize: 12,
         fontWeight: 800,
-        color: PRIORITY_COLORS[photo.priority],
+        color: PRIORITY_FG[photo.priority],
         background: PRIORITY_BG[photo.priority],
         borderRadius: 4,
         padding: "2px 8px"
@@ -8434,7 +8449,7 @@ function PhotoPage({
     style: {
       padding:"10px 14px",
       background: form.priority===p ? p ? PRIORITY_BG[p] : "#f1f5f9" : "#f7f6f3",
-      color: form.priority===p ? p ? PRIORITY_COLORS[p] : "#334155" : "#52525b",
+      color: form.priority===p ? p ? PRIORITY_FG[p] : "#334155" : "#52525b",
       border: `1px solid ${form.priority===p ? p ? PRIORITY_COLORS[p] : "#94a3b8" : "#e4e4e7"}`,
       borderRadius:8, fontSize:12, fontWeight:700, cursor:"pointer"
     },
@@ -8522,7 +8537,7 @@ function ThermoReportView({
     style: STH.summaryTitle
   }, project.name), project.company && /*#__PURE__*/React.createElement("div", {style:{fontSize:12,color:"#6e6a66",marginTop:2,marginBottom:4}}, project.company), /*#__PURE__*/React.createElement("div", {
     style: STH.summaryMeta
-  }, "THERMOGRAPHIC REPORT", meta.auditor ? ` · ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{...STH.duePill,borderColor:`${THERMO_COLOR}55`,color:THERMO_COLOR,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):fmtDate(addYearsISO(meta.testDate,1))))), /*#__PURE__*/React.createElement(ReportStatTiles,{rows:[["Total", rows.length, "#334155"], ["Pass", rows.filter(r => r.photo.result === "PASS").length, "#16a34a"], ["Fail", fails.length, "#dc2626"], ["Monitor", monitors.length, "#92400e"]],mb:20}),
+  }, "THERMOGRAPHIC REPORT", meta.auditor ? ` · ${meta.auditor}` : ""), meta.testDate && /*#__PURE__*/React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:20,flexWrap:"wrap"}}, /*#__PURE__*/React.createElement("div",{style:{...STH.duePill,borderColor:`${THERMO_COLOR}55`,color:THERMO_COLOR,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):fmtDate(addYearsISO(meta.testDate,1))))), React.createElement(ReportStatPills,{model:"thermo",s:{pass:rows.filter(r => r.photo.result === "PASS").length,fail:fails.length,monitor:monitors.length},count:rows.length,unit:"photo",mb:20}),
   React.createElement("div",{style:{marginBottom:20}},
     React.createElement("div",{style:{fontSize:12,fontWeight:700,color:THERMO_COLOR,letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY"),
     (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
@@ -8534,9 +8549,7 @@ function ThermoReportView({
         const bPass=bRows.filter(r=>r.photo.result==="PASS").length;
         return React.createElement("div",{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bFail>0?"#fca5a5":THERMO_COLOR+"22"}`,borderRadius:8,marginBottom:4}},
           React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},board.name),
-          bPass>0&&React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},bPass," P"),
-          bFail>0&&React.createElement("span",{style:{fontSize:11,color:"#dc2626",fontWeight:800}},bFail," F"),
-          bMon>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},bMon," M"),
+          React.createElement(StatusSet,{model:"thermo",s:{pass:bPass,fail:bFail,monitor:bMon}}),
           bRows.length===0&&React.createElement("span",{style:{fontSize:11,color:"#52525b"}},"No photos")
         );
       })
@@ -8544,7 +8557,7 @@ function ThermoReportView({
   ),
   React.createElement(ReportFailedItems,{accent:THERMO_COLOR,items:fails.map(r=>({title:r.photo.flirFile,badge:reportPriorityBadge(r.photo.priority),path:`${r.area} › ${r.board}${r.circuit?` › ${r.circuit}`:""}`,defectId:r.photo.defectId,comment:r.photo.notes,lines:r.photo.temp?[`🌡 ${r.photo.temp}°C`]:[],responsibility:r.photo.responsibility,rectified:r.photo.rectified}))}),
   monitors.length>0&&React.createElement("div",{style:{marginBottom:20}},React.createElement("div",{style:{fontSize:13,fontWeight:800,color:"#92400e",marginBottom:10}},"Items to Monitor"),monitors.map((r,i)=>React.createElement("div",{key:i,style:{background:`${RESULT_BG.MONITOR}88`,border:`1px solid ${RESULT_COLORS.MONITOR}44`,borderRadius:8,padding:"10px 12px",marginBottom:6,fontSize:12}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}},React.createElement("span",{style:{fontWeight:800,color:THERMO_COLOR}},r.photo.flirFile),r.photo.temp&&React.createElement("span",{style:{color:"#92400e"}},"🌡 ",r.photo.temp,"°C")),React.createElement("div",{style:{color:"#6e6a66"}},r.area," › ",r.board,r.circuit?` › ${r.circuit}`:""),r.photo.notes&&React.createElement("div",{style:{color:"#52525b",marginTop:3}},"✎ ",r.photo.notes)))),
-  fails.length===0&&/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"));
+  fails.length===0&&/*#__PURE__*/React.createElement("div",{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -9109,7 +9122,7 @@ function ThermoHistoryView({
           style: {
             fontSize: 12,
             fontWeight: 800,
-            color: PRIORITY_COLORS[photo.priority],
+            color: PRIORITY_FG[photo.priority],
             background: PRIORITY_BG[photo.priority],
             borderRadius: 4,
             padding: "2px 8px"
@@ -9191,20 +9204,7 @@ function ThermoHistoryView({
             color: "#52525b",
             marginTop: 2
           }
-        }, photos.length === 0 ? "No photos" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`)), hasFail && /*#__PURE__*/React.createElement("span", {
-          style: STH.failBadge
-        }, "FAIL"), !hasFail && hasMonitor && /*#__PURE__*/React.createElement("span", {
-          style: {
-            fontSize: 11,
-            fontWeight: 800,
-            color: "#92400e",
-            background: "#fef3c7",
-            borderRadius: 6,
-            padding: "3px 8px",
-            border: "1px solid #fcd34d",
-            marginRight: 8
-          }
-        }, "MONITOR"), /*#__PURE__*/React.createElement("span", {
+        }, photos.length === 0 ? "No photos" : `${photos.length} photo${photos.length !== 1 ? "s" : ""} — ${photos.map(p => p.flirFile || "—").join(", ")}`), React.createElement(StatusSet,{model:"thermo",s:thermoCountPhotos(photos),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
           style: STH.arrow
         }, "\u203A"));
       }));
@@ -9256,9 +9256,7 @@ function ThermoHistoryView({
           style: STH.siteCardName
         }, board.name), /*#__PURE__*/React.createElement("div", {
           style: STH.siteCardSub
-        }, count, " photo", count !== 1 ? "s" : "", " logged")), hasFail && /*#__PURE__*/React.createElement("span", {
-          style: STH.failBadge
-        }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+        }, count, " photo", count !== 1 ? "s" : "", " logged"), React.createElement(StatusSet,{model:"thermo",s:boardCounts(snapResults, viewArea, board.id, board),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
           style: STH.arrow
         }, "\u203A"));
       }));
@@ -9301,35 +9299,7 @@ function ThermoHistoryView({
         fontWeight: 700
       },
       onClick: () => onExportSnap(snap)
-    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        marginBottom: 16
-      }
-    }, [["Photos", totalPhotos, "#1d4ed8"], ["Fail", failPhotos, "#dc2626"], ["Pass", totalPhotos - failPhotos, "#16a34a"]].map(([l, v, c]) => /*#__PURE__*/React.createElement("div", {
-      key: l,
-      style: {
-        flex: 1,
-        textAlign: "center",
-        background: "#f7f6f3",
-        border: `1px solid ${c}33`,
-        borderRadius: 10,
-        padding: "10px 4px"
-      }
-    }, /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 22,
-        fontWeight: 800,
-        color: c
-      }
-    }, v), /*#__PURE__*/React.createElement("div", {
-      style: {
-        fontSize: 10,
-        color: "#6e6a66",
-        marginTop: 2
-      }
-    }, l.toUpperCase())))), /*#__PURE__*/React.createElement("div", {
+    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), React.createElement(StatusSet,{model:"thermo",s:siteCounts(snapResults, project || { areas: [] }),style:{marginBottom:16}}), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: "#52525b",
@@ -9356,9 +9326,7 @@ function ThermoHistoryView({
         style: STH.siteCardName
       }, area.name), /*#__PURE__*/React.createElement("div", {
         style: STH.siteCardSub
-      }, aCount, " photo", aCount !== 1 ? "s" : "", " logged")), aFail && /*#__PURE__*/React.createElement("span", {
-        style: STH.failBadge
-      }, "FAIL"), /*#__PURE__*/React.createElement("span", {
+      }, aCount, " photo", aCount !== 1 ? "s" : "", " logged"), React.createElement(StatusSet,{model:"thermo",s:areaCounts(snapResults, area),dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
         style: STH.arrow
       }, "\u203A"));
     }));
@@ -9447,35 +9415,13 @@ function ThermoHistoryView({
         fontSize: 12,
         color: "#52525b"
       }
-    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor"), /*#__PURE__*/React.createElement("div", {
+    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor", " \xB7 ", nw(totalPhotos, "photo")), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: "#52525b",
         marginTop: 2
       }
-    }, "Archived ", fmtDateTime(snap.archivedAt)), totalPhotos > 0 && /*#__PURE__*/React.createElement("div", {
-      style: {
-        display: "flex",
-        gap: 8,
-        marginTop: 6
-      }
-    }, /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#16a34a"
-      }
-    }, passPhotos, " Pass"), failPhotos > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#991b1b",
-        fontWeight: 800
-      }
-    }, failPhotos, " Fail"), monitorPhotos > 0 && /*#__PURE__*/React.createElement("span", {
-      style: {
-        fontSize: 11,
-        color: "#92400e"
-      }
-    }, monitorPhotos, " Monitor"))), /*#__PURE__*/React.createElement("span", {
+    }, "Archived ", fmtDateTime(snap.archivedAt)), totalPhotos > 0 && React.createElement(StatusSet,{model:"thermo",s:{pass:passPhotos,fail:failPhotos,monitor:monitorPhotos,total:totalPhotos},dash:true,style:{marginTop:6}})), /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 22,
         color: isExpanded ? THERMO_COLOR : "#52525b"
@@ -10086,7 +10032,7 @@ function GlobalSettingsView({ onGoHome }) {
 
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Company Logo")
       , React.createElement('div', { style: { marginBottom: 10 } }, React.createElement(LogoField, { value: logoUrl, onUpload, onRemove: onRemoveLogo }))
-      , error && React.createElement('div', { style: { fontSize: 11, color: "#dc2626", marginBottom: 10 } }, error)
+      , error && React.createElement('div', { style: { fontSize: 11, color: "#b91c1c", marginBottom: 10 } }, error)
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
 
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Storage")
@@ -10103,7 +10049,7 @@ function GlobalSettingsView({ onGoHome }) {
 
       , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
         , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
-        , saved && React.createElement('span', { style: { fontSize: 12, color: "#16a34a", fontWeight: 600 } }, "Saved"))
+        , saved && React.createElement('span', { style: { fontSize: 12, color: "#166534", fontWeight: 600 } }, "Saved"))
     )
   );
 }
@@ -10341,12 +10287,12 @@ const SWB_GUIDANCE = {
 
 const SWB_STATUS = { UNTESTED:"untested", PASS:"pass", FAIL:"fail", NA:"na" };
 const SWB_SM = {
-  untested:{ label:"—",    bg:"#e4e4e7", fg:"#6e6a66",    border:"#d4d4d8" },
+  untested:{ label:"—",    bg:"#e4e4e7", fg:"#5f5b57",    border:"#d4d4d8" },
   pass:    { label:"PASS", bg:"#dcfce7", fg:"#14532d", border:"#16a34a" },
   fail:    { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
   na:      { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
 };
-const SWB_RISK_COLORS = { L:"#16a34a", M:"#92400e", H:"#dc2626", U:"#c0392b" };
+const SWB_RISK_COLORS = { L:"#166534", M:"#92400e", H:"#b91c1c", U:"#9B0000" };   // same as PRIORITY_COLORS (U was a one-off #c0392b)
 const SWB_RISK_LABELS = { L:"Low", M:"Medium", H:"High", U:"Urgent" };
 
 function swbUid()  { return Math.random().toString(36).slice(2,9); }
@@ -10422,16 +10368,9 @@ function swbSiteCompletedBoards(results, project) {
 // Photo box shared by the SWB and ELT exports: exact 4:3 (phone photos are 4:3) and the row is
 // taller than the image + its top offset, so nothing spills into the next row.
 const EXPORT_PHOTO_W_PX = 140, EXPORT_PHOTO_H_PX = 105, EXPORT_PHOTO_ROW_PT = 90;
-const SWB_XC = {
-  white:"FFFFFFFF",black:"FF000000",darkGrey:"FF2D2D2D",lightGrey:"FFF5F5F5",midGrey:"FFD9D9D9",mutedGrey:"FF888888",
-  priorityU_bg:"FF9B0000",priorityU_font:"FFFFFFFF",priorityH_bg:"FFFFC7CE",priorityH_font:"FF9C0006",
-  priorityM_bg:"FFFFD966",priorityM_font:"FF7F6000",priorityL_bg:"FFE2EFDA",priorityL_font:"FF375623",
-};
-function swbXB(s,c){return{style:s||"thin",color:{rgb:c||SWB_XC.midGrey}};}
+function swbXB(s,c){return{style:s||"thin",color:{rgb:c||XJ_COLOURS.midGrey}};}
 function swbXAB(){const b=swbXB();return{top:b,bottom:b,left:b,right:b};}
 function swbXCS(fill,font,align,borders){return{fill:{patternType:"solid",fgColor:{rgb:fill}},font:{name:"Calibri",sz:10,...(font||{})},alignment:{vertical:"center",...(align||{})},border:borders||{}};}
-function swbXPC(p){if(p==="U")return{bg:SWB_XC.priorityU_bg,font:SWB_XC.priorityU_font,bold:true};if(p==="H")return{bg:SWB_XC.priorityH_bg,font:SWB_XC.priorityH_font,bold:false};if(p==="M")return{bg:SWB_XC.priorityM_bg,font:SWB_XC.priorityM_font,bold:false};if(p==="L")return{bg:SWB_XC.priorityL_bg,font:SWB_XC.priorityL_font,bold:false};return null;}
-function swbXRS(ri,risk){if(risk){const pc=swbXPC(risk);if(pc)return swbXCS(pc.bg,{sz:10,color:{rgb:pc.font},bold:pc.bold},{wrapText:true},swbXAB());}const bg=ri%2===0?SWB_XC.white:SWB_XC.lightGrey;return swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());}
 function swbXC2(ws,ref,val,st){ws[ref]={v:val!=null?val:"",t:typeof val==="number"?"n":"s",s:st};}
 // Applies a swbXCS/swbXRS-shaped style object (SheetJS rgb convention) onto an ExcelJS cell (argb convention).
 function swbApplyXlStyle(cell,st){
@@ -10503,11 +10442,11 @@ function swbSheetName(board, area, used) {
 }
 async function exportSWBExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl("swb", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("swb", project.id);
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
   const nextDue = swbNextDue(meta);
-  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
+  const hdr = xjHdr("swb", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue, logo });
   const rows = swbRegisterRows(project, allResults, meta);
   const res = allResults || {};
   // Photos live in sitePhotoStore (Stage 4, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
@@ -10517,38 +10456,33 @@ async function exportSWBExcel(project, allResults, meta) {
     let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
   }
   const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
-  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
-  const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
-  const cellSt = (bg,extra) => swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
+  const passSt = xjStatusStyle("PASS");
+  const failSt = xjStatusStyle("FAIL");
+  const naSt   = xjStatusStyle("N/A");
+  const headSt = swbXCS(XJ_COLOURS.midGrey,{bold:true,sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
+  const cellSt = (bg,extra) => swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
 
   // ── Register ──
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st) => { const c = ws.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = cols.length;
-  setCell('A'+(1+off),`${sName} — Switchboard / Enclosure Audit`,XJ_HEADER_CENTER);
-  setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-  // used to be 3 separate sub-merges, each centred within its own narrow span.
-  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Audit Due: ${nextDue}`].join('  |  '),XJ_HEADER_CENTER);
-  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}}]
-    .forEach(m => ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
-  SWB_REGISTER_COLUMNS.forEach((t,i) => setCell(cols[i]+(5+off),t));
-  [32,16,16,6,40].forEach((h,i) => { ws.getRow(i+1+off).height = h; });
+  // Shared header rows 1-5 (xjHeader — widths first, it needs the real column widths); the table headings are ALWAYS row 6, data from row 7.
+  [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
+  xjHeader(ws, wb, hdr, n);
+  SWB_REGISTER_COLUMNS.forEach((t,i) => { setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   rows.forEach((row,i) => {
-    const r = 6 + off + i; const bg = i%2===0 ? SWB_XC.white : SWB_XC.lightGrey;
+    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0 ? XJ_COLOURS.white : XJ_COLOURS.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci) => {
       let st = base;
       if ([2,4,5,6,7,8,9,13,14,15].includes(ci)) st = ctr;
       if (ci===3) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
+      if (/^(Highest Risk|Priority)/.test(SWB_REGISTER_COLUMNS[ci])) st = xjPriorityStyle(String(v).split(/[;,]/)[0]) || st;   // the Priority cell can list several ("U; H; M"), most severe first: coloured by the first
       setCell(cols[ci]+r,v,st);
     });
   });
-  [22,26,13,11,7,7,7,10,9,13,44,24,12,20,12,16].forEach((w,i) => { ws.getColumn(i+1).width = w; });
-  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
-  if (logo) xjLogo(ws, wb, logo, n);
+  xjPageSetup(ws, true, XJ_TABLE_START);   // native page setup: A4 landscape, 1 page wide, heading row 6 repeated, page footer
 
   // ── One sheet per board ──
   const used = new Set();
@@ -10556,22 +10490,19 @@ async function exportSWBExcel(project, allResults, meta) {
     const { area, board, summary: bs, overall } = row;
     const sh = wb.addWorksheet(swbSheetName(board, area, used));
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
-    put('A'+(1+off),"Switchboard / Enclosure Audit",XJ_HEADER_CENTER);
-    put('A'+(2+off),`${sName}  |  ${coLine}`,XJ_HEADER_CENTER);
-    // Rows 3-4 (2026-09-30 fix): each was 2 separate sub-merges (Area|Board, Auditor|Date Tested) — now ONE joined
-    // "  |  " string per row, in one full-width cell each, matching row 2's format. Row 5 (Next Audit Due) was
-    // already a single full-width cell.
-    put('A'+(3+off),[`Area: ${area.name}`,`Board: ${board.name}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(4+off),[`Auditor: ${(meta&&meta.auditor)||""}`,`Date Tested: ${testDate?fmtDate(testDate):""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(5+off),`Next Audit Due: ${nextDue}`,XJ_HEADER_CENTER);
-    [[1,1,7],[2,1,7],[3,1,7],[4,1,7],[5,1,7]].forEach(([rr,c1,c2]) => sh.mergeCells(rr+off,c1,rr+off,c2));
-    sh.getRow(1+off).height = 24;
+    // Shared header rows 1-5 (same as the Register — only the merge width is this sheet's 7 columns); widths first, the merge + logo centring read them.
+    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+    xjHeader(sh, wb, hdr, 7);
+    // Asset Details (2026-10-02): the Area / Board that used to sit in header row 3 — a labelled block directly under the header, styled like Audit Summary.
+    let rr = XJ_TABLE_START;
+    put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
+    [["Area",area.name],["Board",board.name]].forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,cellSt(XJ_COLOURS.white)); rr++; });
+    rr++;   // blank row
     // Audit summary
-    let rr = 7 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
-    const overallSt = overall==="pass" ? passSt : overall==="fail" ? failSt : naSt;
+    const overallSt = xjStatusStyle(overall) || cellSt(XJ_COLOURS.white,{horizontal:"center"});
     [["Total Items",String(bs.total)],["Pass",String(bs.pass)],["Fail",String(bs.fail)],["N/A",String(bs.na)],["Untested",String(bs.untested)],["Score",scoreLabel(bs.score)],["Overall",overall.toUpperCase()]]
-      .forEach(([l,v]) => { put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,l==="Overall"?overallSt:cellSt(SWB_XC.white,{horizontal:"center"})); rr++; });
+      .forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,(l==="Overall"?overallSt:(l==="Pass"&&+v>0)?passSt:(l==="Fail"&&+v>0)?failSt:cellSt(XJ_COLOURS.white,{horizontal:"center"}))); rr++; });
     // Checklist
     rr++;
     ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((t,i) => put("ABCDEFG"[i]+rr,t,headSt)); rr++;
@@ -10580,21 +10511,21 @@ async function exportSWBExcel(project, allResults, meta) {
       const item = defectGateByStatus(raw);                    // defect details only for FAIL items
       const st = item.status || SWB_STATUS.UNTESTED;
       const resTxt = st===SWB_STATUS.PASS ? "Pass" : st===SWB_STATUS.FAIL ? "Fail" : st===SWB_STATUS.NA ? "N/A" : "";
-      const rs = swbXRS(idx, item.risk || "");
-      const bg = rs.fill.fgColor.rgb;
+      const bg = idx%2===0 ? XJ_COLOURS.white : XJ_COLOURS.lightGrey;   // the row stays plain zebra; only the Risk Rating cell carries the priority colour
+      const rs = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true},swbXAB());
       put('A'+rr,`${idx+1}. ${label}`,rs);
       put('B'+rr,(SWB_GUIDANCE[key]||{}).pass||"",cellSt(bg));
       put('C'+rr,resTxt,st===SWB_STATUS.PASS?passSt:st===SWB_STATUS.FAIL?failSt:st===SWB_STATUS.NA?naSt:cellSt(bg,{horizontal:"center"}));
       put('D'+rr,item.defectId||"",rs);
       put('E'+rr,item.comment||"",rs);
-      put('F'+rr,item.risk||"",swbXCS(bg,{sz:10,color:rs.font.color,bold:rs.font.bold},{wrapText:true,horizontal:"center"},swbXAB()));
+      put('F'+rr,item.risk||"",xjPriorityStyle(item.risk,{vertical:"center",wrap:true}) || swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB()));
       put('G'+rr,(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
       rr++;
     });
     // Photos — this board's photos, one per row
     swbGetBoardPhotos(res, project.id, area.id, board.id).forEach((p,pi) => {
       rr++;
-      put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
+      put('A'+rr,`Photo ${pi+1}`,cellSt(XJ_COLOURS.white)); put('B'+rr,"",cellSt(XJ_COLOURS.white));
       const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const copy = photoCopies.get(p.id);
       const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
@@ -10605,9 +10536,7 @@ async function exportSWBExcel(project, allResults, meta) {
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
-    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
     xjPageSetup(sh, true, null);       // per-board form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
-    if (logo) xjLogo(sh, wb, logo, 7);
   });
 
   xjFitRows(wb);
@@ -10648,7 +10577,7 @@ function parseSWBExcel(data) {
     let siteName="",company="",abn="",licence="";
     if(rows[rowOff]&&rows[rowOff][0]){
       const t=String(rows[rowOff][0]).trim();
-      if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit\s*$/i,"").trim();
+      if(!/enter your site name/i.test(t)) siteName=t.replace(/\s*[—–-]+\s*Switchboard\s*(?:\/\s*Enclosure\s*)?Audit(?:\s*\([^)]*\))?\s*$/i,"").trim();
     }
     if(rows[1+rowOff]&&rows[1+rowOff][0]){
       const p=parseCompanyRow(rows[1+rowOff][0]);
@@ -10948,18 +10877,18 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
     ,projects.map(proj=>{
       const cb=swbSiteCompletedBoards(allResults,proj);
       const s=swbSiteSummary(allResults,proj);
-      const pct=cb.total>0?Math.round(cb.complete/cb.total*100):0;
+      const pct=s.total>0?Math.round((s.pass+s.fail+s.na)/s.total*100):0;
       return React.createElement('div',{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}}
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{onSelect(proj.id);}}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:SS.siteCardName},proj.name)
-            ,React.createElement('div',{style:SS.siteCardSub},`${nw((proj.areas||[]).length,"area")} · ${cb.complete} / ${nw(cb.total,"board")} complete`)
+            ,React.createElement('div',{style:SS.siteCardSub},`${nw((proj.areas||[]).length,"area")} · ${nw(cb.total,"board")}`)
+            ,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
             ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
               ,React.createElement('div',{style:{height:"100%",borderRadius:2,transition:"width 0.4s",width:`${pct}%`,background:s.fail>0?"#dc2626":"#7e22ce"}})
             )
           )
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,s.fail>0&&React.createElement('span',{style:SS.failBadge},s.fail," FAIL")
             ,cb.complete>0&&cb.complete===cb.total&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
             ,React.createElement('span',{style:SS.arrow},"›")
           )
@@ -11042,7 +10971,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SS.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:SS.metaLabelText},"TEST DATE")
@@ -11056,17 +10985,12 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     ,React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:"1px solid #d8b4fe",borderRadius:14,padding:"14px"}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress")
-        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},summary.pass+summary.fail+summary.na," / ",summary.total," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"checklist point"))
       )
       ,React.createElement('div',{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}}
         ,React.createElement('div',{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":"#7e22ce"}})
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,React.createElement('span',{style:{fontSize:11,color:"#7e22ce"}},summary.pass," Pass")
-        ,summary.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-        ,summary.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},summary.untested," untested")
-        ,React.createElement('span',{style:{fontSize:11,color:"#52525b"}},summary.total," total")
-      )
+      ,React.createElement(StatusSet,{model:"full",s:summary})
     )
     ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#7e22ce":"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?"#7e22ce":"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
     ,auditEntered===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
@@ -11117,13 +11041,9 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
           ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},board.name)
           ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginTop:2}},area.name)
         )
-        ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#16a34a",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
+        ,isComplete&&React.createElement('div',{style:{fontSize:11,fontWeight:800,color:"#166534",background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"5px 10px"}},"✓ Complete")
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
-        ,[["PASS",bs.pass,"#16a34a"],["FAIL",bs.fail,"#dc2626"],["N/A",bs.na,"#334155"],["—",bs.untested,"#92400e"],["SCORE",scoreLabel(bs.score),"#334155"]].map(([l,v,c])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l)
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:bs,dash:true,score:scoreLabel(bs.score),style:{marginTop:10}})
       ,bs.untested<SWB_CHECKLIST.length&&React.createElement('div',{style:{marginTop:10}}
         ,React.createElement(ConfirmReset,{onConfirm:onResetBoard,prompt:"Reset all results for this board?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:11,cursor:"pointer",textDecoration:"underline",padding:0},onClick:open},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'1 4 1 10 7 10'}),React.createElement('path',{d:'M3.51 15a9 9 0 1 0 .49-3.5'}))," Reset board results")})
       )
@@ -11200,7 +11120,7 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
       ,React.createElement('div',{style:{background:"#f3e8ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"12px",marginBottom:16}}
         ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:0}}
           ,React.createElement('div',{style:{flex:1,background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"10px 12px"}}
-            ,React.createElement('div',{style:{fontSize:10,fontWeight:700,color:"#16a34a",letterSpacing:0.8,marginBottom:4}},"✓ PASS CRITERIA")
+            ,React.createElement('div',{style:{fontSize:10,fontWeight:700,color:"#166534",letterSpacing:0.8,marginBottom:4}},"✓ PASS CRITERIA")
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},guidance.pass)
           )
           ,React.createElement('div',{style:{flex:1,background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px"}}
@@ -11220,11 +11140,11 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
         )
       )
       ,isFail&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+        ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}
           ,React.createElement('label',{style:SS.modalLabel},"RISK RATING")
           ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-            ,["",...PRIORITY_OPTIONS].map(p=>React.createElement('button',{key:p||"none",type:"button",style:{padding:"10px 14px",background:(risk||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(risk||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(risk||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>setRisk(p)},p?`${p} — ${PRIORITY_LABELS[p]}`:"None")))
+            ,["",...PRIORITY_OPTIONS].map(p=>React.createElement('button',{key:p||"none",type:"button",style:{padding:"10px 14px",background:(risk||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(risk||"")===p?(p?PRIORITY_FG[p]:"#334155"):"#52525b",border:`1px solid ${(risk||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>setRisk(p)},p?`${p} — ${PRIORITY_LABELS[p]}`:"None")))
         )
         ,React.createElement('div',{style:SS.modalField}
           ,React.createElement('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
@@ -11268,7 +11188,7 @@ function SWBReportView({project,results,meta,onBack}) {
     ,testDate&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,React.createElement('div',{style:{...SS.duePill,borderColor:"#d8b4fe",color:"#7e22ce",padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," → next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):swbAddYear(testDate)))
     )
-    ,React.createElement(ReportStatTiles,{rows:[["Total",summary.total,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["N/A",summary.na,"#334155"],["Untested",summary.untested,"#92400e"]],mb:20})
+    ,React.createElement(ReportStatPills,{model:"full",s:summary,count:summary.total,unit:"checklist point",mb:20})
     ,React.createElement('div',{style:{marginBottom:20}}
       ,React.createElement('div',{style:{fontSize:12,fontWeight:700,color:"#7e22ce",letterSpacing:0.8,marginBottom:8}},"BOARD SUMMARY")
       ,(project.areas||[]).map(area=>React.createElement('div',{key:area.id,style:{marginBottom:12}}
@@ -11276,20 +11196,16 @@ function SWBReportView({project,results,meta,onBack}) {
         ,(area.boards||[]).map(board=>{
           const bs=swbBoardSummary(results,project.id,area.id,board.id);
           const isComp=swbBoardComplete(results,project.id,area.id,board.id);
-          return React.createElement('div',{key:board.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bs.fail>0?"#fca5a5":"#f3e8ff"}`,borderRadius:8,marginBottom:4}}
-            ,React.createElement('span',{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},board.name)
-            ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},bs.pass," P")
-            ,bs.fail>0&&React.createElement('span',{style:{fontSize:11,color:"#dc2626",fontWeight:800}},bs.fail," F")
-            ,bs.na>0&&React.createElement('span',{style:{fontSize:11,color:"#334155"}},bs.na," N/A")
-            ,bs.untested>0&&React.createElement('span',{style:{fontSize:11,color:"#92400e"}},bs.untested," U")
-            ,React.createElement('span',{style:{fontSize:11,color:"#334155",fontWeight:700}},scoreLabel(bs.score))
-            ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#16a34a",fontWeight:800,fontSize:12}},"✓")
+          return React.createElement('div',{key:board.id,style:{display:"flex",flexWrap:"wrap",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${bs.fail>0?"#fca5a5":"#f3e8ff"}`,borderRadius:8,marginBottom:4}}
+            ,React.createElement('span',{style:{flex:"1 0 60%",fontSize:13,fontWeight:600,color:"#18181b"}},board.name)
+            ,React.createElement(StatusSet,{model:"full",s:bs,dash:true,score:scoreLabel(bs.score)})
+            ,isComp&&bs.fail===0&&React.createElement('span',{style:{color:"#166534",fontWeight:800,fontSize:12}},"✓")
           );
         })
       ))
     )
     ,React.createElement(ReportFailedItems,{accent:"#7e22ce",items:fails.map(f=>({title:f.label,badge:f.item.risk?{text:SWB_RISK_LABELS[f.item.risk]||f.item.risk,color:SWB_RISK_COLORS[f.item.risk]}:null,path:`${f.area} › ${f.board}`,defectId:f.item.defectId,comment:f.item.comment,priorityText:f.item.priority?`${f.item.priority} priority`:"",responsibility:f.item.responsibility,rectified:f.item.rectified}))})
-    ,fails.length===0&&summary.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
+    ,fails.length===0&&summary.fail===0&&React.createElement('div',{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"✓ No defects recorded")
   );
 }
 
@@ -11433,32 +11349,25 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         )
         ,React.createElement('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
-      ,React.createElement('div',{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}
-        ,[["Pass",pass,"#16a34a"],["Fail",fail,"#dc2626"],["N/A",na,"#334155"],["Untested",unt,"#92400e"]].map(([l,v,col])=>
-          React.createElement('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}}
-            ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:col}},v)
-            ,React.createElement('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      )
+      ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},style:{marginBottom:16}})
       ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results")
       ,project&&(project.areas||[]).map(area=>{
-        let aFail=0,aTotal=0;
+        let aFail=0,aPass=0,aNa=0,aTotal=0;
         (area.boards||[]).forEach(board=>{
           SWB_CHECKLIST.forEach(({key})=>{
             aTotal++;
             const v=(((snap.results||{})[area.id]||{})[board.id]||{})[key];
             const st=(v&&v.status)||SWB_STATUS.UNTESTED;
-            if(st===SWB_STATUS.FAIL)aFail++;
+            if(st===SWB_STATUS.FAIL)aFail++;else if(st===SWB_STATUS.PASS)aPass++;else if(st===SWB_STATUS.NA)aNa++;
           });
         });
         return React.createElement('button',{key:area.id,style:{...SS.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewArea(area.id)}
           ,React.createElement('div',{style:SS.siteCardLeft}
             ,React.createElement('div',{style:SS.siteCardName},area.name)
             ,React.createElement('div',{style:SS.siteCardSub},(area.boards||[]).length," board",((area.boards||[]).length!==1?"s":""))
+            ,React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('div',{style:SS.siteCardRight}
-            ,aFail>0&&React.createElement('span',{style:SS.failBadge},aFail," FAIL")
             ,React.createElement('span',{style:SS.arrow},"›")
           )
         );
@@ -11481,16 +11390,10 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#7e22ce"}},"Switchboard Audit")
-              ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
-            )
-            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+              )
+            ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"checklist point"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,total>0&&React.createElement('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,React.createElement('span',{style:{fontSize:11,color:"#16a34a"}},pass," Pass")
-              ,React.createElement('span',{style:{fontSize:11,color:"#dc2626"}},fail," Fail")
-              ,React.createElement('span',{style:{fontSize:11,color:"#334155"}},na," N/A")
-              ,React.createElement('span',{style:{fontSize:11,color:"#92400e"}},total-pass-fail-na," Untested")
-            )
+            ,total>0&&React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na,total},dash:true,style:{marginTop:6}})
           )
           ,React.createElement('span',{style:{...SS.arrow,color:expanded===snap.id?"#7e22ce": "#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -11569,7 +11472,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
         ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
-          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#dc2626"},ref:el=>{if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});}},notice[key])
+          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#b91c1c"},ref:el=>{if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});}},notice[key])
         )
       );
     })
@@ -11603,8 +11506,8 @@ function swbStyles() {
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
     siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
     siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-    failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
-    untestedBadge:{fontSize:11,fontWeight:700,color:"#78350f",background:"#fef3c7",borderRadius:6,padding:"3px 8px"},
+    failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
+    untestedBadge:{fontSize:11,fontWeight:700,color:"#92400e",background:"#fef3c7",borderRadius:6,padding:"2px 7px",border:"1px solid #fcd34d",lineHeight:1.3,whiteSpace:"nowrap"},
     arrow:{fontSize:22,color:"#52525b",lineHeight:1},
     addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
     summaryWrap:{padding:"16px"},summaryTitle:{fontSize:22,fontWeight:900,letterSpacing:1.5},summaryMeta:{fontSize:13,color:"#6e6a66",marginTop:4,marginBottom:16},
@@ -11834,14 +11737,14 @@ function AreaAuditGroups({areas, nounOne, accent, statusOf, renderRow}) {
   const SS = swbStyles();
   return React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:14}}
     ,(areas||[]).filter(a=>(a.assets||[]).length>0).map(area=>{
-      const list = area.assets; let tested=0, fail=0;
-      list.forEach(a=>{ const s=statusOf(a); if(s!=="untested") tested++; if(s==="fail") fail++; });
+      const list = area.assets; let tested=0, fail=0, pass=0;
+      list.forEach(a=>{ const s=statusOf(a); if(s!=="untested") tested++; if(s==="fail") fail++; else if(s==="pass") pass++; });
       return React.createElement('div',{key:area.id,"data-area":area.name}
         ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,margin:"0 2px 6px",minWidth:0}}
           ,React.createElement('div',{style:{fontSize:12,fontWeight:800,color:accent,letterSpacing:0.6,textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}},area.name)
-          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0,whiteSpace:"nowrap"}},`${nw(list.length,nounOne)} · ${tested} tested`)
-          ,fail>0&&React.createElement('span',{style:SS.failBadge},fail," FAIL")
+          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0,whiteSpace:"nowrap"}},nw(list.length,nounOne))
         )
+        ,React.createElement(StatusSet,{model:"noNA",s:{pass,fail,untested:list.length-tested},dash:true,style:{margin:"0 2px 8px"}})
         ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}},list.map(renderRow))
       );
     })
@@ -11849,7 +11752,7 @@ function AreaAuditGroups({areas, nounOne, accent, statusOf, renderRow}) {
 }
 
 // Report tab "AREA SUMMARY" (same treatment as TAT / IRT / SWB): per area, tested / total with a progress bar.
-function AreaSummaryRows({areas, accent, statusOf}) {
+function AreaSummaryRows({areas, accent, statusOf, nounOne}) {
   const rows = (areas||[]).filter(a=>(a.assets||[]).length>0);
   if(rows.length===0) return null;
   return React.createElement('div',{style:{marginBottom:16}}
@@ -11860,11 +11763,12 @@ function AreaSummaryRows({areas, accent, statusOf}) {
       return React.createElement('div',{key:area.id,style:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:10,padding:"10px 14px",marginBottom:8}}
         ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}
           ,React.createElement('div',{style:{fontSize:13,fontWeight:700,color:"#18181b",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},area.name)
-          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0}},`${pass} pass · ${fail} fail · ${total-tested} untested`)
+          ,React.createElement('div',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(total,nounOne||"item"))
         )
         ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,overflow:"hidden"}}
           ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":pct===100?"#16a34a":accent}})
         )
+        ,React.createElement(StatusSet,{model:"noNA",s:{pass,fail,untested:total-tested,total},dash:true,style:{marginTop:6}})
       );
     })
   );
@@ -11989,33 +11893,27 @@ function eltRegisterRows(project, allResults, meta) {
 
 async function exportELTExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl("elt", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("elt", project.id);
   const ws = wb.addWorksheet("Emergency Lighting");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
-  const merges = [];
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
-  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-  // Rows 1–5 are deliberately unstyled (no fill/font/border set), with the same merges and row
-  // heights as the real IEL/RCD/TAT/Thermo exports: title, company line, meta line, 6pt spacer, headings.
-  setCell('A'+(1+off),`${sName} — Emergency Lighting Test`,XJ_HEADER_CENTER);
-  setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-  // used to be 3 separate sub-merges, each centred within its own narrow span.
-  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Test Due: ${nextDue?fmtDate(nextDue):''}`].join('  |  '),XJ_HEADER_CENTER);
-  merges.push({s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}},{s:{r:3,c:0},e:{r:3,c:n-1}});
-  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+(5+off),t); ws.getCell(cols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap only (no fill / font / border): a narrow column can carry a long heading
-  [32,16,16,6,44].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});   // 44: a heading can wrap onto 3 lines in a narrow column
+  const hdr = xjHdr("elt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
+  // Shared header rows 1-5 (xjHeader; column widths are set FIRST — it needs them). The table headings are ALWAYS row 6, data from row 7.
+  [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});   // content-width columns (headings wrap); import-anchor headings stay exact; date columns >= 13
+  xjHeader(ws, wb, hdr, n);
+  ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap + centre only (no fill / font / border): a narrow column can carry a long heading
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   const rows = eltRegisterRows(project, allResults, meta);
-  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
+  const passSt = xjStatusStyle("PASS");
+  const failSt = xjStatusStyle("FAIL");
   rows.forEach((row,i)=>{
-    const r = 6+off+i;
-    const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
-    const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true},swbXAB());
-    const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
+    const r = XJ_TABLE_START + 1 + i;
+    const bg = i%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
+    const base = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true},swbXAB());
+    const ctr = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB());
     row.cells.forEach((v,ci)=>{
       let st = base;
       if (ci===0 || (ci>=7 && ci<=13) || ci===15) st = ctr;
@@ -12024,12 +11922,8 @@ async function exportELTExcel(project, allResults, meta) {
       setCell(cols[ci]+r,v,st);
     });
   });
-  merges.forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
-  // Content-width columns (headings wrap). The import-anchor headings stay exact; date columns get the shared >= 13 minimum.
-  [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});
   const setup = xjPageSetup;
-  setup(ws,true,5+off);
-  if (logo) xjLogo(ws, wb, logo, n);
+  setup(ws,true,XJ_TABLE_START);
 
   // ── Defects sheet: FAIL fittings only, ALWAYS present (headings even with zero fails), keyed to the register by "#" ──
   {
@@ -12037,23 +11931,22 @@ async function exportELTExcel(project, allResults, meta) {
     const dset = (ref,val,st)=>{const c=ds.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
     const dcols = "ABCDEFGHIJ".split(""); const dn = dcols.length;
     const defRows = rows.filter(r=>r.defect);
-    dset('A'+(1+off),`${sName} — Emergency Lighting Test — Defects`,XJ_HEADER_CENTER); dset('A'+(2+off),coLine,XJ_HEADER_CENTER);
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-    // used to be 3 separate sub-merges, each centred within its own narrow span.
-    dset('A'+(3+off),[`Defects recorded: ${defRows.length}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,"Priority: L Low · M Medium · H High · U Urgent"].join('  |  '),XJ_HEADER_CENTER);
-    [[0,0,0,dn-1],[1,0,1,dn-1],[2,0,2,dn-1],[3,0,3,dn-1]].forEach(([r1,c1,r2,c2])=>ds.mergeCells(r1+1+off,c1+1,r2+1+off,c2+1));
-    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+(5+off),t); ds.getCell(dcols[i]+(5+off)).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
-    [32,16,16,6,44].forEach((h,i)=>{ds.getRow(i+1+off).height = h;});
-    defRows.forEach((row,i)=>{
-      const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
-      const base = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
-      const ctr = swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
-      row.defect.forEach((v,ci)=>dset(dcols[ci]+(6+off+i),v,(ci===0||ci===4||ci===5||ci===7)?ctr:base));
-    });
-    if (!defRows.length) dset('A'+(6+off),"No defects recorded");
+    // Same shared header as the Register (identical rows 1-5, merged over this sheet's 10 columns); widths first.
     [5,12,14,9,9,9,20,14,15,24].forEach((w,i)=>{ds.getColumn(i+1).width=xjColWidth(ELT_DEFECT_COLUMNS[i],w);});
-    setup(ds,true,5+off);
-    if (logo) xjLogo(ds, wb, logo, dn);
+    xjHeader(ds, wb, hdr, dn);
+    ELT_DEFECT_COLUMNS.forEach((t,i)=>{ dset(dcols[i]+XJ_TABLE_START,t); ds.getCell(dcols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    ds.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
+    defRows.forEach((row,i)=>{
+      const bg = i%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
+      const base = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
+      const ctr = swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center",vertical:"top"},swbXAB());
+      row.defect.forEach((v,ci)=>dset(dcols[ci]+(XJ_TABLE_START+1+i),v,(ci===5&&xjPriorityStyle(v))||((ci===0||ci===4||ci===5||ci===7)?ctr:base)));
+    });
+    if (!defRows.length) dset('A'+(XJ_TABLE_START+1),"No defects recorded");
+    // Footer — ALWAYS written, even with 0 defects: a blank row, the count (COMPUTED from the real defect rows) and the priority legend, below the table / the "No defects recorded" line
+    const footAt = XJ_TABLE_START + 1 + Math.max(defRows.length, 1) + 1;
+    dset('A'+footAt,`Defects recorded: ${defRows.length}`); dset('A'+(footAt+1),XJ_PRIORITY_LEGEND);
+    setup(ds,true,XJ_TABLE_START);
   }
 
   // Photos are exported for every fitting that has any, whether or not it is fully tested
@@ -12068,11 +11961,15 @@ async function exportELTExcel(project, allResults, meta) {
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
     const pc = (ref,val,st)=>{const c=ps.getCell(ref);c.value=val;swbApplyXlStyle(c,st);};
-    ["Location","Asset Location","Asset ID","Photo"].forEach((t,i)=>pc("ABCD"[i]+"1",t));
-    let pr = 2;
+    // Shared header rows 1-5 (this sheet had none): widths first; the 4-column table is narrower than the minimum header width, so xjHeader extends the merge by one column.
+    [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
+    xjHeader(ps, wb, hdr, 4);
+    ["Location","Asset Location","Asset ID","Photo"].forEach((t,i)=>{ pc("ABCD"[i]+XJ_TABLE_START,t); ps.getCell("ABCD"[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+    ps.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
+    let pr = XJ_TABLE_START + 1;
     withPhotos.forEach(({asset:a,res:r})=>{
       r.photos.forEach(p=>{
-        const rowSt = swbXCS(SWB_XC.white,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
+        const rowSt = swbXCS(XJ_COLOURS.white,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top"},swbXAB());
         pc("A"+pr,a.location||project.name||"",rowSt); pc("B"+pr,a.assetLocation||"",rowSt); pc("C"+pr,a.assetId||"",rowSt); pc("D"+pr,"",rowSt);
         const bx = xjPhotoBoxWH(p.w, p.h); ps.getRow(pr).height = xjPhotoRowPt(bx.h);
         const copy = photoCopies.get(p.id);
@@ -12086,8 +11983,7 @@ async function exportELTExcel(project, allResults, meta) {
         pr++;
       });
     });
-    [22,18,14,26].forEach((w,i)=>{ps.getColumn(i+1).width=w;});
-    setup(ps,false,1);
+    setup(ps,false,XJ_TABLE_START);
   }
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
@@ -12280,7 +12176,7 @@ function parseELTExcel(data, typeOptions) {
     const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
     const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
-    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test\s*$/i,"").trim();
+    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Emergency Lighting Test(?:\s*\([^)]*\))?\s*$/i,"").trim();
     if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
       const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
@@ -12422,10 +12318,11 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
         ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:SS.siteCardName},proj.name)
-            ,eltEl('div',{style:SS.siteCardSub},`${nw(s.assets,"fitting")} · ${s.total} tested`)
+            ,eltEl('div',{style:SS.siteCardSub},nw(s.assets,"fitting"))
+            ,React.createElement(StatusSet,{model:"noNA",s:{pass:s.pass,fail:s.fail,untested:s.assets-s.total},dash:true,style:{marginTop:6}})
           )
           ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            
             ,eltEl('span',{style:SS.arrow},"›")
           )
         )
@@ -12492,7 +12389,7 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
       ,eltEl('div',{style:{marginBottom:10}}
         ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
         ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED (default for all fittings)")
@@ -12506,12 +12403,9 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
     ,eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:14,padding:"14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Progress")
-        ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},summary.total," / ",nw(summary.assets,"fitting")," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.assets,"fitting"))
       )
-      ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,eltEl('span',{style:{fontSize:11,color:ELT_COLOR}},summary.pass," Pass")
-        ,summary.fail>0&&eltEl('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-      )
+      ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total}})
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No fittings yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit()},"Start / Continue Testing")
@@ -12528,10 +12422,7 @@ function ELTAuditView({project, results, meta, summary, onOpen}) {
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
   return eltEl('div',{style:SS.listWrap}
-    ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
-      ,[["TESTED",summary.total,"#334155"],["PASS",summary.pass,"#16a34a"],["FAIL",summary.fail,"#dc2626"],[summary.assets===1?"FITTING":"FITTINGS",summary.assets,"#92400e"]].map(([l,v,c])=>
-        eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
-    )
+    ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total},style:{marginBottom:14}})
     ,summary.assets===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add an area, then add fittings in the Manage tab.")
     ,eltEl(AreaAuditGroups,{areas:project.areas,nounOne:"fitting",accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id)),renderRow:a=>{
       const r = eltGetRes(results,project.id,a.id); const o = eltOverall(r); const sm = SM[o];
@@ -12592,10 +12483,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"AUDIT SUMMARY")
-    ,eltEl('div',{style:{display:"flex",gap:6,marginBottom:14}},(()=>{ const sum = eltFittingSummary(r);
-      return [["TOTAL",sum.total,"#334155"],["PASS",sum.pass,"#16a34a"],["FAIL",sum.fail,"#dc2626"],["—",sum.untested,"#92400e"],["SCORE",scoreLabel(sum.score),"#334155"]].map(([l,v,col])=>
-        eltEl('div',{key:l,style:{flex:1,minWidth:56,textAlign:"center",background:"#f7f6f3",borderRadius:8,border:`1px solid ${col}33`,padding:"6px 2px"}}
-          ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:col}},v),eltEl('div',{style:{fontSize:9,color:"#6e6a66",fontWeight:700}},l))); })())
+    ,(()=>{ const sum = eltFittingSummary(r); return React.createElement(StatusSet,{model:"noNA",s:sum,score:scoreLabel(sum.score),style:{marginBottom:14}}); })()
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"TESTS")
     ,ELT_CHECKS.map(({key,label})=>
       eltEl('div',{key,style:{display:"flex",alignItems:"center",gap:10,background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:12,padding:"10px 12px",marginBottom:6}}
@@ -12612,7 +12500,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
     )
     // same asset-level derived FAIL panel as Welder (and the rest of the app): RECTIFIED / SCHEDULED ACTION, DEFECT ID, RESPONSIBILITY, PRIORITY, DATE
     ,isFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
         ,eltEl(IELEditableDropdown,{options:rectOpts,value:r.rectified||rectOpts[0]||"",onChange:v=>set({rectified:v}),placeholder:"Select or type…"})
@@ -12628,7 +12516,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"PRIORITY")
         ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
+          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_FG[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
         )
       )
       ,eltEl('div',{style:SS.modalField}
@@ -12648,14 +12536,8 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
   );
 }
 
-function ELTSummaryPills({total, pass, fail}) {
-  return eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-    ,[["Total Items Tested",total,"#334155"],["Items Passed",pass,"#16a34a"],["Items Failed",fail,"#dc2626"]].map(([l,v,c])=>
-      eltEl('div',{key:l,style:{flex:1,minWidth:90,background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:8,padding:"6px 12px",textAlign:"center"}}
-        ,eltEl('div',{style:{fontSize:18,fontWeight:800,color:c}},v)
-        ,eltEl('div',{style:{fontSize:10,color:"#6e6a66"}},l)
-      ))
-  );
+function ELTSummaryPills({total, pass, fail, assets}) {
+  return React.createElement(StatusSet,{model:"noNA",s:{pass,fail,untested:Math.max(0,assets-total)}});
 }
 
 function ELTReportView({project, results, meta, summary}) {
@@ -12681,8 +12563,8 @@ function ELTReportView({project, results, meta, summary}) {
     ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,eltEl('div',{style:{...SS.duePill,borderColor:ELT_COLOR_BORDER,color:ELT_COLOR,padding:"7px 12px"}},eltEl('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('rect',{x:3,y:4,width:18,height:18,rx:2}),eltEl('line',{x1:16,y1:2,x2:16,y2:6}),eltEl('line',{x1:8,y1:2,x2:8,y2:6}),eltEl('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
-    ,eltEl(ReportStatTiles,{rows:[["Total",summary.assets,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["Untested",Math.max(0,summary.assets-summary.total),"#92400e"]]})
-    ,eltEl(AreaSummaryRows,{areas:project.areas,accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id))})
+    ,React.createElement(ReportStatPills,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:Math.max(0,summary.assets-summary.total)},})
+    ,eltEl(AreaSummaryRows,{nounOne:"fitting",areas:project.areas,accent:ELT_COLOR,statusOf:a=>eltOverall(eltGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:ELT_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -12791,7 +12673,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
         )
         ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
       )
-      ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail}))
+      ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail,assets:s.assets}))
       ,groupRowsByArea(rows).map(g=>eltEl('div',{key:g.id,"data-area":g.name}
         ,eltEl('div',{style:AREA_HDR_STYLE},g.name)
         ,g.rows.map(row=>{
@@ -12817,15 +12699,11 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,eltEl('span',{style:{fontSize:13,fontWeight:800,color:ELT_COLOR}},"Emergency Lighting Audit")
-              ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+              
             )
-            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(s.assets,"fitting"))
             ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.total," tested")
-              ,eltEl('span',{style:{fontSize:11,color:"#16a34a"}},s.pass," Pass")
-              ,eltEl('span',{style:{fontSize:11,color:"#dc2626"}},s.fail," Fail")
-            )
+            ,React.createElement(StatusSet,{model:"noNA",s:{pass:s.pass,fail:s.fail,untested:s.assets-s.total,total:s.assets},dash:true,style:{marginTop:6}})
           )
           ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?ELT_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -12859,7 +12737,7 @@ const IRT_DEFAULT_RECTIFIED      = ["Removed from Service","Scheduled for Repair
 const IRT_TEST_VOLTAGES = ["250V","500V","1000V"];
 const IRT_PHASE_EARTH  = [{key:"L1E",label:"L1\u2013E"},{key:"L2E",label:"L2\u2013E"},{key:"L3E",label:"L3\u2013E"},{key:"NE",label:"N\u2013E"}];
 const IRT_PHASE_PHASE  = [{key:"L1L2",label:"L1\u2013L2"},{key:"L1L3",label:"L1\u2013L3"},{key:"L2L3",label:"L2\u2013L3"},{key:"L1N",label:"L1\u2013N"},{key:"L2N",label:"L2\u2013N"},{key:"L3N",label:"L3\u2013N"}];
-const IRT_SM={untested:{label:"\u2014",bg:"#e4e4e7",fg:"#6e6a66",border:"#d4d4d8"},pass:{label:"PASS",bg:"#dcfce7",fg:"#14532d",border:"#16a34a"},fail:{label:"FAIL",bg:"#fee2e2",fg:"#991b1b",border:"#dc2626"},na:{label:"N/A",bg:"#f1f5f9",fg:"#334155",border:"#94a3b8"}};
+const IRT_SM={untested:{label:"\u2014",bg:"#e4e4e7",fg:"#5f5b57",border:"#d4d4d8"},pass:{label:"PASS",bg:"#dcfce7",fg:"#14532d",border:"#16a34a"},fail:{label:"FAIL",bg:"#fee2e2",fg:"#991b1b",border:"#dc2626"},na:{label:"N/A",bg:"#f1f5f9",fg:"#334155",border:"#94a3b8"}};
 function irtUid(){return Math.random().toString(36).slice(2,9);}
 function irtSlug(s){return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,22)+"-"+irtUid();}
 function irtAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
@@ -12883,7 +12761,7 @@ function irtStyles(){
     siteCard:{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px 18px",marginBottom:10,cursor:"pointer",textAlign:"left"},
     siteCardLeft:{flex:1},siteCardRight:{display:"flex",alignItems:"center",gap:8,marginLeft:16},
     siteCardName:{fontSize:16,fontWeight:700,color:"#18181b"},siteCardSub:{fontSize:12,color:"#6e6a66",marginTop:2},
-    failBadge:{fontSize:11,fontWeight:800,color:"#991b1b",background:"#fee2e2",borderRadius:6,padding:"3px 8px",border:"1px solid #dc2626"},
+    failBadge:{fontSize:11,fontWeight:700,color:"#b91c1c",background:"#fee2e2",borderRadius:6,padding:"2px 7px",border:"1px solid #fca5a5",lineHeight:1.3,whiteSpace:"nowrap"},
     arrow:{fontSize:22,color:"#52525b",lineHeight:1},
     addCard:{background:"#f7f6f3",border:"1px solid #e4e4e7",borderRadius:14,padding:"16px",marginBottom:10},
     homeWrap:{padding:"24px 16px",width:"100%",boxSizing:"border-box",display:"flex",flexDirection:"column",alignItems:"center",gap:14},
@@ -12931,7 +12809,7 @@ function parseIRTExcel(data){
     // A logo strip (2026-09-27) pushes every header row down by one \u2014 row 0 is then blank instead of the title.
     const rowOff=(rows[0]||[]).every(c=>c===""||c==null)?1:0;
     let siteName="",company="",abn="",licence="";
-    if(rows[rowOff]&&rows[rowOff][0]){const t=String(rows[rowOff][0]).trim();siteName=t.split(/\s*[-\u2013]\s*/)[0].trim()||t;}
+    if(rows[rowOff]&&rows[rowOff][0]){siteName=xjSiteFromTitle(rows[rowOff][0],"irt");}
     if(rows[1+rowOff]&&rows[1+rowOff][0]){const parts=String(rows[1+rowOff][0]).split(/\s*\|\s*/);parts.forEach(p=>{const l=p.toLowerCase();if(l.startsWith("abn:"))abn=p.replace(/^abn:\s*/i,"").trim();else if(l.startsWith("electrical licence:"))licence=p.replace(/^electrical licence:\s*/i,"").trim();else if(!company)company=p.trim();});}
     let hi=-1;
     for(let i=0;i<Math.min(rows.length,10);i++){if(rows[i].some(c=>String(c).length>60))continue;const r=rows[i].map(c=>String(c).toLowerCase());if(r.some(c=>c==="area"||c==="location")){hi=i;break;}}
@@ -12990,8 +12868,8 @@ function downloadIRTTemplate(){
 async function exportIRTExcel(project, results, meta) {
   const logo = await xjGetLogoDataUrl("irt", project.id);
   const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
-  const coLine = `${project.company || "Your Company Name"}${project.abn ? "  |  ABN: " + project.abn : ""}${project.licence ? "  |  Electrical Licence: " + project.licence : ""}`;
   const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
+  const hdr = xjHdr("irt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta.auditor, testDate: td, nextDue, logo });
   const rows = []; const readingRows = [];
   (project.areas || []).forEach(area => (area.panels || []).forEach(panel => (panel.items || []).forEach(itemId => {
     const name = (panel.itemNames || {})[itemId] || itemId;
@@ -13004,21 +12882,19 @@ async function exportIRTExcel(project, results, meta) {
     });
     readingRows.push([area.name, panel.name, name, d.testVoltage || "500V", r.L1E || "", r.L2E || "", r.L3E || "", r.NE || "", r.L1L2 || "", r.L1L3 || "", r.L2L3 || "", r.L1N || "", r.L2N || "", r.L3N || "", eff.toUpperCase()]);
   })));
-  const metaRow = [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", `Next Test Due: ${nextDue}`];
-  const title = `${sName} — Insulation Resistance Test — ${td}`;
-  // Readings: same "#" (row order identical to the Register); readings are in MΩ, stated once in the header block instead of on every heading
-  const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E", "L2-E", "L3-E", "N-E", "L1-L2", "L1-L3", "L2-L3", "L1-N", "L2-N", "L3-N", "Pass / Fail"];
+  // Readings: same "#" (row order identical to the Register). The unit now sits on each resistance heading — "(MΩ)" — because the header block no longer carries
+  // a units note; Test Voltage (volts) and Pass / Fail hold no resistance, so they get no unit. Nothing imports this sheet (parseIRTExcel reads only the Register).
+  const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E (MΩ)", "L2-E (MΩ)", "L3-E (MΩ)", "N-E (MΩ)", "L1-L2 (MΩ)", "L1-L3 (MΩ)", "L2-L3 (MΩ)", "L1-N (MΩ)", "L2-N (MΩ)", "L3-N (MΩ)", "Pass / Fail"];
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
-    title, defectTitle: `${title} — Defects`, coLine, meta: metaRow,
-    defectMeta: [`Date Tested: ${td}`, "", "Priority: L Low · M Medium · H High · U Urgent"],
+    hdr,
     mainSheet: "Register",
     headers: ["Location", "Panel / DB", "Equipment / Circuit", "Test Date", "Pass / Fail", "Notes / Recommendations"],
     widths: [16, 14, 22, 11, 9, 26],
     idHeaders: ["Location", "Panel / DB", "Equipment / Circuit"], idWidths: [16, 14, 22],
-    rows, footer: [], logo,
-    between: w => xjSheet(w, "Readings", { title: `${title} — Readings`, coLine, meta: [`Tested by: ${meta.auditor || ""}`, "", `Date Tested: ${td}`, "", "All readings in MΩ"],
-      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]), logo }),
+    rows, footer: [],
+    between: w => xjSheet(w, "Readings", { hdr,
+      headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
   });
   const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
   xjFitRows(wb);
@@ -13044,7 +12920,7 @@ function IRTMotorInfoModal({onClose}){
           {title:"SIMPLIFIED MOTOR TEST",color:"#1d4ed8",border:"#93c5fd",lines:[["1. Isolate & lock out","motor at starter/MCC"],["2. Disconnect all phases","at motor terminal box"],["3. Test each winding separately","L1-E, L2-E, L3-E \u2014 one at a time, others floating"],["4. Test N-E if neutral accessible","neutral conductor to earth"],["5. Discharge each winding","short phase to earth 15\u201330 sec before touching or reconnecting"]]},
           {title:"PHASE-TO-PHASE (WINDING-TO-WINDING)",color:"#1d4ed8",border:"#93c5fd",lines:[["Connections:","L1\u2013L2, L2\u2013L3, L3\u2013L1"],["What it tests:","Insulation failure between separate internal phase coils"],["Before testing:","Remove star/delta shorting links to isolate individual windings"],["Discharge:","Short each tested phase to earth 15\u201330 sec before proceeding"]]},
           {title:"WHAT TO LOOK OUT FOR",color:"#92400e",border:"#fcd34d",lines:[["\u2265100 M\u03a9 \u2014 Good:","Healthy insulation. Record as baseline."],["1\u201310 M\u03a9 \u2014 Monitor:","Degrading \u2014 schedule service, clean & bake"],["<1 M\u03a9 \u2014 Fail:","Remove from service immediately. Do not energise."],["Damp/moisture:","Dry out, retest before condemning"],["Trending down:","Investigate even if still above 1 M\u03a9"]]},
-          {title:"\u26a0 VSDs \u2014 CRITICAL",color:"#dc2626",border:"#fca5a5",lines:[["Always disconnect","VSD output leads before testing motor"],["NEVER test","with VSD connected \u2014 it will be permanently damaged"],["Test from:","Motor terminal box only, not drive output"],["Remove links:","Disconnect star/delta links at motor terminal box"]]},
+          {title:"\u26a0 VSDs \u2014 CRITICAL",color:"#b91c1c",border:"#fca5a5",lines:[["Always disconnect","VSD output leads before testing motor"],["NEVER test","with VSD connected \u2014 it will be permanently damaged"],["Test from:","Motor terminal box only, not drive output"],["Remove links:","Disconnect star/delta links at motor terminal box"]]},
           {title:"TEST VOLTAGE GUIDE",color:"#1d4ed8",border:"#93c5fd",lines:[["250V:","Older/fragile insulation or sensitive control circuits"],["500V:","Standard baseline \u2014 recommended for most LV (415V/480V) motors"],["1000V:","690V motors, heavy-duty LV cables, or rigorous testing of known healthy 415V motors"]]},
         ].map(({title,color,border,lines})=>React.createElement("div",{key:title,style:{background:"#e8e6e2",border:`1px solid ${border}`,borderRadius:10,padding:"12px",marginBottom:10}},
           React.createElement("div",{style:{fontSize:11,fontWeight:800,color,letterSpacing:0.8,marginBottom:6}},title),
@@ -13135,7 +13011,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     // Guidance panel (pass/fail criteria) — matches SWBItemPage
     React.createElement("div",{style:{background:"#dbeafe",border:"1px solid #93c5fd",borderRadius:10,padding:"12px",marginBottom:16}},
       React.createElement("div",{style:{display:"flex",gap:8}},
-        React.createElement("div",{style:{flex:1,background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"10px 12px"}},React.createElement("div",{style:{fontSize:10,fontWeight:700,color:"#16a34a",letterSpacing:0.8,marginBottom:4}},"\u2713 PASS CRITERIA"),React.createElement("div",{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},"\u22651 M\u03a9 on all phases. Healthy insulation typically \u2265100 M\u03a9. No significant drop from previous tests.")),
+        React.createElement("div",{style:{flex:1,background:"#dcfce7",border:"1px solid #86efac",borderRadius:8,padding:"10px 12px"}},React.createElement("div",{style:{fontSize:10,fontWeight:700,color:"#166534",letterSpacing:0.8,marginBottom:4}},"\u2713 PASS CRITERIA"),React.createElement("div",{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},"\u22651 M\u03a9 on all phases. Healthy insulation typically \u2265100 M\u03a9. No significant drop from previous tests.")),
         React.createElement("div",{style:{flex:1,background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:8,padding:"10px 12px"}},React.createElement("div",{style:{fontSize:10,fontWeight:700,color:"#991b1b",letterSpacing:0.8,marginBottom:4}},"\u2717 FAIL INDICATORS"),React.createElement("div",{style:{fontSize:11,color:"#52525b",lineHeight:1.5}},"<1 M\u03a9 on any phase. Significant drop from prior reading. Moisture ingress, cable damage or winding breakdown."))
       )
     ),
@@ -13171,7 +13047,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
     ),
     // Comments
     isFail&&React.createElement("div",{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}},
-      React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
+      React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION"),React.createElement(IRTEditableDropdown,{options:rectOptions,value:form.rectified||"",onChange:v=>pf({rectified:v}),placeholder:"Select or type\u2026",color:"#92400e"})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"DEFECT ID"),React.createElement("input",{style:SS.modalInput,type:"text",placeholder:"e.g. 74",value:form.defectId||"",onChange:e=>pf({defectId:e.target.value})})),
       React.createElement("div",{style:SS.modalField},React.createElement("label",{style:SS.modalLabel},"RESPONSIBILITY"),React.createElement(IRTEditableDropdown,{options:respOptions,value:form.responsibility||"",onChange:v=>pf({responsibility:v}),placeholder:"Select or type\u2026",color:"#6b21a8"})),
@@ -13182,7 +13058,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
             style: {
               padding: "10px 14px",
               background: (form.priority||"") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3",
-              color: (form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b",
+              color: (form.priority||"") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b",
               border: `1px solid ${(form.priority||"") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`,
               borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer"
             },
@@ -13228,11 +13104,11 @@ function IRTPanelListView({area,project,results,onSelect,onBack}){
     React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:14}},React.createElement("div",null,React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:1}},project.name))),
     (area.panels||[]).length===0&&React.createElement("div",{style:{color:"#52525b",fontSize:13,textAlign:"center",padding:"24px 0"}},"No panels \u2014 add in \u2699 Structure"),
     (area.panels||[]).map(panel=>{
-      let pass=0,fail=0,unt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else unt++;});
+      let pass=0,fail=0,na=0,unt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="na")na++;else unt++;});
       const hasFail=fail>0;
       return React.createElement("button",{key:panel.id,style:{...SS.siteCard,...(hasFail?{background:"#fee2e2",border:"1px solid #fca5a5"}:{})},onClick:()=>onSelect(panel.id)},
-        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:SS.siteCardSub},nw((panel.items||[]).length,"item"))),
-        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},panel.name),React.createElement("div",{style:SS.siteCardSub},nw((panel.items||[]).length,"item")),React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},dash:true,style:{marginTop:6}})),
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},React.createElement("span",{style:SS.arrow},"\u203a"))
       );
     })
   );
@@ -13244,10 +13120,10 @@ function IRTAreaListView({project,results,onSelect}){
     React.createElement("div",{style:SS.listTitle},"Select Location"),
     (project.areas||[]).length===0&&React.createElement("div",{style:{color:"#52525b",fontSize:14}},"No locations \u2014 go to \u2699 Structure to add areas."),
     (project.areas||[]).map(area=>{
-      let pass=0,fail=0,total=0;(area.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,area.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;}));const hasFail=fail>0;
+      let pass=0,fail=0,na=0,total=0;(area.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,area.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="na")na++;}));const hasFail=fail>0;
       return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(hasFail?{background:"#fee2e2",border:"1px solid #fca5a5"}:{})},onClick:()=>onSelect(area.id)},
-        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:SS.siteCardSub},nw((area.panels||[]).length,"panel")," \u00b7 ",nw(total,"item"))),
-        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},pass>0&&React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},"Pass ",pass),hasFail&&React.createElement("span",{style:SS.failBadge},"FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+        React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},area.name),React.createElement("div",{style:SS.siteCardSub},nw((area.panels||[]).length,"panel")," \u00b7 ",nw(total,"item")),React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:total-pass-fail-na},dash:true,style:{marginTop:6}})),
+        React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},React.createElement("span",{style:SS.arrow},"\u203a"))
       );
     })
   );
@@ -13263,19 +13139,14 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     React.createElement("div",{style:SS.siteTitle},project.name),
     React.createElement("div",{style:SS.siteSub},project.company||""),
     React.createElement("div",{style:{...SS.metaCard}},
-      React.createElement("div",{style:{marginBottom:10}},React.createElement("div",{style:SS.metaLabelText},"AUDITOR"),React.createElement("input",{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit\u2026",onChange:e=>setMeta({auditor:e.target.value})}),!hasAuditor&&React.createElement("div",{style:{fontSize:11,color:"#dc2626",marginTop:4}},"\u26a0 Enter auditor name to enable testing")),
+      React.createElement("div",{style:{marginBottom:10}},React.createElement("div",{style:SS.metaLabelText},"AUDITOR"),React.createElement("input",{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit\u2026",onChange:e=>setMeta({auditor:e.target.value})}),!hasAuditor&&React.createElement("div",{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"\u26a0 Enter auditor name to enable testing")),
       React.createElement("div",null,React.createElement("div",{style:SS.metaLabelText},"TEST DATE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.testDate?fmtDate(meta.testDate):"Select date…"),React.createElement("input",{type:"date",value:meta.testDate||"",onChange:e=>{const nd=e.target.value;const autoPrev=meta.testDate?addYearsISO(meta.testDate,1):"";const upd=!meta.nextTestDate||meta.nextTestDate===autoPrev;setMeta({testDate:nd,...(upd?{nextTestDate:addYearsISO(nd,1)}:{})});},onBlur:e=>{if(!meta.nextTestDate){setMeta({nextTestDate:addYearsISO(meta.testDate,1)});}},style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))),
       React.createElement("div",{style:{marginTop:8}},React.createElement("div",{style:SS.metaLabelText},"NEXT TEST DUE"),React.createElement("div",{style:{position:"relative",marginTop:4}},React.createElement("div",{style:{...SS.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement("input",{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}})))
     ),
     React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${IRT_COLOR}33`,borderRadius:14,padding:"14px"}},
-      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress"),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},summary.pass," / ",summary.total," tested")),
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},React.createElement("div",{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Overall Progress"),React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"item"))),
       React.createElement("div",{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}},React.createElement("div",{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":IRT_COLOR}})),
-      React.createElement("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-        React.createElement("span",{style:{fontSize:11,color:"#1d4ed8"}},summary.pass," Pass"),
-        summary.fail>0&&React.createElement("span",{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL"),
-        summary.untested>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},summary.untested," untested"),
-        React.createElement("span",{style:{fontSize:11,color:"#52525b"}},summary.total," total")
-      )
+      React.createElement(StatusSet,{model:"full",s:summary})
     ),
     React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?IRT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},moduleIcon("irt",15)," Start / Continue Audit"),
     auditEntered===true&&React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}},
@@ -13317,8 +13188,8 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
       const total=(proj.areas||[]).reduce((acc,a)=>(a.panels||[]).reduce((acc2,p)=>acc2+(p.items||[]).length,acc),0);
       return React.createElement("div",{key:proj.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>{onSelect(proj.id);}},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},proj.name),React.createElement("div",{style:SS.siteCardSub},nw((proj.areas||[]).length,"area")," \u00b7 ",nw(total,"item")+(proj.company?` \u00b7 ${proj.company}`:""))),
-          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},s.fail>0&&React.createElement("span",{style:SS.failBadge},s.fail," FAIL"),React.createElement("span",{style:SS.arrow},"\u203a"))
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:SS.siteCardName},proj.name),React.createElement("div",{style:SS.siteCardSub},nw((proj.areas||[]).length,"area")," \u00b7 ",nw(total,"item")+(proj.company?` \u00b7 ${proj.company}`:"")),React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})),
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},React.createElement("span",{style:SS.arrow},"\u203a"))
         ),
         React.createElement("div",{style:{padding:"6px 18px",borderTop:"1px solid #e4e4e7",display:"flex",justifyContent:"flex-end"}},React.createElement(DeleteButton, { onDelete: ()=>onDeleteProject(proj.id), label: "Remove site?" }))
       );
@@ -13539,19 +13410,19 @@ function IRTReportView({project,results,meta,onBack}){
     testDate&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}},
       React.createElement("div",{style:{fontSize:12,background:"#f7f6f3",border:`1px solid ${IRT_COLOR}55`,color:IRT_COLOR,borderRadius:8,padding:"7px 12px"}},React.createElement('svg',{viewBox:'0 0 24 24',width:13,height:13,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('rect',{x:3,y:4,width:18,height:18,rx:2}),React.createElement('line',{x1:16,y1:2,x2:16,y2:6}),React.createElement('line',{x1:8,y1:2,x2:8,y2:6}),React.createElement('line',{x1:3,y1:10,x2:21,y2:10}))," Tested: ",fmtDate(testDate)," \u2192 next due: ",(meta.nextTestDate?fmtDate(meta.nextTestDate):irtAddYear(testDate)))
     ),
-    React.createElement(ReportStatTiles,{rows:[["Total",summary.total,"#334155"],["Pass",summary.pass,"#16a34a"],["Fail",summary.fail,"#dc2626"],["N/A",summary.na,"#334155"],["Untested",summary.untested,"#92400e"]],mb:20}),
+    React.createElement(ReportStatPills,{model:"full",s:summary,count:summary.total,unit:"item",mb:20}),
     React.createElement("div",{style:{marginBottom:20}},
       React.createElement("div",{style:{fontSize:12,fontWeight:700,color:"#1d4ed8",letterSpacing:0.8,marginBottom:8}},"AREA SUMMARY"),
       (project.areas||[]).map(area=>React.createElement("div",{key:area.id,style:{marginBottom:12}},
         React.createElement("div",{style:{fontSize:11,color:"#52525b",fontWeight:700,marginBottom:6,letterSpacing:0.5}},area.name.toUpperCase()),
         (area.panels||[]).map(panel=>{
-          let pPass=0,pFail=0,pUnt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pPass++;else if(s==="fail")pFail++;else pUnt++;});
-          return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${pFail>0?"#fca5a5":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},panel.name),React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},pPass," P"),pFail>0&&React.createElement("span",{style:{fontSize:11,color:"#dc2626",fontWeight:800}},pFail," F"),pUnt>0&&React.createElement("span",{style:{fontSize:11,color:"#92400e"}},pUnt," U"));
+          let pPass=0,pFail=0,pNa=0,pUnt=0;(panel.items||[]).forEach(id=>{const d=irtGetItem(results,project.id,area.id,panel.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pPass++;else if(s==="fail")pFail++;else if(s==="na")pNa++;else pUnt++;});
+          return React.createElement("div",{key:panel.id,style:{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#f7f6f3",border:`1px solid ${pFail>0?"#fca5a5":IRT_COLOR_BORDER}`,borderRadius:8,marginBottom:4}},React.createElement("span",{style:{flex:1,fontSize:13,fontWeight:600,color:"#18181b"}},panel.name),React.createElement(StatusSet,{model:"full",s:{pass:pPass,fail:pFail,na:pNa,untested:pUnt},dash:true}));
         })
       ))
     ),
     React.createElement(ReportFailedItems,{accent:IRT_COLOR,items:fails.map(f=>({title:f.name,badge:reportPriorityBadge(f.item.priority),path:`${f.area} › ${f.panel}`,defectId:f.item.defectId,comment:f.item.notes,responsibility:f.item.responsibility,rectified:f.item.rectified}))}),
-    fails.length===0&&summary.fail===0&&React.createElement("div",{style:{textAlign:"center",color:"#16a34a",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"),
+    fails.length===0&&summary.fail===0&&React.createElement("div",{style:{textAlign:"center",color:"#166534",fontSize:13,fontWeight:700,padding:"20px 0"}},"\u2713 No defects recorded"),
   );
 }
 
@@ -13620,15 +13491,15 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ),
         area&&(area.panels||[]).map(panel=>{
           const items=panel.items||[];if(!items.length)return null;
-          let pFail=0;
-          items.forEach(id=>{const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(eff==="fail")pFail++;});
+          let pFail=0,pPass=0,pNa=0;
+          items.forEach(id=>{const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(eff==="fail")pFail++;else if(eff==="pass")pPass++;else if(eff==="na")pNa++;});
           return React.createElement("button",{key:panel.id,style:{...SS.siteCard,...(pFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewPanel(panel.id)},
             React.createElement("div",{style:SS.siteCardLeft},
               React.createElement("div",{style:SS.siteCardName},panel.name),
-              React.createElement("div",{style:SS.siteCardSub},items.length," item",items.length!==1?"s":"")
+              React.createElement("div",{style:SS.siteCardSub},items.length," item",items.length!==1?"s":""),
+              React.createElement(StatusSet,{model:"full",s:{pass:pPass,fail:pFail,na:pNa,untested:items.length-pPass-pFail-pNa},dash:true,style:{marginTop:6}})
             ),
             React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},
-              pFail>0&&React.createElement("span",{style:SS.failBadge},pFail," FAIL"),
               React.createElement("span",{style:SS.arrow},"›")
             )
           );
@@ -13645,32 +13516,24 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ),
         React.createElement("button",{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       ),
-      React.createElement("div",{style:{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}},
-        [["Pass",sum.pass,"#16a34a"],["Fail",sum.fail,"#dc2626"],["N/A",sum.na,"#334155"],["Untested",sum.untested,"#92400e"]].map(([l,v,col])=>
-          React.createElement("div",{key:l,style:{background:"#f7f6f3",border:`1px solid ${col}33`,borderRadius:8,padding:"6px 12px",textAlign:"center",flex:1}},
-            React.createElement("div",{style:{fontSize:18,fontWeight:800,color:col}},v),
-            React.createElement("div",{style:{fontSize:10,color:"#6e6a66"}},l)
-          )
-        )
-      ),
+      React.createElement(StatusSet,{model:"full",s:sum,style:{marginBottom:16}}),
       React.createElement("div",{style:{fontSize:11,color:"#52525b",marginBottom:12}},"Tap an area to view results"),
       project&&(project.areas||[]).map(area=>{
-        let aFail=0,aTotal=0;
+        let aFail=0,aPass=0,aNa=0,aTotal=0;
         (area.panels||[]).forEach(panel=>(panel.items||[]).forEach(id=>{
           aTotal++;
           const d=irtGetItem(snapResults,project.id,area.id,panel.id,id);
           const eff=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;
-          if(eff==="fail")aFail++;
+          if(eff==="fail")aFail++;else if(eff==="pass")aPass++;else if(eff==="na")aNa++;
         }));
-        const aPass=aTotal-aFail;
-        const pct=aTotal>0?Math.round((aPass/aTotal)*100):0;
+        const pct=aTotal>0?Math.round(((aPass+aFail+aNa)/aTotal)*100):0;
         return React.createElement("button",{key:area.id,style:{...SS.siteCard,...(aFail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>setViewArea(area.id)},
           React.createElement("div",{style:SS.siteCardLeft},
             React.createElement("div",{style:SS.siteCardName},area.name),
-            React.createElement("div",{style:SS.siteCardSub},aTotal," item",aTotal!==1?"s":"")
+            React.createElement("div",{style:SS.siteCardSub},aTotal," item",aTotal!==1?"s":""),
+            React.createElement(StatusSet,{model:"full",s:{pass:aPass,fail:aFail,na:aNa,untested:aTotal-aPass-aFail-aNa},dash:true,style:{marginTop:6}})
           ),
           React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}},
-            aFail>0&&React.createElement("span",{style:SS.failBadge},aFail," FAIL"),
             React.createElement("span",{style:SS.arrow},"\u203a")
           )
         );
@@ -13688,7 +13551,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
       const sum=irtSiteSummary(snap.results&&project?{[project.id]:snap.results}:{},project||{areas:[],id:""});
       return React.createElement("div",{key:snap.id,style:{...SS.siteCard,flexDirection:"column",gap:0,padding:0,overflow:"hidden"}},
         React.createElement("button",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)},
-          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#1d4ed8"}},"IR Test Audit"),sum.fail>0&&React.createElement("span",{style:SS.failBadge},sum.fail," FAIL")),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement("div",{style:{display:"flex",gap:8,marginTop:6}},React.createElement("span",{style:{fontSize:11,color:"#16a34a"}},sum.pass," Pass"),React.createElement("span",{style:{fontSize:11,color:"#dc2626"}},sum.fail," Fail"),React.createElement("span",{style:{fontSize:11,color:"#334155"}},sum.na," N/A"),React.createElement("span",{style:{fontSize:11,color:"#92400e"}},sum.untested," Untested"))),
+          React.createElement("div",{style:{flex:1}},React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}},React.createElement("span",{style:{fontSize:13,fontWeight:800,color:"#1d4ed8"}},"IR Test Audit")),React.createElement("div",{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 ",nw(sum.total,"item")),React.createElement("div",{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt)),sum.total>0&&React.createElement(StatusSet,{model:"full",s:sum,dash:true,style:{marginTop:6}})),
           React.createElement("span",{style:{...SS.arrow,color:expanded===snap.id?"#1d4ed8": "#52525b"}},expanded===snap.id?"\u25be":"\u203a")
         ),
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}},
@@ -14402,7 +14265,7 @@ function parseWelderExcel(data) {
     const rowOff = (rows[0]||[]).every(c => c===""||c==null) ? 1 : 0;
     let siteName="", company="", abn="", licence="";
     const t0 = hi>rowOff && rows[rowOff] ? String(rows[rowOff][0]||"").trim() : "";
-    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test\s*$/i,"").trim();
+    if (t0 && !/enter your site name/i.test(t0)) siteName = t0.replace(/\s*[—–-]+\s*Welder(?:\s*\(VRD\))?\s*Test(?:\s*\([^)]*\))?\s*$/i,"").trim();
     if (hi>1+rowOff && rows[1+rowOff] && rows[1+rowOff][0]) {
       const p = parseCompanyRow(rows[1+rowOff][0]);
       const ph = (v,list)=>list.includes(String(v).toLowerCase().replace(/\s+/g,"")) || list.includes(String(v).toLowerCase());
@@ -14413,20 +14276,22 @@ function parseWelderExcel(data) {
     // Per-welder sheets (identity cells only), in workbook order — the export writes them in Register row order.
     const detail = sheets.filter(n=>n!==regName).map(n=>{
       const r = XLSX.utils.sheet_to_json(data.Sheets[n],{header:1,defval:"",raw:false});
-      // A logo strip on this sheet pushes its own rows down by one too.
-      const off = (r[0]||[]).every(c => c===""||c==null) ? 1 : 0;
-      // Rows 3-6 (2026-09-30 fix): each row is now ONE joined "  |  " string in col A — but a file exported BEFORE
-      // this fix still has 2 separate cells (col A / col C, col B blank). Handle both: collect every non-blank cell
-      // in the row and join them with the same "  |  " separator, then pull the labelled piece out of that line —
-      // this reproduces the new format's single string unchanged, and re-creates it from the old format's 2 cells.
-      const grab = (ri,label)=>{
-        const rowArr = (r[ri+off]) || [];
-        const line = rowArr.filter(c=>c!==""&&c!=null).map(String).join("  |  ");
-        const part = line.split("  |  ").find(p=>new RegExp("^\\s*"+label+":","i").test(p));
-        if (!part) return null;
-        const m = part.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null;
+      // Identity is looked up by LABEL anywhere in the top 16 rows (no fixed row numbers), in EITHER layout:
+      //   NEW (2026-10-02): an "Asset Details" block — label in column A, value in column B (merged B:E), one detail per row;
+      //   OLD: header rows of "Label: value" strings ("Brand: Kemppi  |  Model: Evo") — one joined string in col A (after 2026-09-30) or 2 separate cells
+      //   (col A / col C) before it. A logo strip / the always-reserved row 1 only moves rows down, which a label search does not care about.
+      const grab = (label)=>{
+        const lc = label.toLowerCase();
+        for (let ri=0; ri<Math.min(r.length,16); ri++) {
+          const rowArr = r[ri] || [];
+          if (String(rowArr[0]==null?"":rowArr[0]).trim().toLowerCase()===lc) return String(rowArr[1]==null?"":rowArr[1]).trim();   // new block: label cell + value cell
+          const line = rowArr.filter(c=>c!==""&&c!=null).map(String).join("  |  ");
+          const part = line.split("  |  ").find(p=>new RegExp("^\\s*"+label+":","i").test(p));                                          // old header string
+          if (part) { const m = part.match(new RegExp("^\\s*"+label+":\\s*(.*)$","i")); return m?m[1].trim():null; }
+        }
+        return null;
       };
-      return { assetId:grab(2,"Asset ID"), brand:grab(3,"Brand"), model:grab(3,"Model"), serial:grab(4,"Serial Number") };
+      return { assetId:grab("Asset ID"), brand:grab("Brand"), model:grab("Model"), serial:grab("Serial Number") };
     });
     const assets=[], seen=new Set(); let skipped=0, duplicates=0, combined=0, exact=0, k=-1;
     for (let i=hi+1;i<rows.length;i++) {
@@ -14534,10 +14399,11 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
         ,eltEl('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"16px 18px",color:"inherit",textAlign:"left"},onClick:()=>onSelect(proj.id)}
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:SS.siteCardName},proj.name)
-            ,eltEl('div',{style:SS.siteCardSub},`${nw(s.total,"welder")} · ${s.tested} tested`)
+            ,eltEl('div',{style:SS.siteCardSub},nw(s.total,"welder"))
+            ,React.createElement(StatusSet,{model:"noNA",s:s,dash:true,style:{marginTop:6}})
           )
           ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginLeft:16}}
-            ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+            
             ,eltEl('span',{style:SS.arrow},"›")
           )
         )
@@ -14605,7 +14471,7 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
       ,eltEl('div',{style:{marginBottom:10}}
         ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#dc2626",marginTop:4}},"⚠ Enter auditor name to enable testing")
+        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
         ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED")
@@ -14623,12 +14489,9 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
     ,eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f7f6f3",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:14,padding:"14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",marginBottom:8}}
         ,eltEl('div',{style:{fontSize:13,fontWeight:700,color:"#18181b"}},"Progress")
-        ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},summary.tested," / ",nw(summary.total,"welder")," tested")
+        ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},nw(summary.total,"welder"))
       )
-      ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-        ,eltEl('span',{style:{fontSize:11,color:WELDER_COLOR}},summary.pass," Pass")
-        ,summary.fail>0&&eltEl('span',{style:{fontSize:11,color:"#991b1b",fontWeight:800}},summary.fail," FAIL")
-      )
+      ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.untested}})
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No welders yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:ready?WELDER_COLOR:"#f7f6f3",color:ready?"#fff":"#52525b",border:`2px solid ${ready?WELDER_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:ready?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>ready&&onStartAudit()},"Start / Continue Audit")
@@ -14646,10 +14509,7 @@ function WelderAuditView({project, results, meta, onOpen}) {
   const s = welderSiteSummary(project,results);
   if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
   return eltEl('div',{style:SS.listWrap}
-    ,eltEl('div',{style:{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}
-      ,[["TESTED",s.tested,"#334155"],["PASS",s.pass,"#16a34a"],["FAIL",s.fail,"#dc2626"],[s.total===1?"WELDER":"WELDERS",s.total,"#92400e"]].map(([l,v,c])=>
-        eltEl('div',{key:l,style:{background:"#f7f6f3",border:`1px solid ${c}33`,borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,color:c}},v," ",l))
-    )
+    ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
     ,s.total===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add an area, then add welders in the Manage tab.")
     ,eltEl(AreaAuditGroups,{areas:project.areas,nounOne:"welder",accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id)),renderRow:a=>{
       const o = welderOverall(welderGetRes(results,project.id,a.id)); const sm = welderSM(o);
@@ -14694,8 +14554,6 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     ,eltEl('div',{style:{fontSize:9,color:"#6e6a66",letterSpacing:0.8,fontWeight:700}},lbl)
     ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
   const nextDue = meta.nextTestDate;
-  const box = (l,v,c)=>eltEl('div',{key:l,style:{flex:1,minWidth:56,textAlign:"center",background:"#f7f6f3",borderRadius:8,border:`1px solid ${c}33`,padding:"6px 2px"}}
-    ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:c}},v),eltEl('div',{style:{fontSize:9,color:"#6e6a66",fontWeight:700}},l));
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,eltEl(ELTBackBtn,{onClick:onClose})
     ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:10}}
@@ -14711,10 +14569,8 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     )
     // live Audit Summary
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"4px 0 8px"}},"AUDIT SUMMARY")
-    ,eltEl('div',{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}
-      ,box("TOTAL",sum.total,"#334155"),box("PASS",sum.pass,"#16a34a"),box("FAIL",sum.fail,"#dc2626"),box("N/A",sum.na,"#64748b"),box("SCORE",welderScoreLabel(sum.score),"#334155"),box("ACTIONS",sum.actions,"#92400e")
-    )
-    ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginBottom:14}},overall==="untested"?`Overall: Untested — ${nw(sum.untested,"item")} still to answer`:`Overall: ${welderOverallLabel(overall)}`)
+    ,React.createElement(StatusSet,{model:"full",s:sum,dash:true,score:welderScoreLabel(sum.score),style:{marginBottom:6}})
+    ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginBottom:14}},overall==="untested"?`Overall: Untested — ${nw(sum.untested,"item")} still to answer`:`Overall: ${welderOverallLabel(overall)}`+(sum.actions>0?` · ${nw(sum.actions,"action")} required`:""))
     // checklist
     ,eltEl('div',{style:{fontSize:10,color:"#6e6a66",letterSpacing:0.8,fontWeight:700,margin:"0 0 8px"}},"CHECKLIST")
     ,WELDER_CHECKLIST.map(({key,label,criteria},idx)=>{
@@ -14734,7 +14590,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     })
     // asset-level derived FAIL panel (before the comments box) — shows on the FIRST Fail, independent of `overall`
     ,anyFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
-      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#dc2626",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
+      ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"RECTIFIED / SCHEDULED ACTION")
         ,eltEl(IELEditableDropdown,{options:rectOpts,value:r.rectified||rectOpts[0]||"",onChange:v=>set({rectified:v}),placeholder:"Select or type…"})
@@ -14750,7 +14606,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"PRIORITY")
         ,eltEl('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
-          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
+          ,["",...PRIORITY_OPTIONS].map(p=>eltEl('button',{key:p||"none",style:{padding:"10px 14px",background:(r.priority||"")===p?(p?PRIORITY_BG[p]:"#f1f5f9"):"#f7f6f3",color:(r.priority||"")===p?(p?PRIORITY_FG[p]:"#334155"):"#52525b",border:`1px solid ${(r.priority||"")===p?(p?PRIORITY_COLORS[p]:"#94a3b8"):"#e4e4e7"}`,borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>set({priority:p})},p?`${p} — ${PRIORITY_LABELS[p]}`:"None"))
         )
       )
       ,eltEl('div',{style:SS.modalField}
@@ -14801,8 +14657,8 @@ function WelderReportView({project, results, meta}) {
     ,meta.testDate&&eltEl('div',{style:{display:"flex",gap:8,marginTop:8,marginBottom:16,flexWrap:"wrap"}}
       ,eltEl('div',{style:{...SS.duePill,borderColor:WELDER_COLOR_BORDER,color:WELDER_COLOR,padding:"7px 12px"}},"Tested: ",fmtDate(meta.testDate)," → next due: ",meta.nextTestDate?fmtDate(meta.nextTestDate):"—")
     )
-    ,eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]})
-    ,eltEl(AreaSummaryRows,{areas:project.areas,accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id))})
+    ,React.createElement(ReportStatPills,{model:"noNA",s:s})
+    ,eltEl(AreaSummaryRows,{nounOne:"welder",areas:project.areas,accent:WELDER_COLOR,statusOf:a=>welderOverall(welderGetRes(results,project.id,a.id))})
     ,eltEl(ReportFailedItems,{accent:WELDER_COLOR,items:fails})
     ,fails.length===0&&eltEl(ReportNoDefects)
     ,rows.length>0&&eltEl('div',{style:{marginBottom:20}}
@@ -14902,7 +14758,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
         )
         ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
       )
-      ,eltEl('div',{style:{marginBottom:14}},eltEl(ReportStatTiles,{rows:[["Total",s.total,"#334155"],["Pass",s.pass,"#16a34a"],["Fail",s.fail,"#dc2626"],["Untested",s.untested,"#92400e"]]}))
+      ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
       ,groupRowsByArea(rows).map(g=>eltEl('div',{key:g.id,"data-area":g.name}
         ,eltEl('div',{style:AREA_HDR_STYLE},g.name)
         ,g.rows.map(row=>{
@@ -14928,15 +14784,11 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
           ,eltEl('div',{style:{flex:1}}
             ,eltEl('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
               ,eltEl('span',{style:{fontSize:13,fontWeight:800,color:WELDER_COLOR}},"Welder Audit")
-              ,s.fail>0&&eltEl('span',{style:SS.failBadge},s.fail," FAIL")
+              
             )
-            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor")
+            ,eltEl('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(s.total,"welder"))
             ,eltEl('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
-            ,eltEl('div',{style:{display:"flex",gap:8,marginTop:6}}
-              ,eltEl('span',{style:{fontSize:11,color:"#334155"}},s.tested," tested")
-              ,eltEl('span',{style:{fontSize:11,color:"#16a34a"}},s.pass," Pass")
-              ,eltEl('span',{style:{fontSize:11,color:"#dc2626"}},s.fail," Fail")
-            )
+            ,React.createElement(StatusSet,{model:"noNA",s:s,dash:true,style:{marginTop:6}})
           )
           ,eltEl('span',{style:{...SS.arrow,color:expanded===snap.id?WELDER_COLOR:"#52525b"}},expanded===snap.id?"▾":"›")
         )
@@ -14966,16 +14818,16 @@ function welderSheetName(a, used) {
 }
 async function exportWelderExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
-  const logo = await xjGetLogoDataUrl("welder", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("welder", project.id);
   const sName = project.name||"Site";
   const testDate = (meta&&meta.testDate)||"";
   const nextDue = (meta&&meta.nextTestDate)||"";
-  const coLine = [project.company||"SparkCheck", project.abn?`ABN: ${project.abn}`:"", project.licence?`Electrical Licence: ${project.licence}`:""].filter(Boolean).join("  |  ");
-  const passSt = swbXCS(SWB_XC.priorityL_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityL_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const failSt = swbXCS(SWB_XC.priorityH_bg,{bold:true,sz:10,color:{rgb:SWB_XC.priorityH_font}},{horizontal:"center",vertical:"center"},swbXAB());
-  const naSt   = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{horizontal:"center",vertical:"center"},swbXAB());
-  const headSt = swbXCS(SWB_XC.midGrey,{bold:true,sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
-  const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:SWB_XC.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
+  const hdr = xjHdr("welder", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
+  const passSt = xjStatusStyle("PASS");
+  const failSt = xjStatusStyle("FAIL");
+  const naSt   = xjStatusStyle("N/A");
+  const headSt = swbXCS(XJ_COLOURS.midGrey,{bold:true,sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
+  const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
   const rows = welderRegisterRows(project, allResults, meta);
   // Photos now live in sitePhotoStore (Stage 2, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
   // referenced by this export's own rows into a small export-sized copy BEFORE building any sheet (same pattern as GSD's
@@ -14990,28 +14842,23 @@ async function exportWelderExcel(project, allResults, meta) {
   const ws = wb.addWorksheet("Register");
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLM".split(""); const n = cols.length;
-  setCell('A'+(1+off),`${sName} — Welder Test`,XJ_HEADER_CENTER);
-  setCell('A'+(2+off),coLine,XJ_HEADER_CENTER);
-  // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell, matching row 2 (coLine)'s format —
-  // used to be 3 separate sub-merges, each centred within its own narrow span.
-  setCell('A'+(3+off),[`Auditor: ${(meta&&meta.auditor)||''}`,`Date Tested: ${testDate?fmtDate(testDate):''}`,`Next Test Due: ${nextDue?fmtDate(nextDue):''}`].join('  |  '),XJ_HEADER_CENTER);
-  [{s:{r:0,c:0},e:{r:0,c:n-1}},{s:{r:1,c:0},e:{r:1,c:n-1}},{s:{r:2,c:0},e:{r:2,c:n-1}}]
-    .forEach(m=>ws.mergeCells(m.s.r+1+off,m.s.c+1,m.e.r+1+off,m.e.c+1));
-  WELDER_COLUMNS.forEach((t,i)=>setCell(cols[i]+(5+off),t));
-  [32,16,16,6,40].forEach((h,i)=>{ws.getRow(i+1+off).height = h;});
+  // Shared header rows 1-5 (xjHeader; widths FIRST — it needs them). The table headings are ALWAYS row 6, data from row 7.
+  [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
+  xjHeader(ws, wb, hdr, n);
+  WELDER_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; });
+  ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
   rows.forEach((row,i)=>{
-    const r = 6+off+i; const bg = i%2===0?SWB_XC.white:SWB_XC.lightGrey;
+    const r = XJ_TABLE_START + 1 + i; const bg = i%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
     const base = cellSt(bg); const ctr = cellSt(bg,{horizontal:"center"});
     row.cells.forEach((v,ci)=>{
       let st = base;
       if ([1,4,5,7,8,11,12].includes(ci)) st = ctr;
       if (ci===5) st = v==="Pass" ? passSt : v==="Fail" ? failSt : ctr;
+      if (/^Priority/.test(WELDER_COLUMNS[ci])) st = xjPriorityStyle(v) || st;
       setCell(cols[ci]+r,v,st);
     });
   });
-  [22,12,28,16,13,12,20,16,12,18,36,12,13].forEach((w,i)=>{ws.getColumn(i+1).width=w;});
-  xjPageSetup(ws, true, 5+off);          // native page setup: A4 landscape, 1 page wide, heading row 5 repeated, page footer
-  if (logo) xjLogo(ws, wb, logo, n);
+  xjPageSetup(ws, true, XJ_TABLE_START);   // native page setup: A4 landscape, 1 page wide, heading row 6 repeated, page footer
 
   // ── One sheet per welder ──
   const used = new Set();
@@ -15019,30 +14866,26 @@ async function exportWelderExcel(project, allResults, meta) {
     const a = row.asset; const raw = row.res; const sum = row.summary; const r = defectGate(raw, row.overall==="fail");
     const sh = wb.addWorksheet(welderSheetName(a, used));
     const put = (ref,val,st)=>{const c=sh.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
-    const date = (meta&&meta.testDate) || "";
-    put('A'+(1+off),"Welder Inspection & Audit Checklist",XJ_HEADER_CENTER);
-    put('A'+(2+off),`${sName}  |  ${coLine}`,XJ_HEADER_CENTER);
-    // Rows 3-6 (2026-09-30 fix): each was 2 separate sub-merges — now ONE joined "  |  " string per row, in one
-    // full-width cell each, matching row 2's format. (This sheet has no single Auditor/Date/Next-Due triple like the
-    // Register does — Prepared By / Test Instruments live here instead — so the same "join this row's own split
-    // pieces" principle is applied per row rather than collapsing rows together.)
-    put('A'+(3+off),[`Location: ${a.location||""}`,`Asset ID: ${a.assetId||""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(4+off),[`Brand: ${a.brand||""}`,`Model: ${a.model||""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(5+off),[`Serial Number: ${a.serial||""}`,`Date Tested: ${date?fmtDate(date):""}`].join('  |  '),XJ_HEADER_CENTER);
-    put('A'+(6+off),[`Prepared By: ${(meta&&meta.auditor)||""}`,`Test Instruments: ${(meta&&meta.instruments)||""}`].join('  |  '),XJ_HEADER_CENTER);
-    [[1,1,5],[2,1,5],[3,1,5],[4,1,5],[5,1,5],[6,1,5]].forEach(([rr,c1,c2])=>sh.mergeCells(rr+off,c1,rr+off,c2));
-    sh.getRow(1+off).height = 24;
+    // Shared header rows 1-5 (identical to the Register's, merged over this sheet's 5 columns); widths first.
+    [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
+    xjHeader(sh, wb, hdr, 5);
+    // Asset Details (2026-10-02): everything that used to crowd header rows 3-6 — label cell + value cell (value merged B:E), styled like the defect block below.
+    // Date Tested / the auditor ("Prepared By" was always the same stored value as Auditor) are NOT repeated: they are header row 4 now.
+    let rr = XJ_TABLE_START;
+    put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
+    [["Location",a.location||""],["Asset ID",a.assetId||""],["Brand",a.brand||""],["Model",a.model||""],["Serial Number",a.serial||""],["Test Instruments",(meta&&meta.instruments)||""]]
+      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v,cellSt(XJ_COLOURS.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+    rr++;   // blank row
     // Audit summary
-    let rr = 8 + off;
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
-    const overallSt = row.overall==="pass"?passSt:row.overall==="fail"?failSt:naSt;
+    const overallSt = xjStatusStyle(row.overall) || cellSt(XJ_COLOURS.white,{horizontal:"center"});
     [["Total Items",String(sum.total)],["Pass",String(sum.pass)],["Fail",String(sum.fail)],["N/A",String(sum.na)],["Score",welderScoreLabel(sum.score)],["Actions Required",String(sum.actions)],["Overall",welderOverallLabel(row.overall)]]
-      .forEach(([l,v],i)=>{ put('A'+rr,l,cellSt(SWB_XC.white)); put('B'+rr,v,l==="Overall"?overallSt:cellSt(SWB_XC.white,{horizontal:"center"})); rr++; });
+      .forEach(([l,v],i)=>{ put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,(l==="Overall"?overallSt:(l==="Pass"&&+v>0)?passSt:(l==="Fail"&&+v>0)?failSt:cellSt(XJ_COLOURS.white,{horizontal:"center"}))); rr++; });
     // Checklist
     rr++;
     ["Item","Test / Pass Criteria","Result","Measured Value / Notes","Corrective Action Required"].forEach((t,i)=>put("ABCDE"[i]+rr,t,headSt)); rr++;
     WELDER_CHECKLIST.forEach(({key,label,criteria},idx)=>{
-      const it = welderItem(raw,key); const bg = idx%2===0?SWB_XC.white:SWB_XC.lightGrey;
+      const it = welderItem(raw,key); const bg = idx%2===0?XJ_COLOURS.white:XJ_COLOURS.lightGrey;
       const resTxt = it.result==="pass"?"Pass":it.result==="fail"?"Fail":it.result==="na"?"N/A":"";
       put('A'+rr,`${idx+1}. ${label}`,cellSt(bg)); put('B'+rr,criteria,cellSt(bg));
       put('C'+rr,resTxt,it.result==="pass"?passSt:it.result==="fail"?failSt:it.result==="na"?naSt:cellSt(bg,{horizontal:"center"}));
@@ -15052,14 +14895,14 @@ async function exportWelderExcel(project, allResults, meta) {
     // already gated by defectGate), then comments
     rr++;
     [["Rectified / Scheduled",r.rectified],["Date Rectified / Scheduled",r.rectifiedDate?fmtDate(r.rectifiedDate):""],["Defect ID",r.defectId],["Responsibility",r.responsibility],["Priority",r.priority?`${r.priority} — ${PRIORITY_LABELS[r.priority]||""}`:""]]
-      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5); rr++; });
+      .forEach(([l,v])=>{ put('A'+rr,l,headSt); put('B'+rr,v||"",(l==="Priority"&&xjPriorityStyle(r.priority,{horizontal:"left"}))||cellSt(XJ_COLOURS.white)); sh.mergeCells(rr,2,rr,5); rr++; });
     rr++;
-    put('A'+rr,"Auditor Comments / Overall Notes",headSt); put('B'+rr,(raw.notes||"").trim(),cellSt(SWB_XC.white)); sh.mergeCells(rr,2,rr,5);
+    put('A'+rr,"Auditor Comments / Overall Notes",headSt); put('B'+rr,(raw.notes||"").trim(),cellSt(XJ_COLOURS.white)); sh.mergeCells(rr,2,rr,5);
     sh.getRow(rr).height = 48; rr++;
     // Photos
     (raw.photos||[]).forEach((p,pi)=>{
       rr++;
-      put('A'+rr,`Photo ${pi+1}`,cellSt(SWB_XC.white)); put('B'+rr,"",cellSt(SWB_XC.white));
+      put('A'+rr,`Photo ${pi+1}`,cellSt(XJ_COLOURS.white)); put('B'+rr,"",cellSt(XJ_COLOURS.white));
       const bx = xjPhotoBoxWH(p.w, p.h); sh.getRow(rr).height = xjPhotoRowPt(bx.h);
       const copy = photoCopies.get(p.id);
       const m = copy && /^data:image\/(\w+);base64,(.+)$/.exec(copy.dataUrl||"");
@@ -15070,9 +14913,7 @@ async function exportWelderExcel(project, allResults, meta) {
         sh.addImage(imgId,{tl:{col:1.1,row:rr-1+0.08},ext:{width:bx.w,height:bx.h},editAs:"oneCell"});
       }
     });
-    [38,46,12,30,40].forEach((w,i)=>{sh.getColumn(i+1).width=w;});
     xjPageSetup(sh, true, null);       // per-welder form: A4 landscape, 1 page wide, page footer (a form, so no repeating heading row)
-    if (logo) xjLogo(sh, wb, logo, 5);
   });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
@@ -15327,13 +15168,13 @@ function gsdReportSections(project, items) {
 
 // ── Export layout (pure, so it can be tested without a workbook) ───────────────────────────────────────
 // 5 columns x 140 px = 700 px, which fits A4 portrait at 100% (7.77 in = 746 px), so page heights are exact. Photos are scaled to fit a 120 x 160 px box.
-const GSD_COLS = 5, GSD_COL_PX = 140, GSD_BOX_W = 120, GSD_BOX_H = 160, GSD_PAGE_PT = 730, GSD_HEAD_PT = 70, GSD_CHARS_LINE = 105;
+const GSD_COLS = 5, GSD_COL_PX = 140, GSD_BOX_W = 120, GSD_BOX_H = 160, GSD_PAGE_PT = 730, GSD_HEAD_PT = 114.75, GSD_CHARS_LINE = 105;   // GSD_HEAD_PT = the fixed shared header: 45.75 + 31.5 + 15.75 + 15.75 + 6
 const GSD_H = { bar: 20, gap: 8, detail: 12, spacer: 10 };
 const gsdFit = (w, h) => { const W = w > 0 ? w : 4, H = h > 0 ? h : 3; const s = Math.min(GSD_BOX_W / W, GSD_BOX_H / H); return { dw: Math.max(1, Math.round(W * s)), dh: Math.max(1, Math.round(H * s)) }; };
 const gsdCaptionH = text => { const lines = String(text).split("\n").reduce((n, l) => n + Math.max(1, Math.ceil(l.length / GSD_CHARS_LINE)), 0); return lines * 12 + 3; };
 // sections: [{name, items:[{caption, detail, photos:[{id, dw, dh}]}]}] -> { rows:[{kind,h,...}], breaks:[row index a page break goes BEFORE] }
-// headPt: actual header space already used above the first content row (defaults to GSD_HEAD_PT; a logo row makes the real header taller, so
-// exportGSDExcel passes GSD_HEAD_PT + XJ_LOGO_ROW_PT when one is set — otherwise the first page's break would land a little too low and clip).
+// headPt: the header space already used above the first content row. It is ALWAYS the shared 5-row header now (the logo row is always reserved), so
+// GSD_HEAD_PT is the real figure with or without a logo — no per-logo adjustment any more.
 function gsdLayout(sections, headPt = GSD_HEAD_PT) {
   const rows = [], breaks = []; let y = headPt;
   const push = r => { rows.push(r); y += r.h; };
@@ -15356,36 +15197,28 @@ const gsdPageSetupFixed = sheet => {
 };
 async function exportGSDExcel(project, items, meta) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
-  const logo = await xjGetLogoDataUrl("gsd", project.id); const off = logo ? 1 : 0;   // row 1 reserved for the logo strip when Global Settings has one set
+  const logo = await xjGetLogoDataUrl("gsd", project.id); const off = 1;   // the shared header always reserves row 1 (logo row); `put` below is relative to the header
   const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
-  const coLine = [project.company || "SparkCheck", project.abn ? `ABN: ${project.abn}` : "", project.licence ? `Electrical Licence: ${project.licence}` : ""].filter(Boolean).join("  |  ");
-  // Row 3 (2026-09-30 fix): used to be 3 separate sub-merges, each centred within its own narrow span. `metaArr` is
-  // passed to xjSheet (Register sheet), which does its own "  |  " join into one full-width cell; `metaLine` is the
-  // same join done here directly, for this function's own direct-write Report sheet.
-  const metaArr = [`Auditor: ${m.auditor || ""}`, `Date Audited: ${testDate ? fmtDate(testDate) : ""}`, `Next Audit Due: ${nextDue ? fmtDate(nextDue) : ""}`];
-  const metaLine = metaArr.join("  |  ");
+  const hdr = xjHdr("gsd", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: m.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
   const sections = gsdReportSections(project, items);
   // the export copies of every photo, read from IndexedDB (a missing one is skipped, its space kept)
   const copies = new Map();
   for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
     let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
   }
-  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT + (off ? XJ_LOGO_ROW_PT : 0));
+  const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT);
 
   // ── Sheet 1: the photo report ──
   const ws = wb.addWorksheet("Defects Report"); ws.views = [{ showGridLines: false }];
   const put = (r, c, v, st) => { const cell = ws.getCell(r + off, c); cell.value = v == null ? "" : v; if (st) swbApplyXlStyle(cell, st); return cell; };
   for (let c = 1; c <= GSD_COLS; c++) ws.getColumn(c).width = (GSD_COL_PX - 5) / 7;
-  put(1, 1, `${sName} — General Site Defects`, XJ_HEADER_CENTER); put(2, 1, coLine, XJ_HEADER_CENTER);
-  put(3, 1, metaLine, XJ_HEADER_CENTER);
-  [[1, 1, 1, GSD_COLS], [2, 1, 2, GSD_COLS], [3, 1, 3, GSD_COLS], [4, 1, 4, GSD_COLS]].forEach(([r1, c1, r2, c2]) => ws.mergeCells(r1 + off, c1, r2 + off, c2));
-  [32, 16, 16, 6].forEach((h, i) => { ws.getRow(i + 1 + off).height = h; });
-  const white = SWB_XC.white;
+  xjHeader(ws, wb, hdr, GSD_COLS);   // shared rows 1-5 (5 x 140px = 700px, wide enough that the merge is not widened); the report content starts on row 6
+  const white = XJ_COLOURS.white;
   const barSt = swbXCS("FF" + GSD_COLOR.slice(1).toUpperCase(), { bold: true, sz: 11, color: { rgb: "FFFFFFFF" } }, { vertical: "center", indent: 1 });
-  const capSt = swbXCS(white, { sz: 9, color: { rgb: SWB_XC.darkGrey } }, { wrapText: true, vertical: "top" });
-  const detSt = swbXCS(white, { sz: 8, color: { rgb: SWB_XC.mutedGrey } }, { vertical: "top" });
+  const capSt = swbXCS(white, { sz: 9, color: { rgb: XJ_COLOURS.darkGrey } }, { wrapText: true, vertical: "top" });
+  const detSt = swbXCS(white, { sz: 8, color: { rgb: XJ_COLOURS.mutedGrey } }, { vertical: "top" });
   const breakSet = new Set(layout.breaks);
-  if (!layout.rows.length) { put(6, 1, "No defects recorded"); ws.mergeCells(6 + off, 1, 6 + off, GSD_COLS); }
+  if (!layout.rows.length) { put(5, 1, "No defects recorded"); ws.mergeCells(5 + off, 1, 5 + off, GSD_COLS); }
   layout.rows.forEach((row, i) => {
     const r = 5 + off + i; if (breakSet.has(i)) ws.getRow(r - 1).addPageBreak();
     ws.getRow(r).height = row.h;
@@ -15401,15 +15234,14 @@ async function exportGSDExcel(project, items, meta) {
     if (["bar", "caption", "detail"].includes(row.kind)) { ws.mergeCells(r, 1, r, GSD_COLS); for (let c = 2; c <= GSD_COLS && row.kind === "bar"; c++) swbApplyXlStyle(ws.getCell(r, c), barSt); }
   });
   gsdPageSetupFixed(ws);
-  if (logo) xjLogo(ws, wb, logo, GSD_COLS);
 
   // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
   const numbered = gsdNumbered(project, items);
-  xjSheet(wb, "Register", { title: `${sName} — Site Defects Register`, coLine, meta: metaArr,
+  xjSheet(wb, "Register", { hdr,
     headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
     widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
     rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
-    emptyText: "No defects recorded", landscape: true, logo });
+    emptyText: "No defects recorded", landscape: true });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
   deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
@@ -15610,7 +15442,7 @@ function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAu
       , gsdEl("div", { style: { marginBottom: 10 } }
         , gsdEl("div", { style: SS.metaLabelText }, "AUDITOR")
         , gsdEl("input", { style: { ...SS.metaInput, marginTop: 4, borderColor: "#d4d4d8" }, value: meta.auditor || "", placeholder: "Enter name to begin…", onChange: e => setMeta({ auditor: e.target.value }) })
-        , !hasAuditor && gsdEl("div", { style: { fontSize: 11, color: "#dc2626", marginTop: 4 } }, "⚠ Enter auditor name to begin"))
+        , !hasAuditor && gsdEl("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 4 } }, "⚠ Enter auditor name to begin"))
       , gsdEl("div", null, gsdEl("div", { style: SS.metaLabelText }, "DATE AUDITED")
         , gsdEl("div", { style: { position: "relative", marginTop: 4 } }, dateBox(meta.testDate, "Select date…"), overlay(meta.testDate, nd => { const autoPrev = meta.testDate ? addYearsISO(meta.testDate, 1) : ""; const upd = !meta.nextTestDate || meta.nextTestDate === autoPrev; setMeta({ testDate: nd, ...(upd ? { nextTestDate: addYearsISO(nd, 1) } : {}) }); })))
       , gsdEl("div", { style: { marginTop: 8 } }, gsdEl("div", { style: SS.metaLabelText }, "NEXT AUDIT DUE")
@@ -15706,7 +15538,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
     , field("DESCRIPTION", gsdEl("textarea", { style: { ...SS.modalInput, minHeight: 68, resize: "vertical", fontFamily: "inherit" }, value: r.description || "", placeholder: "Describe the defect…", "aria-label": "Description", onChange: e => set({ description: e.target.value }) }))
     , field("CATEGORY", gsdEl(IELEditableDropdown, { options: catOpts, value: r.category || "", onChange: v => set({ category: v }), placeholder: "Select or type…" }))
     , field("PRIORITY", gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
-      , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
+      , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
     , field("RESPONSIBILITY", gsdEl(IELEditableDropdown, { options: respOpts, value: r.responsibility || "", onChange: v => set({ responsibility: v }), placeholder: "Select or type…" }))
     , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
     , field("FIX BY DATE (informational)", gsdEl("input", { style: SS.modalInput, type: "date", value: r.dueDate || "", "aria-label": "Fix by date", onChange: e => set({ dueDate: e.target.value }) }))
@@ -15733,7 +15565,7 @@ function GSDReportView({ project, items, meta }) {
     , gsdEl("div", { style: SS.summaryMeta }, "SITE DEFECTS REPORT" + (meta.auditor ? ` · ${meta.auditor}` : ""))
     , meta.testDate && gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 8, marginBottom: 16, flexWrap: "wrap" } }
       , gsdEl("div", { style: { ...SS.duePill, borderColor: GSD_COLOR_BORDER, color: GSD_COLOR, padding: "7px 12px" } }, "Audited: ", fmtDate(meta.testDate), " → next due: ", meta.nextTestDate ? fmtDate(meta.nextTestDate) : "—"))
-    , gsdEl(ReportStatTiles, { rows: [["Defects", total, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Areas", sections.length, "#334155"], ["Photos", photos, "#92400e"]] })
+    , React.createElement(GSDCounts, { defects: total, areas: sections.length, photos, urgent })
     , total === 0 && gsdEl(ReportNoDefects)
     , sections.map(sec => gsdEl("div", { key: sec.area.id, style: { marginBottom: 16 } }
       , gsdEl("div", { style: { fontSize: 12, fontWeight: 700, color: GSD_COLOR, letterSpacing: 0.8, marginBottom: 6, textTransform: "uppercase" } }, sec.area.name, " · ", nw(sec.entries.length, "defect"))
@@ -15788,12 +15620,6 @@ function GSDManageView({ project, items, onUpdateProject, onRemoveArea }) {
 
 const gsdHighUrgent = items => (items || []).filter(i => i.priority === "H" || i.priority === "U").length;
 const gsdPhotoCount = items => (items || []).reduce((n, i) => n + (i.photos || []).length, 0);
-function GSDSummaryPills({ defects, urgent, photos }) {
-  return gsdEl("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }
-    , [["Defects", defects, "#334155"], ["High / Urgent", urgent, "#dc2626"], ["Photos", photos, "#92400e"]].map(([l, v, col]) =>
-      gsdEl("div", { key: l, style: { flex: 1, minWidth: 90, background: "#f7f6f3", border: `1px solid ${col}33`, borderRadius: 8, padding: "6px 12px", textAlign: "center" } }
-        , gsdEl("div", { style: { fontSize: 18, fontWeight: 800, color: col } }, v), gsdEl("div", { style: { fontSize: 10, color: "#6e6a66" } }, l))));
-}
 function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onExportSnap, onContinueFromSnap, error }) {
   const SS = swbStyles();
   const [expanded, setExpanded] = React.useState(null);
@@ -15803,7 +15629,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
       , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 10 } }
         , gsdEl("div", { style: { flex: 1 } }, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Snapshot"), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor", " · Read-only"))
         , gsdEl("button", { style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac" }, onClick: () => onExportSnap(snap) }, "Export"))
-      , gsdEl("div", { style: { marginBottom: 14 } }, gsdEl(GSDSummaryPills, { defects: (snap.items || []).length, urgent: gsdHighUrgent(snap.items), photos: gsdPhotoCount(snap.items) }))
+      , React.createElement(GSDCounts, { defects: (snap.items || []).length, areas: sections.length, photos: gsdPhotoCount(snap.items), urgent: gsdHighUrgent(snap.items), mb: 14 })
       , sections.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No defects in this snapshot.")
       , sections.map(sec => gsdEl("div", { key: sec.area.id, "data-area": sec.area.name }, gsdEl("div", { style: AREA_HDR_STYLE }, sec.area.name)
         , sec.entries.map(e => gsdEl("div", { key: e.item.id, "data-testid": "gsd-snap-row", style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "#f7f6f3", border: "1px solid #e4e4e7", borderRadius: 8, marginBottom: 4, minWidth: 0, overflow: "hidden" } }
@@ -15829,7 +15655,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
             , gsdEl("div", { style: { fontSize: 11, color: "#52525b", marginTop: 2 } }, "Archived ", fmtDateTime(snap.archivedAt))
             , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 6 } }
               , gsdEl("span", { style: { fontSize: 11, color: "#334155" } }, nw(n, "defect"))
-              , gsdEl("span", { style: { fontSize: 11, color: "#dc2626" } }, urgent, " High / Urgent")
+              , gsdEl("span", { style: { fontSize: 11, color: "#b91c1c" } }, urgent, " High / Urgent")
               , gsdEl("span", { style: { fontSize: 11, color: "#92400e" } }, nw(photos, "photo"))))
           , gsdEl("span", { style: { ...SS.arrow, color: open ? GSD_COLOR : "#52525b" } }, open ? "▾" : "›"))
         , open && gsdEl("div", { style: { padding: "0 16px 14px", borderTop: "1px solid #e4e4e7" } }
@@ -15843,7 +15669,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjLogo, xjSheet, xjSplit, GlobalSettingsView, LogoField,
+  loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };

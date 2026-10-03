@@ -81,7 +81,7 @@ describe('Welder module shell', () => {
     for (let i = 0; i < 12; i++) await setResult(user, i, pattern[i] === 'P' ? 'PASS' : 'N/A');
     expect(screen.getByText('Overall: PASS')).toBeInTheDocument();
     expect(screen.queryByText('⚠ FAIL — DEFECT DETAILS')).not.toBeInTheDocument();
-    expect(screen.getByText('100.0%')).toBeInTheDocument();
+    expect(screen.getByText('100.0% SCORE')).toBeInTheDocument();
     expect(ls('welder-results-v1').dixon.a1.items.visual.result).toBe('pass');
   });
 
@@ -155,7 +155,7 @@ describe('Welder module shell', () => {
     expect(screen.getByText('W001')).toBeInTheDocument();
     expect(screen.getByText('W002')).toBeInTheDocument();
     expect(screen.getByText('Kemppi MinarcMig Evo 200')).toBeInTheDocument();
-    expect(screen.getByText('UNTESTED').parentElement).toHaveTextContent('2');
+    expect(screen.getByText('2 UNTESTED')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Export/ })).not.toBeInTheDocument(); // export lives in History
   });
 
@@ -203,5 +203,17 @@ describe('Welder module shell', () => {
     render(<AppRoot />);
     await user.click(screen.getByRole('button', { name: 'Open Test Calendar' }));
     expect(await screen.findByText('Welder Testing')).toBeInTheDocument();
+  });
+});
+
+describe('Welder page: Corrective actions are plain text on the Overall line, not a pill or box', () => {
+  it('"N actions required" appears only when a failed item has a Corrective Action; there is no ACTIONS box', async () => {
+    const user = userEvent.setup(); seed(); await openWelder(user);
+    await setResult(user, 0, 'FAIL'); for (let i = 1; i < 12; i++) await setResult(user, i, 'PASS');
+    expect(screen.getByText('Overall: FAIL')).toBeInTheDocument(); expect(screen.queryByText(/actions? required/)).not.toBeInTheDocument();
+    await user.type(screen.getAllByPlaceholderText('Corrective action required')[0], 'Replace the earth lead');
+    expect(screen.getByText('Overall: FAIL · 1 action required')).toBeInTheDocument();
+    expect(screen.queryByText('ACTIONS')).not.toBeInTheDocument();                       // the old box is gone
+    expect([...document.querySelectorAll('[data-statuspill]')].filter(p => /ACTION/.test(p.textContent))).toEqual([]);   // and it is not a pill either
   });
 });

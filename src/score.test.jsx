@@ -59,7 +59,7 @@ describe('SWB board score (11 items, N/A removes an item)', () => {
 });
 
 describe('live UI', () => {
-  const score = () => screen.getByText('SCORE').parentElement.textContent.match(/(\d+\.\d%|—)/)[0];
+  const score = () => screen.getByText(/(\d+\.\d%|—) SCORE$/).textContent.match(/(\d+\.\d%|—)/)[0];
 
   it('ELT fitting page: AUDIT SUMMARY with SCORE that moves as the checks are tapped (live-saved)', async () => {
     localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site E', assets: [
@@ -93,6 +93,6 @@ describe('live UI', () => {
     expect(screen.getByText(/10\.0% SCORE/)).toBeInTheDocument();     // chip in the board's counter row
     await user.click(screen.getByRole('button', { name: /^Report$/ }));
     await waitFor(() => expect(screen.getByText('BOARD SUMMARY')).toBeInTheDocument());
-    expect(screen.getAllByText('10.0%').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/10.0%/).length).toBeGreaterThan(0);      // the per-board score pill ("10.0% SCORE")
   });
 });

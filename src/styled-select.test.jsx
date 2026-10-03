@@ -74,7 +74,7 @@ describe('SWB Risk Rating is the Priority button set', () => {
     expect(within(field).getAllByRole('button').map(b => b.textContent)).toEqual(['None', 'L — Low', 'M — Medium', 'H — High', 'U — Urgent']);
     expect(field.querySelector('select')).toBeNull();
     await user.click(within(field).getByRole('button', { name: 'H — High' }));
-    expect(within(field).getByRole('button', { name: 'H — High' })).toHaveStyle({ color: '#dc2626' });                   // the same colours as Priority (PRIORITY_COLORS.H)
+    expect(within(field).getByRole('button', { name: 'H — High' })).toHaveStyle({ color: '#b91c1c' });                   // the same colours as Priority (PRIORITY_COLORS.H)
     await user.click(screen.getByRole('button', { name: 'Back' }));
     await waitFor(() => expect(JSON.stringify(ls('swb-results-v1'))).toMatch(/"risk":"H"/));
   });

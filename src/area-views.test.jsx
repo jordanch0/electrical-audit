@@ -55,9 +55,9 @@ describe.each(Object.values(MODS))('$name: Site -> Area -> Assets', m => {
     await openSite(user, m, 'Audit');
     expect(areaNames()).toEqual(['Shed', 'Yard', 'Site A']);                        // 3 areas — not 5, not 4
     const shed = within(document.querySelector('[data-area="Shed"]'));
-    expect(shed.getByText(new RegExp(`2 ${m.noun}s · 0 tested`))).toBeInTheDocument();
+    expect(shed.getByText(`2 ${m.noun}s`)).toBeInTheDocument(); expect([...document.querySelector('[data-area="Shed"]').querySelectorAll('[data-statuspill]')].map(e => e.textContent)).toEqual(['0 PASS', '0 FAIL', '2 —']);   // unit subtitle + the compact set, no "N tested"
     expect(shed.getAllByRole('button').map(b => b.textContent)).toEqual([expect.stringContaining(m.title(1)), expect.stringContaining(m.title(3))]);
-    expect(within(document.querySelector('[data-area="Site A"]')).getByText(new RegExp(`1 ${m.noun} · 0 tested`))).toBeInTheDocument(); // blank Location -> site-name area
+    expect(within(document.querySelector('[data-area="Site A"]')).getByText(`1 ${m.noun}`)).toBeInTheDocument(); // blank Location -> site-name area
     await waitFor(() => expect(ls(p('projects-v2'))).toHaveLength(1));
     const v2 = ls(p('projects-v2'))[0];
     expect(v2.assets).toBeUndefined();
@@ -181,21 +181,19 @@ describe('export order = area order', () => {
     expect(eltRegisterRows(interleavedElt, res, {}).map(r => [r.cells[1], r.cells[2]])).toEqual([['North Bay', 'Door 1'], ['North Bay', 'Door 3'], ['Yard', 'Door 2'], ['Yard', 'Door 4']]);
     await exportELTExcel(interleavedElt, res, { auditor: 'J', testDate: '2026-07-13', nextTestDate: '2027-01-13' });
     const ws = (await load()).getWorksheet('Emergency Lighting');
-    expect(col(ws, 'B', 6, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
-    expect(col(ws, 'C', 6, 4)).toEqual(['Door 1', 'Door 3', 'Door 2', 'Door 4']);
+    expect(col(ws, 'B', 7, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);          // data rows start on row 7 (headings row 6 under the shared header)
+    expect(col(ws, 'C', 7, 4)).toEqual(['Door 1', 'Door 3', 'Door 2', 'Door 4']);
   });
 
   it('Welder register AND the per-welder sheets follow area order', async () => {
     expect(welderRegisterRows(interleavedWelder, {}, {}).map(r => [r.cells[0], r.cells[1]])).toEqual([['North Bay', 'W1'], ['North Bay', 'W3'], ['Yard', 'W2'], ['Yard', 'W4']]);
     await exportWelderExcel(interleavedWelder, {}, { auditor: 'J', testDate: '2026-07-13', nextTestDate: '2026-10-13' });
     const wb = await load();
-    expect(col(wb.getWorksheet('Register'), 'A', 6, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
+    expect(col(wb.getWorksheet('Register'), 'A', 7, 4)).toEqual(['North Bay', 'North Bay', 'Yard', 'Yard']);
     expect(wb.worksheets.map(w => w.name)).toEqual(['Register', 'W1', 'W3', 'W2', 'W4']);
-    // each welder sheet's header reads its AREA name as Location (the asset itself no longer stores one); row 3 is
-    // now one joined "Location: ...  |  Asset ID: ..." cell (2026-09-30 fix), not just "Location: ...".
-    expect(['W1', 'W3', 'W2', 'W4'].map(n => String(wb.getWorksheet(n).getCell('A3').value))).toEqual([
-      'Location: North Bay  |  Asset ID: W1', 'Location: North Bay  |  Asset ID: W3',
-      'Location: Yard  |  Asset ID: W2', 'Location: Yard  |  Asset ID: W4',
+    // each welder sheet's "Asset Details" block reads its AREA name as Location (the asset itself no longer stores one): label A7 / value B7, Asset ID on row 8
+    expect(['W1', 'W3', 'W2', 'W4'].map(n => [String(wb.getWorksheet(n).getCell('B7').value), String(wb.getWorksheet(n).getCell('B8').value)])).toEqual([
+      ['North Bay', 'W1'], ['North Bay', 'W3'], ['Yard', 'W2'], ['Yard', 'W4'],
     ]);
   });
 
@@ -204,6 +202,6 @@ describe('export order = area order', () => {
     const res = { p1: { a4: { ...MODS.elt.tested(), photos: [{ id: '1', dataUrl: PNG }] }, a1: { ...MODS.elt.tested(), photos: [{ id: '2', dataUrl: PNG }] } } };
     await exportELTExcel(interleavedElt, res, { auditor: 'J', testDate: '2026-07-13', nextTestDate: '2027-01-13' });
     const ws = (await load()).getWorksheet('Photos');
-    expect([2, 3].map(r => [String(ws.getCell('A' + r).value), String(ws.getCell('B' + r).value)])).toEqual([['North Bay', 'Door 1'], ['Yard', 'Door 4']]);
+    expect([7, 8].map(r => [String(ws.getCell('A' + r).value), String(ws.getCell('B' + r).value)])).toEqual([['North Bay', 'Door 1'], ['Yard', 'Door 4']]);
   });
 });

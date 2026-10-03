@@ -53,11 +53,12 @@ describe('ELT Excel export structure', () => {
     expect(ws).toBeTruthy();
 
     // header block
-    expect(text(ws.getCell('A1'))).toBe('Hearse Road Firestone — Emergency Lighting Test');
-    const co = text(ws.getCell('A2'));
+    // shared header (2026-10-02): row 1 = the always-reserved logo row (empty), row 2 = "{Site}  –  {Module}  ({Test type})", row 3 = company, row 4 = auditor / dates
+    expect(text(ws.getCell('A1'))).toBe('');
+    expect(text(ws.getCell('A2'))).toBe('Hearse Road Firestone  –  Emergency Lighting Test  (AS/NZS 2293.2:2019)');
+    const co = text(ws.getCell('A3'));
     expect(co).toContain('Dixon Quarry Group'); expect(co).toContain('12 345 678 901'); expect(co).toContain('EW123456');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
-    expect(text(ws.getCell('A3'))).toBe('Auditor: Jane Auditor  |  Date Tested: 21/09/2026  |  Next Test Due: 21/03/2027');
+    expect(text(ws.getCell('A4'))).toBe('Auditor: Jane Auditor  |  Date Tested: 21/09/2026  |  Next Test Due: 21/03/2027');
     // Rows 1-5 carry no INTENTIONAL fill/font/border styling — never bold, never a fill colour, never a border —
     // same as the real IEL/RCD/TAT/Thermo files. (A cell that has ANY style property set, even just alignment,
     // gets the workbook's plain default font baked in once the file round-trips through a real save/reload — e.g.
@@ -72,33 +73,33 @@ describe('ELT Excel export structure', () => {
       expect(cell.fill === undefined || cell.fill.pattern === 'none', 'fill r'+r+' c'+c).toBe(true);
       expect(!cell.font || (!cell.font.bold && !cell.font.italic), 'font r'+r+' c'+c+' should never be bold/italic').toBe(true);
       expect(!cell.border || Object.keys(cell.border).length === 0, 'border r'+r+' c'+c).toBe(true);
-      if (r <= 3) expect(cell.alignment, 'alignment r'+r+' c'+c).toMatchObject({ horizontal: 'center' });
-      else if (r === 4) expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined();
-      else expect(cell.alignment).toMatchObject({ wrapText: true });
+      if (r >= 2 && r <= 4 && c === 1) expect(cell.alignment, 'alignment r'+r).toMatchObject({ horizontal: 'center' });
+      else if (r === 1 || r === 5) expect(cell.alignment, 'alignment r'+r+' c'+c).toBeUndefined();   // the logo row and the spacer are never written to
     }
+    for (let c = 1; c <= 16; c++) expect(ws.getCell(6, c).alignment).toMatchObject({ wrapText: true });   // the table headings are row 6
     // same merges and row heights as IEL (adjusted for 16 columns). Row 3 (2026-09-30 fix): one full-width merge
     // (was 3 sub-merges).
     const merged = Object.keys(ws._merges).map(k => ws._merges[k].range).sort();
-    expect(merged).toEqual(['A1:P1','A2:P2','A3:P3','A4:P4'].sort());
-    expect([1,2,3,4,5].map(r => ws.getRow(r).height)).toEqual([32,16,16,6,44]);
+    expect(merged).toEqual(['A1:P1','A2:P2','A3:P3','A4:P4','A5:P5'].sort());   // all five header rows incl. the spacer are merged full width
+    expect([1,2,3,4,5,6].map(r => ws.getRow(r).height)).toEqual([45.75,31.5,15.75,15.75,6,43.5]);
 
-    // blank 6pt spacer row 4, then the column headings on row 5; no summary block or sheet
-    expect(rowVals(ws, 4).every(v => v === '')).toBe(true);
+    // blank 6pt spacer row 5, then the column headings on row 6; no summary block or sheet
+    expect(rowVals(ws, 5).every(v => v === '')).toBe(true);
     expect(wb.getWorksheet('Summary')).toBeUndefined();
 
     // percentages only in the Score column (col 14) of the data rows; no "pass rate" text and no % anywhere else in either sheet
     wb.eachSheet(sheet => sheet.eachRow((row, rowNo) => row.eachCell((c, colNo) => {
-      const isScoreCell = sheet.name === 'Emergency Lighting' && rowNo >= 6 && colNo === 14;
+      const isScoreCell = sheet.name === 'Emergency Lighting' && rowNo >= 7 && colNo === 14;
       if (isScoreCell) expect(text(c)).toMatch(/^\d+\.\d%$/); else expect(text(c)).not.toMatch(/%|pass rate/i);
     })));
 
     // exact column order
-    expect(rowVals(ws, 5)).toEqual(ELT_COLUMNS);
+    expect(rowVals(ws, 6)).toEqual(ELT_COLUMNS);
     expect(ELT_COLUMNS).toEqual(['#','Location','Asset Location','Asset ID','Type','Maintained/Non-Maintained','Fitting Type/Manufacturer','Date','Visual Inspection','90-Min Discharge Test','Automatic Switching Test','Charging Circuit Test','Pass/Fail','Score','Notes / Recommendations','Next Test Due']);
 
     // register rows: 4 tested, untested excluded
-    const rows = [6,7,8,9].map(r => rowVals(ws, r));
-    expect(text(ws.getCell(10,1))).toBe('');
+    const rows = [7,8,9,10].map(r => rowVals(ws, r));
+    expect(text(ws.getCell(11,1))).toBe('');
     expect(rows.map(r => r[2])).toEqual(['SE Door','SW Roof','Workshop','Office']);
     expect(rows.map(r => r[0])).toEqual(['1','2','3','4']);                        // the # cross-reference
     expect(rows.some(r => r[2]==='Store Room' || r[6]==='Untested one')).toBe(false);
@@ -111,7 +112,7 @@ describe('ELT Excel export structure', () => {
     rows.forEach(r => { expect(r[7]).toBe('21/09/2026'); expect(r[15]).toBe('21/03/2027'); expect(r[13]).toMatch(/^\d+\.\d%$/); });
 
     // data rows keep real thin borders on all four sides (SWB's swbXAB); headings are plain
-    for (const r of [6,7,8,9]) for (let c = 1; c <= 16; c++) {
+    for (const r of [7,8,9,10]) for (let c = 1; c <= 16; c++) {
       const b = ws.getCell(r,c).border || {};
       ['top','bottom','left','right'].forEach(side => expect(b[side] && b[side].style, 'border r'+r+' c'+c+' '+side).toBe('thin'));
     }
@@ -126,19 +127,20 @@ describe('ELT Excel export structure', () => {
 
     // Defects sheet: FAIL fittings only, keyed by the same # (2 = SW Roof, 3 = Workshop); the PASS row's retained defect data is not listed
     const ds = wb.getWorksheet('Defects');
-    expect(rowVals(ds, 5, 10)).toEqual(ELT_DEFECT_COLUMNS);
-    expect(rowVals(ds, 6, 10)).toEqual(['2','Hearse Road Firestone','SW Roof','','74','H','Scheduled for Repair','01/10/2026','Client','Seal cracked']);
-    expect(rowVals(ds, 7, 10)).toEqual(['3','Hearse Road Firestone','Workshop','EL-003','','','Removed from Service','','Site Electrician','']);
-    expect(rowVals(ds, 8, 10).every(v => v === '')).toBe(true);
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell.
-    expect(text(ds.getCell('A3'))).toMatch(/^Defects recorded: 2\b/);
+    expect(rowVals(ds, 6, 10)).toEqual(ELT_DEFECT_COLUMNS);
+    expect(rowVals(ds, 7, 10)).toEqual(['2','Hearse Road Firestone','SW Roof','','74','H','Scheduled for Repair','01/10/2026','Client','Seal cracked']);
+    expect(rowVals(ds, 8, 10)).toEqual(['3','Hearse Road Firestone','Workshop','EL-003','','','Removed from Service','','Site Electrician','']);
+    expect(rowVals(ds, 9, 10).every(v => v === '')).toBe(true);            // the blank row between the table and the footer
+    // footer (always written): the count COMPUTED from the 2 defect rows, then the priority legend
+    expect(text(ds.getCell('A10'))).toBe('Defects recorded: 2');
+    expect(text(ds.getCell('A11'))).toBe('Priority: L Low · M Medium · H High · U Urgent');
     expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting','Defects','Photos']);
   });
 
   it('does not leak retained pre-standard Failure Reason/Action (or standard defect data) into a passing row', async () => {
     const res = { p1: { a1: { ...pass4, failReason:'Lamp Failure', action:'Repaired On-Site', rectified:'Stale', notes:'ok' } } };
     const wb = await runExport({ ...project, areas:[{ ...project.areas[0], assets:[project.areas[0].assets[0]] }] }, res, meta);
-    expect(text(wb.getWorksheet('Emergency Lighting').getCell('O6'))).toBe('ok');
+    expect(text(wb.getWorksheet('Emergency Lighting').getCell('O7'))).toBe('ok');
   });
 });
 
@@ -148,17 +150,17 @@ describe('ELT Photos sheet', () => {
     const ps = wb.getWorksheet('Photos');
     expect(ps).toBeTruthy();
     expect(wb.worksheets.map(w => w.name)).toEqual(['Emergency Lighting','Defects','Photos']);
-    expect(rowVals(ps, 1, 4)).toEqual(['Location','Asset Location','Asset ID','Photo']);
+    expect(rowVals(ps, 6, 4)).toEqual(['Location','Asset Location','Asset ID','Photo']);   // the Photos sheet now has the shared header; headings on row 6
     const images = ps.getImages();
     expect(images).toHaveLength(2);
     // ExcelJS reports the anchor as 0-based row; Excel row = floor(row)+1
     const excelRows = images.map(im => Math.floor(im.range.tl.row) + 1).sort((a,b)=>a-b);
-    expect(excelRows).toEqual([2,3]);
+    expect(excelRows).toEqual([7,8]);
     excelRows.forEach(r => {
       expect(rowVals(ps, r, 3)).toEqual(['Hearse Road Firestone','Office','EL-005']);
     });
     // no rows for fittings without photos
-    expect(text(ps.getCell(4,2))).toBe('');
+    expect(text(ps.getCell(9,2))).toBe('');
   });
 
   it('is omitted when no fitting has photos', async () => {
@@ -174,9 +176,9 @@ describe('ELT Photos sheet', () => {
     const ps = wb.getWorksheet('Photos');
     expect(ps).toBeTruthy();
     expect(ps.getImages()).toHaveLength(2);
-    expect([2,3].map(r => text(ps.getCell(r,2))).sort()).toEqual(['Store Room','Workshop']);
+    expect([7,8].map(r => text(ps.getCell(r,2))).sort()).toEqual(['Store Room','Workshop']);
     const reg = wb.getWorksheet('Emergency Lighting');
-    expect(reg.getCell('A6').value == null || text(reg.getCell('A6')) === '').toBe(true); // no register rows
+    expect(reg.getCell('A7').value == null || text(reg.getCell('A7')) === '').toBe(true); // no register rows
   });
 });
 

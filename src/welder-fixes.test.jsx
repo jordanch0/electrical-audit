@@ -22,7 +22,7 @@ const seed = extra => {
 };
 const card = i => screen.getByText(new RegExp(`^${i + 1}\\. ${WELDER_CHECKLIST[i].label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)).parentElement;
 const setResult = (user, i, label) => user.click(within(card(i)).getByRole('button', { name: label }));
-const score = () => screen.getByText('SCORE').parentElement.textContent.match(/(\d+\.\d%|—)/)[0];
+const score = () => screen.getByText(/(\d+\.\d%|—) SCORE$/).textContent.match(/(\d+\.\d%|—)/)[0];
 async function openWelder(user, tab) {
   render(<AppRoot />);
   await user.click(screen.getByText('WELDER TESTING'));
@@ -56,7 +56,7 @@ describe('Welder score, live in the UI', () => {
     const user = userEvent.setup();
     cleanup();
     await openWelder(user, 'Report');
-    expect(screen.queryByText('SCORE')).not.toBeInTheDocument();
+    expect(screen.queryByText(/SCORE/)).not.toBeInTheDocument();
   });
 });
 
@@ -84,8 +84,9 @@ describe('Date Tested / Prepared By / Test Instruments are site-level only', () 
     await waitFor(() => expect(payload).toBeTruthy());
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64'));
     const sh = wb.getWorksheet('W001');
-    // Row 6 and row 5 are each ONE joined "  |  " cell in col A now (2026-09-30 fix), not separate col A / col C cells.
-    expect([sh.getCell('A6').value, sh.getCell('A5').value]).toEqual(['Prepared By: Jordan  |  Test Instruments: Fluke 1587', 'Serial Number: 1  |  Date Tested: 13/07/2026']);
+    // 2026-10-02 shared header: Test Instruments and Serial Number are rows of the "Asset Details" block (label cell + value cell); "Prepared By" is gone (same value as Auditor, header row 4)
+    expect([[sh.getCell('A12').value, sh.getCell('B12').value], [sh.getCell('A11').value, sh.getCell('B11').value]]).toEqual([['Test Instruments', 'Fluke 1587'], ['Serial Number', '1']]);
+    expect(String(sh.getCell('A4').value)).toContain('Auditor: Jordan');
     // the app opens such a record without trouble and the override is gone from storage once the welder is edited
     seed({ 'welder-results-v1': { dixon: { a1: stale } } });
     const user = userEvent.setup();

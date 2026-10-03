@@ -123,8 +123,8 @@ describe('the export carries the typed text', () => {
     window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } };
     await exportTATExcel(project, {}, { auditor: 'J', testDate: '2026-09-21' });
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64')); const ws = wb.getWorksheet('Test & Tag');
-    const col = ws.getRow(5).values.indexOf('Equipment Type');
-    expect([6, 7, 8].map(r => String(ws.getCell(r, col).value))).toEqual(['Power Tool', 'Toaster', 'Other']);
+    const col = ws.getRow(6).values.indexOf('Equipment Type');
+    expect([7, 8, 9].map(r => String(ws.getCell(r, col).value))).toEqual(['Power Tool', 'Toaster', 'Other']);
     delete window.webkit;
   });
 });

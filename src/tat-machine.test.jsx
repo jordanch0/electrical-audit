@@ -26,6 +26,8 @@ async function openHome(user) {
 }
 const field = () => screen.getByRole('textbox', { name: 'Machine used' });
 const loadWb = async () => { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64')); return wb; };
+// The main sheet's column-A text lines, in order: the footer line starting with `prefix` and the line right after it.
+const footerLine = (wb, prefix) => { const lines = []; wb.getWorksheet('Test & Tag').eachRow(row => lines.push(String(row.getCell(1).value == null ? '' : row.getCell(1).value))); const i = lines.findIndex(l => l.startsWith(prefix)); return { text: lines[i], next: lines[i + 1] }; };
 
 describe('Home: the MACHINE USED input', () => {
   it('sits directly below TEST DATE in the meta card, with the approved label and placeholder', async () => {
@@ -69,7 +71,7 @@ describe('Complete Audit and History carry the machine', () => {
     expect(field()).toHaveValue('Rigel 288 (S/N 4471)');
   });
 
-  it('exporting a History snapshot through the real UI writes the snapshot\'s machine in the header', async () => {
+  it('exporting a History snapshot through the real UI writes the snapshot\'s machine in the footer ("Test Machine:" above Notes)', async () => {
     seedMeta({ machine: 'Rigel 288 (S/N 4471)' }); const user = userEvent.setup(); await openHome(user);
     await user.click(await screen.findByRole('button', { name: /Complete Test & Tag Audit/ }));
     await user.click(screen.getByRole('button', { name: /Yes, Complete/ }));
@@ -81,8 +83,12 @@ describe('Complete Audit and History carry the machine', () => {
     await user.click(screen.getByRole('button', { name: 'View Results' }));
     await user.click(await screen.findByRole('button', { name: /Export/ }));
     await waitFor(() => expect(payload).toBeTruthy());
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was separate A3/C3/E3 cells).
-    expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A3').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Machine Used: Rigel 288 (S/N 4471)');
+    // the machine is report-level and left the header (2026-10-02 shared header): it is the footer line directly above "Notes:"
+    expect(footerLine(await loadWb(), 'Test Machine:')).toEqual({ text: 'Test Machine: Rigel 288 (S/N 4471)', next: 'Notes: ' });
+    // an ARCHIVED report carries the same shared header as a live one: logo row, title, company, auditor / dates (earliest next-due of the items passed), table on row 6
+    const arch = (await loadWb()).getWorksheet('Test & Tag');
+    expect([1, 2, 3, 4, 5].map(r => String(arch.getCell(r, 1).value == null ? '' : arch.getCell(r, 1).value))).toEqual(['', 'Site T  –  Test & Tag  (In-Service Electrical Equipment)', 'Co', 'Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due (earliest): 21/12/2026', '']);
+    expect(String(arch.getCell(6, 1).value)).toBe('#');
   });
 });
 
@@ -105,20 +111,39 @@ describe('Report tab: "Machine: …" under the auditor / date line', () => {
   });
 });
 
-describe('export header: "Machine Used: …" in the joined row 3', () => {
-  // Row 3 (2026-09-30 fix): Auditor / Date Tested / Machine Used are now ONE joined "  |  " string in ONE
-  // full-width cell (A3), not separate A3/C3/E3 cells with their own sub-merges.
-  const run = m => exportTATExcel(project, { a1: tested }, { auditor: 'Jane', testDate: '2026-09-21', ...m });
-  it('carries the value joined after Auditor and Date Tested, in one full-width merged cell', async () => {
-    await run({ machine: 'Rigel 288 (S/N 4471)' }); const ws = (await loadWb()).getWorksheet('Test & Tag');
-    expect(String(ws.getCell('A3').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Machine Used: Rigel 288 (S/N 4471)');
-    expect(Object.keys(ws._merges).map(k => ws._merges[k].range).some(r => /^A3:[A-Z]+3$/.test(r))).toBe(true);
+describe('export: "Test Machine:" footer line + "Next Test Due (earliest)" in header row 4', () => {
+  // 2026-10-02 (shared header): the machine is a report-level value that used to ride in the header; it is now the footer line directly above "Notes:". Header row 4 is the
+  // standard "Auditor | Date Tested | next-due" line; TAT has no single report-level due date (each item has its own frequency), so it shows the EARLIEST due date among the
+  // items PASSED in this report (failed / N/A / untested / undated items are excluded; blank when none qualify).
+  const run = (m, results = { a1: tested }, proj = project) => exportTATExcel(proj, results, { auditor: 'Jane', testDate: '2026-09-21', ...m });
+  it('the machine is the footer line directly above Notes (and no longer in the header); row 4 is Auditor | Date Tested | Next Test Due (earliest) in one full-width merged cell', async () => {
+    await run({ machine: 'Rigel 288 (S/N 4471)' }); const wb = await loadWb(); const ws = wb.getWorksheet('Test & Tag');
+    expect(footerLine(wb, 'Test Machine:')).toEqual({ text: 'Test Machine: Rigel 288 (S/N 4471)', next: 'Notes: ' });
+    expect(JSON.stringify([1, 2, 3, 4, 5].map(r => ws.getCell(r, 1).value))).not.toMatch(/Machine/);
+    expect(String(ws.getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due (earliest): 21/12/2026');   // i1 passed 21/09/2026 + 3 months; i2 FAILED and is ignored
+    expect(Object.keys(ws._merges).map(k => ws._merges[k].range).some(r => /^A4:[A-Z]+4$/.test(r))).toBe(true);
   });
-  it('is printed even when blank, whitespace-free legacy or missing (label only)', async () => {
-    for (const m of [{}, { machine: '' }]) { payload = null; await run(m); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A3').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Machine Used: '); }
+  it('the footer line is printed even when the machine is blank or missing (label only)', async () => {
+    for (const m of [{}, { machine: '' }]) { payload = null; await run(m); expect(footerLine(await loadWb(), 'Test Machine:')).toEqual({ text: 'Test Machine: ', next: 'Notes: ' }); }
   });
-  it('the Defects sheet is unchanged (its row 3 still carries the priority legend, now joined too)', async () => {
-    await run({ machine: 'X' }); const ws = (await loadWb()).getWorksheet('Defects');
-    expect(String(ws.getCell('A3').value)).toMatch(/Priority: L Low/);
+  it('the Defects sheet carries the SAME header (row 4 identical) and the always-present footer with the priority legend', async () => {
+    await run({ machine: 'X' }); const wb = await loadWb(); const ws = wb.getWorksheet('Defects'); const main = wb.getWorksheet('Test & Tag');
+    expect(String(ws.getCell('A4').value)).toBe(String(main.getCell('A4').value)); expect(String(ws.getCell('A2').value)).toBe(String(main.getCell('A2').value));
+    const lines = []; ws.eachRow(row => lines.push(String(row.getCell(1).value == null ? '' : row.getCell(1).value)));
+    expect(lines).toContain('Priority: L Low · M Medium · H High · U Urgent'); expect(lines).toContain('Defects recorded: 1');
+  });
+  it('earliest next-due: only PASSED items with a due date count, and the earliest wins (a failed item with an earlier date, an N/A one and an untested one are ignored)', async () => {
+    const proj = JSON.parse(JSON.stringify(project)); proj.areas[0].items = ['i1', 'i2', 'i3', 'i4']; proj.areas[0].itemNames = { i1: 'A', i2: 'B', i3: 'C', i4: 'D' }; proj.areas[0].itemTags = { i1: '1', i2: '2', i3: '3', i4: '4' };
+    proj.areas[0].itemEquipTypes = { i1: 'x', i2: 'x', i3: 'x', i4: 'x' }; proj.areas[0].itemFreqs = { i1: '3', i2: '1', i3: '1', i4: '1' };
+    const res = { a1: {
+      i1: { status: 'pass', lastTested: '2026-09-21', freq: '3' },                 // due 21/12/2026
+      i2: { status: 'pass', lastTested: '2026-08-01', freq: '1' },                 // due 01/09/2026  <- the earliest PASSED
+      i3: { status: 'fail', lastTested: '2026-01-01', freq: '1', defectId: 'D1' }, // due 01/02/2026 but FAILED -> excluded
+      i4: { status: 'na', lastTested: '2026-01-01', freq: '1' } } };               // N/A -> excluded
+    await run({}, res, proj); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due (earliest): 01/09/2026');
+  });
+  it('blank when no item qualifies (everything failed / N/A / untested / undated) — the label stays', async () => {
+    const res = { a1: { i1: { status: 'fail', lastTested: '2026-09-21', freq: '3' }, i2: { status: 'pass', lastTested: '', freq: '3' } } };
+    await run({}, res); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due (earliest): ');
   });
 });

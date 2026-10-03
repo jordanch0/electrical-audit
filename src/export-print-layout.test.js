@@ -67,7 +67,7 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
       expect((x.match(/<pageSetup /g) || []).length).toBe(1);                       // never duplicated
       if (names[i] !== 'Summary') {
         expect(x, names[i]).toContain('orientation="landscape"');
-        expect(wbXml, names[i]).toMatch(new RegExp(`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">(?:'|&apos;)${names[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:'|&apos;)!\\$5:\\$5</definedName>`));
+        expect(wbXml, names[i]).toMatch(new RegExp(`<definedName name="_xlnm.Print_Titles" localSheetId="${i}">(?:'|&apos;)${names[i].replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:'|&apos;)!\\$6:\\$6</definedName>`));
       }
     }
   });
@@ -77,45 +77,46 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
     const wb = readWb(); expect(wb.SheetNames.length).toBeGreaterThanOrEqual(2);
     const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64'));
     const ws = ej.worksheets[0];
-    expect(ws.pageSetup).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '5:5' });
+    expect(ws.pageSetup).toMatchObject({ paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: '6:6' });
     expect(ws.pageSetup.margins).toMatchObject({ left: 0.25, right: 0.25 });
   });
 
   it('the main table carries NO defect columns, starts with #, and fits a landscape page at >= 85% scale', async () => {
     await run(); const zip = await readZip(); const wb = readWb();
     const main = wb.SheetNames[0]; const g = grid(wb, main);
-    expect(g[4][0]).toBe('#');
-    DEFECT_HEADS.forEach(h => expect(g[4], h).not.toContain(h));
-    expect(g[4].some(h => /^Priority/.test(h))).toBe(false);
+    expect(g[5][0]).toBe('#');                                                       // the table headings are ALWAYS on row 6 (index 5) under the 5-row shared header
+    DEFECT_HEADS.forEach(h => expect(g[5], h).not.toContain(h));
+    expect(g[5].some(h => /^Priority/.test(h))).toBe(false);
     const xml = await zip.file('xl/worksheets/sheet1.xml').async('string');
-    expect(fitScale(xml, g[4].length)).toBeGreaterThanOrEqual(0.85);
-    expect(g[4].some(h => /^Notes/.test(h))).toBe(true);                             // Notes stays in the main table
-    expect(g[4].some(h => /Date|Next Test/.test(h))).toBe(true);                     // compliance dates stay in the main table
+    expect(fitScale(xml, g[5].length)).toBeGreaterThanOrEqual(0.85);
+    expect(g[5].some(h => /^Notes/.test(h))).toBe(true);                             // Notes stays in the main table
+    expect(g[5].some(h => /Date|Next Test/.test(h))).toBe(true);                     // compliance dates stay in the main table
   });
 
   it('headings wrap (ExcelJS), so a narrow column can hold a long heading: every heading cell has wrapText on', async () => {
     await run();
     const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64'));
-    ej.worksheets.filter(ws => ws.name !== 'Summary').forEach(ws => ws.getRow(5).eachCell(cell => expect(cell.alignment, ws.name + ' ' + cell.value).toMatchObject({ wrapText: true })));
+    ej.worksheets.filter(ws => ws.name !== 'Summary').forEach(ws => ws.getRow(6).eachCell(cell => expect(cell.alignment, ws.name + ' ' + cell.value).toMatchObject({ wrapText: true })));
   });
 
   it('Defects sheet: FAIL rows only, same # as the main table, identifiers repeated, stale data on PASS rows never listed', async () => {
     await run(); const wb = readWb();
-    const m = grid(wb, wb.SheetNames[0]).slice(5).filter(r => /^\d+$/.test(r[0])); const d = grid(wb, 'Defects');
-    DEFECT_HEADS.forEach(h => expect(d[4], h).toContain(h));
-    const rows = d.slice(5).filter(r => /^\d+$/.test(r[0]));
+    const m = grid(wb, wb.SheetNames[0]).slice(6).filter(r => /^\d+$/.test(r[0])); const d = grid(wb, 'Defects');
+    DEFECT_HEADS.forEach(h => expect(d[5], h).toContain(h));
+    const rows = d.slice(6).filter(r => /^\d+$/.test(r[0]));
     expect(rows).toHaveLength(failCount);
-    const passFailCol = grid(wb, wb.SheetNames[0])[4].findIndex(h => /Pass \/ Fail/.test(h));
+    const passFailCol = grid(wb, wb.SheetNames[0])[5].findIndex(h => /Pass \/ Fail/.test(h));
     rows.forEach(r => {
       const mainRow = m.find(x => x[0] === r[0]);
       expect(mainRow, '# ' + r[0]).toBeTruthy();
       expect(mainRow[passFailCol].toUpperCase()).toMatch(/FAIL|MONITOR/);          // # points at a failing row
-      const mh = grid(wb, wb.SheetNames[0])[4]; d[4].slice(1, 1 + d[4].findIndex(h => h === 'Defect ID') - 1).forEach((h, k) => expect(mainRow[mh.indexOf(h)], h).toBe(r[1 + k]));   // every identifier heading shared with the main table agrees
+      const mh = grid(wb, wb.SheetNames[0])[5]; d[5].slice(1, 1 + d[5].findIndex(h => h === 'Defect ID') - 1).forEach((h, k) => expect(mainRow[mh.indexOf(h)], h).toBe(r[1 + k]));   // every identifier heading shared with the main table agrees
     });
     expect(JSON.stringify(d)).not.toContain('STALE');
     expect(JSON.stringify(grid(wb, wb.SheetNames[0]))).not.toContain('STALE');
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was "Defects recorded: N" alone).
-    expect(d[2][0]).toMatch(new RegExp(`^Defects recorded: ${failCount}\\b`));
+    // The count and the priority legend are a FOOTER under the table (no longer in the header); the count is computed from the real rows.
+    expect(d.map(r => r[0]).filter(x => /^Defects recorded:/.test(x))).toEqual([`Defects recorded: ${failCount}`]);
+    expect(d.map(r => r[0])).toContain('Priority: L Low · M Medium · H High · U Urgent');
   });
 
   it('with ZERO fails the Defects sheet still exists with its headings and a "No defects recorded" line', async () => {
@@ -125,8 +126,10 @@ describe.each(MODULES)('%s export: narrow main table + Defects sheet + real page
     const runs = { 'RCD push': () => exportExcel(c.rcdResults, rcdProject, meta, 'push', null), 'RCD injection': () => exportExcel(passAll(JSON.parse(JSON.stringify(c.rcdResults))), rcdProject, meta, 'inject', null),
       IEL: () => exportIELExcel(ielProject, c.ielResults, meta), TAT: () => exportTATExcel(tatProject, c.tatResults, meta), Thermo: () => exportThermoExcel(thermoProject, c.thermoResults, meta), IRT: () => exportIRTExcel(irtProject, c.irtResults, meta) };
     await runs[name](); const wb = readWb(); const d = grid(wb, 'Defects');
-    DEFECT_HEADS.forEach(h => expect(d[4], h).toContain(h));
-    expect(d[5][0]).toBe('No defects recorded'); expect(d[2][0]).toMatch(/^Defects recorded: 0\b/);
+    DEFECT_HEADS.forEach(h => expect(d[5], h).toContain(h));
+    // row 7 keeps the "No defects recorded" line in the table area; the footer (blank row, count, legend) sits below it and is ALWAYS written, even with 0 defects
+    expect(d[6][0]).toBe('No defects recorded');
+    expect(d.slice(7).map(r => r[0])).toEqual(['', 'Defects recorded: 0', 'Priority: L Low · M Medium · H High · U Urgent']);
   });
 });
 
@@ -137,7 +140,7 @@ describe('RCD: the Defects sheet REPLACES the old "Failed Circuits" list on Summ
     expect(JSON.stringify(sum)).not.toMatch(/Failed Circuits|"Area","Panel","Circuit"/);
     expect(sum.find(r => r[0] === 'Failed circuits')[1]).toBe('1 — see the Defects sheet');
     expect(sum.find(r => r[0] === 'Fail')[1]).toBe('1');                               // the counts are still there
-    const row = d.slice(5).find(r => r[0] === '1');
+    const row = d.slice(6).find(r => r[0] === '1');
     expect(row.slice(1, 3)).toEqual(['Plant', 'MSB C1']);                              // Area + Panel + Circuit (panel and circuit share the cell, as in the main table)
     expect(row).toContain(mode === 'push' ? 'Slow trip' : 'Slow');                     // Notes
     expect(row).toContain('H');                                                        // Priority
@@ -146,7 +149,7 @@ describe('RCD: the Defects sheet REPLACES the old "Failed Circuits" list on Summ
   it('a >300 ms injection result counts as a defect even when the stored status is not FAIL (the old list missed these)', async () => {
     const res = JSON.parse(JSON.stringify(rcdResults)); res.p.a.pn.C3.inject = { status: 'pass', resultPos: '>300', resultNeg: '20', comment: 'slow', priority: 'M' };
     await exportExcel(res, rcdProject, meta, 'inject', null);
-    const d = grid(readWb(), 'Defects').slice(5).filter(r => /^\d+$/.test(r[0]));
+    const d = grid(readWb(), 'Defects').slice(6).filter(r => /^\d+$/.test(r[0]));
     expect(d.map(r => r[2])).toEqual(['MSB C1', 'MSB C3']);
   });
 });
@@ -156,11 +159,11 @@ describe('IRT: three linked sheets — Register (short + narrow), Readings (full
     await exportIRTExcel(irtProject, irtResults, meta); const wb = readWb(); const zip = await readZip();
     expect(wb.SheetNames).toEqual(['Register', 'Readings', 'Defects']);              // Register FIRST: it is the sheet the importer reads and the one for a client PDF
     const reg = grid(wb, 'Register'); const rd = grid(wb, 'Readings');
-    expect(reg[4]).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Date', 'Pass / Fail', 'Notes / Recommendations']);
-    expect(rd[4]).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Voltage', 'L1-E', 'L2-E', 'L3-E', 'N-E', 'L1-L2', 'L1-L3', 'L2-L3', 'L1-N', 'L2-N', 'L3-N', 'Pass / Fail']);
-    // Row 3 (2026-09-30 fix): one joined "  |  " string in one full-width cell (was "All readings in MΩ" alone).
-    expect(rd[2].some(c => String(c).includes('All readings in MΩ'))).toBe(true);    // the unit is stated once, not on every heading
-    const regRows = reg.slice(5).filter(r => /^\d+$/.test(r[0])); const rdRows = rd.slice(5).filter(r => /^\d+$/.test(r[0]));
+    expect(reg[5]).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Date', 'Pass / Fail', 'Notes / Recommendations']);
+    // The unit sits on each of the 10 resistance headings now (the header block no longer carries a units note); Test Voltage (volts) and Pass / Fail have none.
+    expect(rd[5]).toEqual(['#', 'Location', 'Panel / DB', 'Equipment / Circuit', 'Test Voltage', 'L1-E (MΩ)', 'L2-E (MΩ)', 'L3-E (MΩ)', 'N-E (MΩ)', 'L1-L2 (MΩ)', 'L1-L3 (MΩ)', 'L2-L3 (MΩ)', 'L1-N (MΩ)', 'L2-N (MΩ)', 'L3-N (MΩ)', 'Pass / Fail']);
+    expect(rd.slice(0, 5).join('|')).not.toContain('MΩ');                            // nothing about units left in the header block
+    const regRows = reg.slice(6).filter(r => /^\d+$/.test(r[0])); const rdRows = rd.slice(6).filter(r => /^\d+$/.test(r[0]));
     expect(regRows).toHaveLength(3); expect(rdRows).toHaveLength(3);                 // same number of circuits on both — nothing lost
     expect(regRows.map(r => r[0])).toEqual(rdRows.map(r => r[0]));
     expect(regRows.map(r => r[3])).toEqual(rdRows.map(r => r[3]));                   // same circuit on each # (matching Equipment / Circuit)
@@ -170,7 +173,7 @@ describe('IRT: three linked sheets — Register (short + narrow), Readings (full
     // the Register is the short/narrow sheet: 7 columns, prints at 100%; Readings keeps all the measurement columns
     const x1 = await zip.file('xl/worksheets/sheet1.xml').async('string'); const x2 = await zip.file('xl/worksheets/sheet2.xml').async('string');
     expect(fitScale(x1, 7)).toBe(1); expect(fitScale(x2, 16)).toBeGreaterThanOrEqual(0.85);
-    expect(reg[4].length).toBeLessThan(rd[4].length);
+    expect(reg[5].length).toBeLessThan(rd[5].length);
   });
 });
 
@@ -195,7 +198,7 @@ describe('ELT (ExcelJS): native page setup on every sheet, main + Defects + Phot
     await exportELTExcel(project, { p1: { a1: { visual: 'fail', discharge: 'pass', switching: 'pass', charging: 'pass', photos: [{ id: '1', dataUrl: png }] } } }, meta);
     const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64'));
     expect(ej.worksheets.map(w => w.name)).toEqual(['Emergency Lighting', 'Defects', 'Photos']);
-    for (const [i, orient, title] of [[0, 'landscape', '5:5'], [1, 'landscape', '5:5'], [2, 'portrait', '1:1']]) {
+    for (const [i, orient, title] of [[0, 'landscape', '6:6'], [1, 'landscape', '6:6'], [2, 'portrait', '6:6']]) {
       expect(ej.worksheets[i].pageSetup, ej.worksheets[i].name).toMatchObject({ paperSize: 9, orientation: orient, fitToPage: true, fitToWidth: 1, fitToHeight: 0, printTitlesRow: title });
       expect(ej.worksheets[i].headerFooter.oddFooter).toContain('Page &P of &N');
     }
@@ -205,19 +208,19 @@ describe('ELT (ExcelJS): native page setup on every sheet, main + Defects + Phot
 describe('SWB and Welder (ExcelJS): native page setup on every sheet, like the other six exports', () => {
   const want = { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 };
   async function read() { const ej = new ExcelJS.Workbook(); await ej.xlsx.load(Buffer.from(payload.base64, 'base64')); return ej; }
-  it('SWB: the Register repeats its heading row 5; each board form is landscape / fit to width; every sheet has the page footer', async () => {
+  it('SWB: the Register repeats its heading row 6; each board form is landscape / fit to width; every sheet has the page footer', async () => {
     const project = { id: 's1', name: 'Site S', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Area', boards: [{ id: 'b1', name: 'MSB' }, { id: 'b2', name: 'DB1' }] }] };
     await exportSWBExcel(project, {}, meta); const ej = await read();
     expect(ej.worksheets.map(w => w.name)).toEqual(['Register', 'MSB', 'DB1']);
-    expect(ej.worksheets[0].pageSetup).toMatchObject({ ...want, printTitlesRow: '5:5' });
+    expect(ej.worksheets[0].pageSetup).toMatchObject({ ...want, printTitlesRow: '6:6' });
     for (const w of ej.worksheets.slice(1)) expect(w.pageSetup, w.name).toMatchObject(want);
     for (const w of ej.worksheets) expect(w.headerFooter.oddFooter, w.name).toContain('Page &P of &N');
   });
-  it('Welder: the Register repeats its heading row 5; each welder form is landscape / fit to width; every sheet has the page footer', async () => {
+  it('Welder: the Register repeats its heading row 6; each welder form is landscape / fit to width; every sheet has the page footer', async () => {
     const project = { id: 'w', name: 'Site W', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W001', brand: 'K', model: 'E', serial: '1' }, { id: 'a2', assetId: 'W002', brand: 'K', model: 'E', serial: '2' }] }] };
     await exportWelderExcel(project, {}, meta); const ej = await read();
     expect(ej.worksheets.map(w => w.name)).toEqual(['Register', 'W001', 'W002']);
-    expect(ej.worksheets[0].pageSetup).toMatchObject({ ...want, printTitlesRow: '5:5' });
+    expect(ej.worksheets[0].pageSetup).toMatchObject({ ...want, printTitlesRow: '6:6' });
     for (const w of ej.worksheets.slice(1)) expect(w.pageSetup, w.name).toMatchObject(want);
     for (const w of ej.worksheets) expect(w.headerFooter.oddFooter, w.name).toContain('Page &P of &N');
   });

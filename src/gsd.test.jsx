@@ -51,16 +51,23 @@ describe('layout maths', () => {
     const many = { caption: '#1 tall', detail: 'd', photos: P(45) };                // 9 photo rows of 123pt
     const { rows, breaks } = gsdLayout([{ name: 'A', items: [{ caption: '#0 first', detail: '', photos: P(2) }, many] }]);
     breaks.forEach(b => { const prev = rows[b - 1]; const cur = rows[b]; if (cur.kind === 'photos') expect(prev.kind).toBe('photos'); expect(prev.kind).not.toBe('caption'); expect(prev.kind).not.toBe('detail'); });
-    let y = 70, page = 0; const spans = []; rows.forEach((r, i) => { if (breaks.includes(i)) { spans.push(y); y = 0; page++; } y += r.h; }); spans.push(y);
+    let y = 114.75, page = 0; const spans = []; rows.forEach((r, i) => { if (breaks.includes(i)) { spans.push(y); y = 0; page++; } y += r.h; }); spans.push(y);   // y starts at 114.75 = GSD_HEAD_PT, the fixed shared header (45.75 + 31.5 + 15.75 + 15.75 + 6)
     spans.forEach(s => expect(s).toBeLessThanOrEqual(730 + 1));                       // no page is over-full
     expect(page).toBeGreaterThan(0);
   });
   it('when only the caption would fit at the bottom of a page, the caption moves WITH its photos (no page is ever over-full)', () => {
-    const fill = Array.from({ length: 24 }, (_, i) => ({ caption: '#' + i + ' filler', detail: '', photos: [] }));
-    const { rows, breaks } = gsdLayout([{ name: 'A', items: [...fill, { caption: '#25 with photo', detail: '', photos: P(1) }] }]);
-    const cap = rows.findIndex(r => r.text === '#25 with photo'); expect(breaks).toContain(cap);                       // the break goes BEFORE the caption
-    let y = 70; const pages = []; rows.forEach((r, i) => { if (breaks.includes(i)) { pages.push(y); y = 0; } y += r.h; }); pages.push(y);
-    pages.forEach(s => expect(s).toBeLessThanOrEqual(731));
+    // The page budget starts below the fixed 114.75pt shared header, so the exact filler count that leaves "room for the caption only" depends on it: sweep a
+    // range of filler counts — NO page may ever be over-full for any of them, and in at least one the break lands directly BEFORE the captioned item.
+    let sawBreakBeforeCaption = false;
+    for (let n = 18; n <= 36; n++) {
+      const fill = Array.from({ length: n }, (_, i) => ({ caption: '#' + i + ' filler', detail: '', photos: [] }));
+      const { rows, breaks } = gsdLayout([{ name: 'A', items: [...fill, { caption: '#X with photo', detail: '', photos: P(1) }] }]);
+      const cap = rows.findIndex(r => r.text === '#X with photo');
+      if (breaks.includes(cap)) sawBreakBeforeCaption = true;
+      let y = 114.75; const pages = []; rows.forEach((r, i) => { if (breaks.includes(i)) { pages.push(y); y = 0; } y += r.h; }); pages.push(y);
+      pages.forEach(s => expect(s, 'n=' + n).toBeLessThanOrEqual(731));
+    }
+    expect(sawBreakBeforeCaption).toBe(true);
   });
   it('a caption estimate grows with length (wrapped lines)', () => {
     const one = gsdLayout([{ name: 'A', items: [{ caption: 'short', detail: '', photos: [] }] }]).rows[2].h;
