@@ -147,7 +147,7 @@ describe('Continue: copies to NEW ids, never aliases the archived snapshot\'s ph
     await expandHistoryCard(user);
     await user.click(await screen.findByRole('button', { name: /Continue/ }));
     await user.click(await screen.findByRole('button', { name: /Yes, Continue/ }));
-    await waitFor(() => expect(ls('welder-results-v1').dixon.a1.photos[0].id).not.toBe('snapP'));
+    await waitFor(() => expect(['liveP', 'snapP']).not.toContain(ls('welder-results-v1').dixon.a1.photos[0].id));   // the REAL end state: the live photo is the new COPY (neither the original live photo nor the snapshot's)
     const live = ls('welder-results-v1').dixon.a1.photos[0];
     expect(live.id).not.toBe('snapP'); expect([live.w, live.h]).toEqual([7, 7]);            // size carried over
     const copy = await sitePhotoStore.get(live.id);
@@ -162,7 +162,7 @@ describe('Continue: copies to NEW ids, never aliases the archived snapshot\'s ph
     await expandHistoryCard(user);
     await user.click(await screen.findByRole('button', { name: /Continue/ }));
     await user.click(await screen.findByRole('button', { name: /Yes, Continue/ }));
-    await waitFor(() => expect(ls('welder-results-v1').dixon.a1.photos[0].id).not.toBe('snapP'));
+    await waitFor(() => expect(['liveP', 'snapP']).not.toContain(ls('welder-results-v1').dixon.a1.photos[0].id));   // the REAL end state: the live photo is the new COPY (neither the original live photo nor the snapshot's)
     await user.click(screen.getByRole('button', { name: /^Home$/ }));
     await user.click(await screen.findByRole('button', { name: 'Reset all test results' }));
     await user.click(await screen.findByText('Reset all results?'));
