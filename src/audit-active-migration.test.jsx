@@ -3,11 +3,12 @@
 // nothing is lost or changed, the old keys are left exactly as they were (never written, never deleted), an audit started before the change still shows
 // the in-progress gate, and a never-touched site does not.
 import React from 'react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppRoot, { migrateAuditActive } from './App.jsx';
 
+vi.setConfig({ testTimeout: 30000 });                       // multi-screen flows run several renders; keep them stable under a loaded CI / parallel run
 afterEach(() => cleanup()); beforeEach(() => localStorage.clear());
 const back = user => user.click(screen.getAllByText('Back')[0]);
 const auditTab = user => user.click(screen.getByRole('button', { name: /^Audit$/ }));

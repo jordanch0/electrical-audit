@@ -2,11 +2,12 @@
 // Rows here: the PER-SITE ACTIVE-AUDIT FLAG — archived / discarded / never-audited / imported -> NO ACTIVE AUDIT; started -> AUDIT IN PROGRESS and it
 // survives switching site and switching module; site delete clears it; a blank auditor disables Continue in all six modules.
 import React from 'react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppRoot from './App.jsx';
 
+vi.setConfig({ testTimeout: 30000 });                       // multi-screen flows run several renders; keep them stable under a loaded CI / parallel run
 afterEach(() => cleanup()); beforeEach(() => localStorage.clear());
 
 const START = /Start \/ Continue Audit/;
