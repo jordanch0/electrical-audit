@@ -53,7 +53,41 @@ describe('app status colours are all readable (>= 4.5:1), and the old low-contra
     ['PASS', 'FAIL', 'MONITOR'].forEach(k => expect(ratio(RESULT_COLORS[k], RESULT_BG[k]), k).toBeGreaterThanOrEqual(4.5));
     [WHITE, SURFACE, PAGE].forEach(bg => { [...Object.values(RESULT_COLORS).slice(0, 3), PRIORITY_COLORS.L, PRIORITY_COLORS.M, PRIORITY_COLORS.H, PRIORITY_COLORS.U, SWB_RISK_COLORS.L, SWB_RISK_COLORS.H].forEach(fg => expect(ratio(fg, bg), fg + ' on ' + bg).toBeGreaterThanOrEqual(4.5)); });
   });
+  // The old guard here had a stray backspace character in its regex (a mangled \b), so it matched nothing and 80 stray uses got through (2026-10-03). The scanner below is
+  // exercised on known-bad samples first, so the guard itself can't silently stop working again.
+  const textUses = (code, hexes) => [...code.matchAll(new RegExp('(\\b(?:color|fg)\\s*:\\s*[^,}\\n]*?)["\'`]#(' + hexes.join('|') + ')["\'`]', 'gi'))].map(m => m[0]);
+  it('the guard scanner itself works: it flags text-colour uses (plain and ternary) and ignores borders / backgrounds', () => {
+    const OLD = ['16a34a', 'dc2626'];
+    expect(textUses('{color:"#16a34a"}', OLD)).toHaveLength(1);
+    expect(textUses("{ fontSize: 11, color: '#DC2626' }", OLD)).toHaveLength(1);
+    expect(textUses('{color: pri==="H"?"#dc2626":"#52525b"}', OLD)).toHaveLength(1);
+    expect(textUses('{fg:"#16a34a"}', OLD)).toHaveLength(1);
+    expect(textUses('{borderColor:"#16a34a",background:"#dc2626",border:"1px solid #dc2626"}', OLD)).toHaveLength(0);
+  });
   it('no text colour uses the old #16a34a / #dc2626 (they were ~3-4:1); a fill / border / icon may still use them', () => {
-    expect(src).not.toMatch(/colors*:s*["']#(16a34a|dc2626)["']/i);
+    expect(textUses(src, ['16a34a', 'dc2626'])).toEqual([]);
+    // text colours chosen through a variable / function (priority, due-date urgency) must not use them either (nor priority L's old yellow)
+    const vars = [...src.matchAll(/(const priColor\s*=[^;\n]*|const PC\s*=\s*\{[^}]*\}|function urgencyColor\([^)]*\)\s*\{[^}]*\})/g)].map(m => m[0]);
+    expect(vars.length).toBe(4); vars.forEach(v => expect(v).not.toMatch(/#(16a34a|dc2626|eab308)/i));
+  });
+  it('the other low-contrast text colours fixed on 2026-10-03 are not used as text any more', () => {
+    expect(textUses(src, ['6e6a66', 'a1a1aa', 'e2856a', '93c5fd'])).toEqual([]);
+    expect(src).not.toMatch(/#(6e6a66|a1a1aa|e2856a)/i);
+    expect(fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8')).not.toMatch(/#6e6a66/i);
+  });
+  it('every replacement text colour is >= 4.5:1 on every background it can sit on', () => {
+    const BG = { page: '#e8e6e2', surface: '#f7f6f3', white: '#ffffff', grey: '#e4e4e7', redTint: '#fee2e2', blueTint: '#dbeafe', greenTint: '#dcfce7', orangeTint: '#fdecdc' };
+    const must = (fg, bgs) => bgs.forEach(b => expect(ratio(fg, BG[b]), fg + ' on ' + b).toBeGreaterThanOrEqual(4.5));
+    must('#5f5b57', Object.keys(BG));                    // muted text (was #6e6a66: 4.3 on the page)
+    must('#66625e', Object.keys(BG));                    // disabled / done / placeholder text (was #a1a1aa: 2.1)
+    must('#991b1b', ['redTint', 'surface', 'page']);     // IRT DANGER bullets (was #e2856a: 2.2)
+    must('#1d4ed8', ['surface', 'white', 'page']);       // IRT unit label (was #93c5fd: 1.7)
+    must('#166534', Object.keys(BG)); must('#b91c1c', Object.keys(BG)); // standard green / red text, incl. the pale chip fills
+  });
+  it('index.html styles ::placeholder with a >= 4.5:1 colour and full opacity (the browser default #757575 was 3.7:1 on the page)', () => {
+    const html = fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8');
+    const m = /::placeholder\s*\{\s*color:\s*(#[0-9a-fA-F]{6})\s*;\s*opacity:\s*1\s*;?\s*\}/.exec(html);
+    expect(m, 'a ::placeholder { color; opacity: 1 } rule').toBeTruthy();
+    [PAGE, SURFACE, WHITE, '#e4e4e7'].forEach(bg => expect(ratio(m[1], bg), m[1] + ' on ' + bg).toBeGreaterThanOrEqual(4.5));
   });
 });
