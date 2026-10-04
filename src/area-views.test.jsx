@@ -52,6 +52,7 @@ describe.each(Object.values(MODS))('$name: Site -> Area -> Assets', m => {
     const raw = JSON.stringify([flat]);
     localStorage.setItem(p('projects-v1'), raw);
     localStorage.setItem(p('meta-v1'), JSON.stringify(meta));
+    localStorage.setItem(p('audit-active-v1'), JSON.stringify({ v: 1, sites: { p1: {} } }));   // a STARTED audit: the Audit tab is gated now
     await openSite(user, m, 'Audit');
     expect(areaNames()).toEqual(['Shed', 'Yard', 'Site A']);                        // 3 areas — not 5, not 4
     const shed = within(document.querySelector('[data-area="Shed"]'));

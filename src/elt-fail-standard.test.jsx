@@ -16,6 +16,7 @@ const seedElt = (results, dropdowns) => {
   localStorage.clear();
   localStorage.setItem('elt-projects-v2', JSON.stringify([eltSite]));
   localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor: 'Jane', testDate: '2026-09-21', nextTestDate: '2027-03-21' } }));
+  localStorage.setItem('elt-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
   if (results) localStorage.setItem('elt-results-v1', JSON.stringify({ p1: results }));
   if (dropdowns) localStorage.setItem('elt-dropdowns-v1', JSON.stringify(dropdowns));
 };

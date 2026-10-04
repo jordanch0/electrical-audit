@@ -85,7 +85,7 @@ describe.each(GATE_MODS)('$short — Home with a blank auditor', m => {
 // Audit tab with a blank auditor is a plain line (aligned to the gate's wording), not a gate.
 const OLD_LINE = /Enter the auditor name on the Home tab/;
 const EXTRA = [
-  { short: 'ELT', tile: 'EMERGENCY LIGHTING', start: /Start \/ Continue Testing/, site: 'Site E', none: /No fittings yet/,
+  { short: 'ELT', gate: true, tile: 'EMERGENCY LIGHTING', start: /Start \/ Continue Testing/, site: 'Site E', none: /No fittings yet/,
     seed: ({ assets = true, results = true, auditor = '' } = {}) => {
       localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: assets ? [{ id: 'ar', name: 'Site E', assets: [{ id: 'x1', assetLocation: 'SE Door', assetId: '', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] : [] }]));
       localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor, testDate: '2026-09-21' } }));
@@ -134,12 +134,13 @@ describe.each(EXTRA)('$short — Home with a blank auditor (no gate module)', m 
     expect(document.body.textContent).not.toMatch(OLD_HINT); expect(screen.queryByText(MSG)).toBeNull();
   });
 
-  it('Audit tab with a blank auditor is a plain line in the gate\'s wording (no gate, no Continue)', async () => {
+  it('Audit tab with a blank auditor: modules WITHOUT a gate show a plain line in the gate\'s wording; modules WITH the gate show it with Continue disabled', async () => {
     m.seed(); const user = userEvent.setup(); render(<AppRoot />); await openX(user, m);
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     expect(await screen.findByText('Enter the auditor name on Home to continue.')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(OLD_LINE); expect(document.body.textContent).not.toMatch(OLD_HINT);
-    expect(screen.queryByText(/AUDIT IN PROGRESS|NO ACTIVE AUDIT/)).toBeNull(); expect(screen.queryByRole('button', { name: /Continue Audit/ })).toBeNull();
+    if (m.gate) { expect(screen.getByText('AUDIT IN PROGRESS')).toBeInTheDocument(); expect(screen.getByRole('button', { name: /Continue Audit/ })).toBeDisabled(); }       // a started site (results) with a blank auditor: the gate, Continue disabled
+    else { expect(screen.queryByText(/AUDIT IN PROGRESS|NO ACTIVE AUDIT/)).toBeNull(); expect(screen.queryByRole('button', { name: /Continue Audit/ })).toBeNull(); }
   });
 });
 

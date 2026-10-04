@@ -62,6 +62,7 @@ describe('ELT / Welder / GSD: the same rule (UI shown => stored)', () => {
   it('ELT: a fitting photo', async () => {
     localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site E', assets: [{ id: 'x1', assetLocation: 'SE Door', assetId: '', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] }]));
     localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor: 'J', testDate: '2026-09-21' } }));
+    localStorage.setItem('elt-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByText('EMERGENCY LIGHTING')); await user.click(await screen.findByText('Site E', { selector: 'div' })); await user.click(screen.getByRole('button', { name: 'Audit' }));
     await user.click(await screen.findByText('SE Door'));

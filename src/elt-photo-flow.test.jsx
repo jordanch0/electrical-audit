@@ -24,6 +24,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('elt-projects-v1', JSON.stringify([project]));
   localStorage.setItem('elt-meta-v1', JSON.stringify({ p1:{ auditor:'Jane', testDate:'2026-09-21', nextTestDate:'2027-03-21' } }));
+  localStorage.setItem('elt-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
   payload = null; shot = 0;
   window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } };
   vi.stubGlobal('Image', class { set src(v) { this._s = v; queueMicrotask(() => { this.width = 4000; this.height = 3000; this.onload && this.onload(); }); } get src() { return this._s; } });
@@ -90,12 +91,13 @@ describe('ELT photo -> export through the real UI', () => {
   });
 
   it('Complete Audit is offered when a fitting has only a photo (so it can be exported)', async () => {
+    localStorage.removeItem('elt-audit-active-v1');                                   // this test starts from a site that was never started (no Complete card yet)
     const user = userEvent.setup();
     render(<AppRoot />);
     await user.click(screen.getByText('EMERGENCY LIGHTING'));
     await user.click(await screen.findByText('Site A', { selector: 'div' }));
     expect(screen.queryByRole('button', { name: /Complete Emergency Lighting Audit/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^Audit$/ }));
+    await user.click(screen.getByRole('button', { name: /Start \/ Continue Testing/ }));   // the Audit tab is gated now: Start is the way in (it records the flag)
     await user.click(await screen.findByText('SE Door'));
     await addPhoto(user, 'a1', 1);
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); // live auto-save: nothing to save — just leave the page

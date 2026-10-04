@@ -31,10 +31,12 @@ const MODULES = [
   { tile: 'THERMOGRAPHIC', pk: 'thermo-projects-v1', mk: 'thermo-meta-v1', ak: 'thermo-audit-active-v1', start: START },
   { tile: 'SWITCHBOARD', pk: 'swb-projects-v1', mk: 'swb-meta-v1', ak: 'swb-audit-active-v1', start: START },
   { tile: 'INSULATION RESISTANCE TESTING', pk: 'irt-projects-v1', mk: 'irt-meta-v1', ak: 'irt-audit-active-v1', start: START },
+  // ELT's Start is disabled until the site has a fitting, so its sites are seeded with one (the other modules start with no areas)
+  { tile: 'EMERGENCY LIGHTING', pk: 'elt-projects-v2', mk: 'elt-meta-v1', ak: 'elt-audit-active-v1', start: /Start \/ Continue Testing/, areas: [{ id: 'ar', name: 'Plant', assets: [{ id: 'x1', assetLocation: 'Plant Door', assetId: 'E1', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] },
 ];
-const site = (id, name) => ({ id, name, company: '', abn: '', licence: '', areas: [] });
+const site = (id, name, areas = []) => ({ id, name, company: '', abn: '', licence: '', areas });
 function seed(m, sites, auditor = 'Jane') {
-  localStorage.setItem(m.pk, JSON.stringify(sites.map(([id, name]) => site(id, name))));
+  localStorage.setItem(m.pk, JSON.stringify(sites.map(([id, name]) => site(id, name, m.areas || []))));
   localStorage.setItem(m.mk, JSON.stringify(Object.fromEntries(sites.map(([id]) => [id, { auditor, testDate: '2026-10-01' }]))));
 }
 const openSite = async (user, m, name) => { await user.click(screen.getByText(m.tile, { exact: true })); await user.click(await screen.findByText(name, { selector: 'div' })); };
@@ -254,6 +256,27 @@ describe.each(LEVEL)('%s — folder level kept across another tab (the Home tab 
     expect(await screen.findByText(child)).toBeInTheDocument();                                                  // same level
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
     await back(user); expect(screen.queryByText(child)).toBeNull();                                              // one Back = the area list, so we really were inside the area
+  });
+});
+
+// ELT has no folders: the list is the top level and a fitting's page the one deeper level. The item page is kept across another tab; one Back = the list.
+describe('EMERGENCY LIGHTING — the open fitting is kept across another tab (the Home tab included)', () => {
+  it.each(['Report', 'Home', 'History', 'Manage'])('on a fitting page, %s tab, Audit tab: back on the same fitting; one Back = the list', async tab => {
+    const m = MODULES.find(x => x.tile === 'EMERGENCY LIGHTING'); seed(m, [['s1', 'Site One']]);
+    const user = userEvent.setup(); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m);
+    await user.click(await screen.findByText('Plant Door')); expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();      // the item page
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) }));
+    await user.click(screen.getByRole('button', { name: /^Audit$/ }));
+    expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();                                    // same fitting, not the list
+    expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
+    await back(user); expect(screen.queryByText(/Visual Inspection/)).toBeNull(); expect(screen.getByText('Plant Door')).toBeInTheDocument();    // one Back = the list
+  });
+  it('Back from the list arms the gate; Continue lands on the list (the top), not on the fitting', async () => {
+    const m = MODULES.find(x => x.tile === 'EMERGENCY LIGHTING'); seed(m, [['s1', 'Site One']]);
+    const user = userEvent.setup(); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m);
+    await user.click(await screen.findByText('Plant Door')); await back(user); await back(user);                 // fitting -> list -> Home (arms)
+    await user.click(screen.getByRole('button', { name: /^Audit$/ })); expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Continue Audit/ })); expect(await screen.findByText('Plant Door')).toBeInTheDocument(); expect(screen.queryByText(/Visual Inspection/)).toBeNull();
   });
 });
 

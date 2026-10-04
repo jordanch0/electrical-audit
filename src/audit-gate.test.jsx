@@ -68,10 +68,10 @@ describe('AuditGatePage rendered directly, for every module accent', () => {
 
 describe('every module renders that same gate component (no per-module copies)', () => {
   const src = fs.readFileSync(path.join(__dirname, 'App.jsx'), 'utf8');
-  it('SWBAuditGate / IRTAuditGate are gone; exactly one gate definition used six times', () => {
+  it('SWBAuditGate / IRTAuditGate are gone; exactly one gate definition used seven times (the six modules + ELT)', () => {
     expect(src).not.toMatch(/function SWBAuditGate|function IRTAuditGate/);
     expect(src.match(/function \w*AuditGate\w*\(/g)).toEqual(['function AuditGatePage(']);
-    expect((src.match(/createElement\(AuditGatePage/g) || []).length).toBe(6);
+    expect((src.match(/createElement\(AuditGatePage/g) || []).length).toBe(7);
   });
 });
 

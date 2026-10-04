@@ -21,6 +21,7 @@ const seedSite = (type = 'Exit Signs') => {
   localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site A', company: '', abn: '', licence: '', areas: [{ id: 'area-a', name: 'Site A', assets: [
     { id: 'a1', assetLocation: 'SE Door', assetId: '', type, typeOther: '', maintained: 'Maintained', fitting: '' }] }] }]));
   localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor: 'Jane', testDate: '2026-07-13' } }));
+  localStorage.setItem('elt-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
 };
 async function openElt(user, tab) {
   render(<AppRoot />);

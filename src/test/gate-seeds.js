@@ -24,6 +24,10 @@ export const GATE_MODS = [
   { tile: 'INSULATION RESISTANCE TESTING', short: 'IRT', p: 'irt-projects-v1', r: 'irt-results-v1', m: 'irt-meta-v1', a: 'irt-audit-active-v1', entry: {}, start: /Start \/ Continue Audit/,
     areas: [{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'p1', name: 'MSB 1', items: ['m1', 'm2'] }] }],
     marked: { a1: { p1: { m1: { status: 'pass', readings: {}, testVoltage: '500V' } } } }, meta: au => ({ auditor: au, testDate: DATE, notes: '' }) },
+  // ELT: no folders — the Audit tab is one list, tapping a fitting opens its page (the second level). Results are keyed site -> fitting id (not by area).
+  { tile: 'EMERGENCY LIGHTING', short: 'ELT', p: 'elt-projects-v2', r: 'elt-results-v1', m: 'elt-meta-v1', a: 'elt-audit-active-v1', entry: {}, start: /Start \/ Continue Testing/,
+    areas: [{ id: 'ar', name: 'Plant Room', assets: [{ id: 'x1', assetLocation: 'Plant Room Door', assetId: 'E1', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }, { id: 'x2', assetLocation: 'Corridor', assetId: 'E2', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }],
+    marked: { x1: { visual: 'pass' } }, meta: au => ({ auditor: au, testDate: DATE }) },
 ];
 export const GATE_SITE_NAMES = { sa: 'Site A items marked', sb: 'Site B started nothing marked', sc: 'Site C never touched' };
 // opts.noFlagKey: write NO per-site flag key at all (a pure NEW-format "progress only" case)

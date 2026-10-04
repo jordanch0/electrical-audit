@@ -18,6 +18,7 @@ describe('ELT item page: live auto-save', () => {
     localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'area-e', name: 'Site E', assets: [
       { id: 'a1', assetLocation: 'Door 1', assetId: '', type: 'Emergency Exit Sign', typeOther: '', maintained: '', fitting: '' }] }] }]));
     localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor: 'Jane', testDate: '2026-07-13' } }));
+    localStorage.setItem('elt-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
     const user = userEvent.setup();
     render(<AppRoot />);
     await user.click(screen.getByText('EMERGENCY LIGHTING'));

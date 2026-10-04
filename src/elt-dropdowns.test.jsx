@@ -27,6 +27,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('elt-projects-v1', JSON.stringify([project]));
   localStorage.setItem('elt-meta-v1', JSON.stringify({ p1:{ auditor:'Jane', testDate:'2026-09-21', nextTestDate:'2027-03-21' } }));
+  localStorage.setItem('elt-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
 });
 afterEach(() => cleanup());
 

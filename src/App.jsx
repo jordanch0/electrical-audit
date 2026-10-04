@@ -4909,7 +4909,7 @@ function AuditGatePage({accent, hasActiveAudit, hasAuditor = true, onGoHome, onE
 // only READ, once, by the migration below — never written, never deleted. Switching site / module never clears a site's entry.
 // ─────────────────────────────────────────────────────────────────────────
 const AUDIT_ACTIVE_VERSION = 1;
-const K_RCD_ACTIVE = "rcd-audit-active-v1", K_IEL_ACTIVE = "iel-audit-active-v1", K_TAT_ACTIVE = "tat-audit-active-v1", K_THERMO_ACTIVE = "thermo-audit-active-v1", K_SWB_ACTIVE = "swb-audit-active-v1", K_IRT_ACTIVE = "irt-audit-active-v1";
+const K_RCD_ACTIVE = "rcd-audit-active-v1", K_IEL_ACTIVE = "iel-audit-active-v1", K_TAT_ACTIVE = "tat-audit-active-v1", K_THERMO_ACTIVE = "thermo-audit-active-v1", K_SWB_ACTIVE = "swb-audit-active-v1", K_IRT_ACTIVE = "irt-audit-active-v1", K_ELT_ACTIVE = "elt-audit-active-v1";
 function readLegacyJSON(key) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch (_) { return null; } }
 function auditActiveParse(raw) { return raw && raw.v === AUDIT_ACTIVE_VERSION && raw.sites && typeof raw.sites === "object" && !Array.isArray(raw.sites) ? raw.sites : null; }
 // PURE: build the map from existing data. `entryFor(project)` returns the site's entry or null. Never mutates its inputs; the same inputs give the same map,
@@ -11913,6 +11913,8 @@ const ELT_CHECKS       = [
   {key:"switching", label:"Automatic Switching Test"},
   {key:"charging",  label:"Charging Circuit Test"},
 ];
+// ELT "marked items" = any photo or any of the four checks on a fitting (the rule hasResults always used). Pure; shared by hasResults, the gate and the migration.
+function eltHasProgress(allResults, project) { return !!project && areaAssets(project).some(a => { const r = eltGetRes(allResults, project.id, a.id); return (r.photos || []).length > 0 || ELT_CHECKS.some(c => r[c.key]); }); }
 const ELT_COLUMNS = ["#","Location","Asset Location","Asset ID","Type","Maintained/Non-Maintained","Fitting Type/Manufacturer","Date","Visual Inspection","90-Min Discharge Test","Automatic Switching Test","Charging Circuit Test","Pass/Fail","Score","Notes / Recommendations","Next Test Due"];
 // Defect detail lives on its own sheet (FAIL rows only, always present), cross-referenced to the register by "#"
 const ELT_DEFECT_COLUMNS = ["#","Location","Asset Location","Asset ID","Defect ID","Priority","Rectified / Scheduled","Date Rectified / Scheduled","Responsibility","Notes / Recommendations"];
@@ -12138,6 +12140,12 @@ function ELTApp({ onGoHome }) {
   React.useEffect(()=>{ if(loaded) save(K_ELT_DROPDOWNS,eltDropdowns); },[eltDropdowns,loaded]);
 
   const project = projects.find(p=>p.id===activeProject);
+  const [activeMap,setActiveMap]=useAuditActive(K_ELT_ACTIVE,loaded,()=>({projects,entryFor:pr=>eltHasProgress(allResults,pr)?{}:null}));     // hooks stay above the loaded early-return
+  const hasResults = eltHasProgress(allResults, project);
+  const auditActive = auditEntryIsActive(activeMap[activeProject]) || hasResults;     // a gate-only entry is not an audit; marked fittings always are
+  const gateArmed = auditGateOf(activeMap, activeProject);                            // per site, persisted in the site's entry
+  const setGateArmed = v => setActiveMap(prev => v ? auditGateOn(prev, activeProject) : auditGateOff(prev, activeProject));
+  const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // armed by Back, nothing started, or a blank auditor (Continue is then disabled)
   const _m = allMeta[activeProject]||{auditor:"",testDate:new Date().toISOString().slice(0,10)};
   const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,6)};
   const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
@@ -12165,19 +12173,22 @@ function ELTApp({ onGoHome }) {
     clearSiteResults();
   };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
-  const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
-  const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
+  const goHome     = ()=>{setView("home");setViewSnap(null);};     // the Home tab keeps the open item, like every other tab
+  const startAudit = ()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setActiveAssetId(null);setViewSnap(null);setView("audit");};     // Start records the flag and clears the marker
+  const goAuditTab = ()=>{setViewSnap(null);
+    if(showGate||view==="audit"||view==="asset"){setActiveAssetId(null);setView("audit");return;}     // gate up, or already in Audit: the top (as it always was)
+    setView(activeAssetId&&asset?"asset":"audit");};     // from another tab: the level last left at (the list if that fitting is gone)
 
   useScrollMemory(eltMainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit"||view==="projects");   // the list level's key never includes the (still-set) asset id
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${ELT_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
   const summary = project?eltSummary(project,allResults[project.id]?allResults:{}):{total:0,pass:0,fail:0,assets:0};
-  const hasResults = !!project && areaAssets(project).some(a=>{const r=eltGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||ELT_CHECKS.some(c=>r[c.key]);});
   const goBack = ()=>{
     if(viewSnap){setViewSnap(null);return;}
-    if(view==="asset") setView("audit");
-    else if(view==="audit") goHome();
+    if((view==="audit"||view==="asset")&&showGate) goHome();     // Back on the gate goes straight Home
+    else if(view==="asset"){setActiveAssetId(null);setView("audit");}     // Back from a fitting = the list (does not arm)
+    else if(view==="audit"){setGateArmed(true);goHome();}     // Back from the top of Audit arms the gate, then Home
     else if(["manage","report","history","dropdowns"].includes(view)) goHome();
     else goProjects();
   };
@@ -12201,10 +12212,11 @@ function ELTApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${ELT_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:eltMainRef}
-      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:discardSiteResults})
-      ,view==="audit"&&project&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
-      ,view==="asset"&&project&&asset&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
+      ,view==="projects"&&eltEl(ELTProjectListView,{projects,allResults,typeOptions:eltDropdowns.types,onSelect:pid=>{setActiveProject(pid);setActiveAssetId(null);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("elt",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));setActiveMap(prev=>auditActiveClear(prev,pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(ELTHomeView,{project,meta,setMeta,summary,auditActive,onStartAudit:startAudit,onCompleteAudit:()=>{archiveAudit();setActiveAssetId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));clearSiteResults();},onReset:()=>{setActiveAssetId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));discardSiteResults();}})
+      ,(view==="audit"||view==="asset")&&project&&showGate&&React.createElement(AuditGatePage,{accent:ELT_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
+      ,view==="audit"&&project&&!showGate&&eltEl(ELTAuditView,{project,results:allResults,meta,summary,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
+      ,view==="asset"&&project&&asset&&!showGate&&eltEl(ELTAssetPage,{key:asset.id,project,asset,dropdowns:eltDropdowns,res:eltGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(ELTReportView,{project,results:allResults,meta,summary})
       ,view==="manage"&&project&&eltEl(ELTManageView,{project,dropdowns:eltDropdowns,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>{const site=allResults[activeProject]||{};sitePhotoStore.delPhotoList(assetPhotoList(Object.fromEntries(ids.map(id=>[id,site[id]]))));setAllResults(prev=>removeAssetResults(prev,activeProject,ids));}})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:true,reserved:["Other"]})
@@ -12216,13 +12228,14 @@ function ELTApp({ onGoHome }) {
               const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
               setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
               confirmPhotoMigrationVerified("elt");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setActiveAssetId(null);
               setHistoryError("");setViewSnap(null);setView("audit");
             }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
           }})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_HOME,   label:"Home",   active:view==="home",                   onClick:goHome,                    color:"#334155"})
-      ,eltEl(SWBNavBtn,{icon:NAV_ICON_AUDIT,  label:"Audit",  active:["audit","asset"].includes(view),onClick:goAudit,                   color:"#334155"})
+      ,eltEl(SWBNavBtn,{icon:NAV_ICON_AUDIT,  label:"Audit",  active:["audit","asset"].includes(view),onClick:goAuditTab,                   color:"#334155"})
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_REPORT, label:"Report", active:view==="report",                 onClick:()=>{setViewSnap(null);setView("report");},  color:"#334155"})
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_HISTORY,label:"History",active:view==="history",                onClick:()=>{setViewSnap(null);setView("history");}, color:"#334155"})
       ,eltEl(SWBNavBtn,{icon:NAV_ICON_MANAGE, label:"Manage", active:view==="manage",                 onClick:()=>{setViewSnap(null);setView("manage");},  color:"#334155"})
@@ -12467,7 +12480,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
   );
 }
 
-function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit, onCompleteAudit, onReset}) {
+function ELTHomeView({project, meta, setMeta, summary, auditActive, onStartAudit, onCompleteAudit, onReset}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   const hasAssets = summary.assets>0;
@@ -12500,7 +12513,7 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No fittings yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit(),disabled:!(hasAuditor&&hasAssets),"aria-disabled":!(hasAuditor&&hasAssets)},"Start / Continue Testing")
     ,!hasAuditor&&eltEl(AuditorRequiredNote,null)
-    ,hasResults&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
+    ,auditActive&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,eltEl(CompleteAuditBtn,{color:ELT_COLOR,label:"Complete Emergency Lighting Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
@@ -12510,8 +12523,6 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
 
 function ELTAuditView({project, results, meta, summary, onOpen}) {
   const SS = swbStyles();
-  const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
-  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on Home to continue.");
   return eltEl('div',{style:SS.listWrap}
     ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total},style:{marginBottom:14}})
     ,summary.assets===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add an area, then add fittings in the Manage tab.")
@@ -15759,5 +15770,5 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
-export { AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
+export { eltHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
 export default AppRoot;
