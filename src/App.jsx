@@ -1726,7 +1726,6 @@ React.createElement('div', { style: S.homeWrap,}
 , project.company&&React.createElement('div', { style: S.siteSub,}, project.company)
 , React.createElement('div', { style: S.metaCard,}
 , React.createElement(LabelInput, { label: "AUDITOR", value: _nullishCoalesce(_optionalChain([meta, 'optionalAccess', _66 => _66.auditor]), () => ("")), onChange: v=>setMeta({auditor:v}), placeholder: "Enter name to begin audit…" ,})
-, !hasAuditor&&React.createElement('div', { style: {fontSize:11,color:"#b91c1c",marginTop:4}}, "⚠ Enter auditor name to enable testing")
 , React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:10,width:"100%",boxSizing:"border-box"}}
 , React.createElement('div',{style:{width:"100%",boxSizing:"border-box",background:"#e8e6e2",border:"1px solid #fdecdc",borderRadius:10,padding:"10px 12px"}}
   ,React.createElement('div',{style:{fontSize:10,color:"#a3530f",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"PUSH TEST")
@@ -1758,23 +1757,24 @@ React.createElement('div', { style: S.homeWrap,}
 )
 , React.createElement('div', { style: S.modeSelectLabel,}, "SELECT TEST TYPE"  )
 , React.createElement('div', { style: S.modeBtnRow,}
-, React.createElement('button', { style: {...S.modeBtnPush,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartPush:undefined,}
+, React.createElement('button', { style: {...S.modeBtnPush,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartPush:undefined,disabled:!hasAuditor,'aria-disabled':!hasAuditor,}
 , React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_push",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Push Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${pushPct}%`,background:"#a3530f"},}))
 , React.createElement('span', { style: S.modeBtnPct,}, React.createElement(StatusPills,{compact:true,pills:[pushSum.fail>0?["fail",pushSum.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",pushPct+"%"]]}))
 )
-, React.createElement('button', { style: {...S.modeBtnInject,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartInject:undefined,}
+, React.createElement('button', { style: {...S.modeBtnInject,opacity:hasAuditor?1:0.45,cursor:hasAuditor?"pointer":"not-allowed"}, onClick: hasAuditor?onStartInject:undefined,disabled:!hasAuditor,'aria-disabled':!hasAuditor,}
 , React.createElement('span', { style: S.modeBtnIcon,}, moduleIcon("rcd_inject",15))
 , React.createElement('span', { style: S.modeBtnTitle,}, "Injection Test" )
 , React.createElement('div', { style: S.modeBtnProgress,}, React.createElement('div', { style: {...S.modeBtnBar,width:`${injectPct}%`,background:"#1d4ed8"},}))
 , React.createElement('span', { style: S.modeBtnPct,}, React.createElement(StatusPills,{compact:true,pills:[injectSum.fail>0?["fail",injectSum.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",injectPct+"%"]]}))
 )
 )
+, !hasAuditor&&React.createElement(AuditorRequiredNote, null)
 /* Complete audit button */
 , auditActive===true&&React.createElement('div', { style: {width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"},}
 , React.createElement('div', { style: {fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8},}, "COMPLETE ACTIVE AUDIT")
-, React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#a3530f":activeMode==="inject"?"#1d4ed8":"#a3530f", label:activeMode==="push"?"Complete Push Test":activeMode==="inject"?"Complete Injection Test":"Complete RCD Audit", onComplete:onCompleteAudit})
+, React.createElement(CompleteAuditBtn, {color:activeMode==="push"?"#a3530f":activeMode==="inject"?"#1d4ed8":"#a3530f", label:activeMode==="push"?"Complete Push Test":activeMode==="inject"?"Complete Injection Test":"Complete RCD Audit", onComplete:onCompleteAudit, disabled:!hasAuditor})
 )
 , React.createElement(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => React.createElement('button', { style: S.resetBtn, onClick: open }, "Reset all test results") })
 )
@@ -3516,7 +3516,6 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SI.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...SI.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',{style:{marginBottom:8}}
         ,React.createElement('div',{style:SI.metaLabelText},"TEST DATE")
@@ -3533,7 +3532,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
       const pct=sum.total>0?Math.round(((sum.pass+sum.fail+sum.na)/sum.total)*100):0;
       return React.createElement('button',{key:cat.key,
         style:{...SI.catBtn,flexWrap:"wrap",borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
-        onClick:()=>hasAuditor&&onStartCat(cat.key)}
+        onClick:()=>hasAuditor&&onStartCat(cat.key),disabled:!hasAuditor,"aria-disabled":!hasAuditor}
         ,React.createElement('span',{style:{fontSize:28,marginRight:4}},cat.icon)
         ,React.createElement('div',{style:{flex:1,textAlign:"left"}}
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#52525b",letterSpacing:0.3}},cat.label),React.createElement('span',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(sum.total,"item")))
@@ -3546,9 +3545,10 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
         ,React.createElement(StatusSet,{model:"full",s:sum,style:{flex:"0 0 100%",marginTop:8}})
       );
     })
+    ,!hasAuditor&&React.createElement(AuditorRequiredNote, null)
     ,auditActive===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:"Complete IEL Audit",onComplete:onCompleteAudit})
+      ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:"Complete IEL Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
     ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );
@@ -4824,10 +4824,24 @@ function CalendarApp({ onGoHome }) {
 // ─────────────────────────────────────────────────────────────────────────
 // COMPLETE AUDIT BUTTON — inline confirm, used on Home tab
 // ─────────────────────────────────────────────────────────────────────────
-function CompleteAuditBtn({ color, label, onComplete }) {
+// The ONE message for a blank auditor on a module's Home page (RCD, IEL, TAT, Thermo, SWB, IRT). It sits right under the blocked control (the Start / mode / category
+// buttons, and the Complete Audit button) and goes the moment a name is typed, in the same render that re-enables the control. The gate's own line says "on Home" because
+// the name field is on Home, not on the gate. Text colour #b91c1c is >= 4.5:1 on the page and card backgrounds; the warning glyph and the words (never colour alone) carry it.
+const AUDITOR_REQUIRED_MSG = "Please enter the auditor name to continue or complete the audit.";
+function AuditorRequiredNote({ style }) {
+  return React.createElement('div', { role: 'status', 'data-testid': 'auditor-required-note', style: { display: 'flex', gap: 6, alignItems: 'flex-start', width: '100%', maxWidth: 500, boxSizing: 'border-box', fontSize: 12, fontWeight: 600, lineHeight: 1.4, color: '#b91c1c', margin: '2px 0 0', textAlign: 'left', ...style } }
+    , React.createElement('span', { 'aria-hidden': 'true', style: { flexShrink: 0 } }, '\u26A0')
+    , React.createElement('span', null, AUDITOR_REQUIRED_MSG));
+}
+function CompleteAuditBtn({ color, label, onComplete, disabled }) {
   const [confirm, setConfirm] = React.useState(false);
   const boxRef = React.useRef(null);
   useCollapsible(confirm, () => setConfirm(false), boxRef);
+  if (disabled) {                       // blank auditor: visibly disabled, exposed as disabled, and the reason is TEXT under it
+    return React.createElement('div', { style: { width: '100%' } }
+      , React.createElement('button', { type: 'button', disabled: true, 'aria-disabled': true, style: { width: '100%', padding: '10px', background: '#e4e4e7', color: '#52525b', border: `1px solid ${AUDIT_GATE_LINE}`, borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'not-allowed' } }, label)
+      , React.createElement(AuditorRequiredNote, { style: { marginTop: 8 } }));
+  }
   if (confirm) {
     return React.createElement('div', {ref:boxRef,style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
       ,React.createElement('div',{style:{fontSize:12,color:"#18181b",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
@@ -5561,7 +5575,6 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:ST.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...ST.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:ST.metaLabelText},"TEST DATE")
@@ -5585,12 +5598,13 @@ function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
     )
     ,React.createElement('button',{
       style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?TAT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?TAT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},
-      onClick:()=>hasAuditor&&onStartAudit()}
+      onClick:()=>hasAuditor&&onStartAudit(),disabled:!hasAuditor,"aria-disabled":!hasAuditor}
       ,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit"
     )
+    ,!hasAuditor&&React.createElement(AuditorRequiredNote, null)
     ,auditActive===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:"Complete Test & Tag Audit",onComplete:onCompleteAudit})
+      ,React.createElement(CompleteAuditBtn,{color:TAT_COLOR,label:"Complete Test & Tag Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
     ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );
@@ -7253,8 +7267,8 @@ function ThermoNavBtn(props) {
 // COMPLETE AUDIT BUTTON
 // ─────────────────────────────────────────────────────────────────────────
 // ThermoCompleteAuditBtn — alias of shared CompleteAuditBtn with Thermo colour
-function ThermoCompleteAuditBtn({onComplete}) {
-  return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: "Complete Thermographic Audit", onComplete});
+function ThermoCompleteAuditBtn({onComplete, disabled}) {
+  return React.createElement(CompleteAuditBtn, {color: THERMO_COLOR, label: "Complete Thermographic Audit", onComplete, disabled});
 }
 
 
@@ -7331,8 +7345,8 @@ function SWBBoardListView({area, project, results, onSelectBoard}) {
 // COMPLETE AUDIT BTN
 // ─────────────────────────────────────────────────────────────────────────
 // SWBCompleteAuditBtn — alias of shared CompleteAuditBtn with SWB colour
-function SWBCompleteAuditBtn({onComplete}) {
-  return React.createElement(CompleteAuditBtn, {color: "#7e22ce", label: "Complete Switchboard Audit", onComplete});
+function SWBCompleteAuditBtn({onComplete, disabled}) {
+  return React.createElement(CompleteAuditBtn, {color: "#7e22ce", label: "Complete Switchboard Audit", onComplete, disabled});
 }
 
 // SWB-specific EditableDropdown using swbStyles colors
@@ -7774,13 +7788,7 @@ function ThermoHomeView({
     onChange: e => setMeta({
       auditor: e.target.value
     })
-  }), !hasAuditor && /*#__PURE__*/React.createElement("div", {
-    style: {
-      fontSize: 11,
-      color: "#b91c1c",
-      marginTop: 4
-    }
-  }, "\u26A0 Enter auditor name to enable testing")), /*#__PURE__*/React.createElement("div", {
+  })), /*#__PURE__*/React.createElement("div", {
     style: {
       marginBottom: 10,
       width: "100%",
@@ -7851,8 +7859,10 @@ function ThermoHomeView({
       cursor: hasAuditor ? "pointer" : "not-allowed",
       letterSpacing: 0.5
     },
-    onClick: () => hasAuditor && onStartAudit()
-  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'}))," Start / Continue Audit"), auditActive === true && /*#__PURE__*/React.createElement("div", {
+    onClick: () => hasAuditor && onStartAudit(),
+    disabled: !hasAuditor,
+    "aria-disabled": !hasAuditor
+  }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z'}))," Start / Continue Audit"), !hasAuditor && React.createElement(AuditorRequiredNote, null), auditActive === true && /*#__PURE__*/React.createElement("div", {
     style: {
       width: "100%",
       maxWidth: 500,
@@ -7870,7 +7880,8 @@ function ThermoHomeView({
       marginBottom: 8
     }
   }, "COMPLETE ACTIVE AUDIT"), /*#__PURE__*/React.createElement(ThermoCompleteAuditBtn, {
-    onComplete: onCompleteAudit
+    onComplete: onCompleteAudit,
+    disabled: !hasAuditor
   })), /*#__PURE__*/React.createElement(ConfirmReset, {
     onConfirm: onReset,
     prompt: "Reset all photo logs?",
@@ -11051,7 +11062,6 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       ,React.createElement('div',{style:{marginBottom:10}}
         ,React.createElement('div',{style:SS.metaLabelText},"AUDITOR")
         ,React.createElement('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin audit…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&React.createElement('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,React.createElement('div',null
         ,React.createElement('div',{style:SS.metaLabelText},"TEST DATE")
@@ -11072,10 +11082,11 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       )
       ,React.createElement(StatusSet,{model:"full",s:summary})
     )
-    ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#7e22ce":"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?"#7e22ce":"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
+    ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#7e22ce":"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?"#7e22ce":"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit(),disabled:!hasAuditor,"aria-disabled":!hasAuditor},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit")
+    ,!hasAuditor&&React.createElement(AuditorRequiredNote, null)
     ,auditActive===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,React.createElement(SWBCompleteAuditBtn,{onComplete:onCompleteAudit})
+      ,React.createElement(SWBCompleteAuditBtn,{onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
     ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
@@ -13228,19 +13239,20 @@ function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
       React.createElement("div",{style:{width:"100%",height:8,background:"#e4e4e7",borderRadius:4,overflow:"hidden",marginBottom:10}},React.createElement("div",{style:{height:"100%",borderRadius:4,transition:"width 0.4s",width:`${pct}%`,background:summary.fail>0?"#dc2626":pct===100?"#16a34a":IRT_COLOR}})),
       React.createElement(StatusSet,{model:"full",s:summary})
     ),
-    React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?IRT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit()},moduleIcon("irt",15)," Start / Continue Audit"),
+    React.createElement("button",{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?IRT_COLOR:"#f7f6f3",color:hasAuditor?"#fff": "#52525b",border:`2px solid ${hasAuditor?IRT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit(),disabled:!hasAuditor,"aria-disabled":!hasAuditor},moduleIcon("irt",15)," Start / Continue Audit"),
+    !hasAuditor&&React.createElement(AuditorRequiredNote, null),
     auditActive===true&&React.createElement("div",{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}},
       React.createElement("div",{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT"),
-      React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit})
+      React.createElement(IRTCompleteBtn,{color:IRT_COLOR,onComplete:onCompleteAudit,disabled:!hasAuditor})
     ),
     React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
 }
 
 // IRTCompleteBtn — alias of shared CompleteAuditBtn with IRT colour
-function IRTCompleteBtn({color,onComplete}){
+function IRTCompleteBtn({color,onComplete,disabled}){
   const lbl="Complete IR Testing Audit";
-  return React.createElement(CompleteAuditBtn, {color: color||IRT_COLOR, label: lbl, onComplete});
+  return React.createElement(CompleteAuditBtn, {color: color||IRT_COLOR, label: lbl, onComplete, disabled});
 }
 
 // ─── Project list view with Manual + Import tabs ──────────────────────────
@@ -15747,5 +15759,5 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
-export { AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff };
+export { AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
 export default AppRoot;
