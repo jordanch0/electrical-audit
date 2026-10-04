@@ -13,6 +13,8 @@ const SM = {
 [STATUS.FAIL]:     { label:"FAIL", bg:"#fee2e2", fg:"#991b1b", border:"#dc2626" },
 [STATUS.NA]:       { label:"N/A",  bg:"#f1f5f9", fg:"#334155", border:"#94a3b8" },
 };
+// The item-header status badge spells out UNTESTED (the bare "—" read as a button that does nothing); every other use of SM keeps its label.
+const statusBadgeLabel = sm => sm.label === "—" ? "UNTESTED" : sm.label;
 const uid = () => Math.random().toString(36).slice(2,9);
 // "1 fitting" / "2 fittings" — count + correctly pluralised noun
 const nw = (n, singular, plural) => `${n} ${n === 1 ? singular : (plural || singular + "s")}`;
@@ -2722,7 +2724,7 @@ React.createElement('div', { style: {marginBottom:10},}
 }
 function StatusBadge({status}){
 const sm=SM[status];
-return (React.createElement('div', { style: {padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,letterSpacing:0.5,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`},}, sm.label));
+return (React.createElement('div', { style: {padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,letterSpacing:0.5,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`},}, statusBadgeLabel(sm)));
 }
 const NAV_ICON_HOME=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('path',{d:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"}),React.createElement('polyline',{points:"9 22 9 12 15 12 15 22"}));
 const NAV_ICON_AUDIT=React.createElement('svg',{width:17,height:17,viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('polyline',{points:"9 11 12 14 22 4"}),React.createElement('path',{d:"M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"}));
@@ -3740,7 +3742,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
           ,React.createElement('div',{style:{fontSize:18,fontWeight:800,color:"#18181b"}},catI.icon," ",machineName)
           ,React.createElement('div',{style:{fontSize:12,color:"#5f5b57",marginTop:3}},catI.label," · ",area&&area.name,"")
         )
-        ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},sm.label)
+        ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},statusBadgeLabel(sm))
       )
 
       // ── CHECKS ────────────────────────────────────────────────────────
@@ -5738,7 +5740,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
           )
           ,React.createElement('div',{style:{fontSize:12,color:"#5f5b57",marginTop:3}},area.name," · Test & Tag")
         )
-        ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},sm.label)
+        ,React.createElement('div',{style:{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:800,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`}},statusBadgeLabel(sm))
       )
 
       // Equipment type + frequency — READ ONLY in audit
@@ -11207,7 +11209,7 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
           ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},label)
           ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginTop:3}},board.name," · ",area.name)
         )
-        ,React.createElement('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},sm.label)
+        ,React.createElement('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},statusBadgeLabel(sm))
       )
       // Guidance panel
       ,React.createElement('div',{style:{background:"#f3e8ff",border:"1px solid #d8b4fe",borderRadius:10,padding:"12px",marginBottom:16}}
@@ -12566,7 +12568,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
         ,eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:3}},sub)
         ,asset.fitting&&eltEl('div',{style:{fontSize:12,color:"#52525b",marginTop:1}},asset.fitting)
       )
-      ,eltEl('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800,flexShrink:0}},sm.label)
+      ,eltEl('div',{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800,flexShrink:0}},statusBadgeLabel(sm))
     )
     ,eltEl('div',{style:{margin:"14px 0 16px"}}
       ,eltEl('div',{style:{fontSize:10,color:"#5f5b57",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"PHOTOS")
@@ -13102,7 +13104,7 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
       React.createElement("div",null,React.createElement("div",{style:{fontSize:20,fontWeight:800,color:"#18181b"}},itemName),React.createElement("div",{style:{fontSize:12,color:"#52525b",marginTop:3}},panel.name," \u00b7 ",area.name)),
       React.createElement("div",{style:{display:"flex",alignItems:"center",gap:8}},
         React.createElement("button",{style:{padding:"6px 12px",background:IRT_COLOR_DIM,border:`1px solid ${IRT_COLOR_BORDER}`,borderRadius:8,color:"#1d4ed8",fontSize:11,fontWeight:700,cursor:"pointer"},onClick:()=>onShowGuide&&onShowGuide()},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('circle',{cx:12,cy:12,r:10}),React.createElement('line',{x1:12,y1:8,x2:12,y2:12}),React.createElement('line',{x1:12,y1:16,x2:12.01,y2:16}))," Guide"),
-        React.createElement("div",{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},sm.label)
+        React.createElement("div",{style:{padding:"6px 14px",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:13,fontWeight:800}},statusBadgeLabel(sm))
       )
     ),
     // Guidance panel (pass/fail criteria) — matches SWBItemPage
