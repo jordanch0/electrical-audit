@@ -126,6 +126,7 @@ describe('data helpers', () => {
 const seedSite = (areas = ['Concrete Plant', 'Workshop']) => {
   localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: 'Co', abn: '', licence: '', areas: areas.map((n, i) => ({ id: 'a' + (i + 1), name: n })) }]));
   localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor: 'Jane', testDate: '2026-09-21' } }));
+  localStorage.setItem('gsd-audit-active-v1', JSON.stringify({ v: 1, sites: { 's1': {} } }));   // a STARTED audit: the Audit tab is gated now
 };
 async function open(user, tab) {
   render(<AppRoot />);

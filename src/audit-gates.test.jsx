@@ -34,6 +34,7 @@ const MODULES = [
   // ELT's Start is disabled until the site has a fitting, so its sites are seeded with one (the other modules start with no areas)
   { tile: 'EMERGENCY LIGHTING', pk: 'elt-projects-v2', mk: 'elt-meta-v1', ak: 'elt-audit-active-v1', start: /Start \/ Continue Testing/, areas: [{ id: 'ar', name: 'Plant', assets: [{ id: 'x1', assetLocation: 'Plant Door', assetId: 'E1', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] },
   { tile: 'WELDER TESTING', pk: 'welder-projects-v2', mk: 'welder-meta-v1', ak: 'welder-audit-active-v1', start: START, areas: [{ id: 'ar', name: 'Plant', assets: [{ id: 'a1', assetId: 'WLD-1', brand: 'Kemppi', model: 'Mig', serial: '1' }] }] },
+  { tile: 'GENERAL SITE DEFECTS', pk: 'gsd-projects-v1', mk: 'gsd-meta-v1', ak: 'gsd-audit-active-v1', start: START, areas: [{ id: 'a1', name: 'Yard' }] },
 ];
 const site = (id, name, areas = []) => ({ id, name, company: '', abn: '', licence: '', areas });
 function seed(m, sites, auditor = 'Jane') {
@@ -261,24 +262,28 @@ describe.each(LEVEL)('%s — folder level kept across another tab (the Home tab 
 });
 
 // ELT and Welder have no folders: the list is the top level and an item's page (a fitting / a welder) the one deeper level. The item page is kept across another tab; one Back = the list.
-const ITEM_LEVEL = [['EMERGENCY LIGHTING', 'Plant Door'], ['WELDER TESTING', 'WLD-1']];
-describe.each(ITEM_LEVEL)('%s — the open item is kept across another tab (the Home tab included)', (tile, rowText) => {
+const GSD_ITEM = { id: 'i1', areaId: 'a1', assetLocation: 'Gate', category: 'Guarding', commonDefect: '', description: 'Loose guard', descAuto: '', photos: [], priority: 'H', responsibility: '', fixBy: '' };
+// [tile, how to find the list row, what only the item page shows]. GSD's rows are defect cards, and it needs one seeded defect to have a row (a defect only exists with photos).
+const ITEM_LEVEL = [['EMERGENCY LIGHTING', 'Plant Door', /Visual Inspection/], ['WELDER TESTING', 'WLD-1', /Visual Inspection/], ['GENERAL SITE DEFECTS', '@card', /COMMON DEFECT/]];
+const rowsOf = async row => row === '@card' ? screen.findAllByTestId('gsd-card') : screen.findAllByText(new RegExp(row));
+describe.each(ITEM_LEVEL)('%s — the open item is kept across another tab (the Home tab included)', (tile, row, pageRe) => {
+  const setup = () => { const m = MODULES.find(x => x.tile === tile); seed(m, [['s1', 'Site One']]); if (row === '@card') localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [GSD_ITEM] })); return m; };
   it.each(['Report', 'Home', 'History', 'Manage'])('on an item page, %s tab, Audit tab: back on the same item; one Back = the list', async tab => {
-    const m = MODULES.find(x => x.tile === tile); seed(m, [['s1', 'Site One']]);
+    const m = setup();
     const user = userEvent.setup(); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m);
-    await user.click((await screen.findAllByText(new RegExp(rowText)))[0]); expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();      // the item page
+    await user.click((await rowsOf(row))[0]); expect(await screen.findByText(pageRe)).toBeInTheDocument();      // the item page
     await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
-    expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();                                    // same fitting, not the list
+    expect(await screen.findByText(pageRe)).toBeInTheDocument();                                    // same item, not the list
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
-    await back(user); expect(screen.queryByText(/Visual Inspection/)).toBeNull(); expect(screen.getAllByText(new RegExp(rowText)).length).toBeGreaterThan(0);    // one Back = the list
+    await back(user); expect(screen.queryByText(pageRe)).toBeNull(); expect((await rowsOf(row)).length).toBeGreaterThan(0);    // one Back = the list
   });
   it('Back from the list arms the gate; Continue lands on the list (the top), not on the item', async () => {
-    const m = MODULES.find(x => x.tile === tile); seed(m, [['s1', 'Site One']]);
+    const m = setup();
     const user = userEvent.setup(); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m);
-    await user.click((await screen.findAllByText(new RegExp(rowText)))[0]); await back(user); await back(user);   // item -> list -> Home (arms)
+    await user.click((await rowsOf(row))[0]); await back(user); await back(user);   // item -> list -> Home (arms)
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Continue Audit/ })); expect((await screen.findAllByText(new RegExp(rowText))).length).toBeGreaterThan(0); expect(screen.queryByText(/Visual Inspection/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Continue Audit/ })); expect((await rowsOf(row)).length).toBeGreaterThan(0); expect(screen.queryByText(pageRe)).toBeNull();
   });
 });
 

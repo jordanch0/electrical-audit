@@ -4909,7 +4909,7 @@ function AuditGatePage({accent, hasActiveAudit, hasAuditor = true, onGoHome, onE
 // only READ, once, by the migration below — never written, never deleted. Switching site / module never clears a site's entry.
 // ─────────────────────────────────────────────────────────────────────────
 const AUDIT_ACTIVE_VERSION = 1;
-const K_RCD_ACTIVE = "rcd-audit-active-v1", K_IEL_ACTIVE = "iel-audit-active-v1", K_TAT_ACTIVE = "tat-audit-active-v1", K_THERMO_ACTIVE = "thermo-audit-active-v1", K_SWB_ACTIVE = "swb-audit-active-v1", K_IRT_ACTIVE = "irt-audit-active-v1", K_ELT_ACTIVE = "elt-audit-active-v1", K_WELDER_ACTIVE = "welder-audit-active-v1";
+const K_RCD_ACTIVE = "rcd-audit-active-v1", K_IEL_ACTIVE = "iel-audit-active-v1", K_TAT_ACTIVE = "tat-audit-active-v1", K_THERMO_ACTIVE = "thermo-audit-active-v1", K_SWB_ACTIVE = "swb-audit-active-v1", K_IRT_ACTIVE = "irt-audit-active-v1", K_ELT_ACTIVE = "elt-audit-active-v1", K_WELDER_ACTIVE = "welder-audit-active-v1", K_GSD_ACTIVE = "gsd-audit-active-v1";
 function readLegacyJSON(key) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch (_) { return null; } }
 function auditActiveParse(raw) { return raw && raw.v === AUDIT_ACTIVE_VERSION && raw.sites && typeof raw.sites === "object" && !Array.isArray(raw.sites) ? raw.sites : null; }
 // PURE: build the map from existing data. `entryFor(project)` returns the site's entry or null. Never mutates its inputs; the same inputs give the same map,
@@ -15165,6 +15165,8 @@ function WelderApp({ onGoHome }) {
 // photo report (area bars, caption above its photos) plus a flat Register. Not a tracker: no status, no resolution, no pass / fail, no score.
 // Photos live in IndexedDB (a punch-list can hold far more photos than localStorage's ~5 MB); the item record only carries {id, w, h}.
 // ═════════════════════════════════════════════════════════════════════════════════════════════════
+// GSD "marked items" = any defect (a defect only exists once it has photos). Pure; shared by the gate and the migration.
+function gsdHasProgress(allItems, project) { return !!project && ((allItems && allItems[project.id]) || []).length > 0; }
 const GSD_COLOR = "#4d7c0f", GSD_COLOR_DIM = "#ecfccb", GSD_COLOR_BORDER = "#bef264";
 const K_GSD_PROJECTS = "gsd-projects-v1", K_GSD_ITEMS = "gsd-items-v1", K_GSD_META = "gsd-meta-v1", K_GSD_HISTORY = "gsd-history-v1", K_GSD_DROPDOWNS = "gsd-dropdowns-v1";
 const gsdEl = React.createElement;
@@ -15393,6 +15395,11 @@ function GSDApp({ onGoHome }) {
   const setMeta = patch => setAllMeta(prev => ({ ...prev, [activeProject]: { ...meta, ...patch } }));
   const numbered = project ? gsdNumbered(project, items) : [];
   const activeEntry = numbered.find(e => e.item.id === activeItemId);
+  const [activeMap, setActiveMap] = useAuditActive(K_GSD_ACTIVE, loaded, () => ({ projects, entryFor: pr => gsdHasProgress(allItems, pr) ? {} : null }));     // hooks stay above the loaded early-return
+  const auditActive = auditEntryIsActive(activeMap[activeProject]) || items.length > 0;     // a gate-only entry is not an audit; any defect always is
+  const gateArmed = auditGateOf(activeMap, activeProject);                                   // per site, persisted in the site's entry
+  const setGateArmed = v => setActiveMap(prev => v ? auditGateOn(prev, activeProject) : auditGateOff(prev, activeProject));
+  const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // armed by Back, nothing started, or a blank auditor (Continue is then disabled)
 
   const setItems = fn => setAllItems(prev => ({ ...prev, [activeProject]: fn(prev[activeProject] || []) }));
   const patchItem = (id, patch) => setItems(list => list.map(i => i.id === id ? { ...i, ...patch } : i));
@@ -15450,6 +15457,7 @@ function GSDApp({ onGoHome }) {
       if (addAreas.length) setProjects(prev => prev.map(p => p.id === project.id ? { ...p, areas: [...(p.areas || []), ...addAreas] } : p));
       setAllItems(prev => ({ ...prev, [activeProject]: newItems }));
       setAllMeta(prev => ({ ...prev, [activeProject]: { ...snap.meta } }));
+      setActiveMap(prev => auditActiveSet(prev, activeProject, {})); setActiveItemId(null);
       setHistoryError(""); setViewSnap(null); setView("audit");
     } catch (_) {
       await Promise.all(copied.map(p => gsdPhotoStore.delPhoto(p)));                           // roll back the copies made so far
@@ -15463,12 +15471,15 @@ function GSDApp({ onGoHome }) {
   };
   const freshVisit = () => setAllMeta(prev => ({ ...prev, [activeProject]: { ...prev[activeProject], testDate: today(), nextTestDate: "" } }));
   const goProjects = () => { setView("projects"); setActiveProject(null); setActiveItemId(null); setViewSnap(null); };
-  const goHome = () => { setView("home"); setActiveItemId(null); setViewSnap(null); };
-  const goAudit = () => { setView("audit"); setActiveItemId(null); setViewSnap(null); };
+  const goHome = () => { setView("home"); setViewSnap(null); };     // the Home tab keeps the open defect, like every other tab
+  const startAudit = () => { setActiveMap(prev => auditActiveSet(prev, activeProject, {})); setActiveItemId(null); setViewSnap(null); setView("audit"); };     // Start records the flag and clears the marker
+  const goAuditTab = () => { setViewSnap(null);
+    if (showGate || view === "audit" || view === "item") { setActiveItemId(null); setView("audit"); return; }     // gate up, or already in Audit: the top (as it always was)
+    setView(activeItemId && activeEntry ? "item" : "audit"); };     // from another tab: the level last left at (the list if that defect is gone)
   const SS = swbStyles();
   useScrollMemory(mainRef, view === "audit" ? "audit" : view + "|" + (activeItemId || ""), view === "audit" || view === "projects");
   if (!loaded) return gsdEl("div", { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } }, gsdEl("div", { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GSD_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
-  const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if (view === "item") setView("audit"); else if (view === "audit") goHome(); else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
+  const goBack = () => { if (viewSnap) { setViewSnap(null); return; } if ((view === "audit" || view === "item") && showGate) goHome(); else if (view === "item") { setActiveItemId(null); setView("audit"); } else if (view === "audit") { setGateArmed(true); goHome(); } else if (["manage", "report", "history", "dropdowns"].includes(view)) goHome(); else goProjects(); };
   const navTo = v => () => { setViewSnap(null); setView(v); };
   return gsdEl("div", { style: SS.root }
     , gsdEl("div", { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
@@ -15484,12 +15495,13 @@ function GSDApp({ onGoHome }) {
           , gsdEl("span", { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Modules")))
       , gsdEl("div", { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GSD_COLOR}, transparent 70%)`, opacity: 0.5 } }))
     , gsdEl("div", { style: SS.main, ref: mainRef }
-      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { siteLogoStore.del("gsd", pid).catch(() => {}); dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); if (activeProject === pid) goProjects(); } })
-      , view === "home" && project && gsdEl(GSDHomeView, { project, meta, setMeta, items, onStartAudit: goAudit,
-          onCompleteAudit: () => { archiveAudit(); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); },
-          onReset: () => { gsdPhotoStore.delItems(items); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); } })
-      , view === "audit" && project && gsdEl(GSDAuditView, { project, numbered, meta, photoError, onOpen: id => { setActiveItemId(id); setView("item"); }, onAddDefect: addDefect })
-      , view === "item" && project && activeEntry && gsdEl(GSDItemPage, { key: activeEntry.item.id, project, item: activeEntry.item, num: activeEntry.n, dropdowns, photoError,
+      , view === "projects" && gsdEl(GSDProjectListView, { projects, allItems, onSelect: pid => { setActiveProject(pid); setActiveItemId(null); setView("home"); }, onAddProject: p => setProjects(prev => [...prev, p]), onDeleteProject: pid => { siteLogoStore.del("gsd", pid).catch(() => {}); dropSite(pid); setProjects(prev => prev.filter(p => p.id !== pid)); setAllItems(prev => { const n = { ...prev }; delete n[pid]; return n; }); setAllMeta(prev => { const n = { ...prev }; delete n[pid]; return n; }); setHistory(prev => prev.filter(h => h.projectId !== pid)); setActiveMap(prev => auditActiveClear(prev, pid)); if (activeProject === pid) goProjects(); } })
+      , view === "home" && project && gsdEl(GSDHomeView, { project, meta, setMeta, items, auditActive, onStartAudit: startAudit,
+          onCompleteAudit: () => { archiveAudit(); setActiveItemId(null); setActiveMap(prev => auditActiveClear(prev, activeProject)); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); },
+          onReset: () => { gsdPhotoStore.delItems(items); setActiveItemId(null); setActiveMap(prev => auditActiveClear(prev, activeProject)); setAllItems(prev => ({ ...prev, [activeProject]: [] })); freshVisit(); } })
+      , (view === "audit" || view === "item") && project && showGate && React.createElement(AuditGatePage, { accent: GSD_COLOR, hasActiveAudit: auditActive, hasAuditor: !!(meta.auditor && meta.auditor.trim()), onGoHome: goHome, onEnterAudit: () => setGateArmed(false) })
+      , view === "audit" && project && !showGate && gsdEl(GSDAuditView, { project, numbered, meta, photoError, onOpen: id => { setActiveItemId(id); setView("item"); }, onAddDefect: addDefect })
+      , view === "item" && project && activeEntry && !showGate && gsdEl(GSDItemPage, { key: activeEntry.item.id, project, item: activeEntry.item, num: activeEntry.n, dropdowns, photoError,
           onPatch: patch => patchItem(activeEntry.item.id, patch), onAddPhotos: files => addPhotos(activeEntry.item.id, files), onRemovePhoto: p => removePhoto(activeEntry.item.id, p), onMovePhoto: (pid, d) => movePhoto(activeEntry.item.id, pid, d),
           onMove: areaId => moveItem(activeEntry.item.id, areaId), onDelete: () => { deleteItem(activeEntry.item.id); setActiveItemId(null); setView("audit"); },
           onClone: areaId => { const nid = cloneItem(activeEntry.item.id, areaId); if (nid) setActiveItemId(nid); }, onClose: () => { setActiveItemId(null); setView("audit"); } })
@@ -15502,7 +15514,7 @@ function GSDApp({ onGoHome }) {
           onExportSnap: snap => exportGSDExcel({ ...project, areas: snap.areas || project.areas }, snap.items || [], snap.meta || {}), onContinueFromSnap: continueFromSnap, error: historyError }))
     , view !== "projects" && gsdEl("nav", { style: SS.bottomNav }
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_HOME, label: "Home", active: view === "home", onClick: goHome, color: "#334155" })
-      , gsdEl(SWBNavBtn, { icon: NAV_ICON_AUDIT, label: "Audit", active: ["audit", "item"].includes(view), onClick: goAudit, color: "#334155" })
+      , gsdEl(SWBNavBtn, { icon: NAV_ICON_AUDIT, label: "Audit", active: ["audit", "item"].includes(view), onClick: goAuditTab, color: "#334155" })
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_REPORT, label: "Report", active: view === "report", onClick: navTo("report"), color: "#334155" })
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_HISTORY, label: "History", active: view === "history", onClick: navTo("history"), color: "#334155" })
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_MANAGE, label: "Manage", active: view === "manage", onClick: navTo("manage"), color: "#334155" })
@@ -15537,7 +15549,7 @@ function GSDProjectListView({ projects, allItems, onSelect, onAddProject, onDele
       : gsdEl("button", { style: { ...SS.ctaPrimary, background: GSD_COLOR, width: "100%", marginTop: 8 }, onClick: () => setShowAdd(true) }, "+ Add Site"));
 }
 
-function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAudit, onReset }) {
+function GSDHomeView({ project, meta, setMeta, items, auditActive, onStartAudit, onCompleteAudit, onReset }) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor && meta.auditor.trim());
   const photos = items.reduce((n, i) => n + (i.photos || []).length, 0);
@@ -15558,7 +15570,7 @@ function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAu
       , gsdEl("div", { style: { display: "flex", justifyContent: "space-between" } }, gsdEl("div", { style: { fontSize: 13, fontWeight: 700, color: "#18181b" } }, "This visit"), gsdEl("div", { style: { fontSize: 12, color: "#52525b" } }, `${nw(items.length, "defect")} · ${nw(photos, "photo")}`)))
     , gsdEl("button", { style: { width: "100%", maxWidth: 500, padding: "16px", background: hasAuditor ? GSD_COLOR : "#f7f6f3", color: hasAuditor ? "#fff" : "#52525b", border: `2px solid ${hasAuditor ? GSD_COLOR : "#e4e4e7"}`, borderRadius: 16, fontSize: 16, fontWeight: 800, cursor: hasAuditor ? "pointer" : "not-allowed", letterSpacing: 0.5 }, onClick: () => hasAuditor && onStartAudit(), disabled: !hasAuditor, "aria-disabled": !hasAuditor }, "Start / Continue Audit")
     , !hasAuditor && gsdEl(AuditorRequiredNote, null)
-    , items.length > 0 && gsdEl("div", { style: { width: "100%", maxWidth: 500, background: "#f0eeea", border: "1px solid #d4d4d8", borderRadius: 12, padding: "10px 14px", boxSizing: "border-box" } }
+    , auditActive && gsdEl("div", { style: { width: "100%", maxWidth: 500, background: "#f0eeea", border: "1px solid #d4d4d8", borderRadius: 12, padding: "10px 14px", boxSizing: "border-box" } }
       , gsdEl("div", { style: { fontSize: 10, color: "#5f5b57", fontWeight: 700, letterSpacing: 0.8, marginBottom: 8 } }, "COMPLETE ACTIVE AUDIT")
       , gsdEl(CompleteAuditBtn, { color: GSD_COLOR, label: "Complete Site Defects Audit", onComplete: onCompleteAudit, disabled: !hasAuditor }))
     , gsdEl(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => gsdEl("button", { style: SS.resetBtn, onClick: open }, "Reset all test results") }));
@@ -15566,9 +15578,7 @@ function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAu
 
 function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect }) {
   const SS = swbStyles();
-  const hasAuditor = !!(meta.auditor && meta.auditor.trim());
   const fileRef = React.useRef(); const pendingArea = React.useRef(null);
-  if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on Home to continue.");
   const startAdd = areaId => { pendingArea.current = areaId; if (fileRef.current) fileRef.current.click(); };
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })
@@ -15781,5 +15791,5 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
-export { eltHasProgress, welderHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
+export { eltHasProgress, welderHasProgress, gsdHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
 export default AppRoot;

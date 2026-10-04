@@ -79,7 +79,7 @@ describe('ELT / Welder / GSD: the same rule (UI shown => stored)', () => {
     const r = await probe({ resultsKey: 'welder-results-v1', input: await screen.findByTestId('welder-photo-input'), imgsBefore: count() });
     expect(ptr(r.eventually)).toBe(true); expect(ptr(r.atCommit)).toBe(true);
   });
-  const gsdSeed = items => { localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'One' }] }])); localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor: 'J', testDate: '2026-09-21' } })); if (items) localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: items })); };
+  const gsdSeed = items => { localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'One' }] }])); localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor: 'J', testDate: '2026-09-21' } })); localStorage.setItem('gsd-audit-active-v1', JSON.stringify({ v: 1, sites: { 's1': {} } })); if (items) localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: items })); };
   const openGsd = async user => { render(<AppRoot />); await user.click(screen.getByText('GENERAL SITE DEFECTS')); await user.click(await screen.findByText('Site G', { selector: 'div' })); await user.click(screen.getByRole('button', { name: 'Audit' })); };
   it('GSD: photos added to an existing defect', async () => {
     gsdSeed([{ id: 'i1', areaId: 'a1', assetLocation: '', category: '', commonDefect: '', description: 'x', descAuto: '', photos: [], priority: '', responsibility: '', dueDate: '' }]);

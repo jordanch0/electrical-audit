@@ -32,6 +32,10 @@ export const GATE_MODS = [
   { tile: 'WELDER TESTING', short: 'Welder', p: 'welder-projects-v2', r: 'welder-results-v1', m: 'welder-meta-v1', a: 'welder-audit-active-v1', entry: {}, start: /Start \/ Continue Audit/,
     areas: [{ id: 'ar', name: 'Workshop', assets: [{ id: 'a1', assetId: 'W1', brand: 'Kemppi', model: 'Mig 300', serial: '1234' }, { id: 'a2', assetId: 'W2', brand: 'Lincoln', model: 'Pro', serial: '5678' }] }],
     marked: { a1: { items: { visual: { result: 'pass' } } } }, meta: au => ({ auditor: au, testDate: DATE }) },
+  // GSD: the same two-level shape (a list of defect cards; a defect's page). Its "results" are the site's defect LIST under gsd-items-v1 (a defect needs photos to exist, so a marked site holds one).
+  { tile: 'GENERAL SITE DEFECTS', short: 'GSD', p: 'gsd-projects-v1', r: 'gsd-items-v1', m: 'gsd-meta-v1', a: 'gsd-audit-active-v1', entry: {}, start: /Start \/ Continue Audit/,
+    areas: [{ id: 'a1', name: 'Yard' }],
+    marked: [{ id: 'i1', areaId: 'a1', assetLocation: 'Gate', category: 'Guarding', commonDefect: '', description: 'Loose guard', descAuto: '', photos: [], priority: 'H', responsibility: '', fixBy: '' }], meta: au => ({ auditor: au, testDate: DATE }) },
 ];
 export const GATE_SITE_NAMES = { sa: 'Site A items marked', sb: 'Site B started nothing marked', sc: 'Site C never touched' };
 // opts.noFlagKey: write NO per-site flag key at all (a pure NEW-format "progress only" case)

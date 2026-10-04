@@ -95,7 +95,7 @@ const EXTRA = [
       localStorage.setItem('welder-projects-v2', JSON.stringify([{ id: 'w1', name: 'Site W', company: '', abn: '', licence: '', areas: assets ? [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W1', brand: 'K', model: 'E', serial: '1' }] }] : [] }]));
       localStorage.setItem('welder-meta-v1', JSON.stringify({ w1: { auditor, testDate: '2026-09-21' } }));
       if (results) localStorage.setItem('welder-results-v1', JSON.stringify({ w1: { a1: { items: { visual: { result: 'pass' } } } } })); } },
-  { short: 'GSD', tile: 'GENERAL SITE DEFECTS', start: /Start \/ Continue Audit/, site: 'Site G', none: null,
+  { short: 'GSD', gate: true, tile: 'GENERAL SITE DEFECTS', start: /Start \/ Continue Audit/, site: 'Site G', none: null,
     seed: ({ results = true, auditor = '' } = {}) => {
       localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'Yard' }] }]));
       localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor, testDate: '2026-09-21' } }));

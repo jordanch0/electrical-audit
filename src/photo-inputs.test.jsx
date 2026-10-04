@@ -25,6 +25,7 @@ describe('no photo input forces the camera', () => {
   it('GSD: the quick-add input and the item page input', async () => {
     localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'One' }] }]));
     localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor: 'J', testDate: '2026-09-21' } }));
+    localStorage.setItem('gsd-audit-active-v1', JSON.stringify({ v: 1, sites: { 's1': {} } }));   // a STARTED audit: the Audit tab is gated now
     localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [{ id: 'i1', areaId: 'a1', assetLocation: '', category: '', commonDefect: '', description: 'x', descAuto: '', photos: [], priority: '', responsibility: '', dueDate: '' }] }));
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByText('GENERAL SITE DEFECTS')); await user.click(await screen.findByText('Site G', { selector: 'div' })); await user.click(screen.getByRole('button', { name: 'Audit' }));
