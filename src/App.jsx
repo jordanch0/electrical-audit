@@ -4909,7 +4909,7 @@ function AuditGatePage({accent, hasActiveAudit, hasAuditor = true, onGoHome, onE
 // only READ, once, by the migration below — never written, never deleted. Switching site / module never clears a site's entry.
 // ─────────────────────────────────────────────────────────────────────────
 const AUDIT_ACTIVE_VERSION = 1;
-const K_RCD_ACTIVE = "rcd-audit-active-v1", K_IEL_ACTIVE = "iel-audit-active-v1", K_TAT_ACTIVE = "tat-audit-active-v1", K_THERMO_ACTIVE = "thermo-audit-active-v1", K_SWB_ACTIVE = "swb-audit-active-v1", K_IRT_ACTIVE = "irt-audit-active-v1", K_ELT_ACTIVE = "elt-audit-active-v1";
+const K_RCD_ACTIVE = "rcd-audit-active-v1", K_IEL_ACTIVE = "iel-audit-active-v1", K_TAT_ACTIVE = "tat-audit-active-v1", K_THERMO_ACTIVE = "thermo-audit-active-v1", K_SWB_ACTIVE = "swb-audit-active-v1", K_IRT_ACTIVE = "irt-audit-active-v1", K_ELT_ACTIVE = "elt-audit-active-v1", K_WELDER_ACTIVE = "welder-audit-active-v1";
 function readLegacyJSON(key) { try { const r = localStorage.getItem(key); return r ? JSON.parse(r) : null; } catch (_) { return null; } }
 function auditActiveParse(raw) { return raw && raw.v === AUDIT_ACTIVE_VERSION && raw.sites && typeof raw.sites === "object" && !Array.isArray(raw.sites) ? raw.sites : null; }
 // PURE: build the map from existing data. `entryFor(project)` returns the site's entry or null. Never mutates its inputs; the same inputs give the same map,
@@ -14280,6 +14280,8 @@ function welderSummary(r) {
     overall: untested>0 ? "untested" : fail>0 ? "fail" : "pass" };
 }
 const welderOverall = r => welderSummary(r).overall;
+// Welder "marked items" = any photo or any checklist result on a welder (the rule hasResults always used). Pure; shared by hasResults, the gate and the migration.
+function welderHasProgress(allResults, project) { return !!project && areaAssets(project).some(a => { const r = welderGetRes(allResults, project.id, a.id); return (r.photos || []).length > 0 || WELDER_CHECKLIST.some(c => welderItem(r, c.key).result); }); }
 const welderScoreLabel = scoreLabel;
 const welderMachine = a => [a.brand, a.model].map(x=>(x||"").trim()).filter(Boolean).join(" ");
 const welderPF = o => o==="pass"?"Pass":o==="fail"?"Fail":"";
@@ -14554,7 +14556,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
   );
 }
 
-function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAudit, onCompleteAudit, onReset}) {
+function WelderHomeView({project, meta, setMeta, summary, auditActive, onStartAudit, onCompleteAudit, onReset}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   const hasAssets = summary.total>0;
@@ -14592,7 +14594,7 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No welders yet — add them in the Manage tab.")
     ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:ready?WELDER_COLOR:"#f7f6f3",color:ready?"#fff":"#52525b",border:`2px solid ${ready?WELDER_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:ready?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>ready&&onStartAudit(),disabled:!ready,"aria-disabled":!ready},"Start / Continue Audit")
     ,!hasAuditor&&eltEl(AuditorRequiredNote,null)
-    ,hasResults&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
+    ,auditActive&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
       ,eltEl(CompleteAuditBtn,{color:WELDER_COLOR,label:"Complete Welder Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
@@ -14602,9 +14604,7 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
 
 function WelderAuditView({project, results, meta, onOpen}) {
   const SS = swbStyles();
-  const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   const s = welderSiteSummary(project,results);
-  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on Home to continue.");
   return eltEl('div',{style:SS.listWrap}
     ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
     ,s.total===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add an area, then add welders in the Manage tab.")
@@ -15052,6 +15052,12 @@ function WelderApp({ onGoHome }) {
   React.useEffect(()=>{ if(loaded) save(K_WELDER_DROPDOWNS,dropdowns); },[dropdowns,loaded]);
 
   const project = projects.find(p=>p.id===activeProject);
+  const [activeMap,setActiveMap]=useAuditActive(K_WELDER_ACTIVE,loaded,()=>({projects,entryFor:pr=>welderHasProgress(allResults,pr)?{}:null}));     // hooks stay above the loaded early-return
+  const hasResults = welderHasProgress(allResults, project);
+  const auditActive = auditEntryIsActive(activeMap[activeProject]) || hasResults;     // a gate-only entry is not an audit; marked welders always are
+  const gateArmed = auditGateOf(activeMap, activeProject);                            // per site, persisted in the site's entry
+  const setGateArmed = v => setActiveMap(prev => v ? auditGateOn(prev, activeProject) : auditGateOff(prev, activeProject));
+  const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // armed by Back, nothing started, or a blank auditor (Continue is then disabled)
   const _m = welderMetaDefaults(allMeta[activeProject]);
   const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,WELDER_INTERVAL_MONTHS)};
   const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
@@ -15079,19 +15085,22 @@ function WelderApp({ onGoHome }) {
     clearSiteResults();
   };
   const goProjects = ()=>{setView("projects");setActiveProject(null);setActiveAssetId(null);setViewSnap(null);};
-  const goHome     = ()=>{setView("home");setActiveAssetId(null);setViewSnap(null);};
-  const goAudit    = ()=>{setView("audit");setActiveAssetId(null);setViewSnap(null);};
+  const goHome     = ()=>{setView("home");setViewSnap(null);};     // the Home tab keeps the open welder, like every other tab
+  const startAudit = ()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setActiveAssetId(null);setViewSnap(null);setView("audit");};     // Start records the flag and clears the marker
+  const goAuditTab = ()=>{setViewSnap(null);
+    if(showGate||view==="audit"||view==="asset"){setActiveAssetId(null);setView("audit");return;}     // gate up, or already in Audit: the top (as it always was)
+    setView(activeAssetId&&asset?"asset":"audit");};     // from another tab: the level last left at (the list if that welder is gone)
 
   useScrollMemory(mainRef,view==="audit"?"audit":view+"|"+(activeAssetId||""),view==="audit"||view==="projects");
   if(!loaded) return eltEl('div',{style:{display:"flex",flex:1,alignItems:"center",justifyContent:"center",background:"#e8e6e2"}},eltEl('div',{style:{width:36,height:36,border:"3px solid #d4d4d8",borderTop:`3px solid ${WELDER_COLOR}`,borderRadius:"50%",animation:"spin 0.8s linear infinite"}}));
 
   const SS = swbStyles();
   const summary = project?welderSiteSummary(project,allResults):{total:0,pass:0,fail:0,untested:0,tested:0};
-  const hasResults = !!project && areaAssets(project).some(a=>{const r=welderGetRes(allResults,project.id,a.id);return (r.photos||[]).length>0||WELDER_CHECKLIST.some(c=>welderItem(r,c.key).result);});
   const goBack = ()=>{
     if(viewSnap){setViewSnap(null);return;}
-    if(view==="asset") setView("audit");
-    else if(view==="audit") goHome();
+    if((view==="audit"||view==="asset")&&showGate) goHome();     // Back on the gate goes straight Home
+    else if(view==="asset"){setActiveAssetId(null);setView("audit");}     // Back from a welder = the list (does not arm)
+    else if(view==="audit"){setGateArmed(true);goHome();}     // Back from the top of Audit arms the gate, then Home
     else if(["manage","report","history","dropdowns"].includes(view)) goHome();
     else goProjects();
   };
@@ -15119,10 +15128,11 @@ function WelderApp({ onGoHome }) {
       ,eltEl('div',{style:{height:2,marginTop:12,background:`linear-gradient(90deg, ${WELDER_COLOR}, transparent 70%)`,opacity:0.5}})
     )
     ,eltEl('div',{style:SS.main,ref:mainRef}
-      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,hasResults,onStartAudit:goAudit,onCompleteAudit:()=>{archiveAudit();clearSiteResults();},onReset:discardSiteResults})
-      ,view==="audit"&&project&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
-      ,view==="asset"&&project&&asset&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
+      ,view==="projects"&&eltEl(WelderProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setActiveAssetId(null);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("welder",pid).catch(()=>{});sitePhotoStore.delPhotoList(assetPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(assetPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));setActiveMap(prev=>auditActiveClear(prev,pid));if(activeProject===pid)goProjects();}})
+      ,view==="home"&&project&&eltEl(WelderHomeView,{project,meta,setMeta,summary,auditActive,onStartAudit:startAudit,onCompleteAudit:()=>{archiveAudit();setActiveAssetId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));clearSiteResults();},onReset:()=>{setActiveAssetId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));discardSiteResults();}})
+      ,(view==="audit"||view==="asset")&&project&&showGate&&React.createElement(AuditGatePage,{accent:WELDER_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
+      ,view==="audit"&&project&&!showGate&&eltEl(WelderAuditView,{project,results:allResults,meta,onOpen:id=>{setActiveAssetId(id);setView("asset");}})
+      ,view==="asset"&&project&&asset&&!showGate&&eltEl(WelderAssetPage,{key:asset.id,project,asset,dropdowns,res:welderGetRes(allResults,project.id,asset.id),meta,onPatch:patch=>patchAsset(asset.id,patch),onClose:()=>{setActiveAssetId(null);setView("audit");}})
       ,view==="report"&&project&&eltEl(WelderReportView,{project,results:allResults,meta})
       ,view==="manage"&&project&&eltEl(WelderManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onRemoveAssets:ids=>{const site=allResults[activeProject]||{};sitePhotoStore.delPhotoList(assetPhotoList(Object.fromEntries(ids.map(id=>[id,site[id]]))));setAllResults(prev=>removeAssetResults(prev,activeProject,ids));}})
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns,setDropdowns,onBack:goHome,lists:WELDER_DROPDOWN_LISTS,hint:"These lists feed the Welder defect dropdowns. Tap ★ to move an option to the top.",showDefault:true})
@@ -15134,13 +15144,14 @@ function WelderApp({ onGoHome }) {
               const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
               setAllResults(prev=>({...prev,[activeProject]:copied}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
               confirmPhotoMigrationVerified("welder");   // a completed Continue round trip is a real proof the migrated photos read back correctly
+              setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setActiveAssetId(null);
               setHistoryError("");setViewSnap(null);setView("audit");
             }catch(_){setHistoryError("Could not continue this audit — its photos could not be copied. Your current audit was not changed.");}
           }})
     )
     ,view!=="projects"&&eltEl('nav',{style:SS.bottomNav}
       ,navBtn(NAV_ICON_HOME,"Home",view==="home",goHome)
-      ,navBtn(NAV_ICON_AUDIT,"Audit",["audit","asset"].includes(view),goAudit)
+      ,navBtn(NAV_ICON_AUDIT,"Audit",["audit","asset"].includes(view),goAuditTab)
       ,navBtn(NAV_ICON_REPORT,"Report",view==="report",()=>{setViewSnap(null);setView("report");})
       ,navBtn(NAV_ICON_HISTORY,"History",view==="history",()=>{setViewSnap(null);setView("history");})
       ,navBtn(NAV_ICON_MANAGE,"Manage",view==="manage",()=>{setViewSnap(null);setView("manage");})
@@ -15770,5 +15781,5 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
-export { eltHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
+export { eltHasProgress, welderHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
 export default AppRoot;

@@ -33,6 +33,7 @@ describe('no photo input forces the camera', () => {
   it('Welder: the photo input', async () => {
     localStorage.setItem('welder-projects-v2', JSON.stringify([{ id: 'w1', name: 'Site W', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W1', brand: 'K', model: 'E', serial: '1' }] }] }]));
     localStorage.setItem('welder-meta-v1', JSON.stringify({ w1: { auditor: 'J', testDate: '2026-09-21' } }));
+    localStorage.setItem('welder-audit-active-v1', JSON.stringify({ v: 1, sites: { 'w1': {} } }));   // a STARTED audit: the Audit tab is gated now
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByText('WELDER TESTING')); await user.click(await screen.findByText('Site W', { selector: 'div' })); await user.click(screen.getByRole('button', { name: 'Audit' }));
     await user.click(await screen.findByText(/W1/)); chooserOk(await screen.findByTestId('welder-photo-input'));

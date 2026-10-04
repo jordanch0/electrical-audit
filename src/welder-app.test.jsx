@@ -15,6 +15,7 @@ const SEED_PROJECT = { id: 'dixon', name: 'Dixon Quarry Group', company: 'Co', a
 const seed = (extra = {}) => {
   localStorage.setItem('welder-projects-v1', JSON.stringify([SEED_PROJECT]));
   localStorage.setItem('welder-meta-v1', JSON.stringify({ dixon: { auditor: 'Jordan', testDate: '2026-07-13', nextTestDate: '2026-10-13', instruments: 'Fluke 1587' } }));
+  localStorage.setItem('welder-audit-active-v1', JSON.stringify({ v: 1, sites: { 'dixon': {} } }));   // a STARTED audit: the Audit tab is gated now
   Object.entries(extra).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
 };
 async function openSite(user) {

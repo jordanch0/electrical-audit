@@ -33,6 +33,7 @@ const MODULES = [
   { tile: 'INSULATION RESISTANCE TESTING', pk: 'irt-projects-v1', mk: 'irt-meta-v1', ak: 'irt-audit-active-v1', start: START },
   // ELT's Start is disabled until the site has a fitting, so its sites are seeded with one (the other modules start with no areas)
   { tile: 'EMERGENCY LIGHTING', pk: 'elt-projects-v2', mk: 'elt-meta-v1', ak: 'elt-audit-active-v1', start: /Start \/ Continue Testing/, areas: [{ id: 'ar', name: 'Plant', assets: [{ id: 'x1', assetLocation: 'Plant Door', assetId: 'E1', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] },
+  { tile: 'WELDER TESTING', pk: 'welder-projects-v2', mk: 'welder-meta-v1', ak: 'welder-audit-active-v1', start: START, areas: [{ id: 'ar', name: 'Plant', assets: [{ id: 'a1', assetId: 'WLD-1', brand: 'Kemppi', model: 'Mig', serial: '1' }] }] },
 ];
 const site = (id, name, areas = []) => ({ id, name, company: '', abn: '', licence: '', areas });
 function seed(m, sites, auditor = 'Jane') {
@@ -259,24 +260,25 @@ describe.each(LEVEL)('%s — folder level kept across another tab (the Home tab 
   });
 });
 
-// ELT has no folders: the list is the top level and a fitting's page the one deeper level. The item page is kept across another tab; one Back = the list.
-describe('EMERGENCY LIGHTING — the open fitting is kept across another tab (the Home tab included)', () => {
-  it.each(['Report', 'Home', 'History', 'Manage'])('on a fitting page, %s tab, Audit tab: back on the same fitting; one Back = the list', async tab => {
-    const m = MODULES.find(x => x.tile === 'EMERGENCY LIGHTING'); seed(m, [['s1', 'Site One']]);
+// ELT and Welder have no folders: the list is the top level and an item's page (a fitting / a welder) the one deeper level. The item page is kept across another tab; one Back = the list.
+const ITEM_LEVEL = [['EMERGENCY LIGHTING', 'Plant Door'], ['WELDER TESTING', 'WLD-1']];
+describe.each(ITEM_LEVEL)('%s — the open item is kept across another tab (the Home tab included)', (tile, rowText) => {
+  it.each(['Report', 'Home', 'History', 'Manage'])('on an item page, %s tab, Audit tab: back on the same item; one Back = the list', async tab => {
+    const m = MODULES.find(x => x.tile === tile); seed(m, [['s1', 'Site One']]);
     const user = userEvent.setup(); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m);
-    await user.click(await screen.findByText('Plant Door')); expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();      // the item page
+    await user.click((await screen.findAllByText(new RegExp(rowText)))[0]); expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();      // the item page
     await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     expect(await screen.findByText(/Visual Inspection/)).toBeInTheDocument();                                    // same fitting, not the list
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
-    await back(user); expect(screen.queryByText(/Visual Inspection/)).toBeNull(); expect(screen.getByText('Plant Door')).toBeInTheDocument();    // one Back = the list
+    await back(user); expect(screen.queryByText(/Visual Inspection/)).toBeNull(); expect(screen.getAllByText(new RegExp(rowText)).length).toBeGreaterThan(0);    // one Back = the list
   });
-  it('Back from the list arms the gate; Continue lands on the list (the top), not on the fitting', async () => {
-    const m = MODULES.find(x => x.tile === 'EMERGENCY LIGHTING'); seed(m, [['s1', 'Site One']]);
+  it('Back from the list arms the gate; Continue lands on the list (the top), not on the item', async () => {
+    const m = MODULES.find(x => x.tile === tile); seed(m, [['s1', 'Site One']]);
     const user = userEvent.setup(); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m);
-    await user.click(await screen.findByText('Plant Door')); await back(user); await back(user);                 // fitting -> list -> Home (arms)
+    await user.click((await screen.findAllByText(new RegExp(rowText)))[0]); await back(user); await back(user);   // item -> list -> Home (arms)
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /Continue Audit/ })); expect(await screen.findByText('Plant Door')).toBeInTheDocument(); expect(screen.queryByText(/Visual Inspection/)).toBeNull();
+    await user.click(screen.getByRole('button', { name: /Continue Audit/ })); expect((await screen.findAllByText(new RegExp(rowText))).length).toBeGreaterThan(0); expect(screen.queryByText(/Visual Inspection/)).toBeNull();
   });
 });
 

@@ -254,6 +254,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     };
     localStorage.setItem('welder-projects-v1', JSON.stringify([project]));
     localStorage.setItem('welder-meta-v1', JSON.stringify({ 'site-1': { auditor: 'Jordan', testDate: '2026-09-21', nextTestDate: '2026-12-21' } }));
+    localStorage.setItem('welder-audit-active-v1', JSON.stringify({ v: 1, sites: { 'site-1': {} } }));   // a STARTED audit: the Audit tab is gated now
 
     render(<AppRoot />);
     await user.click(await screen.findByText('WELDER TESTING'));

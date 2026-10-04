@@ -112,13 +112,14 @@ describe('IEL: old-format data (global iel-cat-v2 = "estops")', () => {
   });
 });
 
-describe('TAT / SWB / IRT / ELT: old data with marked items becomes active (no loss); an auditor name alone is not an audit', () => {
+describe('TAT / SWB / IRT / ELT / Welder: old data with marked items becomes active (no loss); an auditor name alone is not an audit', () => {
   const CASES = [
     ['TEST & TAG', 'tat-projects-v1', 'tat-meta-v1', 'tat-results-v1', 'tat-audit-active-v1',
       [{ id: 'a1', name: 'Area1', defaultFreq: '6', items: ['i1'], itemNames: {}, itemTags: {}, itemEquipTypes: {}, itemFreqs: {} }], { a1: { i1: { status: 'pass' } } }],
     ['SWITCHBOARD', 'swb-projects-v1', 'swb-meta-v1', 'swb-results-v1', 'swb-audit-active-v1', [{ id: 'a1', name: 'Area1', boards: [{ id: 'b1', name: 'B1' }] }], { a1: { b1: { enclosure: { status: 'pass' } } } }],
     ['INSULATION RESISTANCE TESTING', 'irt-projects-v1', 'irt-meta-v1', 'irt-results-v1', 'irt-audit-active-v1', [{ id: 'a1', name: 'Area1', panels: [{ id: 'p1', name: 'P1', items: ['m1'] }] }], { a1: { p1: { m1: { status: 'pass', readings: {}, testVoltage: '500V' } } } }],
     ['EMERGENCY LIGHTING', 'elt-projects-v2', 'elt-meta-v1', 'elt-results-v1', 'elt-audit-active-v1', [{ id: 'ar', name: 'Area1', assets: [{ id: 'x1', assetLocation: 'Door', assetId: 'E1', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }], { x1: { visual: 'pass' } }],
+    ['WELDER TESTING', 'welder-projects-v2', 'welder-meta-v1', 'welder-results-v1', 'welder-audit-active-v1', [{ id: 'ar', name: 'Area1', assets: [{ id: 'a1', assetId: 'W1', brand: 'Kemppi', model: 'Mig', serial: '1' }] }], { a1: { items: { visual: { result: 'pass' } } } }],
   ];
   it.each(CASES)('%s', async (tile, pk, mk, rk, ak, areas, siteResults) => {
     localStorage.setItem(pk, JSON.stringify([{ id: 'w', name: 'Worked', areas }, { id: 'o', name: 'Name Only', areas }, { id: 'u', name: 'Untouched', areas }]));

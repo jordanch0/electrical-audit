@@ -90,7 +90,7 @@ const EXTRA = [
       localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: assets ? [{ id: 'ar', name: 'Site E', assets: [{ id: 'x1', assetLocation: 'SE Door', assetId: '', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] : [] }]));
       localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor, testDate: '2026-09-21' } }));
       if (results) localStorage.setItem('elt-results-v1', JSON.stringify({ p1: { x1: { visual: 'pass' } } })); } },
-  { short: 'Welder', tile: 'WELDER TESTING', start: /Start \/ Continue Audit/, site: 'Site W', none: /No welders yet/,
+  { short: 'Welder', gate: true, tile: 'WELDER TESTING', start: /Start \/ Continue Audit/, site: 'Site W', none: /No welders yet/,
     seed: ({ assets = true, results = true, auditor = '' } = {}) => {
       localStorage.setItem('welder-projects-v2', JSON.stringify([{ id: 'w1', name: 'Site W', company: '', abn: '', licence: '', areas: assets ? [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W1', brand: 'K', model: 'E', serial: '1' }] }] : [] }]));
       localStorage.setItem('welder-meta-v1', JSON.stringify({ w1: { auditor, testDate: '2026-09-21' } }));

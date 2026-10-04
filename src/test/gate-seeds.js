@@ -28,6 +28,10 @@ export const GATE_MODS = [
   { tile: 'EMERGENCY LIGHTING', short: 'ELT', p: 'elt-projects-v2', r: 'elt-results-v1', m: 'elt-meta-v1', a: 'elt-audit-active-v1', entry: {}, start: /Start \/ Continue Testing/,
     areas: [{ id: 'ar', name: 'Plant Room', assets: [{ id: 'x1', assetLocation: 'Plant Room Door', assetId: 'E1', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }, { id: 'x2', assetLocation: 'Corridor', assetId: 'E2', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }],
     marked: { x1: { visual: 'pass' } }, meta: au => ({ auditor: au, testDate: DATE }) },
+  // Welder: the same two-level shape as ELT (a list of welders; a welder's page). Results are keyed site -> welder id, with the answers under items.
+  { tile: 'WELDER TESTING', short: 'Welder', p: 'welder-projects-v2', r: 'welder-results-v1', m: 'welder-meta-v1', a: 'welder-audit-active-v1', entry: {}, start: /Start \/ Continue Audit/,
+    areas: [{ id: 'ar', name: 'Workshop', assets: [{ id: 'a1', assetId: 'W1', brand: 'Kemppi', model: 'Mig 300', serial: '1234' }, { id: 'a2', assetId: 'W2', brand: 'Lincoln', model: 'Pro', serial: '5678' }] }],
+    marked: { a1: { items: { visual: { result: 'pass' } } } }, meta: au => ({ auditor: au, testDate: DATE }) },
 ];
 export const GATE_SITE_NAMES = { sa: 'Site A items marked', sb: 'Site B started nothing marked', sc: 'Site C never touched' };
 // opts.noFlagKey: write NO per-site flag key at all (a pure NEW-format "progress only" case)

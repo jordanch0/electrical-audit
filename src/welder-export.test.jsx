@@ -124,6 +124,7 @@ describe('Welder photo -> export through the real UI', () => {
     let shot = 0;
     localStorage.setItem('welder-projects-v2', JSON.stringify([{ ...project, areas: [{ ...project.areas[0], assets: project.areas[0].assets.slice(0, 2) }] }]));
     localStorage.setItem('welder-meta-v1', JSON.stringify({ p1: meta }));
+    localStorage.setItem('welder-audit-active-v1', JSON.stringify({ v: 1, sites: { 'p1': {} } }));   // a STARTED audit: the Audit tab is gated now
     vi.stubGlobal('Image', class { set src(v) { this._s = v; queueMicrotask(() => { this.width = 4000; this.height = 3000; this.onload && this.onload(); }); } get src() { return this._s; } });
     HTMLCanvasElement.prototype.getContext = () => ({ drawImage() {} });
     // siteStorePhotos generates a full (maxDim 1280) AND a thumbnail (maxDim 200) per photo — two toDataURL calls now, not one.

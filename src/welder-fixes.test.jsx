@@ -18,6 +18,7 @@ const meta = { auditor: 'Jordan', testDate: '2026-07-13', nextTestDate: '2026-10
 const seed = extra => {
   localStorage.setItem('welder-projects-v2', JSON.stringify([site]));
   localStorage.setItem('welder-meta-v1', JSON.stringify({ dixon: meta }));
+  localStorage.setItem('welder-audit-active-v1', JSON.stringify({ v: 1, sites: { 'dixon': {} } }));   // a STARTED audit: the Audit tab is gated now
   Object.entries(extra || {}).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
 };
 const card = i => screen.getByText(new RegExp(`^${i + 1}\\. ${WELDER_CHECKLIST[i].label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)).parentElement;
