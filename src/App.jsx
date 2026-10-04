@@ -2086,8 +2086,8 @@ if(isPush){
 const push=_nullishCoalesce(d.push, () => ({}));
 const pushIsFail = (_nullishCoalesce(push.status, () => (STATUS.UNTESTED))) === STATUS.FAIL;
 return (
-React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}, onClick: onClose,}
-, React.createElement('div', { style: {}, onClick: e=>e.stopPropagation(),}
+React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"},}
+, React.createElement('div', { style: {},}
 , React.createElement('div', { style: S.modalHeader,}
 , React.createElement('div', null, React.createElement('div', { style: S.modalTitle,}, _optionalChain([panel, 'optionalAccess', _154 => _154.name]), " · "  , circuit), React.createElement('div', { style: S.modalSub,}, _optionalChain([area, 'optionalAccess', _155 => _155.name]), " · Push Test"    ))
 , React.createElement(StatusBadge, { status: _nullishCoalesce(push.status, () => (STATUS.UNTESTED)),})
@@ -2159,8 +2159,8 @@ placeholder: "Select or type…",})
 const inj=_nullishCoalesce(d.inject, () => ({}));
 const isOver = msIsOver(inj.resultPos) || msIsOver(inj.resultNeg);
 return (
-React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}, onClick: onClose,}
-, React.createElement('div', { style: {}, onClick: e=>e.stopPropagation(),}
+React.createElement('div', { style: {flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"},}
+, React.createElement('div', { style: {},}
 , React.createElement('div', { style: S.modalHeader,}
 , React.createElement('div', null, React.createElement('div', { style: S.modalTitle,}, _optionalChain([panel, 'optionalAccess', _156 => _156.name]), " · "  , circuit), React.createElement('div', { style: S.modalSub,}, _optionalChain([area, 'optionalAccess', _157 => _157.name]), " · Injection Test"    ))
 , React.createElement(StatusBadge, { status: _nullishCoalesce(inj.status, () => (STATUS.UNTESTED)),})
