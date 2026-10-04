@@ -1463,7 +1463,8 @@ setHistory(prev=>[snap,...prev].slice(0,100)); // keep last 100
 return snap;
 };
 const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActivePanelId(null);};
-const goHome=()=>{setView("home");};   // the Home tab keeps the folder level
+const clearSnap=()=>{setViewSnap(null);setViewArea(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
+const goHome=()=>{clearSnap();setView("home");};   // the Home tab keeps the folder level
 useScrollMemory(rcdMainRef,[view,mode,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
 if(!loaded) return React.createElement('div', { style: S.loader,}, React.createElement('div', { style: S.loaderSpinner,}), React.createElement('p', { style: {color:"#5f5b57",marginTop:16},}, "Loading…"));
 const modeColor=mode==="push"?"#a3530f":"#1d4ed8";
@@ -1544,11 +1545,11 @@ onContinueFromSnap: (snap)=>{
 , view!=="projects"&&(
 React.createElement('nav', { style: S.bottomNav, 'data-nav': 'bottom',}
 , React.createElement(NavBtn, { icon: NAV_ICON_HOME,      label: "Home",      active: view==="home",     onClick: ()=>{setDetailInfo(null);goHome();}, color: "#334155",})
-, React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}, color: "#334155",})
-, React.createElement(NavBtn, { icon: NAV_ICON_REPORT,    label: "Report",    active: view==="report",   onClick: ()=>{setDetailInfo(null);setView("report");}, color: "#334155",})
-, React.createElement(NavBtn, { icon: NAV_ICON_HISTORY,   label: "History",   active: view==="history",  onClick: ()=>{setDetailInfo(null);setView("history");}, color: "#334155",})
-, React.createElement(NavBtn, { icon: NAV_ICON_MANAGE,    label: "Manage",    active: view==="manage",   onClick: ()=>{setDetailInfo(null);setView("manage");}, color: "#334155",})
-, React.createElement(NavBtn, { icon: NAV_ICON_DROPDOWNS, label: "Dropdowns", active: view==="settings", onClick: ()=>{setDetailInfo(null);setView("settings");}, color: "#334155",})
+, React.createElement(NavBtn, { icon: NAV_ICON_AUDIT,     label: "Audit",     active: isAudit,           onClick: ()=>{clearSnap();setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}, color: "#334155",})
+, React.createElement(NavBtn, { icon: NAV_ICON_REPORT,    label: "Report",    active: view==="report",   onClick: ()=>{clearSnap();setDetailInfo(null);setView("report");}, color: "#334155",})
+, React.createElement(NavBtn, { icon: NAV_ICON_HISTORY,   label: "History",   active: view==="history",  onClick: ()=>{clearSnap();setDetailInfo(null);setView("history");}, color: "#334155",})
+, React.createElement(NavBtn, { icon: NAV_ICON_MANAGE,    label: "Manage",    active: view==="manage",   onClick: ()=>{clearSnap();setDetailInfo(null);setView("manage");}, color: "#334155",})
+, React.createElement(NavBtn, { icon: NAV_ICON_DROPDOWNS, label: "Dropdowns", active: view==="settings", onClick: ()=>{clearSnap();setDetailInfo(null);setView("settings");}, color: "#334155",})
 )
 )
 )
@@ -3192,7 +3193,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   };
 
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActivePanelId(null);};
-  const goHome=()=>{setView("home");};   // the Home tab keeps the folder level
+  const clearSnap=()=>{setViewSnap(null);setViewArea(null);setViewCat(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
+  const goHome=()=>{clearSnap();setView("home");};   // the Home tab keeps the folder level
 
   useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
   if(!loaded)return React.createElement('div',{style:SI.loader},React.createElement('div',{style:SI.loaderSpinner}),React.createElement('p',{style:{color:"#5f5b57",marginTop:16}},"Loading…"));
@@ -3267,11 +3269,11 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // ── Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:SI.bottomNav}
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#334155",onClick:()=>{setDetailInfo(null);goHome();}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{setDetailInfo(null);setView("report");}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{setDetailInfo(null);setView("history");}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{setDetailInfo(null);setView("manage");}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#334155",onClick:()=>{setDetailInfo(null);setView("dropdowns");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("report");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("history");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("manage");}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("dropdowns");}})
     )
   );
 }
@@ -5326,7 +5328,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   };
 
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);};
-  const goHome=()=>{setView("home");};   // the Home tab keeps the folder level
+  const clearSnap=()=>{setViewSnap(null);setViewArea(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
+  const goHome=()=>{clearSnap();setView("home");};   // the Home tab keeps the folder level
   const isAudit=view==="audit";if(isAudit)lastAuditViewRef.current=view;
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
 
@@ -5415,11 +5418,11 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:ST.bottomNav}
       ,React.createElement(TATNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#334155",onClick:()=>{setDetailItemId(null);goHome();}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{if(showGate){setDetailItemId(null);setView("audit");return;}if(isAudit){setDetailItemId(null);setView("audit");setActiveAreaId(null);}else{setView("audit");if(!area){setActiveAreaId(null);setDetailItemId(null);}}}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{setDetailItemId(null);setView("report");}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{setDetailItemId(null);setView("history");}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{setDetailItemId(null);setView("manage");}})
-      ,React.createElement(TATNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="settings",color:"#334155",onClick:()=>{setDetailItemId(null);setView("settings");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{clearSnap();if(showGate){setDetailItemId(null);setView("audit");return;}if(isAudit){setDetailItemId(null);setView("audit");setActiveAreaId(null);}else{setView("audit");if(!area){setActiveAreaId(null);setDetailItemId(null);}}}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{clearSnap();setDetailItemId(null);setView("report");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{clearSnap();setDetailItemId(null);setView("history");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{clearSnap();setDetailItemId(null);setView("manage");}})
+      ,React.createElement(TATNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="settings",color:"#334155",onClick:()=>{clearSnap();setDetailItemId(null);setView("settings");}})
     )
   );
 }
@@ -10851,7 +10854,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   };
 
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
-  const goHome=()=>{setView("home");};   // the Home tab keeps the folder level
+  const clearSnap=()=>{setViewSnap(null);setViewArea(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
+  const goHome=()=>{clearSnap();setView("home");};   // the Home tab keeps the folder level
   // goArea removed - use goAreaList() instead
   const goAreaList=()=>{setView("audit");setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
 
@@ -10918,11 +10922,11 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     )
     ,view!=="projects"&&React.createElement('nav',{style:SS.bottomNav}
       ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",                                  onClick:goHome,                                                                                     color:"#334155"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:["audit","board","item"].includes(view),         onClick:()=>{if(showGate){setView("audit");return;}const v=lastAuditViewRef.current;const inAudit=["audit","board","item"].includes(view);const ok=inAudit?false:v==="item"?!!(board&&activeItemKey):v==="board"?!!board:(!activeAreaId||!!area);if(ok){setView(v);return;}setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#334155"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",                                 onClick:()=>setView("report"),                                                                     color:"#334155"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history",                                onClick:()=>setView("history"),                                                                    color:"#334155"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",                                 onClick:()=>setView("manage"),                                                                     color:"#334155"})
-      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",                              onClick:()=>setView("dropdowns"),                                                                  color:"#334155"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:["audit","board","item"].includes(view),         onClick:()=>{clearSnap();if(showGate){setView("audit");return;}const v=lastAuditViewRef.current;const inAudit=["audit","board","item"].includes(view);const ok=inAudit?false:v==="item"?!!(board&&activeItemKey):v==="board"?!!board:(!activeAreaId||!!area);if(ok){setView(v);return;}setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setView("audit");}, color:"#334155"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",                                 onClick:()=>{clearSnap();setView("report");},                                                                     color:"#334155"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history",                                onClick:()=>{clearSnap();setView("history");},                                                                    color:"#334155"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",                                 onClick:()=>{clearSnap();setView("manage");},                                                                     color:"#334155"})
+      ,React.createElement(SWBNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",                              onClick:()=>{clearSnap();setView("dropdowns");},                                                                  color:"#334155"})
     )
   );
 }
