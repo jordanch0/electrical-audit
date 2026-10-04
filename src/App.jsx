@@ -12100,12 +12100,6 @@ function ELTStatusChip({status}) {
   const sm = SM[status];
   return eltEl('div',{style:{width:60,flexShrink:0,padding:"7px 0",background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,borderRadius:8,fontSize:11,fontWeight:800,textAlign:"center"}},sm.label);
 }
-function ELTBackBtn({onClick}) {
-  const SS = swbStyles();
-  return eltEl('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}}
-    ,eltEl('button',{style:{...SS.smallBtn,color:"#5f5b57"},onClick},eltEl('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},eltEl('polyline',{points:'15 18 9 12 15 6'}))," Back")
-  );
-}
 
 function ELTApp({ onGoHome }) {
   const [projects,      setProjects]      = React.useState([]);
@@ -12565,7 +12559,6 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
   const removePhoto = photo=>{ sitePhotoStore.delPhoto(photo); setPhotos((rRef.current.photos||[]).filter(p=>p.id!==photo.id)); };
   const sub = [asset.location,eltTypeLabel(asset),asset.maintained,asset.assetId&&`#${asset.assetId}`].filter(Boolean).join(" · ");
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
-    ,eltEl(ELTBackBtn,{onClick:onClose})
     ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6,gap:10}}
       ,eltEl('div',{style:{minWidth:0}}
         ,eltEl('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},asset.assetLocation||"Unnamed fitting")
@@ -14653,7 +14646,6 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
     ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
   const nextDue = meta.nextTestDate;
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
-    ,eltEl(ELTBackBtn,{onClick:onClose})
     ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:10}}
       ,eltEl('div',{style:{minWidth:0}}
         ,eltEl('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},welderTitle(asset))
