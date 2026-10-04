@@ -1,6 +1,6 @@
 // AUDIT-GATES MATRIX — every scenario row, for every module (RCD, IEL, TAT, Thermo, SWB, IRT). Where each row lives:
 //   start -> Back -> Audit tab (in progress) ............. per-site active audit; gate marker
-//   start -> Back -> other tab -> Audit tab (no gate) ..... gate marker (Report / History / Manage / Dropdowns); folder level kept (level rows, incl. IEL)
+//   start -> Back -> gate -> other tab -> Audit tab (gate STILL showing; only Continue clears it) ... gate marker; in the folders, other tab -> Audit = same level (level rows, incl. IEL)
 //   start -> Home TAB directly -> Audit tab (no gate) ...... gate marker
 //   start -> Modules -> back in -> Audit tab ................ per-site active audit (switch MODULE)
 //   gate Back to Home -> Audit tab again (gate again) ...... gate marker
@@ -11,7 +11,7 @@
 //   imported site (NO ACTIVE) ................................... imported rows (structure only; TAT / IEL carry untested results)
 //   switch module or site while active (never lost) ....... per-site active audit (switch SITE / switch MODULE)
 //   Continue from the gate, then Back again ................ gate marker
-//   refresh toast / relaunch (data intact; marker not restored; flag survives) ... gate marker (relaunch) + src/audit-active-migration.test.jsx + src/async-write-window.test.jsx
+//   refresh toast / relaunch (data intact; the gate marker is persisted WITH the flag, so the gate is still there) ... gate marker (relaunch) + src/audit-active-migration.test.jsx + src/async-write-window.test.jsx
 //   blank auditor (Continue disabled + reason in text; Back to Home works) ...... per-site active audit
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -40,6 +40,7 @@ function seed(m, sites, auditor = 'Jane') {
 const openSite = async (user, m, name) => { await user.click(screen.getByText(m.tile, { exact: true })); await user.click(await screen.findByText(name, { selector: 'div' })); };
 const startFromHome = async (user, m) => { await user.click(screen.getByRole('button', { name: m.start })); };
 const back = user => user.click(screen.getAllByText('Back')[0]);
+const nav2 = (user, label) => user.click(screen.getByRole('button', { name: new RegExp(`^${label}$`) }));
 const auditTab = user => user.click(screen.getByRole('button', { name: /^Audit$/ }));
 const activeMap = m => { const raw = localStorage.getItem(m.ak); return raw ? JSON.parse(raw).sites : null; };
 
@@ -65,10 +66,10 @@ describe.each(MODULES)('$tile — per-site active audit', m => {
     await back(user); await back(user);
     await user.click(await screen.findByText('Site One', { selector: 'div' }));
     expect(screen.getByText('COMPLETE ACTIVE AUDIT')).toBeInTheDocument();                                          // A is still in progress (Home card)
-    await auditTab(user);                                                                                           // reopening a site does not arm the gate: straight to the folders
-    expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull(); expect(screen.queryByText('NO ACTIVE AUDIT')).toBeNull();
-    await back(user); await auditTab(user);                                                                         // Back arms it: now the in-progress gate
+    await auditTab(user);                                                                                           // A was armed by Back before we left: its gate is STILL up (per-site marker)
     expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Continue Audit/ }));                                      // only Continue clears it
+    expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull(); expect(screen.queryByText('NO ACTIVE AUDIT')).toBeNull();
     expect(Object.keys(activeMap(m))).toEqual(['s1']);
   });
 
@@ -150,16 +151,18 @@ describe('site delete (from now on): clears the active flag; TAT and IEL now als
   });
 });
 
-// ── Commit 4 rows: the GATE MARKER. Only Back from the top of the Audit tab arms it (session-only, never stored). Other tabs disarm it, the Home tab leaves it
-// alone, Continue clears it, and the folder level you were at is kept across other tabs.
+// ── GATE MARKER rows. Only Back from the top of the Audit tab arms it; it is stored per site as `gate` in the site's flag entry, so it survives other tabs, the Home tab,
+// switching site or module and a reload. ONLY Continue (and Start / History Continue / Complete / Reset / site delete) clears it. The folder level is kept across every other tab.
 describe.each(MODULES)('$tile — gate marker', m => {
   const startAndBack = async user => { seed(m, [['s1', 'Site One']]); render(<AppRoot />); await openSite(user, m, 'Site One'); await startFromHome(user, m); await back(user); };
   const noGate = () => { expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull(); expect(screen.queryByText('NO ACTIVE AUDIT')).toBeNull(); };
 
-  it.each(['Report', 'History', 'Manage', 'Dropdowns'])('Back, then %s tab, then Audit tab: NO gate (back in the folders)', async tab => {
-    const user = userEvent.setup(); await startAndBack(user);
+  it.each(['Report', 'History', 'Manage', 'Dropdowns'])('Back, Audit (gate), then %s tab, then Audit tab: the gate is STILL showing', async tab => {
+    const user = userEvent.setup(); await startAndBack(user); await auditTab(user);
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) })); await auditTab(user);
-    noGate();
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Continue Audit/ })).toBeEnabled();
   });
 
   it('Back, Home tab (not via another tab), Audit tab: still the gate (Home leaves the marker alone)', async () => {
@@ -189,12 +192,45 @@ describe.each(MODULES)('$tile — gate marker', m => {
     expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
   });
 
-  it('the marker is not persisted: after a relaunch the active audit opens straight into the folders', async () => {
-    const user = userEvent.setup(); await startAndBack(user); await auditTab(user);
-    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
+  it('the marker is persisted with the flag: Back then an immediate reload, the gate is still there; Continue clears it for good', async () => {
+    const user = userEvent.setup(); await startAndBack(user);
+    expect(activeMap(m).s1.gate).toBe(true);                                                                    // stored the moment Back lands on Home
     cleanup(); const u2 = userEvent.setup(); render(<AppRoot />); await openSite(u2, m, 'Site One'); await auditTab(u2);
-    noGate();                                                                                                   // flag survived (still active), marker did not
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();                                   // the gate survived the reload
+    await u2.click(screen.getByRole('button', { name: /Continue Audit/ })); noGate();
+    expect(activeMap(m).s1.gate).toBeUndefined();
+    cleanup(); const u3 = userEvent.setup(); render(<AppRoot />); await openSite(u3, m, 'Site One'); await auditTab(u3);
+    noGate();                                                                                                   // Continue was remembered too
     expect(Object.keys(activeMap(m))).toEqual(['s1']);
+  });
+
+  it('switching MODULE while armed: Modules button, re-enter, the gate is still up', async () => {
+    const user = userEvent.setup(); await startAndBack(user);
+    await user.click(screen.getByText('Modules')); await openSite(user, m, 'Site One'); await auditTab(user);
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
+  });
+
+  it('the marker belongs to ONE site: arming site One leaves site Two (also started) unarmed', async () => {
+    seed(m, [['s1', 'Site One'], ['s2', 'Site Two']]); const user = userEvent.setup(); render(<AppRoot />);
+    await openSite(user, m, 'Site One'); await startFromHome(user, m); await back(user);                          // arm One
+    await back(user);                                                                                           // site list
+    await user.click(await screen.findByText('Site Two', { selector: 'div' })); await startFromHome(user, m); await nav2(user, 'Home'); await auditTab(user);
+    noGate();                                                                                                   // Two was started and never armed: folders
+    expect(activeMap(m).s1.gate).toBe(true); expect(activeMap(m).s2.gate).toBeUndefined();
+  });
+
+  it.each(['Complete', 'Reset'])('%s clears the marker: the next Start is not gated', async how => {
+    const user = userEvent.setup(); await startAndBack(user); expect(activeMap(m).s1.gate).toBe(true);
+    if (how === 'Complete') { await user.click(screen.getByRole('button', { name: /^Complete/ })); await user.click(await screen.findByRole('button', { name: /^Yes/ })); }
+    else { await user.click(screen.getByRole('button', { name: /^Reset/ })); await user.click(await screen.findByRole('button', { name: /^(Reset|Yes)$/ })); }
+    expect(activeMap(m).s1).toBeUndefined();
+    await startFromHome(user, m); noGate();                                                                     // a fresh start goes straight into the folders
+  });
+
+  it('the Home TAB leaves the gate up', async () => {
+    const user = userEvent.setup(); await startAndBack(user); await auditTab(user);
+    await nav2(user, 'Home'); await auditTab(user);
+    expect(await screen.findByText('AUDIT IN PROGRESS')).toBeInTheDocument();
   });
 });
 
@@ -206,14 +242,14 @@ const LEVEL = [
   ['SWITCHBOARD', 'swb-projects-v1', 'swb-meta-v1', [{ id: 'a1', name: 'Plant', boards: [{ id: 'b1', name: 'MSB1' }] }], START, 'MSB1'],
   ['INSULATION RESISTANCE TESTING', 'irt-projects-v1', 'irt-meta-v1', [{ id: 'a1', name: 'Plant', panels: [{ id: 'p1', name: 'MSB1', items: ['m1'] }] }], START, 'MSB1'],
 ];
-describe.each(LEVEL)('%s — folder level kept across another tab', (tile, pk, mk, areas, startRe, child) => {
-  it('inside an area, Report tab, Audit tab: back inside the same area (not the area list)', async () => {
+describe.each(LEVEL)('%s — folder level kept across another tab (the Home tab included)', (tile, pk, mk, areas, startRe, child) => {
+  it.each(['Report', 'Home'])('inside an area, %s tab, Audit tab: back inside the same area (not the area list)', async tab => {
     localStorage.setItem(pk, JSON.stringify([{ id: 's1', name: 'Site One', company: '', abn: '', licence: '', areas }])); localStorage.setItem(mk, JSON.stringify({ s1: { auditor: 'Jane', testDate: '2026-10-01' } }));
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByText(tile, { exact: true })); await user.click(await screen.findByText('Site One', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: startRe }));
     await user.click(await screen.findByText('Plant')); expect(await screen.findByText(child)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^Report$/ }));
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     expect(await screen.findByText(child)).toBeInTheDocument();                                                  // same level
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
@@ -224,7 +260,7 @@ describe.each(LEVEL)('%s — folder level kept across another tab', (tile, pk, m
 // IEL, with the real category + item labels from the shared fictional seed (src/test/pill-seed.cjs): Wash Plant -> E-Stops -> "Feed Conveyor 1" ...
 import pillSeed from './test/pill-seed.cjs';
 describe('IEL TESTING — folder level kept across another tab (real seed labels)', () => {
-  it('inside Wash Plant (E-Stops), Report tab, Audit tab: back inside the same area, not the area list; one Back = the area list', async () => {
+  it.each(['Report', 'Home'])('inside Wash Plant (E-Stops), %s tab, Audit tab: back inside the same area, not the area list; one Back = the area list', async tab => {
     const d = pillSeed.build('iel', 'nologo'); Object.entries(d.ls).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByText('IEL TESTING', { exact: true })); await user.click(await screen.findByText(pillSeed.SITE, { selector: 'div' }));
@@ -232,7 +268,7 @@ describe('IEL TESTING — folder level kept across another tab (real seed labels
     await user.click(await screen.findByText('Wash Plant'));                           // area -> the category panel card
     await user.click((await screen.findAllByText('E-Stops'))[0]);                      // panel -> the items
     expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /^Report$/ }));
+    await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();           // same (deepest) level
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();

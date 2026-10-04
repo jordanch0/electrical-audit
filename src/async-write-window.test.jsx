@@ -11,6 +11,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppRoot, { sitePhotoStore, sitePhotoIO, gsdPhotoIO } from './App.jsx';
+import { GATE_MODS, GATE_SITE_NAMES, seedGateData } from './test/gate-seeds.js';
 
 vi.setConfig({ testTimeout: 30000 });
 const ab = n => new Uint8Array(n).buffer;
@@ -122,5 +123,19 @@ describe('SWB History -> Continue', () => {
     const idOf = v => JSON.parse(v).dixon['area-onr'].b1._photos[0].id;
     expect(idOf(r.eventually)).not.toBe('liveP'); expect(idOf(r.eventually)).not.toBe('snapP');
     expect(idOf(r.atCommit)).toBe(idOf(r.eventually));               // already the continued audit when the screen shows it
+  });
+});
+
+// Back from the top of Audit arms the gate, and the gate is stored WITH the site's flag entry. A force-quit right after Back must not lose it: at the very first
+// screen change (Home appearing) the stored entry must already hold `gate:true` (React runs the save effect in the same task as the commit).
+describe.each(GATE_MODS)('$short: Back from the top of Audit stores the gate before the screen shows Home', m => {
+  it('storage already holds gate:true when Home first appears', async () => {
+    seedGateData(m, 'new'); const user = userEvent.setup(); render(<AppRoot />);
+    await user.click(screen.getByText(m.tile, { exact: true })); await user.click(await screen.findByText(GATE_SITE_NAMES.sa, { selector: 'div' }));
+    await user.click(screen.getByRole('button', { name: /^Audit$/ }));                          // the folders (unarmed)
+    const backEl = screen.getAllByText('Back')[0];
+    const r = await probeClick({ resultsKey: m.a, trigger: async () => { fireEvent.click(backEl); }, isShown: () => /AUDITOR/.test(document.body.textContent) });
+    expect(JSON.parse(r.atCommit).sites.sa.gate).toBe(true);                                    // stored by the time Home is on screen
+    expect(JSON.parse(r.eventually).sites.sa.gate).toBe(true);
   });
 });

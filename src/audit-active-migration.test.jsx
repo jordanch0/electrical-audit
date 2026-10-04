@@ -13,6 +13,8 @@ afterEach(() => cleanup()); beforeEach(() => localStorage.clear());
 const back = user => user.click(screen.getAllByText('Back')[0]);
 const auditTab = user => user.click(screen.getByRole('button', { name: /^Audit$/ }));
 const snapshot = keys => Object.fromEntries(keys.map(k => [k, localStorage.getItem(k)]));
+// The flows below press Back, which now also stores `gate:true` (and `active:true`) in the entry: compare the MIGRATED part of each entry only.
+const core = sites => Object.fromEntries(Object.entries(sites).map(([k, e]) => { const { gate, active, ...r } = e; return [k, r]; }));
 const toList = async user => { for (let i = 0; i < 3 && screen.queryAllByText('Back').length; i++) await back(user); };
 
 describe('migrateAuditActive (pure)', () => {
@@ -59,7 +61,7 @@ describe('RCD: old-format data (global rcd-mode-v6 = "push")', () => {
     expect(r1['Untouched']).toMatchObject({ out: 'NO-ACTIVE' });                                        // never touched: not active
     const key1 = localStorage.getItem('rcd-audit-active-v1');
     expect(JSON.parse(key1).v).toBe(1); expect(Object.keys(JSON.parse(key1).sites).sort()).toEqual(['s1', 's2', 's3']);
-    expect(JSON.parse(key1).sites.s1).toEqual({ mode: 'push' }); expect(JSON.parse(key1).sites.s3).toEqual({ mode: 'push' });
+    expect(core(JSON.parse(key1).sites).s1).toEqual({ mode: 'push' }); expect(core(JSON.parse(key1).sites).s3).toEqual({ mode: 'push' });
     // the old keys: the mode key is byte-for-byte as left; nothing the user had was changed or lost
     expect(localStorage.getItem('rcd-mode-v6')).toBe(before['rcd-mode-v6']);
     OLD_KEYS.forEach(k => expect(JSON.parse(localStorage.getItem(k))).toEqual(JSON.parse(before[k])));
@@ -69,7 +71,7 @@ describe('RCD: old-format data (global rcd-mode-v6 = "push")', () => {
     await user2.click(screen.getByText('RCD TESTING', { exact: true }));
     const r2 = {}; for (const n of ['Started Empty', 'Blank Auditor', 'With Progress', 'Untouched']) r2[n] = await gateOf(user2, n);
     expect(r2).toEqual(r1);
-    expect(localStorage.getItem('rcd-audit-active-v1')).toBe(key1);                                    // the migration did not run again / did not change anything
+    expect(core(JSON.parse(localStorage.getItem('rcd-audit-active-v1')).sites)).toEqual(core(JSON.parse(key1).sites));   // the migration did not run again / did not change anything
     expect(localStorage.getItem('rcd-mode-v6')).toBe(before['rcd-mode-v6']);
     OLD_KEYS.forEach(k => expect(JSON.parse(localStorage.getItem(k))).toEqual(JSON.parse(before[k])));
   });
@@ -104,8 +106,8 @@ describe('IEL: old-format data (global iel-cat-v2 = "estops")', () => {
     const gate = async (user, name) => { await user.click(await screen.findByText(name, { selector: 'div' })); await auditTab(user); await back(user); await auditTab(user); const g = screen.queryByText('AUDIT IN PROGRESS') ? 'IN-PROGRESS' : screen.queryByText('NO ACTIVE AUDIT') ? 'NO-ACTIVE' : 'OTHER'; const dis = g === 'IN-PROGRESS' ? screen.getByRole('button', { name: /Continue Audit/ }).disabled : null; await toList(user); return [g, dis]; };
     const run = async () => { const user = userEvent.setup(); const r = render(<AppRoot />); await user.click(screen.getByText('IEL TESTING', { exact: true })); const out = []; for (const n of ['Started Empty', 'Blank Auditor', 'Untouched']) out.push(await gate(user, n)); r.unmount(); cleanup(); return out; };
     const one = await run(); expect(one).toEqual([['IN-PROGRESS', false], ['IN-PROGRESS', true], ['NO-ACTIVE', null]]);
-    const key1 = localStorage.getItem('iel-audit-active-v1'); expect(JSON.parse(key1).sites).toEqual({ s1: { cat: 'estops' }, s2: { cat: 'estops' } });
-    const two = await run(); expect(two).toEqual(one); expect(localStorage.getItem('iel-audit-active-v1')).toBe(key1);
+    const key1 = localStorage.getItem('iel-audit-active-v1'); expect(core(JSON.parse(key1).sites)).toEqual({ s1: { cat: 'estops' }, s2: { cat: 'estops' } });
+    const two = await run(); expect(two).toEqual(one); expect(core(JSON.parse(localStorage.getItem('iel-audit-active-v1')).sites)).toEqual(core(JSON.parse(key1).sites));
     expect(localStorage.getItem('iel-cat-v2')).toBe(before['iel-cat-v2']); OLD_KEYS.forEach(k => expect(JSON.parse(localStorage.getItem(k))).toEqual(JSON.parse(before[k])));
   });
 });
