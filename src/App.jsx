@@ -2152,7 +2152,6 @@ placeholder: "Select or type…",})
 , React.createElement('label', { style: S.modalLabel,}, "NOTES / COMMENTS"  )
 , React.createElement('textarea', { style: {...S.modalInput,minHeight:80,resize:"vertical"}, placeholder: "Defect details, rectification notes…"   , value: _nullishCoalesce(push.comment, () => ("")), onChange: e=>onPatch({push:{...push,comment:e.target.value}}),})
 )
-, React.createElement('button', { style: {width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:"#a3530f",color:"#fff"}, onClick: onClose,}, "← Back")
 )
 )
 );
@@ -2252,7 +2251,6 @@ React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca
 , React.createElement('span', { style: {color:"#52525b",fontSize:11},}, "NEXT INJECTION TEST DUE:"   )
 , React.createElement('span', { style: {color:"#1d4ed8",fontWeight:800,fontSize:13,marginLeft:8},}, addYears(meta.injectDate,1))
 )
-, React.createElement('button', { style: {width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:"#1d4ed8",color:"#fff"}, onClick: onClose,}, "← Back")
 )
 )
 );
@@ -3858,7 +3856,6 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
         ,React.createElement('textarea',{style:{...SI.modalInput,minHeight:72,resize:"vertical"},placeholder:"Defect details, action required…",value:item.notes||"",onChange:e=>onPatch({notes:e.target.value})})
       )
 
-      ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:catI.color,color:"#fff"},onClick:onClose},"← Back")
     )
   );
 }
@@ -5857,7 +5854,6 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         ,React.createElement('textarea',{style:{...ST.modalInput,minHeight:72,resize:"vertical"},placeholder:"Defect details, action required…",value:item.notes||"",onChange:e=>onPatch({notes:e.target.value})})
       )
 
-      ,React.createElement('button',{style:{width:"100%",padding:"14px",border:"none",borderRadius:12,fontSize:15,fontWeight:800,cursor:"pointer",marginTop:8,background:TAT_COLOR,color:"#fff"},onClick:onClose},"← Back")
     )
   );
 }
@@ -11133,7 +11129,6 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
   };
 
   return React.createElement('div',{style:{padding:"16px",position:"relative"}}
-    ,onBack&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#5f5b57"},onClick:onBack},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
     ,React.createElement('div',{style:{marginBottom:16}}
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}
         ,React.createElement('div',null
@@ -11207,7 +11202,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
 
 
   return React.createElement('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
-      ,onClose&&React.createElement('div',{style:{display:"flex",alignItems:"center",gap:10,marginBottom:16}},React.createElement('button',{style:{...SS.smallBtn,color:"#5f5b57"},onClick:onClose},React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:2.5,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'15 18 9 12 15 6'}))," Back"))
       ,React.createElement('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}
         ,React.createElement('div',null
           ,React.createElement('div',{style:{fontSize:20,fontWeight:800,color:"#18181b"}},label)
