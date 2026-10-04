@@ -135,12 +135,12 @@ describe('pre-fill: Global Settings values default a NEW site\'s Add Site form i
 });
 
 describe('Global Settings screen: Home-only gear pill, save, and logo remove', () => {
-  it('the gear pill opens Global Settings from Home, and Back returns to Home; Calendar\'s pill sits in the opposite corner', async () => {
+  it('the gear pill opens Global Settings from Home, and the Modules pill returns to Home; Calendar\'s pill sits in the opposite corner', async () => {
     const user = userEvent.setup(); render(<AppRoot />);
     expect(screen.getByTestId('calendar-pill')).toBeTruthy();
     await user.click(screen.getByTestId('settings-pill'));
     expect(await screen.findByText('Global Settings')).toBeTruthy();
-    await user.click(screen.getByText('Back'));
+    await user.click(screen.getByText('Modules'));
     expect(await screen.findByTestId('settings-pill')).toBeTruthy();
   });
 

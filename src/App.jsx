@@ -4448,6 +4448,14 @@ function UpcomingView({overdue,upcoming7,upcoming30,future,completedEvents,activ
 }
 
 
+// The Modules pill (top right of a header). ONE definition used by the Test Calendar and Global Settings; the module headers still carry their own identical inline copies.
+function ModulesPill({ onClick }) {
+  return React.createElement('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick}
+    ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
+    ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Modules")
+  );
+}
+
 function CalendarApp({ onGoHome }) {
   const [events,    setEvents]   = React.useState([]);
   const [allSites,  setAllSites] = React.useState([]);  // combined from every module's site list
@@ -4631,17 +4639,10 @@ function CalendarApp({ onGoHome }) {
     ,React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #f0eeea',background:'#f0eeea',flexShrink:0}}
       ,React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
         ,React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
-          ,React.createElement('span',{style:{fontSize:12,color:'#52525b',display:'flex',alignItems:'center',gap:4,cursor:'pointer'},onClick:onGoHome}
-            ,React.createElement('svg',{width:10,height:10,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:2.5,strokeLinecap:"round"},React.createElement('polyline',{points:"15 18 9 12 15 6"}))
-            ,"Modules"
-          )
-          ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1}},"Test Calendar")
+          ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Test Calendar")
           ,React.createElement('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},events.length," scheduled events")
         )
-        ,React.createElement('div',{style:{border:'1px solid rgba(0,0,0,0.06)',borderRadius:'10px',padding:'8px 12px',background:'#f0eeea',flexShrink:0,marginTop:2,display:'flex',alignItems:'center',gap:6,cursor:'pointer'},onClick:onGoHome}
-          ,React.createElement('svg',{width:14,height:14,viewBox:"0 0 24 24",fill:"none",stroke:"#52525b",strokeWidth:1.8,strokeLinecap:"round",strokeLinejoin:"round"},React.createElement('rect',{x:3,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:3,width:7,height:7,rx:1}),React.createElement('rect',{x:3,y:14,width:7,height:7,rx:1}),React.createElement('rect',{x:14,y:14,width:7,height:7,rx:1}))
-          ,React.createElement('span',{style:{fontSize:11,fontWeight:600,color:'#52525b'}},"Modules")
-        )
+        ,React.createElement(ModulesPill,{onClick:onGoHome})
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #4338ca, transparent 70%)',opacity:0.5}})
     )
@@ -10098,11 +10099,11 @@ function GlobalSettingsView({ onGoHome }) {
 
   return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
     , React.createElement('div', { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
-      , React.createElement('div', { style: { border: "1px solid rgba(0,0,0,0.06)", borderRadius: "10px", padding: "8px 12px", background: "#f0eeea", flexShrink: 0, alignSelf: "flex-start", marginBottom: 10, display: "flex", alignItems: "center", gap: 6, cursor: "pointer", width: "fit-content" }, onClick: onGoHome }
-        , React.createElement('svg', { width: 10, height: 10, viewBox: "0 0 24 24", fill: "none", stroke: "#52525b", strokeWidth: 2.5, strokeLinecap: "round" }, React.createElement('polyline', { points: "15 18 9 12 15 6" }))
-        , React.createElement('span', { style: { fontSize: 11, fontWeight: 600, color: "#52525b" } }, "Back"))
-      , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
-      , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export")
+      , React.createElement('div', { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 } }
+        , React.createElement('div', { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 } }
+          , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
+          , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
+        , React.createElement(ModulesPill, { onClick: onGoHome }))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
     , React.createElement('div', { style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
