@@ -9748,7 +9748,9 @@ function ThermoApp({
     setActiveCircuitId(null);
     setActiveCircuitName("");
   };
+  const clearSnap = () => { setViewSnap(null); setViewArea(null); setViewBoard(null); setViewCirc(null); };   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
   const goHome = () => {
+    clearSnap();
     setView("home");   // the Home tab keeps the folder level
   };
   const handleBack = () => {
@@ -9968,6 +9970,7 @@ function ThermoApp({
     label: "Audit",
     active: isAudit,
     onClick: () => {
+      clearSnap();
       if (showGate) { setView("audit"); return; }
       const v = lastAuditViewRef.current;
       const ok = isAudit ? false : v === "circuit" ? !!(board && activeCircuitId) : v === "board" ? !!board : v === "area" ? !!area : (!activeAreaId || !!area);
@@ -9983,25 +9986,25 @@ function ThermoApp({
     icon: NAV_ICON_REPORT,
     label: "Report",
     active: view === "report",
-    onClick: () => setView("report"),
+    onClick: () => { clearSnap(); setView("report"); },
     color: "#334155"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_HISTORY,
     label: "History",
     active: view === "history",
-    onClick: () => setView("history"),
+    onClick: () => { clearSnap(); setView("history"); },
     color: "#334155"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_MANAGE,
     label: "Manage",
     active: view === "manage",
-    onClick: () => setView("manage"),
+    onClick: () => { clearSnap(); setView("manage"); },
     color: "#334155"
   }), /*#__PURE__*/React.createElement(ThermoNavBtn, {
     icon: NAV_ICON_DROPDOWNS,
     label: "Dropdowns",
     active: view === "dropdowns",
-    onClick: () => setView("dropdowns"),
+    onClick: () => { clearSnap(); setView("dropdowns"); },
     color: "#334155"
   })));
 }
@@ -13707,7 +13710,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const patchItem=(areaId,panelId,itemId,data)=>{const pid=activeProject;setAllResults(prev=>({...prev,[pid]:{...(prev[pid]||{}),[areaId]:{...((prev[pid]||{})[areaId]||{}),[panelId]:{...(((prev[pid]||{})[areaId]||{})[panelId]||{}),[itemId]:data}}}}));};
   const archiveAudit=()=>{const snap={id:irtUid(),projectId:activeProject,projectName:project?.name||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};setHistory(prev=>[snap,...prev].slice(0,100));};
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
-  const goHome=()=>{setView("home");};   // the Home tab keeps the folder level
+  const clearSnap=()=>{setViewSnap(null);setViewArea(null);setViewPanel(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
+  const goHome=()=>{clearSnap();setView("home");};   // the Home tab keeps the folder level
   const isAudit=["audit","area","panel","item"].includes(view);if(isAudit)lastAuditViewRef.current=view;
   const SS=irtStyles();
   useScrollMemory(irtMainRef,[view,activeAreaId,activePanelId,activeItemId||""].join("|"),["projects","audit","area","panel"].includes(view));
@@ -13761,11 +13765,11 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // Bottom nav — matches SWBApp exactly
     view!=="projects"&&React.createElement("nav",{style:SS.bottomNav},
       React.createElement(IRTNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     onClick:goHome,                                                                           color:"#334155"}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{if(showGate){setView("audit");return;}const v=lastAuditViewRef.current;const ok=isAudit?false:v==="item"?!!(panel&&activeItemId):v==="panel"?!!panel:v==="area"?!!area:true;if(ok){setView(v);return;}setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>setView("report")}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>setView("history")}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>setView("manage")}),
-      React.createElement(IRTNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#334155",onClick:()=>setView("dropdowns")})
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{clearSnap();if(showGate){setView("audit");return;}const v=lastAuditViewRef.current;const ok=isAudit?false:v==="item"?!!(panel&&activeItemId):v==="panel"?!!panel:v==="area"?!!area:true;if(ok){setView(v);return;}setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");}}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{clearSnap();setView("report");}}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{clearSnap();setView("history");}}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{clearSnap();setView("manage");}}),
+      React.createElement(IRTNavBtn,{icon:NAV_ICON_DROPDOWNS,label:"Dropdowns",active:view==="dropdowns",color:"#334155",onClick:()=>{clearSnap();setView("dropdowns");}})
     )
   );
 }

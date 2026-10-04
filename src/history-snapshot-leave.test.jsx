@@ -1,4 +1,4 @@
-// A viewed History snapshot must not outlive History (2026-10-05). ELT / Welder / GSD already cleared it whenever you left History; RCD / IEL / TAT / SWB (and Thermo / IRT)
+// A viewed History snapshot must not outlive History (2026-10-05). ELT / Welder / GSD already cleared it whenever you left History; RCD / IEL / TAT / SWB 
 // kept it, so after View Results -> Audit tab -> an open item, the header Back first cleared the invisible snapshot and the item stayed open until a SECOND tap.
 // Two guarantees, every module in MODULES (FICTIONAL data):
 //   1. View Results in History, then the Audit tab, open an area / folder, open an item: ONE header Back closes the item.
@@ -24,6 +24,10 @@ export const MODULES = [
     areas: [{ id: 'a1', name: 'Workshop', defaultFreq: '3', items: ['i1', 'i2'], itemNames: { i1: 'Angle grinder', i2: 'Drill' }, itemTags: {}, itemEquipTypes: {}, itemFreqs: {} }], drill: ['Workshop'], item: 'Angle grinder', gridText: 'Drill', isItem: () => !screen.queryByText('Drill') },
   { tile: 'SWITCHBOARD', p: 'swb-projects-v1', m: 'swb-meta-v1', h: 'swb-history-v1', start: /Start \/ Continue Audit/, snap: {},
     areas: [{ id: 'a1', name: 'Wash Plant', boards: [{ id: 'b1', name: 'MSB 1' }] }], drill: ['Wash Plant', 'MSB 1'], item: 'Enclosure Condition', gridText: 'Ventilation', isItem: () => !!screen.queryByText('RESULT') },
+  { tile: 'THERMOGRAPHIC', p: 'thermo-projects-v1', m: 'thermo-meta-v1', h: 'thermo-history-v1', start: /Start \/ Continue Audit/, snap: {},
+    areas: [{ id: 'a1', name: 'Wash Plant', boards: [{ id: 'b1', name: 'MSB 1', circuits: ['c1', 'c2'], circuitNames: { c1: 'Main incomer', c2: 'Feed Conveyor 1' } }] }], drill: ['Wash Plant', 'MSB 1'], item: 'Main incomer', gridText: 'Feed Conveyor 1', isItem: () => !screen.queryByText('Feed Conveyor 1') },
+  { tile: 'INSULATION RESISTANCE TESTING', p: 'irt-projects-v1', m: 'irt-meta-v1', h: 'irt-history-v1', start: /Start \/ Continue Audit/, snap: {},
+    areas: [{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'p1', name: 'MSB 1', items: ['m1', 'm2'] }] }], drill: ['Wash Plant', 'MSB 1'], item: 'm1', gridText: 'm2', isItem: () => !screen.queryByText('m2') },
 ];
 
 async function toItem(user, m) {
@@ -35,7 +39,7 @@ async function toItem(user, m) {
   await user.click(screen.getByRole('button', { name: m.start }));                                   // an active audit, so the Audit tab opens the folders, not the gate
 }
 const tab = (user, name) => user.click(screen.getByRole('button', { name: new RegExp(`^${name}$`) }));
-const viewSnapshot = async user => { await tab(user, 'History'); await user.click(await screen.findByText(/Jane/)); await user.click(await screen.findByRole('button', { name: /View Results/ })); };
+const viewSnapshot = async user => { await tab(user, 'History'); await user.click(await screen.findByText(/Jane/)); await user.click(await screen.findByRole('button', { name: /^\s*View( Results)?\s*$/ })); };
 
 describe.each(MODULES)('$tile — a viewed History snapshot is dropped when you leave History', m => {
   it('View Results, Audit tab, open an item: ONE header Back closes the item', async () => {
@@ -51,9 +55,9 @@ describe.each(MODULES)('$tile — a viewed History snapshot is dropped when you 
   });
   it('View Results, leave History, come back: the History list shows (not the snapshot)', async () => {
     const user = userEvent.setup(); await toItem(user, m); await viewSnapshot(user);
-    expect(screen.queryByRole('button', { name: /View Results/ })).toBeNull();                      // the snapshot is open
+    expect(screen.queryByRole('button', { name: /^\s*View( Results)?\s*$/ })).toBeNull();                      // the snapshot is open
     await tab(user, 'Report'); await tab(user, 'History');
     await user.click(screen.getByText(/Jane/));
-    expect(await screen.findByRole('button', { name: /View Results/ })).toBeInTheDocument();         // the card list, ready to open again
+    expect(await screen.findByRole('button', { name: /^\s*View( Results)?\s*$/ })).toBeInTheDocument();         // the card list, ready to open again
   });
 });
