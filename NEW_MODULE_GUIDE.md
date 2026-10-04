@@ -92,6 +92,7 @@ Reference: **`ELTApp`** shell and nav; `SWBNavBtn`/`NavBtn`.
      `Promise.all` in `CalendarApp` (ELT was missing from both — a real bug).
   5. CLAUDE.md: Module Map row, and add the module to the "Modules to audit" scope of the Delete Consistency item.
 - [ ] Project list header pattern: title, "Sites" heading, site cards with the `DeleteButton` ("Remove site?") under each card.
+- [ ] **Blank auditor (all modules, 2026-10-04).** If the module needs an auditor name to start or complete, every blocked control (Start / mode / category buttons and Complete Audit) must be `disabled` + `aria-disabled`, with `<AuditorRequiredNote/>` directly under it ("Please enter the auditor name to continue or complete the audit."). Never put a separate hint under the Auditor field. If the module has no gate, its Audit tab with a blank auditor shows the plain line "Enter the auditor name on Home to continue.". Reference: any of the nine Home views. Tests: `src/audit-blank-auditor-message.test.jsx`.
 
 ---
 
