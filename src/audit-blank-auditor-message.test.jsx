@@ -13,6 +13,7 @@ vi.setConfig({ testTimeout: 30000 });
 afterEach(() => cleanup()); beforeEach(() => localStorage.clear());
 
 const MSG = 'Please enter the auditor name to continue or complete the audit.';
+const OLD_HINT = /Enter auditor name to (enable testing|begin)/;   // the retired field-level hints
 const lum = h => { const c = [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
 const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
 // every Start / mode / category control on Home, per module
@@ -37,6 +38,7 @@ describe.each(GATE_MODS)('$short — Home with a blank auditor', m => {
     seedGateData(m, 'new'); const user = userEvent.setup(); render(<AppRoot />);
     await open(user, m, 'sc');
     expect(notes()).toHaveLength(1); expect(screen.getByText(MSG)).toBeInTheDocument();            // one blocked group of controls, one message
+    expect(document.body.textContent).not.toMatch(OLD_HINT);                                       // the old field-level hint is gone in every module
     expect(screen.getByRole('status')).toHaveTextContent(MSG);                                     // announced to assistive tech
     controlsOf(m).forEach(b => { expect(b).toBeDisabled(); expect(b).toHaveAttribute('aria-disabled', 'true'); });
     expect(screen.queryByText(/Complete (Push|Injection|RCD|IEL|IR|Test|Switchboard|Thermographic)/)).toBeNull();     // no active audit: no Complete card yet
@@ -58,6 +60,7 @@ describe.each(GATE_MODS)('$short — Home with a blank auditor', m => {
     await user.clear(nameBox());
     expect(complete()).toBeDisabled(); expect(complete()).toHaveAttribute('aria-disabled', 'true');
     expect(notes()).toHaveLength(2);                                                               // under the Start controls AND under the Complete button
+    expect(document.body.textContent).not.toMatch(OLD_HINT);
     const card = screen.getByText('COMPLETE ACTIVE AUDIT').parentElement;
     expect(within(card).getByTestId('auditor-required-note')).toHaveTextContent(MSG);              // the second one is inside the Complete card, right under its button
     await user.click(complete());                                                                  // a disabled button does nothing: no confirm box
