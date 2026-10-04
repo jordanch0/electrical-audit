@@ -12480,7 +12480,6 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
       ,eltEl('div',{style:{marginBottom:10}}
         ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
         ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED (default for all fittings)")
@@ -12499,10 +12498,11 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
       ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total}})
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No fittings yet — add them in the Manage tab.")
-    ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit()},"Start / Continue Testing")
+    ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor&&hasAssets?ELT_COLOR:"#f7f6f3",color:hasAuditor&&hasAssets?"#fff":"#52525b",border:`2px solid ${hasAuditor&&hasAssets?ELT_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor&&hasAssets?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&hasAssets&&onStartAudit(),disabled:!(hasAuditor&&hasAssets),"aria-disabled":!(hasAuditor&&hasAssets)},"Start / Continue Testing")
+    ,!hasAuditor&&eltEl(AuditorRequiredNote,null)
     ,hasResults&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,eltEl(CompleteAuditBtn,{color:ELT_COLOR,label:"Complete Emergency Lighting Audit",onComplete:onCompleteAudit})
+      ,eltEl(CompleteAuditBtn,{color:ELT_COLOR,label:"Complete Emergency Lighting Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
     ,eltEl(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>eltEl('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
@@ -12511,7 +12511,7 @@ function ELTHomeView({project, meta, setMeta, summary, hasResults, onStartAudit,
 function ELTAuditView({project, results, meta, summary, onOpen}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
-  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
+  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on Home to continue.");
   return eltEl('div',{style:SS.listWrap}
     ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.assets-summary.total},style:{marginBottom:14}})
     ,summary.assets===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No fittings yet — add an area, then add fittings in the Manage tab.")
@@ -14557,7 +14557,6 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
       ,eltEl('div',{style:{marginBottom:10}}
         ,eltEl('div',{style:SS.metaLabelText},"AUDITOR")
         ,eltEl('input',{style:{...SS.metaInput,marginTop:4,borderColor:"#d4d4d8"},value:meta.auditor||"",placeholder:"Enter name to begin testing…",onChange:e=>setMeta({auditor:e.target.value})})
-        ,!hasAuditor&&eltEl('div',{style:{fontSize:11,color:"#b91c1c",marginTop:4}},"⚠ Enter auditor name to enable testing")
       )
       ,eltEl('div',null
         ,eltEl('div',{style:SS.metaLabelText},"DATE TESTED")
@@ -14580,10 +14579,11 @@ function WelderHomeView({project, meta, setMeta, summary, hasResults, onStartAud
       ,React.createElement(StatusSet,{model:"noNA",s:{pass:summary.pass,fail:summary.fail,untested:summary.untested}})
     )
     ,!hasAssets&&eltEl('div',{style:{fontSize:12,color:"#92400e",textAlign:"center"}},"No welders yet — add them in the Manage tab.")
-    ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:ready?WELDER_COLOR:"#f7f6f3",color:ready?"#fff":"#52525b",border:`2px solid ${ready?WELDER_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:ready?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>ready&&onStartAudit()},"Start / Continue Audit")
+    ,eltEl('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:ready?WELDER_COLOR:"#f7f6f3",color:ready?"#fff":"#52525b",border:`2px solid ${ready?WELDER_COLOR:"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:ready?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>ready&&onStartAudit(),disabled:!ready,"aria-disabled":!ready},"Start / Continue Audit")
+    ,!hasAuditor&&eltEl(AuditorRequiredNote,null)
     ,hasResults&&eltEl('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px",boxSizing:"border-box"}}
       ,eltEl('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,eltEl(CompleteAuditBtn,{color:WELDER_COLOR,label:"Complete Welder Audit",onComplete:onCompleteAudit})
+      ,eltEl(CompleteAuditBtn,{color:WELDER_COLOR,label:"Complete Welder Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
     ,eltEl(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>eltEl('button',{style:SS.resetBtn,onClick:open},"Reset all test results")})
   );
@@ -14593,7 +14593,7 @@ function WelderAuditView({project, results, meta, onOpen}) {
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor&&meta.auditor.trim());
   const s = welderSiteSummary(project,results);
-  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on the Home tab to begin testing.");
+  if(!hasAuditor) return eltEl('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Enter the auditor name on Home to continue.");
   return eltEl('div',{style:SS.listWrap}
     ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
     ,s.total===0&&eltEl('div',{style:{color:"#52525b",fontSize:13}},"No welders yet — add an area, then add welders in the Manage tab.")
@@ -15527,18 +15527,18 @@ function GSDHomeView({ project, meta, setMeta, items, onStartAudit, onCompleteAu
     , gsdEl("div", { style: SS.metaCard }
       , gsdEl("div", { style: { marginBottom: 10 } }
         , gsdEl("div", { style: SS.metaLabelText }, "AUDITOR")
-        , gsdEl("input", { style: { ...SS.metaInput, marginTop: 4, borderColor: "#d4d4d8" }, value: meta.auditor || "", placeholder: "Enter name to begin…", onChange: e => setMeta({ auditor: e.target.value }) })
-        , !hasAuditor && gsdEl("div", { style: { fontSize: 11, color: "#b91c1c", marginTop: 4 } }, "⚠ Enter auditor name to begin"))
+        , gsdEl("input", { style: { ...SS.metaInput, marginTop: 4, borderColor: "#d4d4d8" }, value: meta.auditor || "", placeholder: "Enter name to begin…", onChange: e => setMeta({ auditor: e.target.value }) }))
       , gsdEl("div", null, gsdEl("div", { style: SS.metaLabelText }, "DATE AUDITED")
         , gsdEl("div", { style: { position: "relative", marginTop: 4 } }, dateBox(meta.testDate, "Select date…"), overlay(meta.testDate, nd => { const autoPrev = meta.testDate ? addYearsISO(meta.testDate, 1) : ""; const upd = !meta.nextTestDate || meta.nextTestDate === autoPrev; setMeta({ testDate: nd, ...(upd ? { nextTestDate: addYearsISO(nd, 1) } : {}) }); })))
       , gsdEl("div", { style: { marginTop: 8 } }, gsdEl("div", { style: SS.metaLabelText }, "NEXT AUDIT DUE")
         , gsdEl("div", { style: { position: "relative", marginTop: 4 } }, dateBox(meta.nextTestDate, "Not set"), overlay(meta.nextTestDate, v => setMeta({ nextTestDate: v })))))
     , gsdEl("div", { style: { width: "100%", maxWidth: 500, background: "#f7f6f3", border: `1px solid ${GSD_COLOR_BORDER}`, borderRadius: 14, padding: "14px", boxSizing: "border-box" } }
       , gsdEl("div", { style: { display: "flex", justifyContent: "space-between" } }, gsdEl("div", { style: { fontSize: 13, fontWeight: 700, color: "#18181b" } }, "This visit"), gsdEl("div", { style: { fontSize: 12, color: "#52525b" } }, `${nw(items.length, "defect")} · ${nw(photos, "photo")}`)))
-    , gsdEl("button", { style: { width: "100%", maxWidth: 500, padding: "16px", background: hasAuditor ? GSD_COLOR : "#f7f6f3", color: hasAuditor ? "#fff" : "#52525b", border: `2px solid ${hasAuditor ? GSD_COLOR : "#e4e4e7"}`, borderRadius: 16, fontSize: 16, fontWeight: 800, cursor: hasAuditor ? "pointer" : "not-allowed", letterSpacing: 0.5 }, onClick: () => hasAuditor && onStartAudit() }, "Start / Continue Audit")
+    , gsdEl("button", { style: { width: "100%", maxWidth: 500, padding: "16px", background: hasAuditor ? GSD_COLOR : "#f7f6f3", color: hasAuditor ? "#fff" : "#52525b", border: `2px solid ${hasAuditor ? GSD_COLOR : "#e4e4e7"}`, borderRadius: 16, fontSize: 16, fontWeight: 800, cursor: hasAuditor ? "pointer" : "not-allowed", letterSpacing: 0.5 }, onClick: () => hasAuditor && onStartAudit(), disabled: !hasAuditor, "aria-disabled": !hasAuditor }, "Start / Continue Audit")
+    , !hasAuditor && gsdEl(AuditorRequiredNote, null)
     , items.length > 0 && gsdEl("div", { style: { width: "100%", maxWidth: 500, background: "#f0eeea", border: "1px solid #d4d4d8", borderRadius: 12, padding: "10px 14px", boxSizing: "border-box" } }
       , gsdEl("div", { style: { fontSize: 10, color: "#5f5b57", fontWeight: 700, letterSpacing: 0.8, marginBottom: 8 } }, "COMPLETE ACTIVE AUDIT")
-      , gsdEl(CompleteAuditBtn, { color: GSD_COLOR, label: "Complete Site Defects Audit", onComplete: onCompleteAudit }))
+      , gsdEl(CompleteAuditBtn, { color: GSD_COLOR, label: "Complete Site Defects Audit", onComplete: onCompleteAudit, disabled: !hasAuditor }))
     , gsdEl(ConfirmReset, { onConfirm: onReset, prompt: "Reset all results?", renderIdle: open => gsdEl("button", { style: SS.resetBtn, onClick: open }, "Reset all test results") }));
 }
 
@@ -15546,7 +15546,7 @@ function GSDAuditView({ project, numbered, meta, photoError, onOpen, onAddDefect
   const SS = swbStyles();
   const hasAuditor = !!(meta.auditor && meta.auditor.trim());
   const fileRef = React.useRef(); const pendingArea = React.useRef(null);
-  if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on the Home tab to begin.");
+  if (!hasAuditor) return gsdEl("div", { style: { padding: "40px 24px", textAlign: "center", color: "#52525b", fontSize: 14 } }, "Enter the auditor name on Home to continue.");
   const startAdd = areaId => { pendingArea.current = areaId; if (fileRef.current) fileRef.current.click(); };
   return gsdEl("div", { style: SS.listWrap }
     , gsdEl("input", { ref: fileRef, type: "file", accept: "image/*", multiple: true, style: { display: "none" }, "data-testid": "gsd-add-photos", onChange: e => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length && pendingArea.current) onAddDefect(pendingArea.current, files); } })

@@ -81,11 +81,75 @@ describe.each(GATE_MODS)('$short — Home with a blank auditor', m => {
   });
 });
 
-describe('ELT keeps its old hint (the new message is for the six audit modules only)', () => {
-  it('shows "⚠ Enter auditor name to enable testing" and no new note', async () => {
-    localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: [{ id: 'ar', name: 'Site E', assets: [{ id: 'x1', assetLocation: 'SE Door', assetId: '', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] }]));
-    const user = userEvent.setup(); render(<AppRoot />);
-    await user.click(screen.getByText('EMERGENCY LIGHTING')); await user.click(await screen.findByText('Site E', { selector: 'div' }));
-    expect(screen.getByText(/Enter auditor name to enable testing/)).toBeInTheDocument(); expect(notes()).toHaveLength(0);
+// ELT, Welder and GSD (no gate, no per-site flag): the SAME message, the SAME position, the SAME disabled controls. Their Start only opens the Audit list, and their
+// Audit tab with a blank auditor is a plain line (aligned to the gate's wording), not a gate.
+const OLD_LINE = /Enter the auditor name on the Home tab/;
+const EXTRA = [
+  { short: 'ELT', tile: 'EMERGENCY LIGHTING', start: /Start \/ Continue Testing/, site: 'Site E', none: /No fittings yet/,
+    seed: ({ assets = true, results = true, auditor = '' } = {}) => {
+      localStorage.setItem('elt-projects-v2', JSON.stringify([{ id: 'p1', name: 'Site E', company: '', abn: '', licence: '', areas: assets ? [{ id: 'ar', name: 'Site E', assets: [{ id: 'x1', assetLocation: 'SE Door', assetId: '', type: 'Exit Signs', typeOther: '', maintained: 'Maintained', fitting: '' }] }] : [] }]));
+      localStorage.setItem('elt-meta-v1', JSON.stringify({ p1: { auditor, testDate: '2026-09-21' } }));
+      if (results) localStorage.setItem('elt-results-v1', JSON.stringify({ p1: { x1: { visual: 'pass' } } })); } },
+  { short: 'Welder', tile: 'WELDER TESTING', start: /Start \/ Continue Audit/, site: 'Site W', none: /No welders yet/,
+    seed: ({ assets = true, results = true, auditor = '' } = {}) => {
+      localStorage.setItem('welder-projects-v2', JSON.stringify([{ id: 'w1', name: 'Site W', company: '', abn: '', licence: '', areas: assets ? [{ id: 'ar', name: 'Site W', assets: [{ id: 'a1', assetId: 'W1', brand: 'K', model: 'E', serial: '1' }] }] : [] }]));
+      localStorage.setItem('welder-meta-v1', JSON.stringify({ w1: { auditor, testDate: '2026-09-21' } }));
+      if (results) localStorage.setItem('welder-results-v1', JSON.stringify({ w1: { a1: { items: { visual: { result: 'pass' } } } } })); } },
+  { short: 'GSD', tile: 'GENERAL SITE DEFECTS', start: /Start \/ Continue Audit/, site: 'Site G', none: null,
+    seed: ({ results = true, auditor = '' } = {}) => {
+      localStorage.setItem('gsd-projects-v1', JSON.stringify([{ id: 's1', name: 'Site G', company: '', abn: '', licence: '', areas: [{ id: 'a1', name: 'Yard' }] }]));
+      localStorage.setItem('gsd-meta-v1', JSON.stringify({ s1: { auditor, testDate: '2026-09-21' } }));
+      if (results) localStorage.setItem('gsd-items-v1', JSON.stringify({ s1: [{ id: 'i1', areaId: 'a1', assetLocation: 'Gate', category: 'Guarding', commonDefect: '', description: 'Loose guard', descAuto: '', photos: [], priority: 'H', responsibility: '', fixBy: '' }] })); } },
+];
+const openX = async (user, m) => { await user.click(screen.getByText(m.tile, { exact: true })); await user.click(await screen.findByText(m.site, { selector: 'div' })); };
+const startBtn = m => screen.getByRole('button', { name: m.start });
+
+describe.each(EXTRA)('$short — Home with a blank auditor (no gate module)', m => {
+  it('the message sits under the disabled Start button; typing a name removes it and enables Start; clearing brings it back', async () => {
+    m.seed(); const user = userEvent.setup(); render(<AppRoot />); await openX(user, m);
+    expect(notes()).toHaveLength(2);                                                               // under Start AND under the (disabled) Complete button: results exist
+    expect(startBtn(m)).toBeDisabled(); expect(startBtn(m)).toHaveAttribute('aria-disabled', 'true');
+    expect(startBtn(m).compareDocumentPosition(notes()[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();   // right under it, not up at the field
+    expect(screen.getAllByText(MSG).length).toBe(2); expect(document.body.textContent).not.toMatch(OLD_HINT);
+    await user.type(nameBox(), 'J');
+    expect(notes()).toHaveLength(0); expect(startBtn(m)).toBeEnabled(); expect(startBtn(m)).not.toHaveAttribute('aria-disabled', 'true');
+    expect(document.body.textContent).not.toMatch(OLD_HINT);
+    await user.clear(nameBox());
+    expect(notes()).toHaveLength(2); expect(startBtn(m)).toBeDisabled();
+  });
+
+  it('Complete Audit is disabled with the note in its card while the auditor is blank, inert when clicked, and works again with a name', async () => {
+    m.seed(); const user = userEvent.setup(); render(<AppRoot />); await openX(user, m);
+    const complete = () => screen.getByRole('button', { name: /^Complete/ });
+    expect(complete()).toBeDisabled(); expect(complete()).toHaveAttribute('aria-disabled', 'true');
+    const card = screen.getByText('COMPLETE ACTIVE AUDIT').parentElement; expect(within(card).getByTestId('auditor-required-note')).toHaveTextContent(MSG);
+    await user.click(complete()); expect(screen.queryByText('Archive this audit and reset for next run?')).toBeNull();
+    await user.type(nameBox(), 'Jane');
+    expect(complete()).toBeEnabled(); await user.click(complete()); expect(await screen.findByText('Archive this audit and reset for next run?')).toBeInTheDocument();
+  });
+
+  it('with a name already entered: no note and none of the retired text', async () => {
+    m.seed({ auditor: 'Jane' }); const user = userEvent.setup(); render(<AppRoot />); await openX(user, m);
+    expect(notes()).toHaveLength(0); expect(startBtn(m)).toBeEnabled(); expect(screen.getByRole('button', { name: /^Complete/ })).toBeEnabled();
+    expect(document.body.textContent).not.toMatch(OLD_HINT); expect(screen.queryByText(MSG)).toBeNull();
+  });
+
+  it('Audit tab with a blank auditor is a plain line in the gate\'s wording (no gate, no Continue)', async () => {
+    m.seed(); const user = userEvent.setup(); render(<AppRoot />); await openX(user, m);
+    await user.click(screen.getByRole('button', { name: /^Audit$/ }));
+    expect(await screen.findByText('Enter the auditor name on Home to continue.')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(OLD_LINE); expect(document.body.textContent).not.toMatch(OLD_HINT);
+    expect(screen.queryByText(/AUDIT IN PROGRESS|NO ACTIVE AUDIT/)).toBeNull(); expect(screen.queryByRole('button', { name: /Continue Audit/ })).toBeNull();
+  });
+});
+
+describe.each(EXTRA.filter(m => m.none))('$short — no fittings / welders AND a blank auditor: both reasons show', m => {
+  it('the yellow "none yet" line and the red message together; Start disabled; a name removes only the red message', async () => {
+    m.seed({ assets: false, results: false }); const user = userEvent.setup(); render(<AppRoot />); await openX(user, m);
+    expect(screen.getByText(m.none)).toBeInTheDocument(); expect(notes()).toHaveLength(1);          // no results yet: no Complete card, one note under Start
+    expect(startBtn(m)).toBeDisabled(); expect(startBtn(m)).toHaveAttribute('aria-disabled', 'true');
+    await user.type(nameBox(), 'J');
+    expect(notes()).toHaveLength(0); expect(screen.getByText(m.none)).toBeInTheDocument();            // the other reason stays
+    expect(startBtn(m)).toBeDisabled();                                                              // still blocked: nothing to test
   });
 });
