@@ -997,9 +997,10 @@ async function exportExcel(results, project, meta, mode) {
   const logo = await xjGetLogoDataUrl("rcd", project.id);
   const isInject = mode === "inject";
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
-  const nextDue  = isInject ? (meta && meta.nextInjectDate ? fmtDate(meta.nextInjectDate) : addYears(testDate, 1)) : (meta && meta.nextPushDate ? fmtDate(meta.nextPushDate) : addMonths(testDate, 1));
+  const homeNextISO = isInject ? ((meta && meta.nextInjectDate) || addYearsISO(testDate, 1)) : ((meta && meta.nextPushDate) || addMonthsISO(testDate, 1));
+  const addInt = isInject ? (d => addYearsISO(d, 1)) : (d => addMonthsISO(d, 1));   // the interval = the Home-date follow's (HOME_DATE_SPECS): push +1 month, injection +1 year
   const label    = isInject ? "Injection Test" : "Push Test";
-  const hdr = xjHdr("rcd", { variant: isInject ? "inject" : "push", site: project.name, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: fmtDate(testDate), nextDue, logo });
+  const itDates = [], itDues = [];   // ISO: the date / next-due of every PASS / FAIL item (header: the earliest of each; the Home values when none)
   // A defect is only exported for FAIL rows (a >300 ms injection result counts as Fail whatever the stored status), so data
   // retained from an earlier FAIL never shows up on a PASS / N/A / untested row.
   const rows = [];
@@ -1012,11 +1013,15 @@ async function exportExcel(results, project, meta, mode) {
     const cm = (panel && panel.circuitMeta && panel.circuitMeta[circuit]) || {};
     const src = isInject ? inj : push;
     const pc = `${panel.name} ${circuit}`;
+    const itDate = src.lastTested || ""; const itDue = (pf === "Pass" || pf === "Fail") && itDate ? itemNextDue(itDate, testDate, homeNextISO, addInt) : "";
+    if ((pf === "Pass" || pf === "Fail") && itDate) { itDates.push(itDate); itDues.push(itDue); }
     const cells = isInject
-      ? [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(testDate), inj.resultPos || "", inj.resultNeg || "", pf, inj.comment || "", nextDue]
-      : [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(testDate), pf, push.comment || "", nextDue];
+      ? [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(itDate), inj.resultPos || "", inj.resultNeg || "", pf, inj.comment || "", fmtDate(itDue)]
+      : [area.name, pc, cm.cbType || "", cm.ampRating || "", fmtDate(itDate), pf, push.comment || "", fmtDate(itDue)];
     rows.push({ cells, pf, defect: pf === "Fail" ? { ids: [area.name, pc], defectId: src.defectId, priority: src.priority, rectified: src.rectified, rectifiedDate: src.scheduledDate, responsibility: src.responsibility, notes: src.comment } : null });
   })));
+  const hdrDate = earliestIso(itDates) || testDate, hdrDue = earliestIso(itDues) || homeNextISO, nextDue = fmtDate(hdrDue);
+  const hdr = xjHdr("rcd", { variant: isInject ? "inject" : "push", site: project.name, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: fmtDate(hdrDate), nextDue, logo });
   const wb = new ExcelJS.Workbook();
   const failCount = xjSplit(wb, {
     hdr,
@@ -1030,7 +1035,7 @@ async function exportExcel(results, project, meta, mode) {
   const sum = summariseProject(results, project, mode);
   const sumRows = [
     [`${project.name} – RCD Test Summary`, ""], ["", ""],
-    ["Test Type", label], ["Date", fmtDate(testDate)], ["Auditor", (meta && meta.auditor) || ""], ["", ""],
+    ["Test Type", label], ["Date", fmtDate(hdrDate)], ["Auditor", (meta && meta.auditor) || ""], ["", ""],
     ["Total", sum.total], ["Pass", sum.pass], ["Fail", sum.fail], ["N/A", sum.na], ["Untested", sum.untested], ["", ""],
     ["Next Test Due", nextDue], ["", ""],
     ["Failed circuits", failCount ? `${failCount} — see the Defects sheet` : "None — Defects sheet is empty"],
@@ -1465,7 +1470,9 @@ const panel   = _optionalChain([area, 'optionalAccess', _44 => _44.panels, 'acce
 const patchCircuit=(pid,aid,panid,circuit,patch)=>{
 setAllResults(prev=>{
 const old=_nullishCoalesce(_optionalChain([prev, 'optionalAccess', _47 => _47[pid], 'optionalAccess', _48 => _48[aid], 'optionalAccess', _49 => _49[panid], 'optionalAccess', _50 => _50[circuit]]), () => ({push:{},inject:{}}));
-return {...prev,[pid]:{...prev[pid],[aid]:{...(_nullishCoalesce(prev[pid], () => ({})))[aid],[panid]:{...(_nullishCoalesce((_nullishCoalesce(prev[pid], () => ({})))[aid], () => ({})))[panid],[circuit]:{...old,...patch}}}}};
+const next={...old,...patch};
+["push","inject"].forEach(m=>{ if(patch[m]) next[m]=itemDateApply(next[m],itemHasStatus,(m==="push"?meta.pushDate:meta.injectDate)||localISODate()); });   // first result = the Home date; a changed result keeps it; "—" clears it
+return {...prev,[pid]:{...prev[pid],[aid]:{...(_nullishCoalesce(prev[pid], () => ({})))[aid],[panid]:{...(_nullishCoalesce((_nullishCoalesce(prev[pid], () => ({})))[aid], () => ({})))[panid],[circuit]:next}}}};
 });
 };
 const cycleCircuit=(aid,panid,circuit)=>{
@@ -1479,7 +1486,7 @@ if(mode==="push"){
 const setAllPanel=(aid,panid,circuits,status)=>{
 setAllResults(prev=>{
 const base=_nullishCoalesce(prev, () => ({}));const proj={...base[activeProject]};const ar={...proj[aid]};const pan={...ar[panid]};
-circuits.forEach(c=>{const old=_nullishCoalesce(pan[c], () => ({push:{},inject:{}}));pan[c]=mode==="push"?{...old,push:failFill({...old.push,status},(dropdowns||{}).rectified,(dropdowns||{}).responsibility)}:{...old,inject:failFill({...old.inject,status},(dropdowns||{}).rectified,(dropdowns||{}).responsibility)};});
+circuits.forEach(c=>{const old=_nullishCoalesce(pan[c], () => ({push:{},inject:{}}));const home=(mode==="push"?meta.pushDate:meta.injectDate)||localISODate();pan[c]=mode==="push"?{...old,push:itemDateApply(failFill({...old.push,status},(dropdowns||{}).rectified,(dropdowns||{}).responsibility),itemHasStatus,home)}:{...old,inject:itemDateApply(failFill({...old.inject,status},(dropdowns||{}).rectified,(dropdowns||{}).responsibility),itemHasStatus,home)};});   // the "all PASS / FAIL / N/A / Reset" buttons stamp / clear like a single tap
 ar[panid]=pan;proj[aid]=ar;return {...base,[activeProject]:proj};
 });
 };
@@ -2143,6 +2150,9 @@ style: {flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,curs
 })
 )
 )
+/* Date tested (only once the item has a result) + its next due */
+, itemHasStatus(push)&&React.createElement(ItemDateField,{date:push.lastTested||"",onChange:v=>onPatch({push:{...push,lastTested:v}}),S})
+, React.createElement(ItemDueBanner,{iso:itemDue(push,meta.pushDate,meta.nextPushDate,d=>addMonthsISO(d,1)),accent:"#a3530f"})
 /* FAIL-ONLY SECTION — only shown when result is FAIL */
 , pushIsFail && React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4},}
 , React.createElement('div', { style: {fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10},}, "⚠ FAIL — DEFECT DETAILS")
@@ -2245,6 +2255,9 @@ return React.createElement('button', { key: s, onClick: ()=>onPatch({inject:{...
 })
 )
 )
+/* Date tested (only once the item has a result) + its next due */
+, itemHasStatus(inj)&&React.createElement(ItemDateField,{date:inj.lastTested||"",onChange:v=>onPatch({inject:{...inj,lastTested:v}}),S})
+, React.createElement(ItemDueBanner,{iso:itemDue(inj,meta.injectDate,meta.nextInjectDate,d=>addYearsISO(d,1)),accent:"#1d4ed8"})
 /* Fail-only section — red panel matching push test standard */
 , (inj.status===STATUS.FAIL)&&(
 React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4},}
@@ -2284,10 +2297,6 @@ React.createElement('div', { style: {background:"#fee2e2",border:"1px solid #fca
 , React.createElement('div', { style: S.modalField,}
 , React.createElement('label', { style: S.modalLabel,}, "NOTES / RECOMMENDATIONS"  )
 , React.createElement('textarea', { style: {...S.modalInput,minHeight:80,resize:"vertical"}, placeholder: "Defect details, action required…"   , value: _nullishCoalesce(inj.comment, () => ("")), onChange: e=>onPatch({inject:{...inj,comment:e.target.value}}),})
-)
-, _optionalChain([meta, 'optionalAccess', _158 => _158.injectDate])&&React.createElement('div', { style: S.nextBanner,}
-, React.createElement('span', { style: {color:"#52525b",fontSize:11},}, "NEXT INJECTION TEST DUE:"   )
-, React.createElement('span', { style: {color:"#1d4ed8",fontWeight:800,fontSize:13,marginLeft:8},}, addYears(meta.injectDate,1))
 )
 )
 )
@@ -2994,9 +3003,24 @@ function itemDateApply(next, hasResult, home) {
   if (!hasResult(next)) return { ...next, lastTested: "" };
   return next.lastTested ? next : { ...next, lastTested: home };
 }
+// An item's next-due: the auditor-chosen Home next-due wins (it differs from the Home date + the module's interval), else the item date + the interval.
+function itemNextDue(date, homeDate, homeNext, add) {
+  if (!date) return "";
+  if (homeNext && homeDate && homeNext !== add(homeDate)) return homeNext;
+  return add(date);
+}
+const itemIsTested = r => !!r && (r.status === "pass" || r.status === "fail");        // a test = PASS or FAIL (N/A is not a test; it has no next-due)
+const itemDue = (r, homeDate, homeNext, add) => itemIsTested(r) && r.lastTested ? itemNextDue(r.lastTested, homeDate, homeNext, add) : "";
 const itemHasStatus = r => !!r && !!r.status && r.status !== "untested";                    // the item shape of RCD, IEL, TAT and SWB
 const earliestIso = list => { const l = list.filter(Boolean).sort(); return l.length ? l[0] : ""; };   // ISO dates sort chronologically
 // </itemDate>
+// The item page's read-only NEXT TEST DUE, directly under DATE TESTED (the caller passes the item's due date, "" for none). accent = the module's colour.
+function ItemDueBanner({ iso, accent }) {
+  if (!iso) return null;
+  return React.createElement('div', { style: { display: "flex", alignItems: "center", background: "#e8e6e2", border: `1px solid ${accent}33`, borderRadius: 8, padding: "10px 14px", marginBottom: 14 } }
+    , React.createElement('span', { style: { color: "#52525b", fontSize: 11 } }, "NEXT TEST DUE:")
+    , React.createElement('span', { style: { color: accent, fontWeight: 800, fontSize: 13, marginLeft: 8 } }, fmtDate(iso)));
+}
 // The item page's DATE TESTED: the shared overlay DateBox, in the module's own field style S. Shown only once the item has a result (the caller decides).
 function ItemDateField({ date, onChange, S }) {
   return React.createElement('div', { style: S.modalField }
@@ -15939,7 +15963,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
