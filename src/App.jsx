@@ -6820,16 +6820,17 @@ async function exportThermoExcel(project, results, meta) {
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
   const auditor = meta && meta.auditor || "";
-  const nextDue = meta && meta.nextTestDate ? meta.nextTestDate : (testDate ? addYearsISO(testDate, 1) : "");
-  const hdr = xjHdr("thermo", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue: fmtDate(nextDue), logo });
+  const homeNext = meta && meta.nextTestDate ? meta.nextTestDate : (testDate ? addYearsISO(testDate, 1) : "");
+  const itDates = [], itDues = [];   // ISO: the date / next-due of every logged test entry (PASS / FAIL / MONITOR all count; header: the earliest of each; the Home values when none)
   const rows = [];
   // FAIL and MONITOR photos carry defect details (the MONITOR panel collects the same fields on purpose); PASS never does
   const add = (area, board, cName, photo0) => {
-    if (!photo0) { rows.push({ cells: [area.name, board.name, cName, fmtDate(testDate), "", "", "", ""], defect: null }); return; }
+    if (!photo0) { rows.push({ cells: [area.name, board.name, cName, "", "", "", "", ""], defect: null }); return; }
     const flagged = photo0.result === "FAIL" || photo0.result === "MONITOR";
     const photo = defectGate(photo0, flagged);
+    if (photo0.lastTested) { itDates.push(photo0.lastTested); itDues.push(itemNextDue(photo0.lastTested, testDate, homeNext, x => addYearsISO(x, 1))); }
     rows.push({
-      cells: [area.name, board.name, cName, fmtDate(testDate), photo.flirFile || "", photo.temp || "", photo.result || "", photo.notes || ""],
+      cells: [area.name, board.name, cName, fmtDate(photo0.lastTested), photo.flirFile || "", photo.temp || "", photo.result || "", photo.notes || ""],
       defect: flagged ? { ids: [area.name, board.name, cName], defectId: photo.defectId, priority: photo.priority, rectified: photo.rectified, rectifiedDate: photo.rectifiedDate, responsibility: photo.responsibility, notes: photo.notes } : null,
     });
   };
@@ -6845,6 +6846,7 @@ async function exportThermoExcel(project, results, meta) {
       });
     });
   });
+  const hdr = xjHdr("thermo", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(earliestIso(itDates) || testDate), nextDue: fmtDate(earliestIso(itDues) || homeNext), logo });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
     hdr,
@@ -8351,6 +8353,7 @@ function PhotoPage({
   };
   const blankForm = localPhotosLength => ({
     id: uid(),
+    lastTested: (meta && meta.testDate) || localISODate(),     // this test's date: the Home date, editable before saving
     flirFile: makeFlirName(localPhotosLength),
     temp: "",
     result: "PASS",
@@ -8525,7 +8528,7 @@ function PhotoPage({
         fontSize: 12,
         color: "#92400e"
       }
-    }, "\uD83C\uDF21 ", photo.temp, "\xB0C"), photo.priority && /*#__PURE__*/React.createElement("span", {
+    }, "\uD83C\uDF21 ", photo.temp, "\xB0C"), photo.lastTested && React.createElement("span", {style: {fontSize: 12, color: "#52525b"}}, fmtDate(photo.lastTested)), photo.priority && /*#__PURE__*/React.createElement("span", {
       style: {
         fontSize: 12,
         fontWeight: 800,
@@ -8637,7 +8640,7 @@ function PhotoPage({
       ...f,
       result: r
     }))
-  }, r)))), /*#__PURE__*/React.createElement("div", {
+  }, r)))), React.createElement(ItemDateField, {date: form.lastTested || "", onChange: v => setForm(f => ({...f, lastTested: v})), S: STH}), React.createElement(ItemDueBanner, {iso: form.lastTested ? itemNextDue(form.lastTested, meta && meta.testDate, meta && meta.nextTestDate, d => addYearsISO(d, 1)) : "", accent: "#c2410c"}), /*#__PURE__*/React.createElement("div", {
     style: STH.modalField
   }, /*#__PURE__*/React.createElement("label", {
     style: STH.modalLabel
@@ -9365,7 +9368,7 @@ function ThermoHistoryView({
             fontSize: 12,
             color: "#92400e"
           }
-        }, "\uD83C\uDF21 ", photo.temp, "\xB0C"), photo.priority && /*#__PURE__*/React.createElement("span", {
+        }, "\uD83C\uDF21 ", photo.temp, "\xB0C"), photo.lastTested && React.createElement("span", {style: {fontSize: 12, color: "#52525b"}}, fmtDate(photo.lastTested)), photo.priority && /*#__PURE__*/React.createElement("span", {
           style: {
             fontSize: 12,
             fontWeight: 800,
