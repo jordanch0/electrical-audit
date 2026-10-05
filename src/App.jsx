@@ -1110,6 +1110,16 @@ function useCollapsible(open, close, ref) {
     return () => { document.removeEventListener("click", onDocClick, true); if (activeExpander === me) activeExpander = null; };
   }, [open]);
 }
+// DateBox — the app's ONE date field on a form page: a styled box that shows the date as DD/MM/YYYY, over a transparent native date input that catches the tap.
+// A raw native <input type="date"> ignores width / max-width on iOS Safari and overflows its container (the 2026-06-07 fix notes); the overlay cannot, because the box you see is an
+// ordinary div. The Home pages carry the same pattern inline. The box shows a focus outline while the hidden input has focus (keyboard / assistive tech users see where they are).
+// { value: "YYYY-MM-DD" | "", onChange(iso), placeholder, ariaLabel (on the input), boxStyle (the field's look, e.g. SS.modalInput), onBlur }
+function DateBox({ value, onChange, placeholder, ariaLabel, boxStyle, onBlur }) {
+  const [focused, setFocused] = React.useState(false);
+  return React.createElement('div', { style: { position: "relative" } }
+    , React.createElement('div', { "data-testid": "date-box", style: { ...boxStyle, textAlign: "center", cursor: "pointer", color: value ? "#18181b" : "#66625e", ...(focused ? { outline: "2px solid #1d4ed8", outlineOffset: 1 } : {}) } }, value ? fmtDate(value) : (placeholder || "Select date…"))
+    , React.createElement('input', { type: "date", value: value || "", "aria-label": ariaLabel, onChange: e => onChange(e.target.value), onFocus: () => setFocused(true), onBlur: e => { setFocused(false); if (onBlur) onBlur(e); }, style: { position: "absolute", top: 0, left: 0, width: "100%", height: "100%", opacity: 0, cursor: "pointer" } }));
+}
 // StyledSelect — the app's styled dropdown (same look as the EditableDropdown family: a button with a ▾ and a popover list) for fields that used to be a native
 // <select>. Unlike the family it takes { value, label } options (the stored value need not equal the label — TAT's frequency stores "3" and shows "3 Months — …"),
 // is CLOSED by default (only listed values), and offers a typed-text mode only when allowCustom is set. allowEmpty adds a first option that clears the value
@@ -12626,7 +12636,7 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
       )
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"DATE RECTIFIED / SCHEDULED")
-        ,eltEl('input',{style:SS.modalInput,type:"date",value:r.rectifiedDate||"",onChange:e=>set({rectifiedDate:e.target.value})})
+        ,eltEl(DateBox,{value:r.rectifiedDate||"",ariaLabel:"Date rectified or scheduled",boxStyle:SS.modalInput,onChange:v=>set({rectifiedDate:v})})
       )
     )
     ,eltEl('div',{style:SS.modalField}
@@ -14711,7 +14721,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
       )
       ,eltEl('div',{style:SS.modalField}
         ,eltEl('label',{style:SS.modalLabel},"DATE RECTIFIED / SCHEDULED")
-        ,eltEl('input',{style:SS.modalInput,type:"date",value:r.rectifiedDate||"",onChange:e=>set({rectifiedDate:e.target.value})})
+        ,eltEl(DateBox,{value:r.rectifiedDate||"",ariaLabel:"Date rectified or scheduled",boxStyle:SS.modalInput,onChange:v=>set({rectifiedDate:v})})
       )
     )
     ,eltEl('div',{style:SS.modalField}
@@ -15662,7 +15672,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
       , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
     , field("RESPONSIBILITY", gsdEl(IELEditableDropdown, { options: respOpts, value: r.responsibility || "", onChange: v => set({ responsibility: v }), placeholder: "Select or type…" }))
     , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
-    , field("FIX BY DATE (informational)", gsdEl("input", { style: SS.modalInput, type: "date", value: r.dueDate || "", "aria-label": "Fix by date", onChange: e => set({ dueDate: e.target.value }) }))
+    , field("FIX BY DATE (informational)", gsdEl(DateBox, { value: r.dueDate || "", ariaLabel: "Fix by date", boxStyle: SS.modalInput, onChange: v => set({ dueDate: v }) }))
     , gsdEl("div", { ref: bottomRef, "data-testid": "gsd-bottom", style: { paddingBottom: 12 } }
     , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", boxRef: pickerRef, onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })
     , picker === "move" && gsdEl(GSDAreaPicker, { title: "Move to which area?", areas: project.areas.filter(a => a.id !== item.areaId), emptyText: "There is no other area — add one in the Manage tab first.", boxRef: pickerRef, onPick: id => { setPicker(null); onMove(id); }, onCancel: () => setPicker(null) })
@@ -15790,7 +15800,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
