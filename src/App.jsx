@@ -3013,6 +3013,7 @@ const itemIsTested = r => !!r && (r.status === "pass" || r.status === "fail");  
 const itemDue = (r, homeDate, homeNext, add) => itemIsTested(r) && r.lastTested ? itemNextDue(r.lastTested, homeDate, homeNext, add) : "";
 const irtHasResult = r => !!r && ((!!r.status && r.status !== "untested") || irtAutoStatus(r.readings || {}) !== "untested");   // IRT: "untested" with readings = an auto-detected result
 const eltHasResult = r => !!r && ELT_CHECKS.some(c => r[c.key]);                                      // ELT: any of the 4 checks recorded
+const welderHasResult = r => !!r && !!r.items && Object.values(r.items).some(v => v && v.result);     // Welder: any checklist item answered
 const itemHasStatus = r => !!r && !!r.status && r.status !== "untested";                    // the item shape of RCD, IEL, TAT and SWB
 const earliestIso = list => { const l = list.filter(Boolean).sort(); return l.length ? l[0] : ""; };   // ISO dates sort chronologically
 // </itemDate>
@@ -14494,11 +14495,11 @@ function welderRegisterRows(project, allResults, meta) {
     const sum = welderSummary(raw);
     const r = defectGate(raw, sum.overall==="fail");
     const tested = sum.overall!=="untested";
-    const date = tested ? ((meta&&meta.testDate) || "") : "";
-    const nextDue = tested ? ((meta&&meta.nextTestDate) || (date ? addMonthsISO(date, WELDER_INTERVAL_MONTHS) : "")) : "";
-    return { asset:a, res:raw, summary:sum, overall:sum.overall, cells:[
-      a.location||project.name||"", a.assetId||"", welderMachine(a), a.serial||"", date?fmtDate(date):"", welderPF(sum.overall),
-      r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.defectId||"", r.responsibility||"", (raw.notes||"").trim(), r.priority||"", nextDue?fmtDate(nextDue):"",
+    const dateISO = tested ? (raw.lastTested || "") : "";
+    const dueISO = dateISO ? itemNextDue(dateISO, meta&&meta.testDate, meta&&meta.nextTestDate, d=>addMonthsISO(d, WELDER_INTERVAL_MONTHS)) : "";
+    return { asset:a, res:raw, summary:sum, overall:sum.overall, dateISO, dueISO, cells:[
+      a.location||project.name||"", a.assetId||"", welderMachine(a), a.serial||"", dateISO?fmtDate(dateISO):"", welderPF(sum.overall),
+      r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.defectId||"", r.responsibility||"", (raw.notes||"").trim(), r.priority||"", dueISO?fmtDate(dueISO):"",
     ]};
   });
 }
@@ -14846,7 +14847,7 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
   const ro = (lbl,val)=>eltEl('div',{key:lbl,style:{minWidth:0}}
     ,eltEl('div',{style:{fontSize:9,color:"#5f5b57",letterSpacing:0.8,fontWeight:700}},lbl)
     ,eltEl('div',{style:{fontSize:12,color:"#18181b",fontWeight:600,overflowWrap:"anywhere"}},val||"—"));
-  const nextDue = meta.nextTestDate;
+  const dueISO = overall!=="untested"&&res.lastTested ? itemNextDue(res.lastTested,meta.testDate,meta.nextTestDate,d=>addMonthsISO(d,WELDER_INTERVAL_MONTHS)) : "";
   return eltEl('div',{style:{padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,eltEl('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10,gap:10}}
       ,eltEl('div',{style:{minWidth:0}}
@@ -14881,6 +14882,9 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
       );
     })
     // asset-level derived FAIL panel (before the comments box) — shows on the FIRST Fail, independent of `overall`
+    // Date tested (only once a checklist item is answered) + its next due (PASS / FAIL overall only)
+    ,welderHasResult(res)&&eltEl(ItemDateField,{date:res.lastTested||"",onChange:v=>set({lastTested:v}),S:SS})
+    ,eltEl(ItemDueBanner,{iso:dueISO,accent:WELDER_COLOR})
     ,anyFail&&eltEl('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
       ,eltEl('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
       ,eltEl('div',{style:SS.modalField}
@@ -14920,10 +14924,6 @@ function WelderAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose
       ,eltEl('input',{ref:photoRef,type:"file",accept:"image/*",multiple:true,style:{display:"none"},onChange:addPhotos,"data-testid":"welder-photo-input"})
       ,eltEl('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:WELDER_COLOR,border:`1px dashed ${WELDER_COLOR_BORDER}`,borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoRef.current&&photoRef.current.click()},"+ Add Photo")
       ,photoError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
-    )
-    ,nextDue&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${WELDER_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
-      ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
-      ,eltEl('span',{style:{color:WELDER_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},fmtDate(nextDue))
     )
   );
 }
@@ -15112,15 +15112,15 @@ async function exportWelderExcel(project, allResults, meta) {
   const wb = new ExcelJS.Workbook();
   const logo = await xjGetLogoDataUrl("welder", project.id);
   const sName = project.name||"Site";
-  const testDate = (meta&&meta.testDate)||"";
-  const nextDue = (meta&&meta.nextTestDate)||"";
+  const rows = welderRegisterRows(project, allResults, meta);
+  const testDate = earliestIso(rows.map(r=>r.dateISO)) || (meta&&meta.testDate) || "";
+  const nextDue = earliestIso(rows.map(r=>r.dueISO)) || (meta&&meta.nextTestDate) || "";
   const hdr = xjHdr("welder", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
   const passSt = xjStatusStyle("PASS");
   const failSt = xjStatusStyle("FAIL");
   const naSt   = xjStatusStyle("N/A");
   const headSt = swbXCS(XJ_COLOURS.midGrey,{bold:true,sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"center"},swbXAB());
   const cellSt = (bg,extra)=>swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,vertical:"top",...(extra||{})},swbXAB());
-  const rows = welderRegisterRows(project, allResults, meta);
   // Photos now live in sitePhotoStore (Stage 2, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
   // referenced by this export's own rows into a small export-sized copy BEFORE building any sheet (same pattern as GSD's
   // exportGSDExcel). A photo whose record is missing is skipped, its space kept, never a broken image reference.
@@ -15262,7 +15262,7 @@ function WelderApp({ onGoHome }) {
 
   const patchAsset = (assetId,patch)=>setAllResults(prev=>{
     const site = prev[activeProject]||{};
-    return {...prev,[activeProject]:{...site,[assetId]:{...welderGetRes(prev,activeProject,assetId),...patch}}};
+    return {...prev,[activeProject]:{...site,[assetId]:itemDateApply({...welderGetRes(prev,activeProject,assetId),...patch},welderHasResult,meta.testDate||localISODate())}};
   });
   const archiveAudit = ()=>{
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
@@ -15984,7 +15984,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,

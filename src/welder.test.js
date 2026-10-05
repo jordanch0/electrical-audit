@@ -110,8 +110,8 @@ describe('Summary Register (derived, never entered separately)', () => {
   ] });
   const stale = { rectified: 'Removed from Service', defectId: 'D-9', responsibility: 'Site Electrician', priority: 'H' };
   const results = { p: {
-    a1: rec('PPPPPNNNPPNN', { date: '2026-07-13', ...stale, notes: 'ok' }),                       // PASS with retained defect data
-    a2: rec('PPPPPPPPPPPF', { date: '2026-07-13', ...stale, rectifiedDate: '2026-08-01', notes: 'Return to supplier' }), // FAIL
+    a1: rec('PPPPPNNNPPNN', { lastTested: '2026-07-13', ...stale, notes: 'ok' }),                       // PASS with retained defect data
+    a2: rec('PPPPPPPPPPPF', { lastTested: '2026-07-13', ...stale, rectifiedDate: '2026-08-01', notes: 'Return to supplier' }), // FAIL
     a3: rec('PPP.........', {}),                                                                 // untested
   } };
   const meta = { auditor: 'Jordan', testDate: '2026-07-13', nextTestDate: '' };

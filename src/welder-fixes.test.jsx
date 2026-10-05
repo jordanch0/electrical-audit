@@ -80,7 +80,7 @@ describe('Date Tested / Prepared By / Test Instruments are site-level only', () 
     expect(welderGetRes({ dixon: { a1: stale } }, 'dixon', 'a1')).not.toHaveProperty('date');
     expect(welderGetRes({ dixon: { a1: stale } }, 'dixon', 'a1')).not.toHaveProperty('preparedBy');
     const proj = migrateProjectToAreas(site);
-    expect(welderRegisterRows(proj, { dixon: { a1: stale } }, meta)[0].cells[4]).toBe('13/07/2026');   // Register: site Date Tested, not 01/01/2000
+    expect(welderRegisterRows(proj, { dixon: { a1: { ...stale, lastTested: '2026-07-13' } } }, meta)[0].cells[4]).toBe('13/07/2026');   // Register: the welder's own Date Tested (lastTested), not the legacy per-welder date 01/01/2000
     await exportWelderExcel(proj, { dixon: { a1: stale } }, meta);
     await waitFor(() => expect(payload).toBeTruthy());
     const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64'));

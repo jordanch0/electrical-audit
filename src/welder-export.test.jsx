@@ -40,8 +40,8 @@ const V = c => (c.value == null ? '' : String(c.value));
 
 describe('Welder export structure', () => {
   const results = {
-    a1: rec('PPPPPNNNPPNN', { date: '2026-07-13', ...stale, notes: 'All good' }),               // PASS with retained defect data
-    a2: rec('PPPPPPPPPPPF', { date: '2026-07-13', ...stale, rectifiedDate: '2026-08-01', notes: 'Return to supplier' }), // FAIL
+    a1: rec('PPPPPNNNPPNN', { lastTested: '2026-07-13', ...stale, notes: 'All good' }),               // PASS with retained defect data
+    a2: rec('PPPPPPPPPPPF', { lastTested: '2026-07-13', ...stale, rectifiedDate: '2026-08-01', notes: 'Return to supplier' }), // FAIL
     a3: rec('PPP.........'),                                                                    // untested
   };
 
