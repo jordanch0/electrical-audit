@@ -43,7 +43,7 @@ describe('export: the "Next Test Due" column matches header row 4 once a date is
   it('default (no override): each tested item is its OWN last tested + 3 months; untested is blank', async () => {
     const { due, row4 } = await dueColumn({ auditor: 'J', testDate: '2026-09-30', nextTestDate: '2026-12-30' });
     expect(due).toEqual(['13/10/2026', '20/11/2026', '']);
-    expect(row4).toContain('Next Test Due: 30/12/2026');
+    expect(row4).toContain('Next Test Due: 13/10/2026');   // header row 4 = the EARLIEST item next-due (x: 13/07 + 3 months), no longer the Home date + 3 months (30/12/2026)
   });
   it('override: every tested item shows the chosen date, the same date as header row 4; untested stays blank', async () => {
     const { due, row4 } = await dueColumn({ auditor: 'J', testDate: '2026-09-30', nextTestDate: '2027-03-01' });

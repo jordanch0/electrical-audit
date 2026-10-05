@@ -140,7 +140,7 @@ describe('export: "Test Machine:" footer line + "Next Test Due (earliest)" in he
       i2: { status: 'pass', lastTested: '2026-08-01', freq: '1' },                 // due 01/09/2026  <- the earliest PASSED
       i3: { status: 'fail', lastTested: '2026-01-01', freq: '1', defectId: 'D1' }, // due 01/02/2026 but FAILED -> excluded
       i4: { status: 'na', lastTested: '2026-01-01', freq: '1' } } };               // N/A -> excluded
-    await run({}, res, proj); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due (earliest): 01/09/2026');
+    await run({}, res, proj); expect(String((await loadWb()).getWorksheet('Test & Tag').getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 01/01/2026  |  Next Test Due (earliest): 01/09/2026');   // Date Tested = the earliest PASS / FAIL item date: the FAILED i3 (01/01/2026), not the Home date; the N/A i4 (also 01/01/2026) does not count
   });
   it('blank when no item qualifies (everything failed / N/A / untested / undated) — the label stays', async () => {
     const res = { a1: { i1: { status: 'fail', lastTested: '2026-09-21', freq: '3' }, i2: { status: 'pass', lastTested: '', freq: '3' } } };

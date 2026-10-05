@@ -2986,6 +2986,24 @@ function itemDatesLoadStep(mod, results, metaAll, history) {
 }
 // </itemDates>
 
+// ITEM DATE — the rules, one for every module (2026-10). An item's date (lastTested) is stamped with the Home date when the item FIRST gets a result, and never changes when its result
+// changes (PASS -> FAIL ...); setting it back to untested ("—") clears it; the auditor can edit it (only that item). Reset / Complete clear the results, and the dates with them.
+// itemDateApply(next, hasResult, home) takes the record AFTER a patch was merged and returns it with its date set by those rules.
+// <itemDate>
+function itemDateApply(next, hasResult, home) {
+  if (!hasResult(next)) return { ...next, lastTested: "" };
+  return next.lastTested ? next : { ...next, lastTested: home };
+}
+const itemHasStatus = r => !!r && !!r.status && r.status !== "untested";                    // the item shape of RCD, IEL, TAT and SWB
+const earliestIso = list => { const l = list.filter(Boolean).sort(); return l.length ? l[0] : ""; };   // ISO dates sort chronologically
+// </itemDate>
+// The item page's DATE TESTED: the shared overlay DateBox, in the module's own field style S. Shown only once the item has a result (the caller decides).
+function ItemDateField({ date, onChange, S }) {
+  return React.createElement('div', { style: S.modalField }
+    , React.createElement('label', { style: S.modalLabel }, "DATE TESTED")
+    , React.createElement(DateBox, { value: date, onChange, ariaLabel: "Date tested", boxStyle: S.modalInput }));
+}
+
 // (b) THE HOME-DATE FOLLOW. A site's Home date follows the device's local date: each stored meta carries dateDay = the local day its Home date was last set automatically. On a
 // check (app open / return to the foreground / the local-midnight timer) a site whose dateDay is not today gets today's date and dateDay = today; a MANUAL edit changes the date
 // only, so it holds until the next day change. A stored next-due date that is only the DEFAULT for the old date (empty, or old date + the module's interval) moves with it; a chosen one
@@ -3090,10 +3108,9 @@ async function exportIELExcel(project, results, meta) {
   const logo = await xjGetLogoDataUrl("iel", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
-  const nextDue = meta && meta.nextTestDate ? fmtDate(meta.nextTestDate) : addMonths(testDate, 3);
   const sName = project.name || "Site";
-  const hdr = xjHdr("iel", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue, logo });
   const rows = [];
+  const itemDates = [], itemDues = [];   // ISO: the date and the next-due of every PASS / FAIL item (N/A is not a test; row 4: the earliest of each; the Home values when none has one)
   const catOrder = ["estops", "lanyards", "isolators"];
   // Organised by AREA first, then category within each area — no separator rows
   project.areas.forEach(area => {
@@ -3107,6 +3124,7 @@ async function exportIELExcel(project, results, meta) {
         const st = item.status || IEL_STATUS.UNTESTED;
         const pf = st === IEL_STATUS.PASS ? "Pass" : st === IEL_STATUS.FAIL ? "Fail" : st === IEL_STATUS.NA ? "N/A" : "Untested";
         const dueDate = ielItemDue(item, meta).label;
+        if (st === IEL_STATUS.PASS || st === IEL_STATUS.FAIL) { if (item.lastTested) itemDates.push(item.lastTested); const du = ielItemDue(item, meta).iso; if (du) itemDues.push(du); }
         rows.push({
           cells: [area.name, catLabel, machineName, fmtDate(item.lastTested), item.mechCheck ? "yes" : "", item.circuitIso ? "yes" : "", catKey === "lanyards" ? (item.lanyardCond ? "yes" : "") : "", pf, item.notes || "", dueDate],
           defect: pf === "Fail" ? { ids: [area.name, machineName], defectId: item.defectId, priority: item.priority, rectified: item.rectified, rectifiedDate: item.scheduledDate, responsibility: item.responsibility, notes: item.notes } : null,
@@ -3114,6 +3132,8 @@ async function exportIELExcel(project, results, meta) {
       });
     });
   });
+  const homeDue = meta && meta.nextTestDate ? meta.nextTestDate : addMonthsISO(testDate, 3);
+  const hdr = xjHdr("iel", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(earliestIso(itemDates) || testDate), nextDue: fmtDate(earliestIso(itemDues) || homeDue), logo });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
     hdr,
@@ -3327,7 +3347,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const patchItem=(pid,aid,cat,itemId,patch)=>{
     setAllResults(prev=>{
       const old=((((prev[pid]||{})[aid]||{})[cat])||{})[itemId]||{};
-      return{...prev,[pid]:{...prev[pid],[aid]:{...(prev[pid]||{})[aid],[cat]:{...((prev[pid]||{})[aid]||{})[cat],[itemId]:(patch.status===IEL_STATUS.FAIL?failFill({...old,...patch},(ielDropdowns||{}).rectified,(ielDropdowns||{}).responsibility):{...old,...patch})}}}};
+      return{...prev,[pid]:{...prev[pid],[aid]:{...(prev[pid]||{})[aid],[cat]:{...((prev[pid]||{})[aid]||{})[cat],[itemId]:itemDateApply((patch.status===IEL_STATUS.FAIL?failFill({...old,...patch},(ielDropdowns||{}).rectified,(ielDropdowns||{}).responsibility):{...old,...patch}),itemHasStatus,meta.testDate||localISODate())}}}};
     });
   };
 
@@ -3873,8 +3893,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
 
   const setStatus=s=>{
     if(s===IEL_STATUS.PASS&&!allChecked)return; // blocked
-    const testDate=meta.testDate||localISODate();
-    onPatch({status:s,...(s===IEL_STATUS.PASS||s===IEL_STATUS.FAIL?{lastTested:testDate}:{})});
+    onPatch({status:s});                                                    // the date is set by patchItem: first result = the Home date, a changed result keeps it, "—" clears it
   };
 
   const _due=ielItemDue(item,meta);const nextDue=_due.label||null;const nextDueISO=_due.iso;
@@ -3951,11 +3970,8 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
         )
       )
 
-      // ── Date tested
-      ,React.createElement('div',{style:SI.modalField}
-        ,React.createElement('label',{style:SI.modalLabel},"DATE TESTED")
-        ,React.createElement('input',{style:SI.modalInput,type:"date",value:item.lastTested||"",onChange:e=>onPatch({lastTested:e.target.value})})
-      )
+      // ── Date tested (only once the item has a result)
+      ,itemHasStatus(item)&&React.createElement(ItemDateField,{date:item.lastTested||"",onChange:v=>onPatch({lastTested:v}),S:SI})
 
       // Next due
       ,nextDue&&React.createElement('div',{style:{display:"flex",alignItems:"center",background:overdue?"#fee2e2":"#e8e6e2",border:`1px solid ${overdue?"#fca5a5":"#10b98133"}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
@@ -5252,6 +5268,7 @@ async function exportTATExcel(project, results, meta) {
   const auditor = (meta && meta.auditor) || "";
   const sName = project.name || "Site";
   const rows = [];
+  const itemDates = [];  // ISO: the date of every PASS / FAIL item (N/A is not a test; row 4's Date Tested = the earliest; the Home date when none has one)
   const passDues = [];   // ISO due dates of the items PASSED in this report (row 4's "Next Test Due (earliest)" — each item has its own frequency, so there is no single report-level due date)
   project.areas.forEach(area => {
     (area.items || []).forEach(itemId => {
@@ -5268,6 +5285,7 @@ async function exportTATExcel(project, results, meta) {
       const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
       const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
+      if ((st === TAT_STATUS.PASS || st === TAT_STATUS.FAIL) && item.lastTested) itemDates.push(item.lastTested);
       if (st === TAT_STATUS.PASS && item.lastTested) passDues.push(addTATMonths(item.lastTested, parseInt(areaFreq)));   // only PASSED items count: failed / N/A / untested / undated are excluded
       rows.push({
         cells: [area.name, areaTag, cleanName, areaEquip, item.visualCheck === "pass" ? "Pass" : item.visualCheck === "fail" ? "Fail" : "", item.electricalCheck === "pass" ? "Pass" : item.electricalCheck === "fail" ? "Fail" : "", pf, fmtDate(item.lastTested), freqLabel, nextDue, item.notes || ""],
@@ -5277,7 +5295,7 @@ async function exportTATExcel(project, results, meta) {
   });
   const wb = new ExcelJS.Workbook();
   const earliestDue = passDues.length ? passDues.slice().sort()[0] : "";   // ISO dates sort chronologically; blank when no item qualifies
-  const hdr = xjHdr("tat", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(testDate), nextDue: earliestDue ? fmtDate(earliestDue) : "", logo });
+  const hdr = xjHdr("tat", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor, testDate: fmtDate(earliestIso(itemDates) || testDate), nextDue: earliestDue ? fmtDate(earliestDue) : "", logo });
   xjSplit(wb, {
     hdr,
     mainSheet: "Test & Tag",
@@ -5465,7 +5483,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const patchItem=(pid,aid,itemId,patch)=>{
     setAllResults(prev=>{
       const old=(((prev[pid]||{})[aid])||{})[itemId]||{};
-      return{...prev,[pid]:{...prev[pid],[aid]:{...(prev[pid]||{})[aid],[itemId]:{...old,...patch}}}};
+      return{...prev,[pid]:{...prev[pid],[aid]:{...(prev[pid]||{})[aid],[itemId]:itemDateApply({...old,...patch},itemHasStatus,meta.testDate||localISODate())}}};
     });
   };
 
@@ -5864,18 +5882,17 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
 
   const setStatus=s=>{
     if(s===TAT_STATUS.PASS&&!canPass)return;
-    const testDate=meta.testDate||localISODate();
-    onPatch({status:s,...(s===TAT_STATUS.PASS||s===TAT_STATUS.FAIL?{lastTested:testDate}:{})});
+    onPatch({status:s});                                                    // the date is set by patchItem: first result = the Home date, a changed result keeps it, "—" clears it
   };
 
   const setElectrical=v=>{
     const next=(item.electricalCheck||"")===v?"":v;   // re-tapping the active button clears it back to "not recorded"
-    onPatch(tatElectricalPatch(item,next,meta.testDate||localISODate()));
+    onPatch(tatElectricalPatch(item,next,item.lastTested||meta.testDate||localISODate()));
   };
 
   const setVisual=v=>{
     const next=(item.visualCheck||"")===v?"":v;   // re-tapping the active button clears it back to "not recorded"
-    onPatch(tatVisualPatch(item,next,meta.testDate||localISODate()));
+    onPatch(tatVisualPatch(item,next,item.lastTested||meta.testDate||localISODate()));
   };
 
   const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
@@ -5952,16 +5969,13 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
         )
       )
 
-      // Date tested
-      ,React.createElement('div',{style:ST.modalField}
-        ,React.createElement('label',{style:ST.modalLabel},"DATE TESTED")
-        ,React.createElement('input',{style:ST.modalInput,type:"date",value:item.lastTested||"",onChange:e=>onPatch({lastTested:e.target.value})})
-      )
+      // Date tested (only once the item has a result)
+      ,itemHasStatus(item)&&React.createElement(ItemDateField,{date:item.lastTested||"",onChange:v=>onPatch({lastTested:v}),S:ST})
 
       // Next due
       ,nextDue&&React.createElement('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${TAT_COLOR}33`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
         ,React.createElement('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
-        ,React.createElement('span',{style:{color:TAT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},nextDue)
+        ,React.createElement('span',{style:{color:TAT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},fmtDate(nextDue))
         ,React.createElement('span',{style:{color:"#52525b",fontSize:11,marginLeft:8}},"(",item.freq==="12"?"Annual":item.freq==="1"?"1 Month":(item.freq||"3")+" Months",")")
       )
 
@@ -15925,7 +15939,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
