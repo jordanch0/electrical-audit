@@ -1458,7 +1458,8 @@ const meta = {
   nextPushDate:   _rcdMeta.nextPushDate   || addMonthsISO(_rcdMeta.pushDate, 1),
   nextInjectDate: _rcdMeta.nextInjectDate || addYearsISO(_rcdMeta.injectDate, 1),
 };
-const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+useHomeDateFollow("rcd", loaded, setAllMeta, projects);
 const area    = _optionalChain([project, 'optionalAccess', _41 => _41.areas, 'access', _42 => _42.find, 'call', _43 => _43(a=>a.id===activeAreaId)]);
 const panel   = _optionalChain([area, 'optionalAccess', _44 => _44.panels, 'access', _45 => _45.find, 'call', _46 => _46(p=>p.id===activePanelId)]);
 const patchCircuit=(pid,aid,panid,circuit,patch)=>{
@@ -1550,12 +1551,12 @@ onStartPush: ()=>{setMode("push");setView("audit");setGateArmed(false);},
 onStartInject: ()=>{setMode("inject");setView("audit");setGateArmed(false);},
 onReport: ()=>setView("report"), onManage: ()=>setView("manage"),
 onHistory: ()=>setView("history"), onSettings: ()=>setView("settings"),
-onReset: ()=>{setMode(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],pushDate:localISODate(),injectDate:localISODate(),nextPushDate:"",nextInjectDate:""}}));},
+onReset: ()=>{setMode(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextPushDate:"",nextInjectDate:""}}));},
 onExportPush: ()=>exportExcel(allResults,project,meta,"push"),
 onExportInject: ()=>exportExcel(allResults,project,meta,"inject"),
 activeMode: mode,
 auditActive: auditActive,
-onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],...(mode==="push"?{pushDate:localISODate()}:{injectDate:localISODate()}),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);},})
+onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);},})
 , isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#a3530f",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
 , isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(AreaListView, { project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>setActiveAreaId(id),})
 , isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(PanelListView, { area: area, project: project, results: allResults, mode: mode, modeColor: modeColor, onSelect: id=>{setActivePanelId(id);setView("panel");},})
@@ -2925,7 +2926,7 @@ function isDueSoon(d){ const due = isoFromDateText(d); if(!due) return false; co
 // </dueDates>
 
 // ═════════════════════════════════════════════════════════════════════════
-// ITEM DATES (2026-10) — one model for every module.
+// ITEM DATES + THE HOME-DATE FOLLOW (2026-10) — one model for every module.
 // ═════════════════════════════════════════════════════════════════════════
 // (a) THE ITEM-DATE BACKFILL. Results saved before item dates existed get a FIXED date: a live audit's items get that site's STORED Home date (today's local date only for a site
 // with no stored meta), a History snapshot's items get the snapshot's own date (testDate, else its meta, else the local day it was archived). Additive (only items that HAVE a
@@ -2985,6 +2986,57 @@ function itemDatesLoadStep(mod, results, metaAll, history) {
 }
 // </itemDates>
 
+// (b) THE HOME-DATE FOLLOW. A site's Home date follows the device's local date: each stored meta carries dateDay = the local day its Home date was last set automatically. On a
+// check (app open / return to the foreground / the local-midnight timer) a site whose dateDay is not today gets today's date and dateDay = today; a MANUAL edit changes the date
+// only, so it holds until the next day change. A stored next-due date that is only the DEFAULT for the old date (empty, or old date + the module's interval) moves with it; a chosen one
+// stays. It only ever updates meta records that already exist (never creates one), and touches nothing else: not results, History, the active flag or the gate.
+// <homeDateFollow>
+const HOME_DATE_SPECS = {
+  rcd:    [{ test: "pushDate", next: "nextPushDate", nextOf: d => addMonthsISO(d, 1) }, { test: "injectDate", next: "nextInjectDate", nextOf: d => addYearsISO(d, 1) }],
+  iel:    [{ test: "testDate", next: "nextTestDate", nextOf: d => addMonthsISO(d, 3) }],
+  tat:    [{ test: "testDate" }],
+  thermo: [{ test: "testDate", next: "nextTestDate", nextOf: d => addYearsISO(d, 1) }],
+  swb:    [{ test: "testDate", next: "nextTestDate", nextOf: d => addYearsISO(d, 1) }],
+  irt:    [{ test: "testDate", next: "nextTestDate", nextOf: d => addYearsISO(d, 1) }],
+  elt:    [{ test: "testDate", next: "nextTestDate", nextOf: d => addMonthsISO(d, 6) }],
+  welder: [{ test: "testDate", next: "nextTestDate", nextOf: d => addMonthsISO(d, 3) }],
+  gsd:    [{ test: "testDate", next: "nextTestDate", nextOf: d => addYearsISO(d, 1) }],
+};
+function homeDateFollow(meta, today, spec) {
+  if (!meta || typeof meta !== "object" || meta.dateDay === today) return null;
+  const out = { ...meta, dateDay: today };
+  spec.forEach(f => {
+    const old = meta[f.test]; if (old === today) return;
+    out[f.test] = today;
+    if (f.next && (!meta[f.next] || (old && meta[f.next] === f.nextOf(old)))) out[f.next] = f.nextOf(today);
+  });
+  return out;
+}
+// the whole meta map, for the sites that exist (siteIds): only the records that change are replaced (the same object back when nothing changes, so React does not re-save).
+// A record of a site that no longer exists (an orphan) is left alone.
+function homeDateFollowAll(allMeta, today, spec, siteIds) {
+  let changed = false; const out = {};
+  Object.keys(allMeta || {}).forEach(id => { const m = siteIds && siteIds.has(id) ? homeDateFollow(allMeta[id], today, spec) : null; if (m) { out[id] = m; changed = true; } else out[id] = allMeta[id]; });
+  return changed ? out : allMeta;
+}
+// ms until the next local midnight (+1 s), from the DEVICE's clock: the Date constructor does the calendar maths, so a 23- or 25-hour day is exact
+const msToLocalMidnight = (now = new Date()) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1).getTime() - now.getTime();
+// </homeDateFollow>
+// Runs the follow for one module: on load, whenever the app returns to the foreground / the window regains focus / the page is restored, and from a timer armed for the next local
+// midnight (re-armed from the device's current clock at every check, so a changed time zone or a long sleep cannot leave it stale). Call it after the module's state hooks.
+function useHomeDateFollow(mod, loaded, setAllMeta, projects) {
+  const projectsRef = React.useRef(projects); projectsRef.current = projects;
+  React.useEffect(() => {
+    if (!loaded) return undefined;
+    let timer = null, alive = true;
+    const check = () => { if (!itemDatesDone(mod)) return; const today = localISODate(), ids = new Set((projectsRef.current || []).map(p => p.id)); setAllMeta(prev => homeDateFollowAll(prev, today, HOME_DATE_SPECS[mod], ids)); };
+    const arm = () => { clearTimeout(timer); timer = setTimeout(() => { if (alive) { check(); arm(); } }, msToLocalMidnight()); };
+    const wake = () => { if (!alive || (typeof document !== "undefined" && document.visibilityState === "hidden")) return; check(); arm(); };
+    check(); arm();
+    document.addEventListener("visibilitychange", wake); window.addEventListener("focus", wake); window.addEventListener("pageshow", wake);
+    return () => { alive = false; clearTimeout(timer); document.removeEventListener("visibilitychange", wake); window.removeEventListener("focus", wake); window.removeEventListener("pageshow", wake); };
+  }, [loaded]);
+}
 function ielTypeToKey(t){
   if(!t)return null;const s=String(t).trim().toLowerCase();
   if(s.includes("lanyard"))return"lanyards";
@@ -3265,7 +3317,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     ..._ielMeta,
     nextTestDate: _ielMeta.nextTestDate || addMonthsISO(_ielMeta.testDate, 3),
   };
-  const setMeta  = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const setMeta  = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+  useHomeDateFollow("iel", loaded, setAllMeta, projects);
   const area     = project&&project.areas.find(a=>a.id===activeAreaId);
   // panel here represents a category-panel (panel.name = catKey)
   const panel    = area&&area.panels.find(p=>p.id===activePanelId);
@@ -3337,7 +3390,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // ── Main
     ,React.createElement('main',{style:SI.main,ref:mainElRef}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setGateArmed(false);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate(),nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate(),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setGateArmed(false);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextTestDate:""}}));},onExport:()=>exportIELExcel(project,allResults[activeProject]||{},meta),activeCatKey:activeCat,auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
       ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
@@ -5405,7 +5458,8 @@ function TATApp({ onGoHome }) {
 const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):auditGateOff(prev,activeProject));
   const showGate=gateArmed||!auditActive||auditorIsBlank(allMeta,activeProject);     // the gate shows when armed by Back, when there is no active audit, or when the auditor is blank (Continue is then disabled)
   const meta=allMeta[activeProject]||{auditor:"",testDate:localISODate(),notes:""};
-  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+  useHomeDateFollow("tat", loaded, setAllMeta, projects);
   const area=project&&project.areas.find(a=>a.id===activeAreaId);
 
   const patchItem=(pid,aid,itemId,patch)=>{
@@ -5476,10 +5530,10 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,view==="home"&&project&&React.createElement(TATHomeView,{project,meta,setMeta,results:allResults,summary,
         onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setView("audit");},
         onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onSettings:()=>setView("settings"),
-        onReset:()=>{setActiveMap(prev=>auditActiveClear(prev,activeProject));setGateArmed(false);setActiveAreaId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate()}}));},
+        onReset:()=>{setActiveMap(prev=>auditActiveClear(prev,activeProject));setGateArmed(false);setActiveAreaId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));},
         onExport:()=>exportTATExcel(project,allResults[activeProject]||{},meta),
         auditActive,
-        onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setDetailItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate(),notes:""}}));setGateArmed(false);},
+        onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setDetailItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],notes:""}}));setGateArmed(false);},
       })
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:TAT_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
       ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(TATAreaListView,{project,results:allResults,onSelect:id=>setActiveAreaId(id)})
@@ -9759,9 +9813,11 @@ function ThermoApp({
     ...prev,
     [activeProject]: {
       ...meta,
+      dateDay: meta.dateDay || localISODate(),
       ...patch
     }
   }));
+  useHomeDateFollow("thermo", loaded, setAllMeta, projects);
   const area = project?.areas?.find(a => a.id === activeAreaId);
   const board = area?.boards?.find(b => b.id === activeBoardId);
   const patchPhotos = (areaId, boardId, circuitId, photos) => {
@@ -9808,7 +9864,6 @@ function ThermoApp({
       ...prev,
       [activeProject]: {
         ...meta,
-        testDate: localISODate(),
         startFlir: "",
         startFlirBaseCount: 0
       }
@@ -9940,7 +9995,6 @@ function ThermoApp({
         ...prev,
         [activeProject]: {
           ...prev[activeProject],
-          testDate: localISODate(),
           nextTestDate: ""
         }
       }));
@@ -10887,7 +10941,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     ..._swbMeta,
     nextTestDate: _swbMeta.nextTestDate || addYearsISO(_swbMeta.testDate, 1),
   };
-  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+  useHomeDateFollow("swb", loaded, setAllMeta, projects);
   const area=project&&project.areas&&project.areas.find(a=>a.id===activeAreaId);
   const board=area&&area.boards&&area.boards.find(b=>b.id===activeBoardId);
 
@@ -10925,7 +10980,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
   const clearSiteResults=()=>{
     setAllResults(prev=>({...prev,[activeProject]:{}}));
-    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate()}}));
+    
   };
   // Reset (site-level): nothing will reference these results afterward, so their photos must be freed here.
   const discardSiteResults=()=>{
@@ -10933,7 +10988,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);
     sitePhotoStore.delPhotoList(swbPhotoList(allResults[activeProject]));
     setAllResults(prev=>({...prev,[activeProject]:{}}));
-    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate(),nextTestDate:""}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextTestDate:""}}));
   };
 
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);};
@@ -12229,7 +12284,8 @@ function ELTApp({ onGoHome }) {
   const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // armed by Back, nothing started, or a blank auditor (Continue is then disabled)
   const _m = allMeta[activeProject]||{auditor:"",testDate:localISODate()};
   const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,6)};
-  const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+  useHomeDateFollow("elt", loaded, setAllMeta, projects);
   const asset = project&&areaAssets(project).find(a=>a.id===activeAssetId);
 
   const patchAsset = (assetId,patch)=>setAllResults(prev=>{
@@ -12240,12 +12296,11 @@ function ELTApp({ onGoHome }) {
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
   };
-  const today = ()=>localISODate();
   // Complete Audit: archiveAudit() above already made history the sole reference to these photos (a deep JSON clone just
   // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
   const clearSiteResults = ()=>{
     setAllResults(prev=>({...prev,[activeProject]:{}}));
-    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextTestDate:""}}));
   };
   // Reset: nothing will reference these results afterward (unlike Complete Audit, nothing was archived first), so their
   // photos must be freed here or they'd be orphaned in sitePhotoStore forever.
@@ -13782,7 +13837,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     ..._irtMeta,
     nextTestDate: _irtMeta.nextTestDate || addYearsISO(_irtMeta.testDate, 1),
   };
-  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const setMeta=patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+  useHomeDateFollow("irt", loaded, setAllMeta, projects);
   const area=project&&(project.areas||[]).find(a=>a.id===activeAreaId)||null;
   const panel=area&&(area.panels||[]).find(p=>p.id===activePanelId)||null;
   const summary=project?irtSiteSummary(allResults,project):{total:0,pass:0,fail:0,untested:0};
@@ -13828,7 +13884,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // Main
     React.createElement("div",{style:SS.main,ref:irtMainRef},
       view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{siteLogoStore.del("irt",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}}),
-      view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate()}}));setGateArmed(false);},onReset:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:localISODate(),nextTestDate:""}}));setGateArmed(false);},auditActive}),
+      view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>exportIRTExcel(project,allResults,meta),onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setGateArmed(false);},onReset:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextTestDate:""}}));setGateArmed(false);},auditActive}),
       isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:IRT_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}}),
       view==="audit"&&project&&!showGate&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
       !showGate&&view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
@@ -15141,9 +15197,9 @@ function WelderApp({ onGoHome }) {
   const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // armed by Back, nothing started, or a blank auditor (Continue is then disabled)
   const _m = welderMetaDefaults(allMeta[activeProject]);
   const meta = {..._m, nextTestDate:_m.nextTestDate||addMonthsISO(_m.testDate,WELDER_INTERVAL_MONTHS)};
-  const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,...patch}}));
+  const setMeta = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
+  useHomeDateFollow("welder", loaded, setAllMeta, projects);
   const asset = project&&areaAssets(project).find(a=>a.id===activeAssetId);
-  const today = ()=>localISODate();
 
   const patchAsset = (assetId,patch)=>setAllResults(prev=>{
     const site = prev[activeProject]||{};
@@ -15157,7 +15213,7 @@ function WelderApp({ onGoHome }) {
   // duplicates the small {id,w,h} pointer, not the bytes) — so clearing live results here must NOT free them.
   const clearSiteResults = ()=>{
     setAllResults(prev=>({...prev,[activeProject]:{}}));
-    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],testDate:today(),nextTestDate:""}}));
+    setAllMeta(prev=>({...prev,[activeProject]:{...prev[activeProject],nextTestDate:""}}));
   };
   // Reset: nothing will reference these results afterward (unlike Complete Audit, nothing was archived first), so their
   // photos must be freed here or they'd be orphaned in sitePhotoStore forever.
@@ -15473,7 +15529,8 @@ function GSDApp({ onGoHome }) {
   const items = (allItems[activeProject] || []);
   const _m = allMeta[activeProject] || { auditor: "", testDate: today() };
   const meta = { ..._m, nextTestDate: _m.nextTestDate || addYearsISO(_m.testDate, 1) };     // annual audit: default next due = one year on
-  const setMeta = patch => setAllMeta(prev => ({ ...prev, [activeProject]: { ...meta, ...patch } }));
+  const setMeta = patch => setAllMeta(prev => ({ ...prev, [activeProject]: { ...meta, dateDay: meta.dateDay || localISODate(), ...patch } }));
+  useHomeDateFollow("gsd", loaded, setAllMeta, projects);
   const numbered = project ? gsdNumbered(project, items) : [];
   const activeEntry = numbered.find(e => e.item.id === activeItemId);
   const [activeMap, setActiveMap] = useAuditActive(K_GSD_ACTIVE, loaded, () => ({ projects, entryFor: pr => gsdHasProgress(allItems, pr) ? {} : null }));     // hooks stay above the loaded early-return
@@ -15550,7 +15607,7 @@ function GSDApp({ onGoHome }) {
     const snap = { id: uid(), projectId: activeProject, projectName: (project && project.name) || "", testDate: meta.testDate || "", auditor: meta.auditor || "", archivedAt: new Date().toISOString(), items: JSON.parse(JSON.stringify(items)), areas: JSON.parse(JSON.stringify((project && project.areas) || [])), meta: { ...meta } };
     setHistory(prev => [snap, ...prev].slice(0, 100));
   };
-  const freshVisit = () => setAllMeta(prev => ({ ...prev, [activeProject]: { ...prev[activeProject], testDate: today(), nextTestDate: "" } }));
+  const freshVisit = () => setAllMeta(prev => ({ ...prev, [activeProject]: { ...prev[activeProject], nextTestDate: "" } }));
   const goProjects = () => { setView("projects"); setActiveProject(null); setActiveItemId(null); setViewSnap(null); };
   const goHome = () => { setView("home"); setViewSnap(null); };     // the Home tab keeps the open defect, like every other tab
   const startAudit = () => { setActiveMap(prev => auditActiveSet(prev, activeProject, {})); setActiveItemId(null); setViewSnap(null); setView("audit"); };     // Start records the flag and clears the marker
@@ -15868,7 +15925,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
