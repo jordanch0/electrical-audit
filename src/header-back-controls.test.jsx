@@ -57,6 +57,7 @@ describe.each(SCREENS)('$name: header only', s => {
   it('exactly one back control (the header pill) and exactly one Modules pill; Modules goes to the Modules screen', async () => {
     const user = userEvent.setup(); await s.go(user);
     expect(BACKS()).toHaveLength(1); expect(screen.getAllByText('Modules')).toHaveLength(1);
+    expect(screen.queryByTestId('header-back-slot')).toBeNull();                                      // the empty slot is only for screens with no Back
     await user.click(screen.getByText('Modules'));
     expect(await screen.findByTestId('settings-pill')).toBeInTheDocument();
   });
@@ -68,11 +69,13 @@ describe.each(SCREENS)('$name: header only', s => {
   });
 });
 
-describe('site lists: no Back, one Modules pill (reached directly from the Modules screen)', () => {
+describe('site lists: no Back, one Modules pill, an empty Back slot above the title (reached directly from the Modules screen)', () => {
   it.each(['RCD TESTING', 'IEL TESTING', 'TEST & TAG', 'THERMOGRAPHIC', 'SWITCHBOARD', 'INSULATION RESISTANCE TESTING', 'EMERGENCY LIGHTING', 'WELDER TESTING', 'GENERAL SITE DEFECTS'])('%s', async tile => {
     const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByText(tile, { exact: true }));
     expect(await screen.findByText('Modules')).toBeInTheDocument();                                   // the site list is up (its header has the pill)
     expect(BACKS()).toHaveLength(0); expect(screen.getAllByText('Modules')).toHaveLength(1);
+    const slot = screen.getByTestId('header-back-slot');                                              // an empty 30px + 10px slot where Back would be: the title sits where it does on every other screen
+    expect(slot.style.height).toBe('30px'); expect(slot.style.marginBottom).toBe('10px'); expect(slot.textContent).toBe('');
   });
 });
 
