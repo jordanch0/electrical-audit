@@ -60,6 +60,25 @@ const addYearsISO  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.s
 // <localISODate>
 const localISODate = d => { const x = d || new Date(); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`; };
 // </localISODate>
+
+// A date typed or exported as TEXT -> "YYYY-MM-DD", the SAME calendar day in every zone. Used by the imports (and the due-date flags). Never goes through toISOString (that is UTC).
+//   DD/MM/YYYY (the app's own format; a two-digit year 00-69 is 20xx, 70-99 is 19xx); ISO "YYYY-MM-DD" with or without a time (the day AS WRITTEN); an Excel serial number (whole days
+//   since 1899-12-30, accepted only for the years 1990-2100); anything else ("21 Sep 2026", "Sep 21, 2026", "2026/09/21 23:30") is parsed by the engine as LOCAL time, so its LOCAL
+//   calendar day is the day written. A year below 1900, a serial outside 1990-2100, or unreadable text -> "" (never a 0026-style date).
+// <isoFromDateText>
+function isoFromDateText(val) {
+  if (val == null) return "";
+  const s = String(val).trim(); if (!s) return "";
+  const ok = iso => (+iso.slice(0, 4) >= 1900 ? iso : "");
+  let m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+  if (m) { const y = m[3].length === 2 ? (+m[3] < 70 ? 2000 : 1900) + +m[3] : +m[3]; return ok(y + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0")); }
+  m = /^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/.exec(s);
+  if (m) return ok(m[1] + "-" + m[2] + "-" + m[3]);
+  if (/^\d+(\.\d+)?$/.test(s)) { const n = Math.floor(parseFloat(s)); return n >= 32874 && n <= 73415 ? new Date((n - 25569) * 864e5).toISOString().slice(0, 10) : ""; }   // 32874 = 1 Jan 1990, 73415 = 31 Dec 2100
+  const d = new Date(s);
+  return isNaN(d) ? "" : ok(localISODate(d));
+}
+// </isoFromDateText>
 const addMonths = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setMonth(x.getMonth()+n); return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return ""; } };
 const addYears  = (d,n) => { if(!d) return ""; try { const x=new Date(d); x.setFullYear(x.getFullYear()+n); return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"}); } catch(_) { return ""; } };
 const cycleS = s => s===STATUS.UNTESTED?STATUS.PASS:s===STATUS.PASS?STATUS.FAIL:s===STATUS.FAIL?STATUS.NA:STATUS.UNTESTED;
@@ -2890,14 +2909,6 @@ function ielUid()  { return Math.random().toString(36).slice(2,9); }
 function ielSlug(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,20)+"-"+ielUid(); }
 function isOverdue(d){ if(!d)return false; try{return new Date(d)<new Date();}catch(_){return false;} }
 function isDueSoon(d){ if(!d)return false; try{const n=new Date(),tw=new Date(n.getTime()+14*864e5);const x=new Date(d);return x>=n&&x<=tw;}catch(_){return false;} }
-function parseAUDate(val){
-  if(!val)return"";const s=String(val).trim();
-  const m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if(m)return`${m[3]}-${m[2].padStart(2,"0")}-${m[1].padStart(2,"0")}`;
-  if(/^\d+(\.\d+)?$/.test(s)){try{const d=new Date(Math.round((parseFloat(s)-25569)*86400*1000));if(!isNaN(d))return d.toISOString().slice(0,10);}catch(_){}}
-  try{const d=new Date(s);if(!isNaN(d))return d.toISOString().slice(0,10);}catch(_){}
-  return s;
-}
 function ielTypeToKey(t){
   if(!t)return null;const s=String(t).trim().toLowerCase();
   if(s.includes("lanyard"))return"lanyards";
@@ -6773,30 +6784,13 @@ function parseThermoExcel(data, overrideName, XLSX) {
     // Parse date to ISO
     let isoDate = "";
     if (dateRaw) {
-      try {
-        // Handle DD/MM/YYYY (Australian format)
-        const parts = dateRaw.split("/");
-        if (parts.length === 3 && parts[0].length <= 2) {
-          isoDate = `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        } else {
-          isoDate = new Date(dateRaw).toISOString().slice(0, 10);
-        }
-        if (!testDate || isoDate < testDate) testDate = isoDate;
-      } catch {/* ignore */}
+      isoDate = isoFromDateText(dateRaw);       // DD/MM/YYYY, ISO, an Excel serial or other text: the same calendar day in every zone
+      if (isoDate && (!testDate || isoDate < testDate)) testDate = isoDate;
     }
 
     // Parse rectified date
     let isoRectDate = "";
-    if (dRectRaw) {
-      try {
-        const parts = dRectRaw.split("/");
-        if (parts.length === 3 && parts[0].length <= 2) {
-          isoRectDate = `${parts[2].padStart(4, "0")}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
-        } else {
-          isoRectDate = new Date(dRectRaw).toISOString().slice(0, 10);
-        }
-      } catch {/* ignore */}
-    }
+    if (dRectRaw) isoRectDate = isoFromDateText(dRectRaw);
 
     // Validate priority
     const priority = ["L", "M", "H", "U"].includes(priRaw) ? priRaw : "";
@@ -15792,7 +15786,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate,
+  localISODate, isoFromDateText,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
