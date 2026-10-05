@@ -3072,7 +3072,7 @@ function ielChosenNextDue(meta){
   return n!==addMonthsISO(meta.testDate,3)?n:null;
 }
 function ielItemDue(item,meta){
-  if(!item||!item.lastTested)return{iso:null,label:""};
+  if(!item||!item.lastTested||item.status===IEL_STATUS.NA)return{iso:null,label:""};   // N/A is not a test: no next-due
   const chosen=ielChosenNextDue(meta);
   if(chosen)return{iso:chosen,label:fmtDate(chosen)};
   return{iso:addMonthsISO(item.lastTested,3),label:addMonths(item.lastTested,3)};
@@ -5284,7 +5284,7 @@ async function exportTATExcel(project, results, meta) {
       const st = item.status || TAT_STATUS.UNTESTED;
       const pf = st === TAT_STATUS.PASS ? "Pass" : st === TAT_STATUS.FAIL ? "Fail" : st === TAT_STATUS.NA ? "N/A" : "Untested";
       const freqLabel = tatFreqPlain(areaFreq);   // the plain interval only — the site-type guidance ("— Building / Construction …") is part of the dropdown option text, not the value
-      const nextDue = item.lastTested ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";
+      const nextDue = item.lastTested && st !== TAT_STATUS.NA ? fmtDate(addTATMonths(item.lastTested, parseInt(areaFreq))) : "";   // N/A is not a test: no next-due
       if ((st === TAT_STATUS.PASS || st === TAT_STATUS.FAIL) && item.lastTested) itemDates.push(item.lastTested);
       if (st === TAT_STATUS.PASS && item.lastTested) passDues.push(addTATMonths(item.lastTested, parseInt(areaFreq)));   // only PASSED items count: failed / N/A / untested / undated are excluded
       rows.push({
@@ -5895,7 +5895,7 @@ function TATItemModal({itemId,area,project,results,meta,onPatch,onClose,equipTyp
     onPatch(tatVisualPatch(item,next,item.lastTested||meta.testDate||localISODate()));
   };
 
-  const nextDue=item.lastTested?addTATMonths(item.lastTested,parseInt(areaFreq)):"";
+  const nextDue=item.lastTested&&item.status!==TAT_STATUS.NA?addTATMonths(item.lastTested,parseInt(areaFreq)):"";   // N/A is not a test: no next-due
 
   return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
     ,React.createElement('div',{style:{}}

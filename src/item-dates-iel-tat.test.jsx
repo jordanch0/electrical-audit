@@ -7,7 +7,7 @@ import { render, screen, cleanup, fireEvent, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import * as XLSX from 'xlsx';
 import ExcelJS from 'exceljs';
-import AppRoot, { itemDateApply, itemHasStatus, earliestIso, exportIELExcel, exportTATExcel } from './App.jsx';
+import AppRoot, { itemDateApply, itemHasStatus, earliestIso, exportIELExcel, exportTATExcel, ielItemDue } from './App.jsx';
 
 const ls = k => JSON.parse(localStorage.getItem(k));
 beforeEach(() => localStorage.clear());
@@ -125,5 +125,25 @@ describe('export headers: Date Tested = the earliest PASS / FAIL item date, Next
     await exportTATExcel(proj, { a1: { i1: { status: 'untested' } } }, { auditor: 'Jane', testDate: '2026-09-21' });
     const wb2 = new ExcelJS.Workbook(); await wb2.xlsx.load(Buffer.from(payload.base64, 'base64'));
     expect(String(wb2.getWorksheet('Test & Tag').getCell('A4').value)).toBe('Auditor: Jane  |  Date Tested: 21/09/2026  |  Next Test Due (earliest): ');
+  });
+});
+
+describe('an N/A item is not a test: no next-due anywhere', () => {
+  it('IEL: ielItemDue is empty for N/A, present for PASS / FAIL', () => {
+    const meta = { testDate: '2026-10-05', nextTestDate: '2027-01-05' };
+    expect(ielItemDue({ status: 'na', lastTested: '2026-10-05' }, meta)).toEqual({ iso: null, label: '' });
+    expect(ielItemDue({ status: 'pass', lastTested: '2026-10-05' }, meta).iso).toBe('2027-01-05');
+    expect(ielItemDue({ status: 'fail', lastTested: '2026-10-05' }, meta).iso).toBe('2027-01-05');
+  });
+  it('IEL item page: an N/A item shows its date but no NEXT TEST DUE', async () => {
+    at(5); seedHome(IEL); const user = userEvent.setup(); await openIel(user); await user.click(await screen.findByText('Feed Conveyor 1'));
+    await status(user, 'N/A'); await waitFor(() => expect(ls(IEL.r).s1.a1.estops.x1.lastTested).toBe(day(5)));
+    expect(box()).not.toBeNull(); expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
+    await status(user, 'FAIL'); expect(await screen.findByText('NEXT TEST DUE:')).toBeInTheDocument();
+  });
+  it('TAT item page and export row: an N/A item has no next-due', async () => {
+    at(5); seedHome(TAT); const user = userEvent.setup(); await openTat(user); await user.click(await screen.findByText('Grinder'));
+    await status(user, 'N/A'); await waitFor(() => expect(ls(TAT.r).s1.a1.i1.lastTested).toBe(day(5)));
+    expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
   });
 });
