@@ -8,7 +8,7 @@ const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJA
 // differentiate which underlying record produced which copy.
 beforeAll(() => { sitePhotoIO.exportCopy = async () => ({ dataUrl: PNG }); });
 beforeEach(async () => { await sitePhotoStore.put('ph1', { buf: new Uint8Array([1]).buffer, type: 'image/png' }); await sitePhotoStore.put('ph2', { buf: new Uint8Array([2]).buffer, type: 'image/png' }); await sitePhotoStore.put('x', { buf: new Uint8Array([3]).buffer, type: 'image/png' }); await sitePhotoStore.put('y', { buf: new Uint8Array([4]).buffer, type: 'image/png' }); });
-const pass4 = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
+const pass4 = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass', lastTested:'2026-09-21' };
 
 const project = toAreas({
   id: 'p1', name: 'Hearse Road Firestone', company: 'Dixon Quarry Group', abn: '12 345 678 901', licence: 'EW123456',

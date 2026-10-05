@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, migrateProjectToAreas as toAreas } from './App.jsx';
 
-const allPass = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass' };
+const allPass = { visual:'pass', discharge:'pass', switching:'pass', charging:'pass', lastTested:'2026-09-21' };
 
 describe('eltOverall', () => {
   it('passes only when all four checks pass', () => {

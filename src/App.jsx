@@ -3012,6 +3012,7 @@ function itemNextDue(date, homeDate, homeNext, add) {
 const itemIsTested = r => !!r && (r.status === "pass" || r.status === "fail");        // a test = PASS or FAIL (N/A is not a test; it has no next-due)
 const itemDue = (r, homeDate, homeNext, add) => itemIsTested(r) && r.lastTested ? itemNextDue(r.lastTested, homeDate, homeNext, add) : "";
 const irtHasResult = r => !!r && ((!!r.status && r.status !== "untested") || irtAutoStatus(r.readings || {}) !== "untested");   // IRT: "untested" with readings = an auto-detected result
+const eltHasResult = r => !!r && ELT_CHECKS.some(c => r[c.key]);                                      // ELT: any of the 4 checks recorded
 const itemHasStatus = r => !!r && !!r.status && r.status !== "untested";                    // the item shape of RCD, IEL, TAT and SWB
 const earliestIso = list => { const l = list.filter(Boolean).sort(); return l.length ? l[0] : ""; };   // ISO dates sort chronologically
 // </itemDate>
@@ -12163,14 +12164,14 @@ function eltRegisterRows(project, allResults, meta) {
     return {asset:a, res:r, overall:eltOverall(r)};
   }).filter(x=>x.overall!==STATUS.UNTESTED).map(({asset:a,res:raw,overall},idx)=>{
     const r = defectGate(raw, overall===STATUS.FAIL); // defect details are retained after a fitting leaves FAIL — only FAIL rows write them
-    const date = (meta&&meta.testDate) || "";
-    const nextDue = (meta&&meta.nextTestDate) || "";
+    const dateISO = raw.lastTested || "";
+    const dueISO = dateISO ? itemNextDue(dateISO, meta&&meta.testDate, meta&&meta.nextTestDate, d=>addMonthsISO(d,6)) : "";   // +6 months = HOME_DATE_SPECS
     const loc = a.location||project.name||"";
     // "#" = position among the TESTED fittings; the Defects sheet repeats it for FAIL rows
-    return {asset:a, res:raw, overall, cells:[
+    return {asset:a, res:raw, overall, dateISO, dueISO, cells:[
       idx+1, loc, a.assetLocation||"", a.assetId||"", eltTypeLabel(a), a.maintained||"", a.fitting||"",
-      date?fmtDate(date):"", ...ELT_CHECKS.map(c=>eltPF(raw[c.key])), eltPF(overall), scoreLabel(eltFittingSummary(raw).score),
-      (raw.notes||"").trim(), nextDue?fmtDate(nextDue):"",
+      dateISO?fmtDate(dateISO):"", ...ELT_CHECKS.map(c=>eltPF(raw[c.key])), eltPF(overall), scoreLabel(eltFittingSummary(raw).score),
+      (raw.notes||"").trim(), dueISO?fmtDate(dueISO):"",
     ], defect: overall===STATUS.FAIL ? [idx+1, loc, a.assetLocation||"", a.assetId||"", r.defectId||"", r.priority||"", r.rectified||"", r.rectifiedDate?fmtDate(r.rectifiedDate):"", r.responsibility||"", (raw.notes||"").trim()] : null};
   });
 }
@@ -12182,15 +12183,15 @@ async function exportELTExcel(project, allResults, meta) {
   const setCell = (ref,val,st)=>{const c=ws.getCell(ref);c.value=val!=null?val:"";swbApplyXlStyle(c,st);};
   const cols = "ABCDEFGHIJKLMNOP".split(""); const n = ELT_COLUMNS.length;
   const sName = project.name||"Site";
-  const testDate = (meta&&meta.testDate)||"";
-  const nextDue = (meta&&meta.nextTestDate)||"";
+  const rows = eltRegisterRows(project, allResults, meta);
+  const testDate = earliestIso(rows.map(r=>r.dateISO)) || (meta&&meta.testDate) || "";
+  const nextDue = earliestIso(rows.map(r=>r.dueISO)) || (meta&&meta.nextTestDate) || "";
   const hdr = xjHdr("elt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
   // Shared header rows 1-5 (xjHeader; column widths are set FIRST — it needs them). The table headings are ALWAYS row 6, data from row 7.
   [5,12,14,9,12,12,14,13,11,10,10,10,10,8,16,13].forEach((w,i)=>{ws.getColumn(i+1).width=xjColWidth(ELT_COLUMNS[i],w);});   // content-width columns (headings wrap); import-anchor headings stay exact; date columns >= 13
   xjHeader(ws, wb, hdr, n);
   ELT_COLUMNS.forEach((t,i)=>{ setCell(cols[i]+XJ_TABLE_START,t); ws.getCell(cols[i]+XJ_TABLE_START).alignment = {wrapText:true,vertical:"center",horizontal:"center"}; }); // wrap + centre only (no fill / font / border): a narrow column can carry a long heading
   ws.getRow(XJ_TABLE_START).height = XJ_HEADING_H;
-  const rows = eltRegisterRows(project, allResults, meta);
   const passSt = xjStatusStyle("PASS");
   const failSt = xjStatusStyle("FAIL");
   rows.forEach((row,i)=>{
@@ -12340,7 +12341,7 @@ function ELTApp({ onGoHome }) {
 
   const patchAsset = (assetId,patch)=>setAllResults(prev=>{
     const site = prev[activeProject]||{};
-    return {...prev,[activeProject]:{...site,[assetId]:{...eltGetRes(prev,activeProject,assetId),...patch}}};
+    return {...prev,[activeProject]:{...site,[assetId]:itemDateApply({...eltGetRes(prev,activeProject,assetId),...patch},eltHasResult,meta.testDate||localISODate())}};
   });
   const archiveAudit = ()=>{
     const snap = {id:uid(),projectId:activeProject,projectName:(project&&project.name)||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),areas:JSON.parse(JSON.stringify((project&&project.areas)||[])),meta:{...meta}};
@@ -12781,6 +12782,9 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
         })
       )
     )
+    // Date tested (only once a check is recorded) + its next due (PASS / FAIL only)
+    ,eltHasResult(res)&&eltEl(ItemDateField,{date:res.lastTested||"",onChange:v=>set({lastTested:v}),S:SS})
+    ,eltEl(ItemDueBanner,{iso:overall!==STATUS.UNTESTED&&res.lastTested?itemNextDue(res.lastTested,meta.testDate,meta.nextTestDate,d=>addMonthsISO(d,6)):"",accent:ELT_COLOR})
     ,eltEl('div',{style:{...SS.modalField,marginTop:10}}
       ,eltEl('label',{style:SS.modalLabel},"OVERALL RESULT (AUTOMATIC)")
       ,eltEl('div',{style:{...SS.modalInput,background:sm.bg,color:sm.fg,border:`1.5px solid ${sm.border}`,fontWeight:800}},overall===STATUS.UNTESTED?"Awaiting all 4 test results":sm.label)
@@ -12814,10 +12818,6 @@ function ELTAssetPage({project, asset, res, meta, dropdowns, onPatch, onClose}) 
     ,eltEl('div',{style:SS.modalField}
       ,eltEl('label',{style:SS.modalLabel},"NOTES")
       ,eltEl('textarea',{style:{...SS.modalInput,minHeight:68,resize:"vertical",fontFamily:"inherit"},value:r.notes||"",placeholder:"Observations, comments…",onChange:e=>set({notes:e.target.value})})
-    )
-    ,meta.nextTestDate&&eltEl('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:`1px solid ${ELT_COLOR_BORDER}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
-      ,eltEl('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
-      ,eltEl('span',{style:{color:ELT_COLOR,fontWeight:800,fontSize:13,marginLeft:8}},fmtDate(meta.nextTestDate))
     )
     
   );
@@ -15984,7 +15984,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
