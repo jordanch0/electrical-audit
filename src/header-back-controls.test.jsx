@@ -99,3 +99,17 @@ describe('Test Calendar and Global Settings: only the Modules pill', () => {
     expect(await screen.findByTestId('calendar-pill')).toBeInTheDocument();
   });
 });
+
+// ── the Modules pill is alone on its own top row (where a Back pill would be), the title on the line below ───────────────────────────────────────────
+describe('Test Calendar and Global Settings: the pill is NOT in the same row as the title', () => {
+  const check = (title) => {
+    const row = screen.getByTestId('header-pill-row'); const pill = screen.getByText('Modules').parentElement;
+    const t = screen.getByText(title);
+    expect(row.contains(pill)).toBe(true); expect(row.contains(t)).toBe(false);                      // the row holds the pill and nothing else
+    expect(row.style.justifyContent).toBe('flex-end'); expect(row.style.minHeight).toBe('40px');   // right-aligned; as tall as a Back pill + its margin, so the title lines up with the other screens
+    expect(row.nextElementSibling.contains(t)).toBe(true); expect(t.style.marginTop).toBe('6px');   // the title is the next line, marginTop 6
+    expect(row.parentElement.style.flexDirection).toBe('column');
+  };
+  it('Test Calendar', async () => { const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByTestId('calendar-pill')); await screen.findByText('Upcoming'); check('Test Calendar'); });
+  it('Global Settings', async () => { const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByTestId('settings-pill')); await screen.findByText('Global Settings'); check('Global Settings'); });
+});

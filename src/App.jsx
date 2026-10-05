@@ -4638,12 +4638,13 @@ function CalendarApp({ onGoHome }) {
   return React.createElement('div',{style:CAL_STYLE.root}
     // Header
     ,React.createElement('div',{style:{padding:'48px 18px 12px',borderBottom:'1px solid #f0eeea',background:'#f0eeea',flexShrink:0}}
-      ,React.createElement('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:12}}
-        ,React.createElement('div',{style:{flex:1,minWidth:0,display:'flex',flexDirection:'column',gap:4}}
-          ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Test Calendar")
-          ,React.createElement('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},events.length," scheduled events")
+      ,React.createElement('div',{style:{display:'flex',flexDirection:'column',gap:4}}
+        // the Modules pill alone on the top row, where a Back pill would be (40px = Back's 30px + its 10px margin), title on the line below
+        ,React.createElement('div',{"data-testid":"header-pill-row",style:{display:'flex',justifyContent:'flex-end',alignItems:'flex-start',minHeight:40}}
+          ,React.createElement(ModulesPill,{onClick:onGoHome})
         )
-        ,React.createElement(ModulesPill,{onClick:onGoHome})
+        ,React.createElement('div',{style:{fontFamily:"'Barlow Condensed',sans-serif",fontSize:22,fontWeight:600,letterSpacing:0.5,color:'#18181b',lineHeight:1.1,marginTop:6}},"Test Calendar")
+        ,React.createElement('div',{style:{fontSize:12,color:'#52525b',marginTop:2,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},events.length," scheduled events")
       )
       ,React.createElement('div',{style:{height:2,marginTop:12,background:'linear-gradient(90deg, #4338ca, transparent 70%)',opacity:0.5}})
     )
@@ -10103,11 +10104,12 @@ function GlobalSettingsView({ onGoHome }) {
 
   return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
     , React.createElement('div', { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
-      , React.createElement('div', { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 } }
-        , React.createElement('div', { style: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 4 } }
-          , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
-          , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
-        , React.createElement(ModulesPill, { onClick: onGoHome }))
+      , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 4 } }
+        // the Modules pill alone on the top row, where a Back pill would be (40px = Back's 30px + its 10px margin), title on the line below
+        , React.createElement('div', { "data-testid": "header-pill-row", style: { display: "flex", justifyContent: "flex-end", alignItems: "flex-start", minHeight: 40 } }
+          , React.createElement(ModulesPill, { onClick: onGoHome }))
+        , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
+        , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
     , React.createElement('div', { style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
