@@ -1429,7 +1429,7 @@ load(K_META,{}),
 load(K_HISTORY,[]),
 load(K_DROPDOWNS,{responsibility:DEFAULT_RESPONSIBILITY,rectified:DEFAULT_RECTIFIED,ampRating:DEFAULT_AMP_RATING,cbType:DEFAULT_CB_TYPE}),
 ]);
-clearTimeout(safetyTimer);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns(d);setLoaded(true);
+const _dm=itemDatesLoadStep("rcd", r,m,h);clearTimeout(safetyTimer);setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setDropdowns(d);setLoaded(true);
 } catch(loadErr) { console.error('Load error:',loadErr); clearTimeout(safetyTimer); setLoaded(true); }
 })();
 },[]);
@@ -2923,6 +2923,68 @@ function ielSlug(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-
 function isOverdue(d){ const due = isoFromDateText(d); return !!due && due < localISODate(); }
 function isDueSoon(d){ const due = isoFromDateText(d); if(!due) return false; const t = new Date(); return due >= localISODate(t) && due <= localISODate(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 14)); }
 // </dueDates>
+
+// ═════════════════════════════════════════════════════════════════════════
+// ITEM DATES (2026-10) — one model for every module.
+// ═════════════════════════════════════════════════════════════════════════
+// (a) THE ITEM-DATE BACKFILL. Results saved before item dates existed get a FIXED date: a live audit's items get that site's STORED Home date (today's local date only for a site
+// with no stored meta), a History snapshot's items get the snapshot's own date (testDate, else its meta, else the local day it was archived). Additive (only items that HAVE a
+// result and NO date are touched) and idempotent. WHICH data is old is decided by the data itself, not by a marker: a meta record carries dateDay once a site has been through the
+// Home-date follow (and so does a snapshot's meta copy), so a site / snapshot whose meta has NO dateDay is old-format data — including data RESTORED from a backup made before this
+// release, however it was restored. It runs inside each module's load, in memory, and the app's normal save effects persist it (the same path as the audit-active migration, with the
+// storage-full safety net). It runs BEFORE the Home-date follow, which only starts once it has succeeded (so a restored site's own Home date is read before the follow moves it).
+// The item date is the field `lastTested` in every module (RCD: on the push / inject record; Thermo: on each photo entry; ELT / Welder: on the asset's record; GSD: on the defect).
+// <itemDates>
+const idEach = (o, fn) => { if (o && typeof o === "object" && !Array.isArray(o)) Object.values(o).forEach(fn); };
+const idHasStatus = r => !!r && typeof r === "object" && !Array.isArray(r) && !!r.status && r.status !== "untested";
+// has this module's backfill run? (the Home-date follow waits for it: a Home date that moved before a failed backfill was retried would drift into the old items' dates)
+const ITEM_DATES_READY = {};                                                                  // module -> true once its load-time backfill ran in this session (the Home-date follow waits for it)
+const itemDatesDone = mod => !!ITEM_DATES_READY[mod];
+// stamp(record, mode?) is called for every item that HAS a result and NO date. site = one site's results (live: results[siteId]; a snapshot's results are already one site's).
+const ITEM_DATE_WALKERS = {
+  rcd:    (site, stamp) => idEach(site, area => idEach(area, panel => idEach(panel, circuit => ["push", "inject"].forEach(m => { const r = circuit && circuit[m]; if (idHasStatus(r) && !r.lastTested) stamp(r, m); })))),
+  iel:    (site, stamp) => idEach(site, area => idEach(area, cat => idEach(cat, r => { if (idHasStatus(r) && !r.lastTested) stamp(r); }))),
+  tat:    (site, stamp) => idEach(site, area => idEach(area, r => { if (idHasStatus(r) && !r.lastTested) stamp(r); })),
+  swb:    (site, stamp) => idEach(site, area => idEach(area, board => idEach(board, r => { if (idHasStatus(r) && !r.lastTested) stamp(r); }))),
+  irt:    (site, stamp) => idEach(site, area => idEach(area, panel => idEach(panel, r => { if (r && typeof r === "object" && !r.lastTested && (idHasStatus(r) || irtAutoStatus(r.readings) !== "untested")) stamp(r); }))),
+  thermo: (site, stamp) => idEach(site, area => idEach(area, board => idEach(board, list => { (Array.isArray(list) ? list : []).forEach(p => { if (p && typeof p === "object" && !p.lastTested) stamp(p); }); }))),
+  elt:    (site, stamp) => idEach(site, r => { if (r && typeof r === "object" && !r.lastTested && ELT_CHECKS.some(c => r[c.key])) stamp(r); }),
+  welder: (site, stamp) => idEach(site, r => { if (r && typeof r === "object" && !r.lastTested && r.items && Object.values(r.items).some(v => v && v.result)) stamp(r); }),
+};
+const idIso = v => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+// the date for a LIVE site: its stored Home date(s); {push, inject} for RCD
+const idLiveDates = (mod, meta, today) => mod === "rcd" ? { push: idIso(meta && meta.pushDate) || today, inject: idIso(meta && meta.injectDate) || today } : (idIso(meta && meta.testDate) || today);
+// the date for a SNAPSHOT: its own date. Never the live Home date.
+const idSnapDates = (mod, snap, today) => {
+  let archived = ""; try { if (snap && snap.archivedAt) { const d = new Date(snap.archivedAt); if (!isNaN(d)) archived = localISODate(d); } } catch (_) {}
+  const base = idIso(snap && snap.testDate) || idIso(snap && snap.meta && snap.meta.testDate) || archived || today;
+  return mod === "rcd" ? { push: idIso(snap && snap.meta && snap.meta.pushDate) || base, inject: idIso(snap && snap.meta && snap.meta.injectDate) || base } : base;
+};
+// stamps ONE site's results (or, for GSD, its defect LIST) in place; returns how many items were stamped
+function itemDatesStampSite(mod, siteRes, dates) {
+  let n = 0; const stamp = (rec, m) => { const d = typeof dates === "string" ? dates : dates[m]; if (d) { rec.lastTested = d; n++; } };
+  if (mod === "gsd") { (Array.isArray(siteRes) ? siteRes : []).forEach(it => { if (it && typeof it === "object" && !it.lastTested) stamp(it); }); return n; }
+  ITEM_DATE_WALKERS[mod](siteRes, stamp); return n;
+}
+// Pure: fresh copies of results / history with every missing item date filled in; { results, history, changed } (changed = items stamped)
+function itemDatesMigrate(mod, results, metaAll, history, today) {
+  const R = JSON.parse(JSON.stringify(results || {})), H = JSON.parse(JSON.stringify(history || [])); let changed = 0;
+  Object.keys(R).forEach(id => { const m = (metaAll || {})[id]; if (m && m.dateDay) return; changed += itemDatesStampSite(mod, R[id], idLiveDates(mod, m, today)); });     // a meta with dateDay = already through the follow
+  H.forEach(snap => { if (!snap || typeof snap !== "object" || (snap.meta && snap.meta.dateDay)) return; changed += itemDatesStampSite(mod, mod === "gsd" ? snap.items : snap.results, idSnapDates(mod, snap, today)); });
+  return { results: R, history: H, changed };
+}
+// The load step: in memory only. The returned results / history go into state and the module's own save effects write them (the app's save() with its storage-full banner) — the same
+// way the audit-active migration works; nothing here touches storage itself. Marks the module ready for the Home-date follow; on an error the data is returned untouched and the
+// module is NOT ready (so the follow stays off and the next load simply tries again).
+function itemDatesLoadStep(mod, results, metaAll, history) {
+  try {
+    const mig = itemDatesMigrate(mod, results, metaAll, history, localISODate());
+    ITEM_DATES_READY[mod] = true;
+    return mig.changed ? { results: mig.results, history: mig.history } : { results, history };
+  } catch (_) { return { results, history }; }
+}
+// </itemDates>
+
 function ielTypeToKey(t){
   if(!t)return null;const s=String(t).trim().toLowerCase();
   if(s.includes("lanyard"))return"lanyards";
@@ -3171,7 +3233,8 @@ function IELApp({ onGoHome }) {
       try{
         const[p,r,m,h,dd]=await Promise.all([load(K_IEL_PROJECTS,[]),load(K_IEL_RESULTS,{}),load(K_IEL_META,{}),load(K_IEL_HISTORY,[]),load(K_IEL_DROPDOWNS,{responsibility:IEL_DEFAULT_RESPONSIBILITY,rectified:IEL_DEFAULT_RECTIFIED})]);
         setIelDropdowns(dd);
-        clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setLoaded(true);
+        const _dm=itemDatesLoadStep("iel", r,m,h);
+        clearTimeout(t);setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setLoaded(true);
       }catch(e){clearTimeout(t);setLoaded(true);}
     })();
   },[]);
@@ -5318,7 +5381,8 @@ function TATApp({ onGoHome }) {
     (async()=>{
       try{
         const[p,r,m,h,et,fq,an,td,dd]=await Promise.all([load(K_TAT_PROJECTS,[]),load(K_TAT_RESULTS,{}),load(K_TAT_META,{}),load(K_TAT_HISTORY,[]),load(K_TAT_SETTINGS,TAT_DEFAULT_EQUIP_TYPES),load(K_TAT_FREQS,TAT_DEFAULT_FREQS),load(K_TAT_NAMES,TAT_DEFAULT_NAMES),load(K_TAT_DEFAULTS,TAT_FACTORY_DEFAULTS),load(K_TAT_DROPDOWNS,TAT_DEFAULT_DROPDOWNS)]);
-        clearTimeout(t);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEquipTypes(tatCleanEquipTypes(et));setFreqOptions(fq||TAT_DEFAULT_FREQS);setApplianceNames(an||TAT_DEFAULT_NAMES);setTatDefaults(td||TAT_FACTORY_DEFAULTS);setTatDropdowns({...TAT_DEFAULT_DROPDOWNS,...(dd||{})});setLoaded(true);
+        const _dm=itemDatesLoadStep("tat", r,m,h);
+        clearTimeout(t);setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setEquipTypes(tatCleanEquipTypes(et));setFreqOptions(fq||TAT_DEFAULT_FREQS);setApplianceNames(an||TAT_DEFAULT_NAMES);setTatDefaults(td||TAT_FACTORY_DEFAULTS);setTatDropdowns({...TAT_DEFAULT_DROPDOWNS,...(dd||{})});setLoaded(true);
       }catch(e){clearTimeout(t);setLoaded(true);}
     })();
   },[]);
@@ -9638,11 +9702,12 @@ function ThermoApp({
     (async () => {
       try {
         const [p, r, m, h, dd] = await Promise.all([load(K_THERMO_PROJECTS, []), load(K_THERMO_RESULTS, {}), load(K_THERMO_META, {}), load(K_THERMO_HISTORY, []), load(K_THERMO_DROPDOWNS, {responsibility:[...RESPONSIBILITY_OPTIONS],rectified:[...RECTIFIED_OPTIONS]})]);
+        const _dm = itemDatesLoadStep("thermo", r, m, h);
         clearTimeout(t);
         setProjects(p);
-        setAllResults(r);
+        setAllResults(_dm.results);
         setAllMeta(m);
-        setHistory(h);
+        setHistory(_dm.history);
         setThermoDropdowns(dd);
         setLoaded(true);
       } catch {
@@ -10798,7 +10863,8 @@ function SWBApp({ onGoHome }) {
         const photoMig = await migrateSitePhotos("swb",K_SWB_RESULTS,K_SWB_HISTORY,swbExtractPhotos);
         if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
         expirePhotoMigrationBackupIfStale("swb");
-        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setSwbDropdowns(dd);
+        const _dm=itemDatesLoadStep("swb", r,m,h);
+        setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setSwbDropdowns(dd);
       }
       finally{setLoaded(true);}
     })();
@@ -12142,7 +12208,8 @@ function ELTApp({ onGoHome }) {
         const photoMig = await migrateSitePhotos("elt",K_ELT_RESULTS,K_ELT_HISTORY,assetResultsExtractPhotos);
         if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
         expirePhotoMigrationBackupIfStale("elt");
-        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});
+        const _dm=itemDatesLoadStep("elt", r,m,h);
+        setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setEltDropdowns({...ELT_DEFAULT_DROPDOWNS,...upgradeEltDropdowns(dd)});
       }
       finally{setLoaded(true);}
     })();
@@ -13697,7 +13764,7 @@ function IRTApp({onGoHome}){
   const irtMainRef = React.useRef(null);
   const [irtWarnDismissed,setIrtWarnDismissed]=React.useState(false);
   const [showGuide,setShowGuide]=React.useState(false);
-  React.useEffect(()=>{(async()=>{try{const[p,r,m,h,dd]=await Promise.all([load(K_IRT_PROJECTS,[]),load(K_IRT_RESULTS,{}),load(K_IRT_META,{}),load(K_IRT_HISTORY,[]),load(K_IRT_DROPDOWNS,{responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED})]);setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setIrtDropdowns(dd);}finally{setLoaded(true);}})();},[]);
+  React.useEffect(()=>{(async()=>{try{const[p,r,m,h,dd]=await Promise.all([load(K_IRT_PROJECTS,[]),load(K_IRT_RESULTS,{}),load(K_IRT_META,{}),load(K_IRT_HISTORY,[]),load(K_IRT_DROPDOWNS,{responsibility:IRT_DEFAULT_RESPONSIBILITY,rectified:IRT_DEFAULT_RECTIFIED})]);const _dm=itemDatesLoadStep("irt", r,m,h);setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setIrtDropdowns(dd);}finally{setLoaded(true);}})();},[]);
   React.useEffect(()=>{if(loaded)save(K_IRT_PROJECTS,projects);},[projects,loaded]);
   React.useEffect(()=>{if(loaded){save(K_IRT_RESULTS,allResults);setSaveFlash(true);const t=setTimeout(()=>setSaveFlash(false),1200);return()=>clearTimeout(t);}},[allResults,loaded]);
   React.useEffect(()=>{if(loaded)save(K_IRT_META,allMeta);},[allMeta,loaded]);
@@ -15053,7 +15120,8 @@ function WelderApp({ onGoHome }) {
         const photoMig = await migrateSitePhotos("welder",K_WELDER_RESULTS,K_WELDER_HISTORY,assetResultsExtractPhotos);
         if (photoMig.migrated) { r = photoMig.results; h = photoMig.history; }
         expirePhotoMigrationBackupIfStale("welder");
-        setProjects(p);setAllResults(r);setAllMeta(m);setHistory(h);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});
+        const _dm=itemDatesLoadStep("welder", r,m,h);
+        setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setDropdowns({...WELDER_DEFAULT_DROPDOWNS,...dd});
       }
       finally{setLoaded(true);}
     })();
@@ -15390,7 +15458,7 @@ function GSDApp({ onGoHome }) {
   const mainRef = React.useRef(null);
   React.useEffect(() => {
     (async () => {
-      try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); setProjects(p); setAllItems(i); setAllMeta(m); setHistory(h); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...gsdUpgradeDropdowns(dd) }); }
+      try { const [p, i, m, h, dd] = await Promise.all([load(K_GSD_PROJECTS, []), load(K_GSD_ITEMS, {}), load(K_GSD_META, {}), load(K_GSD_HISTORY, []), load(K_GSD_DROPDOWNS, GSD_DEFAULT_DROPDOWNS)]); const _dm = itemDatesLoadStep("gsd", i, m, h); setProjects(p); setAllItems(_dm.results); setAllMeta(m); setHistory(_dm.history); setDropdowns({ ...GSD_DEFAULT_DROPDOWNS, ...gsdUpgradeDropdowns(dd) }); }
       finally { setLoaded(true); }
     })();
   }, []);
@@ -15800,7 +15868,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,

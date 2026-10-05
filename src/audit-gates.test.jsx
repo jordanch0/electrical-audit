@@ -142,7 +142,7 @@ describe('site delete (from now on): clears the active flag; TAT and IEL now als
       seed(m, [['s1', 'Site One'], ['s2', 'Site Two']]);
       const hk = m.mk.replace('-meta-', '-history-');
       localStorage.setItem(hk, JSON.stringify([{ id: 'h1', projectId: 's1', archivedAt: '2026-01-01T00:00:00Z', results: {}, meta: {} }, { id: 'h2', projectId: 's2', archivedAt: '2026-01-02T00:00:00Z', results: {}, meta: {} }, { id: 'h0', projectId: 'GONE-EARLIER', archivedAt: '2025-01-01T00:00:00Z', results: {}, meta: {} }]));
-      const meta0 = JSON.parse(localStorage.getItem(m.mk)); meta0['GONE-EARLIER'] = { auditor: 'Old orphan' }; localStorage.setItem(m.mk, JSON.stringify(meta0));
+      const meta0 = JSON.parse(localStorage.getItem(m.mk)); meta0['GONE-EARLIER'] = { auditor: 'Old orphan' }; rawSetItem(m.mk, JSON.stringify(meta0));
       const user = userEvent.setup(); render(<AppRoot />);
       await openSite(user, m, 'Site One'); await startFromHome(user, m); await back(user); await back(user);
       expect(Object.keys(activeMap(m))).toEqual(['s1']);
