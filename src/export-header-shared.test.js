@@ -49,7 +49,7 @@ const CASES = [
     sheets: [['Register', '#'], ['Readings', '#'], ['Defects', '#']] },
   { id: 'swb', title: `${SITE}  –  Switchboard / Enclosure Audit  (Visual Inspection)`, meta: AUD + 'Next Audit Due: 30/09/2027', file: /^SWB_/,
     run: pid => exportSWBExcel({ id: pid, name: SITE, ...co, areas: [{ id: 'ar', name: 'Plant', boards: [{ id: 'b1', name: 'MSB' }, { id: 'b2', name: 'DB1' }] }] }, {}, meta),
-    sheets: [['Register', 'Area'], ['MSB', 'Asset Details', 7], ['DB1', 'Asset Details', 7]] },
+    sheets: [['Register', 'Area'], ['MSB', 'Asset Details', 8], ['DB1', 'Asset Details', 8]] },
   { id: 'elt', title: `${SITE}  –  Emergency Lighting Test  (AS/NZS 2293.2:2019)`, meta: AUD + 'Next Test Due: 30/09/2027', defects: 1, file: /^ELT_/, photos: true,
     run: async pid => { await sitePhotoStore.put('ph1', { buf: new Uint8Array([1]).buffer, type: 'image/png' });
       await exportELTExcel(migrateProjectToAreas({ id: pid, name: SITE, ...co, assets: [{ id: 'a1', location: SITE, assetLocation: 'North Door', assetId: 'EL-1', type: 'Emergency Exit Sign', maintained: 'Maintained', fitting: 'X' }, { id: 'a2', location: SITE, assetLocation: 'South Roof', assetId: 'EL-2', type: 'Emergency Exit Sign', maintained: 'Maintained', fitting: 'Y' }] }),

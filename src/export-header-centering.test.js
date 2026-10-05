@@ -92,12 +92,12 @@ describe('Export header block: merge spans the real column count AND is centred 
 
 describe('Export header block: the direct-write sheets use the SAME shared header (xjHeader) as the xjSheet modules', () => {
   const HDR_TEXT = (title, extra) => ({ title, co: 'Co  |  ABN: 1  |  Electrical Licence: L', ...extra });
-  it('SWB Register (16 cols) and per-board sheet (7 cols): identical rows 1-5; Area / Board are an "Asset Details" block from row 6', async () => {
+  it('SWB Register (16 cols) and per-board sheet (8 cols): identical rows 1-5; Area / Board are an "Asset Details" block from row 6', async () => {
     const project = { id: 's1', name: 'Site S', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'ar1', name: 'Area 1', boards: [{ id: 'b1', name: 'MSB' }] }] };
     const results = { s1: { ar1: { b1: { enclosure: { status: 'pass' } } } } };
     const wb = await load(exportSWBExcel, project, results, { auditor: 'J', testDate: '2026-09-21' });
     const reg = wb.getWorksheet('Register'); const board = wb.getWorksheet('MSB');
-    expectSharedHeader(reg, 16); expectSharedHeader(board, 7);
+    expectSharedHeader(reg, 16); expectSharedHeader(board, 8);
     [reg, board].forEach(ws => {
       expect(String(ws.getCell(2, 1).value)).toBe('Site S  –  Switchboard / Enclosure Audit  (Visual Inspection)');
       expect(String(ws.getCell(3, 1).value)).toBe('Co  |  ABN: 1  |  Electrical Licence: L');

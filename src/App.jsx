@@ -10667,9 +10667,12 @@ function swbRegisterRows(project, allResults, meta) {
   const res = allResults || {};
   const testDate = (meta && meta.testDate) || "";
   const nextDue = swbNextDue(meta);
+  const homeNext = (meta && meta.nextTestDate) || (testDate ? addYearsISO(testDate, 1) : "");
   const rows = [];
   (project.areas || []).forEach(area => (area.boards || []).forEach(board => {
     const bs = swbBoardSummary(res, project.id, area.id, board.id);
+    const itDates = SWB_CHECKLIST.map(({key}) => swbGetItem(res, project.id, area.id, board.id, key)).filter(itemIsTested).map(it => it.lastTested).filter(Boolean);
+    const dateISO = earliestIso(itDates), dueISO = earliestIso(itDates.map(d => itemNextDue(d, testDate, homeNext, x => addYearsISO(x, 1))));   // +1 year = HOME_DATE_SPECS
     const overall = swbBoardOverall(bs);
     const fails = SWB_CHECKLIST.filter(({key}) => swbGetStatus(res, project.id, area.id, board.id, key) === SWB_STATUS.FAIL);
     const risks = fails.map(({key}) => swbGetItem(res, project.id, area.id, board.id, key).risk).filter(Boolean);
@@ -10680,9 +10683,9 @@ function swbRegisterRows(project, allResults, meta) {
     // SWB has no Priority control: its Risk Rating (L / M / H / U — the SAME scale and labels as Priority) plays that role. The Register's Priority column
     // therefore reads the item's risk (a stored `priority`, e.g. from an older import, wins if present), most severe first.
     const priorities = [...new Set(failItems.map(it => (it.priority || it.risk || "").trim()).filter(Boolean))].sort((a, b) => SWB_RISK_ORDER.indexOf(a) - SWB_RISK_ORDER.indexOf(b)).join("; ");
-    rows.push({ area, board, summary: bs, overall, cells: [
-      area.name, board.name, overall !== "untested" && testDate ? fmtDate(testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
-      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), priorities, nextDue,
+    rows.push({ area, board, summary: bs, overall, dateISO, dueISO, cells: [
+      area.name, board.name, overall !== "untested" && (dateISO || testDate) ? fmtDate(dateISO || testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
+      bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), priorities, dueISO ? fmtDate(dueISO) : nextDue,
     ]});
   }));
   return rows;
@@ -10704,9 +10707,10 @@ async function exportSWBExcel(project, allResults, meta) {
   const logo = await xjGetLogoDataUrl("swb", project.id);
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
-  const nextDue = swbNextDue(meta);
-  const hdr = xjHdr("swb", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue, logo });
   const rows = swbRegisterRows(project, allResults, meta);
+  const hdrDate = earliestIso(rows.map(r => r.dateISO)) || testDate, hdrDue = earliestIso(rows.map(r => r.dueISO));
+  const nextDue = hdrDue ? fmtDate(hdrDue) : swbNextDue(meta);
+  const hdr = xjHdr("swb", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: hdrDate ? fmtDate(hdrDate) : "", nextDue, logo });
   const res = allResults || {};
   // Photos live in sitePhotoStore (Stage 4, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
   // referenced by any board's photos into a small export-sized copy BEFORE building any sheet (GSD's pattern).
@@ -10750,8 +10754,8 @@ async function exportSWBExcel(project, allResults, meta) {
     const sh = wb.addWorksheet(swbSheetName(board, area, used));
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
     // Shared header rows 1-5 (same as the Register — only the merge width is this sheet's 7 columns); widths first, the merge + logo centring read them.
-    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
-    xjHeader(sh, wb, hdr, 7);
+    [34,52,10,12,36,10,30,13].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+    xjHeader(sh, wb, hdr, 8);
     // Asset Details (2026-10-02): the Area / Board that used to sit in header row 3 — a labelled block directly under the header, styled like Audit Summary.
     let rr = XJ_TABLE_START;
     put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
@@ -10764,7 +10768,7 @@ async function exportSWBExcel(project, allResults, meta) {
       .forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,(l==="Overall"?overallSt:(l==="Pass"&&+v>0)?passSt:(l==="Fail"&&+v>0)?failSt:cellSt(XJ_COLOURS.white,{horizontal:"center"}))); rr++; });
     // Checklist
     rr++;
-    ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((t,i) => put("ABCDEFG"[i]+rr,t,headSt)); rr++;
+    ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action","Date Tested"].forEach((t,i) => put("ABCDEFGH"[i]+rr,t,headSt)); rr++;
     SWB_CHECKLIST.forEach(({key,label},idx) => {
       const raw = (((res[project.id]||{})[area.id]||{})[board.id]||{})[key] || {status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
       const item = defectGateByStatus(raw);                    // defect details only for FAIL items
@@ -10779,6 +10783,7 @@ async function exportSWBExcel(project, allResults, meta) {
       put('E'+rr,item.comment||"",rs);
       put('F'+rr,item.risk||"",xjPriorityStyle(item.risk,{vertical:"center",wrap:true}) || swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB()));
       put('G'+rr,(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
+      put('H'+rr,st===SWB_STATUS.UNTESTED?"":fmtDate(item.lastTested),cellSt(bg,{horizontal:"center"}));
       rr++;
     });
     // Photos — this board's photos, one per row
@@ -10987,7 +10992,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const patchItem=(areaId,boardId,itemKey,patch)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
     const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
-    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,[itemKey]:{...old,...patch}}}}};
+    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,[itemKey]:itemDateApply({...old,...patch},itemHasStatus,meta.testDate||localISODate())}}}};
   });
 
   const patchBoardPhotos=(areaId,boardId,photos)=>setAllResults(prev=>{
@@ -11078,7 +11083,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,view==="audit"&&project&&!showGate&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&!showGate&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
       ,!showGate&&view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
-      ,!showGate&&view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
+      ,!showGate&&view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,meta,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home"),
           onRemoveArea:areaId=>sitePhotoStore.delPhotoList(swbAreaPhotoList(allResults[activeProject],areaId)),
@@ -11354,7 +11359,7 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
 // ─────────────────────────────────────────────────────────────────────────
 // ITEM DETAIL PAGE
 // ─────────────────────────────────────────────────────────────────────────
-function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClose}) {
+function SWBItemPage({itemKey,board,area,project,results,dropdowns,meta,onPatch,onClose}) {
   const item=swbGetItem(results,project.id,area.id,board.id,itemKey);
   const label=(SWB_CHECKLIST.find(c=>c.key===itemKey)||{}).label||itemKey;
   const guidance=SWB_GUIDANCE[itemKey]||{pass:"",fail:""};
@@ -11409,6 +11414,9 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,onPatch,onClo
           })
         )
       )
+      // Date tested (only once the item has a result) + its next due (PASS / FAIL only)
+      ,status!==SWB_STATUS.UNTESTED&&React.createElement(ItemDateField,{date:item.lastTested||"",onChange:v=>put({lastTested:v}),S:SS})
+      ,React.createElement(ItemDueBanner,{iso:itemDue({status,lastTested:item.lastTested},meta.testDate,meta.nextTestDate,d=>addYearsISO(d,1)),accent:"#7e22ce"})
       ,isFail&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
         ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}
