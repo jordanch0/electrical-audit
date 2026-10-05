@@ -3011,6 +3011,7 @@ function itemNextDue(date, homeDate, homeNext, add) {
 }
 const itemIsTested = r => !!r && (r.status === "pass" || r.status === "fail");        // a test = PASS or FAIL (N/A is not a test; it has no next-due)
 const itemDue = (r, homeDate, homeNext, add) => itemIsTested(r) && r.lastTested ? itemNextDue(r.lastTested, homeDate, homeNext, add) : "";
+const irtHasResult = r => !!r && ((!!r.status && r.status !== "untested") || irtAutoStatus(r.readings || {}) !== "untested");   // IRT: "untested" with readings = an auto-detected result
 const itemHasStatus = r => !!r && !!r.status && r.status !== "untested";                    // the item shape of RCD, IEL, TAT and SWB
 const earliestIso = list => { const l = list.filter(Boolean).sort(); return l.length ? l[0] : ""; };   // ISO dates sort chronologically
 // </itemDate>
@@ -13150,17 +13151,19 @@ function downloadIRTTemplate(){
 // Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
 async function exportIRTExcel(project, results, meta) {
   const logo = await xjGetLogoDataUrl("irt", project.id);
-  const sName = project.name || "Site"; const td = meta.testDate ? fmtDate(meta.testDate) : "";
-  const nextDue = meta.nextTestDate ? fmtDate(meta.nextTestDate) : (meta.testDate ? irtAddYear(meta.testDate) : "");
-  const hdr = xjHdr("irt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta.auditor, testDate: td, nextDue, logo });
+  const sName = project.name || "Site";
+  const homeNext = meta.nextTestDate || (meta.testDate ? addYearsISO(meta.testDate, 1) : "");
+  const itDates = [], itDues = [];   // ISO: the date / next-due of every PASS / FAIL item (header: the earliest of each; the Home values when none)
   const rows = []; const readingRows = [];
   (project.areas || []).forEach(area => (area.panels || []).forEach(panel => (panel.items || []).forEach(itemId => {
     const name = (panel.itemNames || {})[itemId] || itemId;
     const d0 = irtGetItem(results, project.id, area.id, panel.id, itemId); const r = d0.readings || {};
     const eff = d0.status === "untested" ? irtAutoStatus(r) : d0.status;
     const d = defectGate(d0, eff === "fail"); // defect details only for FAIL (auto-detected or manual)
+    const itDate = eff === "untested" ? "" : (d0.lastTested || "");
+    if ((eff === "pass" || eff === "fail") && itDate) { itDates.push(itDate); itDues.push(itemNextDue(itDate, meta.testDate, homeNext, x => addYearsISO(x, 1))); }
     rows.push({
-      cells: [area.name, panel.name, name, td, eff.toUpperCase(), d.notes || ""],
+      cells: [area.name, panel.name, name, fmtDate(itDate), eff.toUpperCase(), d.notes || ""],
       defect: eff === "fail" ? { ids: [area.name, panel.name, name], defectId: d.defectId, priority: d.priority, rectified: d.rectified, rectifiedDate: d.scheduledDate, responsibility: d.responsibility, notes: d.notes } : null,
     });
     readingRows.push([area.name, panel.name, name, d.testVoltage || "500V", r.L1E || "", r.L2E || "", r.L3E || "", r.NE || "", r.L1L2 || "", r.L1L3 || "", r.L2L3 || "", r.L1N || "", r.L2N || "", r.L3N || "", eff.toUpperCase()]);
@@ -13168,6 +13171,7 @@ async function exportIRTExcel(project, results, meta) {
   // Readings: same "#" (row order identical to the Register). The unit now sits on each resistance heading — "(MΩ)" — because the header block no longer carries
   // a units note; Test Voltage (volts) and Pass / Fail hold no resistance, so they get no unit. Nothing imports this sheet (parseIRTExcel reads only the Register).
   const readingHeaders = ["Location", "Panel / DB", "Equipment / Circuit", "Test Voltage", "L1-E (MΩ)", "L2-E (MΩ)", "L3-E (MΩ)", "N-E (MΩ)", "L1-L2 (MΩ)", "L1-L3 (MΩ)", "L2-L3 (MΩ)", "L1-N (MΩ)", "L2-N (MΩ)", "L3-N (MΩ)", "Pass / Fail"];
+  const hdr = xjHdr("irt", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta.auditor, testDate: fmtDate(earliestIso(itDates) || meta.testDate || ""), nextDue: fmtDate(earliestIso(itDues) || homeNext), logo });
   const wb = new ExcelJS.Workbook();
   xjSplit(wb, {
     hdr,
@@ -13260,7 +13264,7 @@ function IRTMegInput({value,onChange,label}){
 }
 
 // ─── Item test page ────────────────────────────────────────────────────────
-function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnDismissed,onDismissWarn,onPatch,onBack,onShowGuide}){
+function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,meta,warnDismissed,onDismissWarn,onPatch,onBack,onShowGuide}){
   const existing=irtGetItem(results,project.id,area.id,panel.id,itemId);
   // Live auto-save (the app-wide standard): every change is written straight to storage. `status` is stored exactly as the user set
   // it — "untested" means AUTO-DETECT from the readings (all IRT readers already derive it), so it is never frozen by a save.
@@ -13328,6 +13332,9 @@ function IRTItemPage({itemId,itemName,panel,area,project,results,dropdowns,warnD
         [["pass","PASS"],["fail","FAIL"],["na","N/A"],["untested","\u2014"]].map(([s,lbl])=>{const sm2=IRT_SM[s];const active=form.status===s||(form.status==="untested"&&s===autoSt&&s!=="untested");return React.createElement("button",{key:s,style:{flex:1,padding:"12px 4px",borderRadius:8,fontSize:12,fontWeight:800,cursor:"pointer",border:`2px solid ${active?sm2.border:"#d4d4d8"}`,background:active?sm2.bg:"#f7f6f3",color:active?sm2.fg:"#52525b",boxShadow:active?`0 0 8px ${sm2.border}66`:"none"},onClick:()=>pf({status:s})},lbl);})
       )
     ),
+    // Date tested (only once the item has a result) + its next due (PASS / FAIL only)
+    irtHasResult(form)&&React.createElement(ItemDateField,{date:existing.lastTested||"",onChange:v=>pf({lastTested:v}),S:SS}),
+    React.createElement(ItemDueBanner,{iso:itemDue({status:effectiveSt,lastTested:existing.lastTested},meta.testDate,meta.nextTestDate,d=>addYearsISO(d,1)),accent:"#1d4ed8"}),
     // Comments
     isFail&&React.createElement("div",{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}},
       React.createElement("div",{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"\u26a0 FAIL \u2014 DEFECT DETAILS"),
@@ -13888,7 +13895,10 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const area=project&&(project.areas||[]).find(a=>a.id===activeAreaId)||null;
   const panel=area&&(area.panels||[]).find(p=>p.id===activePanelId)||null;
   const summary=project?irtSiteSummary(allResults,project):{total:0,pass:0,fail:0,untested:0};
-  const patchItem=(areaId,panelId,itemId,data)=>{const pid=activeProject;setAllResults(prev=>({...prev,[pid]:{...(prev[pid]||{}),[areaId]:{...((prev[pid]||{})[areaId]||{}),[panelId]:{...(((prev[pid]||{})[areaId]||{})[panelId]||{}),[itemId]:data}}}}));};
+  const patchItem=(areaId,panelId,itemId,data)=>{const pid=activeProject;setAllResults(prev=>{
+    const old=((((prev[pid]||{})[areaId]||{})[panelId]||{})[itemId])||{};
+    const next=itemDateApply(("lastTested" in data)||!old.lastTested?data:{...data,lastTested:old.lastTested},irtHasResult,meta.testDate||localISODate());   // the page sends its whole form (it holds no date of its own): keep the stored date unless the date itself was edited
+    return {...prev,[pid]:{...(prev[pid]||{}),[areaId]:{...((prev[pid]||{})[areaId]||{}),[panelId]:{...(((prev[pid]||{})[areaId]||{})[panelId]||{}),[itemId]:next}}}};});};
   const archiveAudit=()=>{const snap={id:irtUid(),projectId:activeProject,projectName:project?.name||"",testDate:meta.testDate||"",auditor:meta.auditor||"",archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};setHistory(prev=>[snap,...prev].slice(0,100));};
   const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);};
   const clearSnap=()=>{setViewSnap(null);setViewArea(null);setViewPanel(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
@@ -13935,7 +13945,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       view==="audit"&&project&&!showGate&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
       !showGate&&view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
       !showGate&&view==="panel"&&panel&&React.createElement(IRTItemListView,{panel,area,project,results:allResults,onSelect:(itemId,name)=>{setActiveItemId(itemId);setActiveItemName(name);setView("item");},onBack:()=>{setActivePanelId(null);setView("area");}}),
-      !showGate&&view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");},onShowGuide:()=>setShowGuide(true)}),
+      !showGate&&view==="item"&&panel&&activeItemId&&React.createElement(IRTItemPage,{itemId:activeItemId,itemName:activeItemName,panel,area,project,results:allResults,dropdowns:irtDropdowns,meta,warnDismissed:irtWarnDismissed,onDismissWarn:()=>setIrtWarnDismissed(true),onPatch:patchItem,onBack:()=>{setActiveItemId(null);setView("panel");},onShowGuide:()=>setShowGuide(true)}),
       view==="report"&&project&&React.createElement(IRTReportView,{project,results:allResults,meta,onBack:()=>setView("home")}),
       view==="manage"&&project&&React.createElement(IRTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")}),
       view==="dropdowns"&&React.createElement(IRTDropdownsView,{dropdowns:irtDropdowns,setDropdowns:setIrtDropdowns,onBack:()=>setView("home")}),
@@ -15971,7 +15981,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
