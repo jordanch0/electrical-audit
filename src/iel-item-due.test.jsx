@@ -52,7 +52,7 @@ describe('export: the "Next Test Due" column matches header row 4 once a date is
   });
 });
 
-describe('real UI: save meta, change ONLY the test date -> items keep lastTested + 3 months; a chosen date shows per item (and OVERDUE when past)', () => {
+describe('real UI: save meta, change ONLY the test date -> items keep lastTested + 3 months; a chosen date shows per item', () => {
   const project = { id: 'p1', name: 'Example Quarry', company: '', abn: '', licence: '', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'e1', name: 'estops', circuits: ['x'], machineNames: { x: 'Conv 1' } }] }] };
   const results = { p1: { a: { estops: { x: { status: 'pass', lastTested: '2026-07-13' } } } } };
   const ls = k => JSON.parse(localStorage.getItem(k));
@@ -89,15 +89,17 @@ describe('real UI: save meta, change ONLY the test date -> items keep lastTested
     expect(await screen.findByText('Due: 01/02/2027')).toBeTruthy();
     expect(screen.queryByText('Due: 13/10/2026')).toBeNull();
   });
-  it('a chosen date in the past marks the tested item OVERDUE', async () => {
+  it('a chosen date in the past is shown as the plain due date: no OVERDUE / DUE SOON flag, in the list or on the item page', async () => {
     const user = await open({ auditor: 'J', testDate: '2026-07-13', nextTestDate: '2020-01-01', notes: '' });
     await openItemList(user);
     expect(await screen.findByText('Due: 01/01/2020')).toBeTruthy();
-    expect(screen.getByText('OVERDUE')).toBeTruthy();
+    expect(screen.queryByText(/OVERDUE|DUE SOON/)).toBeNull();
+    await user.click(screen.getByText('Conv 1'));
+    expect(await screen.findByText('NEXT TEST DUE:')).toBeTruthy(); expect(screen.getByText('01/01/2020')).toBeTruthy(); expect(screen.queryByText(/OVERDUE|DUE SOON/)).toBeNull();
   });
 });
 
-// No interval wording in the IEL screens: the auditor can pick any next-due date, so "3-month cycle" could contradict it. Only the real "Due:" date and the OVERDUE / DUE SOON badges say when.
+// No interval wording in the IEL screens: the auditor can pick any next-due date, so "3-month cycle" could contradict it. Only the real "Due:" date says when.
 describe('IEL screens carry no hard-coded interval wording', () => {
   const INTERVAL = /\b(3|three)[- ]?month(ly|s)?\b|quarterly|every 3 months|\bcycle\b/i;
   const project = { id: 'p1', name: 'Example Quarry', company: 'Example Electrical Pty Ltd', abn: '', licence: '', areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'e1', name: 'estops', circuits: ['x'], machineNames: { x: 'Conv 1' } }] }] };

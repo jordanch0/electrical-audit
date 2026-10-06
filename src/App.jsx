@@ -2927,12 +2927,6 @@ const IEL_SM = {
 
 function ielUid()  { return Math.random().toString(36).slice(2,9); }
 function ielSlug(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,20)+"-"+ielUid(); }
-// Due flags compare LOCAL calendar dates (YYYY-MM-DD strings): an item due today is not overdue and is due soon; it is overdue from the next local day. "Soon" = today up to 14 local days
-// on (the 14 is added with the Date constructor, so a clock-change day cannot shift it). Any zone, any time of day.
-// <dueDates>
-function isOverdue(d){ const due = isoFromDateText(d); return !!due && due < localISODate(); }
-function isDueSoon(d){ const due = isoFromDateText(d); if(!due) return false; const t = new Date(); return due >= localISODate(t) && due <= localISODate(new Date(t.getFullYear(), t.getMonth(), t.getDate() + 14)); }
-// </dueDates>
 
 // ═════════════════════════════════════════════════════════════════════════
 // ITEM DATES + THE HOME-DATE FOLLOW (2026-10) — one model for every module.
@@ -3834,9 +3828,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
         const st=d.status||IEL_STATUS.UNTESTED;
         const sm=IEL_SM[st]||IEL_SM.untested;
         const machineName=machineNames[itemId]||itemId;
-        const _due=ielItemDue(d,meta);const nextDueISO=_due.iso;const nextDue=_due.label||null;
-        const overdue=nextDueISO&&isOverdue(nextDueISO);
-        const dueSoon=nextDueISO&&!overdue&&isDueSoon(nextDueISO);
+        const nextDue=ielItemDue(d,meta).label||null;
         const hasNote=!!(d.notes);
         return React.createElement('div',{key:itemId,style:{display:"flex",alignItems:"stretch",background:sm.bg,border:`2px solid ${sm.border}`,borderRadius:12,overflow:"hidden",cursor:"pointer",boxShadow:st!==IEL_STATUS.UNTESTED?`0 0 10px ${sm.border}44`:"none"},onClick:()=>onOpenDetail(itemId)}
           ,React.createElement('div',{style:{width:64,flexShrink:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"12px 4px",borderRight:`1px solid ${sm.border}44`}}
@@ -3845,12 +3837,10 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
           ,React.createElement('div',{style:{flex:1,padding:"12px 14px",minWidth:0}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
               ,React.createElement('span',{style:{fontSize:14,fontWeight:800,color:"#18181b"}},machineName)
-              ,overdue&&React.createElement(StatusPill,{kind:"fail",label:"OVERDUE",alert:true,compact:true})
-              ,dueSoon&&React.createElement(StatusPill,{kind:"warn",label:"DUE SOON",alert:true,compact:true})
             )
             ,React.createElement('div',{style:{display:"flex",gap:10,marginTop:4,fontSize:11,color:"#52525b",flexWrap:"wrap"}}
               ,d.lastTested&&React.createElement('span',null,"Tested: ",fmtDate(d.lastTested))
-              ,nextDue&&React.createElement('span',{style:{color:overdue?"#b91c1c":dueSoon?"#92400e": "#52525b"}},"Due: ",nextDue)
+              ,nextDue&&React.createElement('span',{style:{color:"#52525b"}},"Due: ",nextDue)
             )
             ,React.createElement('div',{style:{display:"flex",gap:6,marginTop:6}}
               ,React.createElement('span',{style:{fontSize:10,color:d.mechCheck?"#166534":"#52525b",fontWeight:600}},d.mechCheck?"✓":"○"," Mech")
@@ -3923,8 +3913,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
     onPatch({status:s});                                                    // the date is set by patchItem: first result = the Home date, a changed result keeps it, "—" clears it
   };
 
-  const _due=ielItemDue(item,meta);const nextDue=_due.label||null;const nextDueISO=_due.iso;
-  const overdue=nextDueISO&&isOverdue(nextDueISO);
+  const nextDue=ielItemDue(item,meta).label||null;
   const sm=IEL_SM[item.status||IEL_STATUS.UNTESTED]||IEL_SM.untested;
 
   return React.createElement('div',{style:{flex:1,overflowY:"auto",padding:"16px",background:"#e8e6e2",minHeight:"100%"}}
@@ -4001,10 +3990,9 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
       ,itemHasStatus(item)&&React.createElement(ItemDateField,{date:item.lastTested||"",onChange:v=>onPatch({lastTested:v}),S:SI})
 
       // Next due
-      ,nextDue&&React.createElement('div',{style:{display:"flex",alignItems:"center",background:overdue?"#fee2e2":"#e8e6e2",border:`1px solid ${overdue?"#fca5a5":"#10b98133"}`,borderRadius:8,padding:"10px 14px",marginBottom:14}}
+      ,nextDue&&React.createElement('div',{style:{display:"flex",alignItems:"center",background:"#e8e6e2",border:"1px solid #10b98133",borderRadius:8,padding:"10px 14px",marginBottom:14}}
         ,React.createElement('span',{style:{color:"#52525b",fontSize:11}},"NEXT TEST DUE:")
-        ,React.createElement('span',{style:{color:overdue?"#991b1b":"#047857",fontWeight:800,fontSize:13,marginLeft:8}},nextDue)
-        ,overdue&&React.createElement('span',{style:{fontSize:11,fontWeight:800,color:"#991b1b",marginLeft:8}},"⚠ OVERDUE")
+        ,React.createElement('span',{style:{color:"#047857",fontWeight:800,fontSize:13,marginLeft:8}},nextDue)
       )
 
       // Notes
@@ -15985,7 +15973,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, isOverdue, isDueSoon, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
