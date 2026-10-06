@@ -1,6 +1,6 @@
 // THE HOME-DATE FOLLOW (all nine modules): a site's Home date follows the device's local date. meta.dateDay = the local day the Home date was last set AUTOMATICALLY.
 // On a check (open / return to the foreground / the local-midnight timer) a site whose dateDay is not today gets today's date; a MANUAL edit changes only the date, so it holds
-// until the next day change; a stored next-due that is only the DEFAULT for the old date moves with it, a chosen one stays; Reset and Complete no longer set the Home date.
+// until the next day change; a stored next-due that is only the DEFAULT for the old date moves with it, a chosen one stays; Reset and Complete Audit set it back to today (homeDateRelease: see home-date-release.test.jsx); the follow and a manual edit are as before.
 // The follow never creates a meta record, never touches results / History / the active flag / the gate, and leaves orphan records alone. (FICTIONAL data.)
 // Only Date is faked (built from LOCAL components, so any zone); the zone cases of the midnight maths run in CHILD processes with TZ set (see local-date.test.jsx for why).
 import React from 'react';
@@ -146,19 +146,20 @@ describe('the follow with no meta record: none is created, and the Home screen s
   });
 });
 
-describe('Reset and Complete no longer set the Home date (the six Home screens with a Reset), and the follow waits for the backfill', () => {
+describe('The follow waits for the backfill (and Reset releases a hand-edited Home date, six modules here; all nine in home-date-release.test.jsx)', () => {
   const HOMES = [['rcd', 'Reset all test results'], ['iel', 'Reset all test results'], ['tat', 'Reset all test results'], ['thermo', 'Reset all photo logs'], ['swb', 'Reset all test results'], ['irt', 'Reset all test results']];
-  it.each(HOMES)('%s: after Reset the Home date is what the auditor set it to (it used to jump to today)', async (mod, idle) => {
+  it.each(HOMES)('%s: after Reset the Home date is back to today (the hand-edit is released)', async (mod, idle) => {
     const f = MODULES.find(m => m.mod === mod); const spec = HOME_DATE_SPECS[mod]; localStorage.clear();
     at(2026, 10, 5); const meta = { auditor: 'Jane', dateDay: '2026-10-05', notes: '' }; spec.forEach(x => { meta[x.test] = '2026-09-01'; });                       // edited to 1 Sep today
     rawSetItem(f.keys.p, JSON.stringify(f.project)); rawSetItem(f.keys.m, JSON.stringify({ s1: meta })); rawSetItem(f.keys.r, JSON.stringify({ s1: clone(f.live) }));
     const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByText(f.tile, { exact: true })); await user.click(await screen.findByText('Site One', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: idle })); await user.click(within((await screen.findByText(/^Reset all (results|photo logs)\?$/)).parentElement).getByRole('button', { name: 'Reset' }));
-    await waitFor(() => expect(ls(f.keys.r).s1).toEqual({})); spec.forEach(x => expect(ls(f.keys.m).s1[x.test]).toBe('2026-09-01'));
+    await waitFor(() => expect(ls(f.keys.r).s1).toEqual({})); spec.forEach(x => expect(ls(f.keys.m).s1[x.test]).toBe('2026-10-05'));
   });
-  it('source: no Reset / Complete handler writes a Home date any more', () => {
+  it('source: Reset / Complete set the Home date only through homeDateRelease (no hand-written testDate: localISODate())', () => {
     expect(/\.\.\.prev\[activeProject\],[^}\n]*\b(testDate|pushDate|injectDate)\s*:\s*(localISODate\(\)|today\(\))/.test(APP)).toBe(false);
     expect(/\.\.\.meta,\s*testDate:\s*localISODate\(\)/.test(APP)).toBe(false);
+    expect((APP.match(/homeDateRelease\("/g) || []).length).toBeGreaterThanOrEqual(15);   // every Reset / Complete handler: RCD, IEL, TAT, Thermo, SWB, IRT x2 each; ELT / Welder via clearSiteResults; GSD via freshVisit
   });
   it('the follow waits for the backfill: while a module is not marked ready (the backfill did not succeed) its Home date is NOT moved, and it moves as soon as it is ready', async () => {
     const f = MODULES.find(m => m.mod === 'iel'); at(2026, 10, 5);
