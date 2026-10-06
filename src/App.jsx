@@ -3025,10 +3025,10 @@ function ItemDueBanner({ iso, accent }) {
     , React.createElement('span', { style: { color: accent, fontWeight: 800, fontSize: 13, marginLeft: 8 } }, fmtDate(iso)));
 }
 // The item page's DATE TESTED: the shared overlay DateBox, in the module's own field style S. Shown only once the item has a result (the caller decides).
-function ItemDateField({ date, onChange, S }) {
+function ItemDateField({ date, onChange, S, label = "DATE TESTED", ariaLabel = "Date tested" }) {
   return React.createElement('div', { style: S.modalField }
-    , React.createElement('label', { style: S.modalLabel }, "DATE TESTED")
-    , React.createElement(DateBox, { value: date, onChange, ariaLabel: "Date tested", boxStyle: S.modalInput }));
+    , React.createElement('label', { style: S.modalLabel }, label)
+    , React.createElement(DateBox, { value: date, onChange, ariaLabel, boxStyle: S.modalInput }));
 }
 
 // (b) THE HOME-DATE FOLLOW. A site's Home date follows the device's local date: each stored meta carries dateDay = the local day its Home date was last set automatically. On a
@@ -15504,7 +15504,7 @@ const gsdPageSetupFixed = sheet => {
 async function exportGSDExcel(project, items, meta) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
   const logo = await xjGetLogoDataUrl("gsd", project.id); const off = 1;   // the shared header always reserves row 1 (logo row); `put` below is relative to the header
-  const sName = project.name || "Site"; const testDate = m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(testDate, 1);
+  const sName = project.name || "Site"; const testDate = earliestIso((items || []).map(i => i.lastTested)) || m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(m.testDate || "", 1);   // Date Tested = the earliest DATE LOGGED; the Next Audit Due is unchanged (a defect has no due of its own)
   const hdr = xjHdr("gsd", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: m.auditor, testDate: testDate ? fmtDate(testDate) : "", nextDue: nextDue ? fmtDate(nextDue) : "", logo });
   const sections = gsdReportSections(project, items);
   // the export copies of every photo, read from IndexedDB (a missing one is skipped, its space kept)
@@ -15544,9 +15544,9 @@ async function exportGSDExcel(project, items, meta) {
   // ── Sheet 2: the flat Register (one row per defect; # matches the report) ──
   const numbered = gsdNumbered(project, items);
   xjSheet(wb, "Register", { hdr,
-    headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Fix By Date", "Photos"],
-    widths: [5, 20, 22, 22, 46, 10, 18, 13, 8],
-    rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
+    headers: ["#", "Area", "Asset Location", "Category", "Description", "Priority", "Responsibility", "Date Logged", "Fix By Date", "Photos"],
+    widths: [5, 20, 22, 22, 46, 10, 18, 13, 13, 8],
+    rows: numbered.map(({ item, n, area }) => [n, area.name, item.assetLocation || "", item.category || "", item.description || "", item.priority || "", item.responsibility || "", item.lastTested ? fmtDate(item.lastTested) : "", item.dueDate ? fmtDate(item.dueDate) : "", (item.photos || []).length]),
     emptyText: "No defects recorded", landscape: true });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
@@ -15599,14 +15599,14 @@ function GSDApp({ onGoHome }) {
   const showGate = gateArmed || !auditActive || auditorIsBlank(allMeta, activeProject);     // armed by Back, nothing started, or a blank auditor (Continue is then disabled)
 
   const setItems = fn => setAllItems(prev => ({ ...prev, [activeProject]: fn(prev[activeProject] || []) }));
-  const patchItem = (id, patch) => setItems(list => list.map(i => i.id === id ? { ...i, ...patch } : i));
+  const patchItem = (id, patch) => setItems(list => list.map(i => i.id === id ? itemDateApply({ ...i, ...patch }, () => true, meta.testDate || localISODate()) : i));   // a defect always has its date (DATE LOGGED)
   const respDefault = (dropdowns.responsibility || [])[0] || "";
   // A new defect is created FROM its photos (photo-first), then its detail page opens.
   const addDefect = async (areaId, files) => {
     if (!files || !files.length) return;
     try {
       const photos = await gsdStorePhotos(Array.from(files)); setPhotoError("");
-      const item = { ...gsdBlankItem(areaId, respDefault), photos };
+      const item = { ...gsdBlankItem(areaId, respDefault), photos, lastTested: meta.testDate || localISODate() };   // logged = the Home date
       setItems(list => [...list, item]); setActiveItemId(item.id); setView("item");
     } catch (_) { setPhotoError("Photos could not be saved — this browser's photo storage is unavailable or full."); }
   };
@@ -15623,7 +15623,7 @@ function GSDApp({ onGoHome }) {
   // Duplicate: every field EXCEPT the photos (a clone is a similar issue somewhere else, so the original's photos would be the wrong evidence)
   const cloneItem = (id, areaId) => {
     const src = items.find(i => i.id === id); if (!src) return null;
-    const copy = { ...src, id: uid(), areaId, photos: [] };
+    const copy = { ...src, id: uid(), areaId, photos: [], lastTested: meta.testDate || localISODate() };   // a duplicate is a NEW defect: logged now
     setItems(list => [...list, copy]); return copy.id;
   };
   const [historyError, setHistoryError] = React.useState("");
@@ -15856,6 +15856,7 @@ function GSDItemPage({ project, item, num, dropdowns, photoError, onPatch, onAdd
       , ["", ...PRIORITY_OPTIONS].map(p => gsdEl("button", { key: p || "none", style: { padding: "10px 14px", background: (r.priority || "") === p ? (p ? PRIORITY_BG[p] : "#f1f5f9") : "#f7f6f3", color: (r.priority || "") === p ? (p ? PRIORITY_FG[p] : "#334155") : "#52525b", border: `1px solid ${(r.priority || "") === p ? (p ? PRIORITY_COLORS[p] : "#94a3b8") : "#e4e4e7"}`, borderRadius: 8, fontSize: 12, fontWeight: 700, cursor: "pointer" }, onClick: () => set({ priority: p }) }, p ? `${p} — ${PRIORITY_LABELS[p]}` : "None"))))
     , field("RESPONSIBILITY", gsdEl(IELEditableDropdown, { options: respOpts, value: r.responsibility || "", onChange: v => set({ responsibility: v }), placeholder: "Select or type…" }))
     , field("ASSET LOCATION", gsdEl("input", { style: SS.modalInput, type: "text", value: r.assetLocation || "", placeholder: "e.g. Screen deck, pit pump control board", "aria-label": "Asset location", onChange: e => set({ assetLocation: e.target.value }) }))
+    , gsdEl(ItemDateField, { date: item.lastTested || "", onChange: v => set({ lastTested: v }), S: SS, label: "DATE LOGGED", ariaLabel: "Date logged" })
     , field("FIX BY DATE (informational)", gsdEl(DateBox, { value: r.dueDate || "", ariaLabel: "Fix by date", boxStyle: SS.modalInput, onChange: v => set({ dueDate: v }) }))
     , gsdEl("div", { ref: bottomRef, "data-testid": "gsd-bottom", style: { paddingBottom: 12 } }
     , picker === "duplicate" && gsdEl(GSDAreaPicker, { title: "Duplicate into which area?", areas: project.areas, currentId: item.areaId, emptyText: "No areas.", boxRef: pickerRef, onPick: id => { setPicker(null); onClone(id); }, onCancel: () => setPicker(null) })

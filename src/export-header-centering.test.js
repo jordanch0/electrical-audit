@@ -137,12 +137,12 @@ describe('Export header block: the direct-write sheets use the SAME shared heade
     expect(String(def.getCell(6, 1).value)).toBe('#'); expect(String(ph.getCell(6, 1).value)).toBe('Location');
   });
 
-  it('GSD Defects Report (5 cols) and Register (9 cols): identical rows 1-5, "Date Tested" (not "Date Audited"); the report content starts on row 6', async () => {
+  it('GSD Defects Report (5 cols) and Register (10 cols): identical rows 1-5, "Date Tested" (not "Date Audited"); the report content starts on row 6', async () => {
     const project = { id: 'p', name: 'Site G', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a1', name: 'Area 1' }] };
     const items = [{ id: 'i1', areaId: 'a1', assetLocation: 'x', category: 'c', commonDefect: '', description: 'd', photos: [], priority: 'H', responsibility: '', dueDate: '' }];
     const wb = await load(exportGSDExcel, project, items, { auditor: 'J', testDate: '2026-09-21', nextTestDate: '2027-09-21' });
     const rep = wb.getWorksheet('Defects Report'); const reg = wb.getWorksheet('Register');
-    expectSharedHeader(rep, 5); expectSharedHeader(reg, 9);
+    expectSharedHeader(rep, 5); expectSharedHeader(reg, 10);
     [rep, reg].forEach(ws => {
       expect(String(ws.getCell(2, 1).value)).toBe('Site G  –  General Site Defects  (Punch-List Report)');
       expect(String(ws.getCell(4, 1).value)).toBe('Auditor: J  |  Date Tested: 21/09/2026  |  Next Audit Due: 21/09/2027');

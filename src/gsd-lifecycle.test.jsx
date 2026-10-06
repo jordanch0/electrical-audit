@@ -301,11 +301,11 @@ describe('export: photo report + Register', () => {
     await exportGSDExcel(project, items, meta); expect((await readExport()).getWorksheet('Defects Report').getImages()).toHaveLength(1);
   });
   it('Register: one row per defect, # matching the report (area order), Priority coloured with the shared swbXPC palette, landscape', async () => {
-    const items = [mkI('i1', 'a2', [[300, 400]], { priority: 'U' }), mkI('i2', 'a1', [[300, 400], [300, 400]], { priority: '', dueDate: '' })]; await seedPhotos(items);
+    const items = [mkI('i1', 'a2', [[300, 400]], { priority: 'U', lastTested: '2026-09-22' }), mkI('i2', 'a1', [[300, 400], [300, 400]], { priority: '', dueDate: '', lastTested: '2026-09-21' })]; await seedPhotos(items);
     await exportGSDExcel(project, items, meta); const ws = (await readExport()).getWorksheet('Register');
-    expect(ws.getRow(6).values.slice(1)).toEqual(['#', 'Area', 'Asset Location', 'Category', 'Description', 'Priority', 'Responsibility', 'Fix By Date', 'Photos']);   // headings on row 6 (shared header rows 1-5)
-    expect(ws.getRow(7).values.slice(1)).toEqual([1, 'Concrete Plant', 'Loc i2', 'Guarding', 'Defect i2', '', 'Site Manager', '', 2]);      // area order first: the a1 defect is #1
-    expect(ws.getRow(8).values.slice(1)).toEqual([2, 'Workshop', 'Loc i1', 'Guarding', 'Defect i1', 'U', 'Site Manager', '31/10/2026', 1]);
+    expect(ws.getRow(6).values.slice(1)).toEqual(['#', 'Area', 'Asset Location', 'Category', 'Description', 'Priority', 'Responsibility', 'Date Logged', 'Fix By Date', 'Photos']);   // headings on row 6 (shared header rows 1-5)
+    expect(ws.getRow(7).values.slice(1)).toEqual([1, 'Concrete Plant', 'Loc i2', 'Guarding', 'Defect i2', '', 'Site Manager', '21/09/2026', '', 2]);      // area order first: the a1 defect is #1
+    expect(ws.getRow(8).values.slice(1)).toEqual([2, 'Workshop', 'Loc i1', 'Guarding', 'Defect i1', 'U', 'Site Manager', '22/09/2026', '31/10/2026', 1]);
     expect(ws.getCell('F8').fill.fgColor.argb).toBe('FF9B0000');
     expect(ws.pageSetup).toMatchObject({ orientation: 'landscape', fitToPage: true, fitToWidth: 1 }); expect(ws.getColumn(8).width).toBeGreaterThanOrEqual(13);
   });
