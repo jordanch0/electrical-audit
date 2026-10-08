@@ -15999,9 +15999,173 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
     }));
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP / RESTORE — core (Stage 1: BUILD a backup file and INSPECT one; no UI, nothing here writes to storage)
+// ═════════════════════════════════════════════════════════════════════════
+// One plain .zip, SparkCheck-backup-YYYY-MM-DD.zip: manifest.json (the envelope: format, formatVersion, appVersion = the build id, createdAtUtc, deviceLocalDate, utcOffsetMinutes, per-entry
+// size + SHA-256), data.json ({ localStorageKey: rawJsonText } for every key this app owns) and files/<store>/<n>.bin (one entry per IndexedDB record: photos, thumbnails, logos). Entries are
+// written and read ONE AT A TIME (see the zip helpers), so memory stays bounded by the largest single record, not the archive. Photos are optional; logos and data are always included.
+const BACKUP_FORMAT = "sparkcheck-backup", BACKUP_FORMAT_VERSION = 1;
+const BACKUP_APP_VERSION = typeof __BUILD_ID__ !== "undefined" ? __BUILD_ID__ : "dev";
+// Minimal STORE-only ZIP (no dependency, no compression: photos are JPEG and data.json is small). A valid .zip any tool can open. Entries are written and read ONE AT A TIME.
+const ZIP_CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function zipCrc32(u8) { let c = 0xFFFFFFFF; for (let i = 0; i < u8.length; i++) c = ZIP_CRC_TABLE[(c ^ u8[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+// DOS date / time of a Date (local components; years before 1980 are clamped)
+function zipDosStamp(d) { const y = Math.max(1980, d.getFullYear()); return { time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date: ((y - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() }; }
+// Incremental writer: add(name, bytes) appends one entry (the bytes can be released as soon as add() returns), finish() returns the Blob. The archive is a Blob built by reference (Blob-of-Blob), so
+// memory stays near ONE entry plus the browser's own blob store.
+function zipWriter(now = new Date()) {
+  const enc = new TextEncoder(); const stamp = zipDosStamp(now); const central = []; let blob = new Blob([]); let offset = 0; const names = new Set();
+  return {
+    add(name, bytes) {
+      if (names.has(name)) throw new Error("duplicate zip entry " + name); names.add(name);
+      const nameB = enc.encode(name); const size = bytes.length >>> 0; const crc = zipCrc32(bytes);
+      if (offset + size + nameB.length + 30 > 0xFFFFFFFF - 1024 || central.length >= 0xFFFE) throw new Error("backup too large for a plain zip");
+      const h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true); h.setUint16(10, stamp.time, true); h.setUint16(12, stamp.date, true);
+      h.setUint32(14, crc, true); h.setUint32(18, size, true); h.setUint32(22, size, true); h.setUint16(26, nameB.length, true); h.setUint16(28, 0, true);
+      blob = new Blob([blob, h.buffer, nameB, bytes]); central.push({ nameB, crc, size, offset }); offset += 30 + nameB.length + size;
+    },
+    finish() {
+      const parts = []; let cdSize = 0;
+      for (const e of central) {
+        const c = new DataView(new ArrayBuffer(46)); c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true); c.setUint16(12, stamp.time, true); c.setUint16(14, stamp.date, true);
+        c.setUint32(16, e.crc, true); c.setUint32(20, e.size, true); c.setUint32(24, e.size, true); c.setUint16(28, e.nameB.length, true); c.setUint32(42, e.offset, true);
+        parts.push(c.buffer, e.nameB); cdSize += 46 + e.nameB.length;
+      }
+      const t = new DataView(new ArrayBuffer(22)); t.setUint32(0, 0x06054b50, true); t.setUint16(8, central.length, true); t.setUint16(10, central.length, true); t.setUint32(12, cdSize, true); t.setUint32(16, offset, true);
+      return new Blob([blob, ...parts, t.buffer], { type: "application/zip" });
+    },
+  };
+}
+// Reader over a Blob / File: reads only the end record + the central directory, then each entry's bytes on demand (Blob.slice), so a 100 MB archive is never in memory at once.
+async function zipOpen(blob) {
+  const fail = m => { const e = new Error(m); e.code = "zip"; throw e; };
+  if (!blob || typeof blob.size !== "number" || blob.size < 22) fail("not a zip file");
+  const tailLen = Math.min(blob.size, 65557); const tail = new DataView(await blob.slice(blob.size - tailLen).arrayBuffer());
+  let p = -1; for (let i = tailLen - 22; i >= 0; i--) if (tail.getUint32(i, true) === 0x06054b50) { p = i; break; }
+  if (p < 0) fail("not a zip file (no end record)");
+  const count = tail.getUint16(p + 10, true), cdSize = tail.getUint32(p + 12, true), cdOff = tail.getUint32(p + 16, true);
+  if (count === 0xFFFF || cdSize === 0xFFFFFFFF || cdOff === 0xFFFFFFFF) fail("zip64 archives are not supported");
+  if (cdOff + cdSize > blob.size) fail("zip directory is outside the file");
+  const cd = new DataView(await blob.slice(cdOff, cdOff + cdSize).arrayBuffer()); const dec = new TextDecoder(); const entries = new Map(); let q = 0;
+  for (let n = 0; n < count; n++) {
+    if (q + 46 > cd.byteLength || cd.getUint32(q, true) !== 0x02014b50) fail("zip directory is damaged");
+    const method = cd.getUint16(q + 10, true), crc = cd.getUint32(q + 16, true), csize = cd.getUint32(q + 20, true), size = cd.getUint32(q + 24, true), nl = cd.getUint16(q + 28, true), xl = cd.getUint16(q + 30, true), cl = cd.getUint16(q + 32, true), off = cd.getUint32(q + 42, true);
+    const name = dec.decode(new Uint8Array(cd.buffer, q + 46, nl)); q += 46 + nl + xl + cl;
+    if (method !== 0) fail("this backup uses compression, which this app does not read"); if (csize !== size) fail("zip entry sizes disagree");
+    if (entries.has(name)) fail("duplicate zip entry " + name); entries.set(name, { name, crc, size, off });
+  }
+  async function bytes(name) {
+    const e = entries.get(name); if (!e) fail("missing zip entry " + name);
+    const lh = new DataView(await blob.slice(e.off, e.off + 30).arrayBuffer()); if (lh.byteLength < 30 || lh.getUint32(0, true) !== 0x04034b50) fail("zip entry header is damaged");
+    const start = e.off + 30 + lh.getUint16(26, true) + lh.getUint16(28, true); if (start + e.size > blob.size) fail("zip entry is truncated");
+    const u8 = new Uint8Array(await blob.slice(start, start + e.size).arrayBuffer()); if (zipCrc32(u8) !== e.crc) fail("zip entry " + name + " is damaged (checksum mismatch)"); return u8;
+  }
+  return { names: () => [...entries.keys()], has: n => entries.has(n), size: n => (entries.get(n) || {}).size, bytes };
+}
+const backupFilename = (d = new Date()) => `SparkCheck-backup-${localISODate(d)}.zip`;
+// The localStorage keys this app OWNS. Anything else on the origin is ignored (and listed); the temporary `*-preMigration-v1` recovery copies are deliberately left out (they duplicate results).
+const BACKUP_MODULES = ["rcd", "iel", "tat", "thermo", "swb", "irt", "elt", "welder", "gsd"];
+const BACKUP_KEY_RE = new RegExp("^(?:(?:" + BACKUP_MODULES.join("|") + ")-(?:projects|results|meta|history|dropdowns|audit-active|items|photos-migrated)-v\\d+|rcd-mode-v\\d+|iel-cat-v\\d+|tat-(?:settings|freqs|names|defaults)-v\\d+|cal-events-v\\d+|app-settings-v\\d+)$");
+const backupKeyAllowed = k => typeof k === "string" && BACKUP_KEY_RE.test(k);
+const backupKeyExcluded = k => typeof k === "string" && /-preMigration-v\d+$/.test(k);
+function backupCollectLocalStorage(storage = localStorage) {
+  const entries = {}, unknown = [], excluded = [];
+  for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; if (backupKeyExcluded(k)) excluded.push(k); else if (backupKeyAllowed(k)) entries[k] = storage.getItem(k) || ""; else unknown.push(k); }
+  return { entries, unknown: unknown.sort(), excluded: excluded.sort() };
+}
+// The four IndexedDB databases (one object store each). Opened exactly as the app opens them (same version + store), so reading never changes their shape.
+const BACKUP_STORES = [
+  { id: "site-photos", db: SITE_PHOTO_DB_NAME, store: SITE_PHOTO_DB_STORE, photos: true },     // ELT / Welder / SWB photos (full under id, thumbnail under id~t)
+  { id: "gsd-photos", db: GSD_DB_NAME, store: GSD_DB_STORE, photos: true },                    // GSD photos
+  { id: "app-logo", db: APP_LOGO_DB_NAME, store: APP_LOGO_DB_STORE, photos: false },           // the global logo
+  { id: "site-logos", db: SITE_LOGO_DB_NAME, store: SITE_LOGO_DB_STORE, photos: false },       // per-site logos
+];
+function backupIdbOpen(name, store) {
+  return new Promise((res, rej) => {
+    if (typeof indexedDB === "undefined") { res(null); return; }
+    const rq = indexedDB.open(name, 1); rq.onupgradeneeded = () => rq.result.createObjectStore(store); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+  });
+}
+const backupIdbReq = (db, store, mode, fn) => new Promise((res, rej) => { const tx = db.transaction(store, mode); const r = fn(tx.objectStore(store)); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+const backupIdbKeys = (db, store) => backupIdbReq(db, store, "readonly", s => s.getAllKeys());
+const backupIdbGet = (db, store, key) => backupIdbReq(db, store, "readonly", s => s.get(key));
+const backupToHex = u8 => Array.from(u8, b => b.toString(16).padStart(2, "0")).join("");
+async function backupSha256(u8) {
+  if (!(typeof crypto !== "undefined" && crypto.subtle)) throw Object.assign(new Error("Backup needs a secure (https) page."), { code: "no-crypto" });
+  return backupToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", u8)));
+}
+// Builds the backup. Returns { blob, filename, manifest }. Reads storage only.
+async function backupBuild({ includePhotos = true, now = new Date(), storage = localStorage } = {}) {
+  const w = zipWriter(now), enc = new TextEncoder();
+  const { entries, unknown, excluded } = backupCollectLocalStorage(storage);
+  const dataBytes = enc.encode(JSON.stringify(entries));
+  w.add("data.json", dataBytes);
+  const manifest = {
+    format: BACKUP_FORMAT, formatVersion: BACKUP_FORMAT_VERSION, appVersion: BACKUP_APP_VERSION, createdAtUtc: now.toISOString(), deviceLocalDate: localISODate(now), utcOffsetMinutes: -now.getTimezoneOffset(),
+    includesPhotos: !!includePhotos, localStorage: { file: "data.json", keyCount: Object.keys(entries).length, size: dataBytes.length, sha256: await backupSha256(dataBytes) },
+    stores: {}, notBackedUp: { unknownKeys: unknown, excludedKeys: excluded },
+  };
+  for (const st of BACKUP_STORES) {
+    manifest.stores[st.id] = []; if (st.photos && !includePhotos) continue;
+    const db = await backupIdbOpen(st.db, st.store); if (!db) continue;
+    try {
+      const keys = await backupIdbKeys(db, st.store);
+      for (const key of keys) {
+        const rec = await backupIdbGet(db, st.store, key); if (!rec || !rec.buf) continue;       // a record without bytes is not a photo / logo: skipped
+        const bytes = new Uint8Array(rec.buf); const file = `files/${st.id}/${manifest.stores[st.id].length}.bin`;
+        manifest.stores[st.id].push({ key: String(key), file, type: String(rec.type || ""), size: bytes.length, sha256: await backupSha256(bytes) });
+        w.add(file, bytes);                                                                      // the bytes are released as soon as the next record is read
+      }
+    } finally { db.close(); }
+  }
+  w.add("manifest.json", enc.encode(JSON.stringify(manifest, null, 1)));
+  return { blob: w.finish(), filename: backupFilename(now), manifest };
+}
+// Inspects a backup file (a Blob / File) WITHOUT touching storage: structure, versions, every entry's checksum (one entry at a time), the key allow-list. Returns { ok: true, manifest, summary } or
+// { ok: false, code, message } with a message fit to show the user. Codes: not-a-backup, damaged, wrong-format, newer-version, invalid.
+const BACKUP_SITES_KEYS = { rcd: ["rcd-projects-v6"], iel: ["iel-projects-v2"], tat: ["tat-projects-v1"], thermo: ["thermo-projects-v1"], swb: ["swb-projects-v1"], irt: ["irt-projects-v1"], elt: ["elt-projects-v2", "elt-projects-v1"], welder: ["welder-projects-v2", "welder-projects-v1"], gsd: ["gsd-projects-v1"] };
+async function backupInspect(file) {
+  const bad = (code, message) => ({ ok: false, code, message });
+  let z; try { z = await zipOpen(file); } catch (e) { return bad("not-a-backup", "This is not a SparkCheck backup file (it is not a readable zip)."); }
+  let manifest;
+  try { if (!z.has("manifest.json")) return bad("not-a-backup", "This is not a SparkCheck backup file (no manifest)."); manifest = JSON.parse(new TextDecoder().decode(await z.bytes("manifest.json"))); }
+  catch (e) { return bad(e && e.code === "zip" ? "damaged" : "not-a-backup", e && e.code === "zip" ? "This backup file is damaged (" + e.message + ")." : "This is not a SparkCheck backup file (the manifest is unreadable)."); }
+  if (!manifest || typeof manifest !== "object" || manifest.format !== BACKUP_FORMAT) return bad("wrong-format", "This is not a SparkCheck backup file.");
+  if (!Number.isInteger(manifest.formatVersion) || manifest.formatVersion < 1) return bad("invalid", "This backup file has no valid format version.");
+  if (manifest.formatVersion > BACKUP_FORMAT_VERSION) return bad("newer-version", "This backup was made by a newer version of SparkCheck (backup format " + manifest.formatVersion + "). Update the app, then try again.");
+  const ls = manifest.localStorage, stores = manifest.stores;
+  if (!ls || typeof ls.file !== "string" || typeof ls.sha256 !== "string" || !stores || typeof stores !== "object" || Array.isArray(stores) || typeof manifest.createdAtUtc !== "string" || typeof manifest.deviceLocalDate !== "string") return bad("invalid", "This backup file's manifest is incomplete.");
+  let data, unknownKeys = [];
+  try {
+    if (!z.has(ls.file)) return bad("damaged", "This backup file is damaged (the data entry is missing).");
+    const dataBytes = await z.bytes(ls.file); if (dataBytes.length !== ls.size || await backupSha256(dataBytes) !== ls.sha256) return bad("damaged", "This backup file is damaged (the data does not match its checksum).");
+    data = JSON.parse(new TextDecoder().decode(dataBytes));
+  } catch (e) { return bad(e && e.code === "zip" ? "damaged" : "invalid", "This backup file's data could not be read (" + (e && e.message) + ")."); }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return bad("invalid", "This backup file's data is not in the expected shape.");
+  for (const k of Object.keys(data)) {
+    if (typeof data[k] !== "string") return bad("invalid", "This backup file holds a value for " + k + " that is not text.");
+    if (!backupKeyAllowed(k)) { unknownKeys.push(k); continue; }
+    try { JSON.parse(data[k]); } catch (_) { return bad("invalid", "This backup file holds damaged data for " + k + "."); }
+  }
+  let photos = 0, logos = 0, records = 0; const seen = new Set();
+  for (const st of BACKUP_STORES) {
+    const list = stores[st.id] === undefined ? [] : stores[st.id]; if (!Array.isArray(list)) return bad("invalid", "This backup file's " + st.id + " list is not in the expected shape.");
+    for (const r of list) {
+      if (!r || typeof r.key !== "string" || typeof r.file !== "string" || typeof r.type !== "string" || !Number.isInteger(r.size) || typeof r.sha256 !== "string") return bad("invalid", "This backup file lists a damaged " + st.id + " entry.");
+      if (seen.has(st.id + "\u0000" + r.key) || seen.has(r.file)) return bad("invalid", "This backup file lists the same " + st.id + " entry twice."); seen.add(st.id + "\u0000" + r.key); seen.add(r.file);
+      if (!z.has(r.file)) return bad("damaged", "This backup file is damaged (a photo or logo entry is missing).");
+      try { const b = await z.bytes(r.file); if (b.length !== r.size || await backupSha256(b) !== r.sha256) return bad("damaged", "This backup file is damaged (a photo or logo does not match its checksum)."); }
+      catch (e) { return bad("damaged", "This backup file is damaged (" + (e && e.message) + ")."); }
+      records++; if (st.photos) { if (!r.key.endsWith("~t")) photos++; } else logos++;
+    }
+  }
+  const sites = {}; for (const m of BACKUP_MODULES) { const k = BACKUP_SITES_KEYS[m].find(x => data[x] !== undefined); let n = 0; try { const a = k ? JSON.parse(data[k]) : []; n = Array.isArray(a) ? a.length : 0; } catch (_) {} sites[m] = n; }
+  return { ok: true, manifest, summary: { createdAtUtc: manifest.createdAtUtc, deviceLocalDate: manifest.deviceLocalDate, appVersion: String(manifest.appVersion || ""), formatVersion: manifest.formatVersion, includesPhotos: !!manifest.includesPhotos, fileBytes: file.size, keys: Object.keys(data).length - unknownKeys.length, unknownKeys: unknownKeys.sort(), sites, photos, logos, records } };
+}
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,

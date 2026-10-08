@@ -1,6 +1,10 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { execSync } from 'node:child_process'
+
+// Build id for the backup file's appVersion: the commit being built (CI sets GITHUB_SHA), else the local HEAD, else 'dev'. A plain constant: it changes nothing else in the build.
+const buildId = process.env.GITHUB_SHA ? process.env.GITHUB_SHA.slice(0, 7) : (() => { try { return execSync('git rev-parse --short HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch (_) { return 'dev'; } })()
 
 export default defineConfig({
   plugins: [
@@ -38,6 +42,7 @@ export default defineConfig({
     }),
   ],
   base: '/electrical-audit/',
+  define: { __BUILD_ID__: JSON.stringify(buildId) },
   server: {
     host: true,
   },
