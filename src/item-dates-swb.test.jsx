@@ -65,15 +65,15 @@ describe('Report export + import', () => {
   const proj = { id: 's1', name: 'Site One', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a1', name: 'Plant', boards: [{ id: 'b1', name: 'MSB' }, { id: 'b2', name: 'DB1' }] }] };
   const meta = { auditor: 'J', testDate: '2026-09-30', nextTestDate: '2027-09-30' };
   const K = SWB_CHECKLIST.map(c => c.key);
-  // MSB: pass 20/08, fail 13/07, N/A 05/01 (earlier, ignored), the rest untested; DB1: nothing
-  const results = { s1: { a1: { b1: { [K[0]]: { status: 'pass', lastTested: '2026-08-20' }, [K[1]]: { status: 'fail', lastTested: '2026-07-13' }, [K[2]]: { status: 'na', lastTested: '2026-01-05' } } } } };
+  // MSB: pass 20/08, fail 13/07, N/A 05/01, the rest untested, board date 13/07; DB1: nothing
+  const results = { s1: { a1: { b1: { [K[0]]: { status: 'pass', lastTested: '2026-08-20' }, [K[1]]: { status: 'fail', lastTested: '2026-07-13' }, [K[2]]: { status: 'na', lastTested: '2026-01-05' }, _lastTested: '2026-07-13' } } } };
   const load = async () => { const wb = new ExcelJS.Workbook(); await wb.xlsx.load(Buffer.from(payload.base64, 'base64')); return wb; };
-  it('Register: the board Date Tested / Next Audit Due come from its PASS / FAIL items; the header is the earliest of the boards; N/A is ignored; an untested board is blank / Home', async () => {
+  it('Register: the board Date Tested / Next Audit Due come from the BOARD date; the header is the earliest of the boards; an untested board is blank / Home', async () => {
     await exportSWBExcel(proj, results, meta); const wb = await load(); const reg = wb.getWorksheet('Register');
     expect(String(reg.getCell('A4').value)).toBe('Auditor: J  |  Date Tested: 13/07/2026  |  Next Audit Due: 13/07/2027');
     const row = r => [1, 2, 3, 16].map(c => String(reg.getCell(r, c).value ?? '')); expect(row(7)[0]).toBe('Plant'); expect(row(8)[1]).toBe('DB1'); expect(row(8)[2]).toBe('');
-    // MSB has untested items, so (as before) its Register Date Tested stays blank until every point is answered; its Next Audit Due is the earliest item due
-    expect(row(7)[3]).toBe('13/07/2027');
+    // the board date shows even though the board is only part answered; its Next Audit Due is the board next-due
+    expect(row(7)[2]).toBe('13/07/2026'); expect(row(7)[3]).toBe('13/07/2027');
   });
   it('board sheet: a "Date Tested" column (H) with each answered item\'s own date; untested items blank; the header merge covers 8 columns', async () => {
     await exportSWBExcel(proj, results, meta); const wb = await load(); const sh = wb.getWorksheet('MSB');

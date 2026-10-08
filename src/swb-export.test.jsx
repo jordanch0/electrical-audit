@@ -34,12 +34,12 @@ const project = { id: 's1', name: 'Hearse Road - Firestone', company: 'Acme Pty 
 ] };
 const results = { s1: {
   wp: {
-    msb: { ...answered('PPPPPPPPPPP') },                                                                  // all pass
+    msb: { ...answered('PPPPPPPPPPP'), _lastTested: '2026-07-13' },                                                                  // all pass
     mcc: { ...answered('PFN........', { ventilation: { risk: 'M', defectId: 'D-7', comment: 'blocked', rectified: 'Scheduled for Repair', responsibility: 'Site Electrician' }, enclosure: { risk: 'H', defectId: 'STALE', comment: 'old' } }),
            _photos: [{ id: 'p1', w: 200, h: 150 }, { id: 'p2', w: 200, h: 150 }] },                   // partly answered, 1 fail, 2 photos
   },
   ss: {
-    msb2: { ...answered('PPPPPPPPPPF', { earthing: { risk: 'U', defectId: 'D-9' } }), _photos: [{ id: 'p3', w: 200, h: 150 }] }, // complete, 1 fail, 1 photo
+    msb2: { ...answered('PPPPPPPPPPF', { earthing: { risk: 'U', defectId: 'D-9' } }), _photos: [{ id: 'p3', w: 200, h: 150 }], _lastTested: '2026-07-13' }, // complete, 1 fail, 1 photo
     // db: not tested at all
   },
 } };

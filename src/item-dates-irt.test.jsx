@@ -81,3 +81,12 @@ describe('irtHasResult + Report export header', () => {
     expect(String(rows()[3][0])).toBe('Auditor: J  |  Date Tested: 30/09/2026  |  Next Test Due: 30/09/2027');
   });
 });
+
+describe('an item with NO result shows no date field and no NEXT TEST DUE; setting a result makes them appear', () => {
+  it('open the untested item page -> absent; set PASS -> DATE TESTED and NEXT TEST DUE appear', async () => {
+    at(7); const user = userEvent.setup(); await openItem(user, 'Motor 2');
+    expect(screen.queryByLabelText('Date tested')).toBeNull(); expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'PASS' }));
+    expect(await screen.findByLabelText('Date tested')).toBeInTheDocument(); expect(screen.getByText('NEXT TEST DUE:')).toBeInTheDocument();
+  });
+});

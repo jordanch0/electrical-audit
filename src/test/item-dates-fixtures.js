@@ -34,8 +34,8 @@ const tat = (() => {
     meta: { auditor: 'Jane', testDate: HOME, notes: '' }, live, hist, expLive: exp.live, expHist: exp.hist, stamped: 3 };
 })();
 const swb = (() => {
-  const live = { a1: { b1: { enclosure: { status: 'pass' }, ventilation: { status: 'untested' }, moisture: { status: 'na', lastTested: KEPT }, photos: [] } } };
-  const hist = { a1: { b1: { enclosure: { status: 'fail' }, photos: [] } } };
+  const live = { a1: { b1: { enclosure: { status: 'pass' }, ventilation: { status: 'untested' }, moisture: { status: 'na', lastTested: KEPT }, photos: [], _lastTested: KEPT } } };
+  const hist = { a1: { b1: { enclosure: { status: 'fail' }, photos: [], _lastTested: SNAP } } };
   const exp = clone({ live, hist }); exp.live.a1.b1.enclosure.lastTested = HOME; exp.hist.a1.b1.enclosure.lastTested = SNAP;
   return { mod: 'swb', tile: 'SWITCHBOARD', keys: { p: 'swb-projects-v1', r: 'swb-results-v1', m: 'swb-meta-v1', h: 'swb-history-v1' },
     project: site([{ id: 'a1', name: 'Wash Plant', boards: [{ id: 'b1', name: 'MSB 1' }] }]),

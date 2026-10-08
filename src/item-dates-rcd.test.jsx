@@ -91,3 +91,14 @@ describe('Report export header', () => {
     expect(String(rows()[3][0])).toBe('Auditor: J  |  Date Tested: 30/09/2026  |  Next Push Test Due: 30/10/2026');
   });
 });
+
+describe('an item with NO result shows no date field and no NEXT TEST DUE; setting a result makes them appear', () => {
+  it.each([['push', 'CB 2', 'PASS'], ['inject', 'CB 2', 'PASS']])('%s: open the untested item page -> absent; set %s -> DATE TESTED and NEXT TEST DUE appear', async (mode, cb, result) => {
+    at(7); const user = userEvent.setup(); await openGrid(user, mode);
+    if (mode === 'push') await user.click((await screen.findAllByText('note'))[1]); else await user.click(await screen.findByRole('button', { name: /CB 2/ }));
+    await screen.findByRole('button', { name: 'N/A' });
+    expect(screen.queryByLabelText('Date tested')).toBeNull(); expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
+    await user.click(screen.getByRole('button', { name: result }));
+    expect(await screen.findByLabelText('Date tested')).toBeInTheDocument(); expect(screen.getByText('NEXT TEST DUE:')).toBeInTheDocument();
+  });
+});

@@ -147,3 +147,13 @@ describe('an N/A item is not a test: no next-due anywhere', () => {
     expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
   });
 });
+
+describe('IEL: an item with NO result shows no date field and no NEXT TEST DUE; setting a result makes them appear', () => {
+  it('open the untested item page -> absent; set FAIL -> DATE TESTED and NEXT TEST DUE appear', async () => {
+    at(5); seedHome(IEL); const user = userEvent.setup(); await openIel(user); await user.click(await screen.findByText('Feed Conveyor 2'));
+    await screen.findByRole('button', { name: 'N/A' });
+    expect(box()).toBeNull(); expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
+    await user.click(screen.getByRole('button', { name: 'FAIL' }));
+    expect(await screen.findByLabelText('Date tested')).toBeInTheDocument(); expect(screen.getByText('NEXT TEST DUE:')).toBeInTheDocument();
+  });
+});

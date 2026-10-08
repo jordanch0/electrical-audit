@@ -2975,7 +2975,18 @@ function itemDatesMigrate(mod, results, metaAll, history, today) {
   const R = JSON.parse(JSON.stringify(results || {})), H = JSON.parse(JSON.stringify(history || [])); let changed = 0;
   Object.keys(R).forEach(id => { const m = (metaAll || {})[id]; if (m && m.dateDay) return; changed += itemDatesStampSite(mod, R[id], idLiveDates(mod, m, today)); });     // a meta with dateDay = already through the follow
   H.forEach(snap => { if (!snap || typeof snap !== "object" || (snap.meta && snap.meta.dateDay)) return; changed += itemDatesStampSite(mod, mod === "gsd" ? snap.items : snap.results, idSnapDates(mod, snap, today)); });
+  if (mod === "swb") { Object.keys(R).forEach(id => { changed += swbBoardDatesBackfill(R[id]); }); H.forEach(snap => { if (snap && typeof snap === "object") changed += swbBoardDatesBackfill(snap.results); }); }
   return { results: R, history: H, changed };
+}
+// SWB: every board that has a result but no board date gets the earliest date among its answered tests (the per-test dates are stamped first, above). Never the live Home date; blank stays blank; idempotent.
+function swbBoardDatesBackfill(siteRes) {
+  let n = 0;
+  Object.values(siteRes && typeof siteRes === "object" ? siteRes : {}).forEach(area => idEach(area, bd => {
+    if (!bd || typeof bd !== "object" || Array.isArray(bd) || bd._lastTested || !swbBoardHasResult(bd)) return;
+    const d = earliestIso(SWB_CHECKLIST.map(({ key }) => bd[key]).filter(itemHasStatus).map(r => r.lastTested));
+    if (d) { bd._lastTested = d; n++; }
+  }));
+  return n;
 }
 // The load step: in memory only. The returned results / history go into state and the module's own save effects write them (the app's save() with its storage-full banner) — the same
 // way the audit-active migration works; nothing here touches storage itself. Marks the module ready for the Home-date follow; on an error the data is returned untouched and the
@@ -3008,6 +3019,11 @@ const itemDue = (r, homeDate, homeNext, add) => itemIsTested(r) && r.lastTested 
 const irtHasResult = r => !!r && ((!!r.status && r.status !== "untested") || irtAutoStatus(r.readings || {}) !== "untested");   // IRT: "untested" with readings = an auto-detected result
 const eltHasResult = r => !!r && ELT_CHECKS.some(c => r[c.key]);                                      // ELT: any of the 4 checks recorded
 const welderHasResult = r => !!r && !!r.items && Object.values(r.items).some(v => v && v.result);     // Welder: any checklist item answered
+// SWB BOARD DATE (2026-10): the board page has its own DATE TESTED / NEXT TEST DUE, stored as the scalar `_lastTested` on the board record (next to `_photos` and the per-test keys). It is
+// stamped with the Home date at the first result in the board, kept when a result changes, cleared when no test on the board has a result, and independent of the per-test dates (neither rewrites the other).
+const swbBoardHasResult = bd => !!bd && typeof bd === "object" && SWB_CHECKLIST.some(({ key }) => itemHasStatus(bd[key]));
+const swbBoardTested = bd => !!bd && typeof bd === "object" && SWB_CHECKLIST.some(({ key }) => itemIsTested(bd[key]));        // PASS / FAIL: N/A is not a test
+function swbBoardDateApply(bd, home) { const o = { ...bd }; if (!swbBoardHasResult(o)) { delete o._lastTested; return o; } if (!o._lastTested) o._lastTested = home; return o; }
 const itemHasStatus = r => !!r && !!r.status && r.status !== "untested";                    // the item shape of RCD, IEL, TAT and SWB
 const earliestIso = list => { const l = list.filter(Boolean).sort(); return l.length ? l[0] : ""; };   // ISO dates sort chronologically
 // </itemDate>
@@ -10668,8 +10684,9 @@ function swbRegisterRows(project, allResults, meta) {
   const rows = [];
   (project.areas || []).forEach(area => (area.boards || []).forEach(board => {
     const bs = swbBoardSummary(res, project.id, area.id, board.id);
-    const itDates = SWB_CHECKLIST.map(({key}) => swbGetItem(res, project.id, area.id, board.id, key)).filter(itemIsTested).map(it => it.lastTested).filter(Boolean);
-    const dateISO = earliestIso(itDates), dueISO = earliestIso(itDates.map(d => itemNextDue(d, testDate, homeNext, x => addYearsISO(x, 1))));   // +1 year = HOME_DATE_SPECS
+    const bdRec = (((res[project.id] || {})[area.id]) || {})[board.id] || {};
+    const dateISO = swbBoardHasResult(bdRec) ? (bdRec._lastTested || "") : "";                                                            // the board date (blank stays blank)
+    const dueISO = dateISO && swbBoardTested(bdRec) ? itemNextDue(dateISO, testDate, homeNext, x => addYearsISO(x, 1)) : "";            // PASS / FAIL only; +1 year = HOME_DATE_SPECS; the Home chosen date wins
     const overall = swbBoardOverall(bs);
     const fails = SWB_CHECKLIST.filter(({key}) => swbGetStatus(res, project.id, area.id, board.id, key) === SWB_STATUS.FAIL);
     const risks = fails.map(({key}) => swbGetItem(res, project.id, area.id, board.id, key).risk).filter(Boolean);
@@ -10680,8 +10697,8 @@ function swbRegisterRows(project, allResults, meta) {
     // SWB has no Priority control: its Risk Rating (L / M / H / U — the SAME scale and labels as Priority) plays that role. The Register's Priority column
     // therefore reads the item's risk (a stored `priority`, e.g. from an older import, wins if present), most severe first.
     const priorities = [...new Set(failItems.map(it => (it.priority || it.risk || "").trim()).filter(Boolean))].sort((a, b) => SWB_RISK_ORDER.indexOf(a) - SWB_RISK_ORDER.indexOf(b)).join("; ");
-    rows.push({ area, board, summary: bs, overall, dateISO, dueISO, cells: [
-      area.name, board.name, overall !== "untested" && (dateISO || testDate) ? fmtDate(dateISO || testDate) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
+    rows.push({ area, board, summary: bs, overall, dateISO, hdrDateISO: swbBoardTested(bdRec) ? dateISO : "", dueISO, cells: [
+      area.name, board.name, dateISO ? fmtDate(dateISO) : "", overall === "pass" ? "Pass" : overall === "fail" ? "Fail" : "",
       bs.pass, bs.fail, bs.na, bs.untested, scoreLabel(bs.score), top ? (SWB_RISK_LABELS[top] || top) : "", fails.map(f => f.label).join("; "), joined("rectified"), joined("defectId"), joined("responsibility"), priorities, dueISO ? fmtDate(dueISO) : nextDue,
     ]});
   }));
@@ -10705,7 +10722,7 @@ async function exportSWBExcel(project, allResults, meta) {
   const sName = project.name || "Site";
   const testDate = (meta && meta.testDate) || "";
   const rows = swbRegisterRows(project, allResults, meta);
-  const hdrDate = earliestIso(rows.map(r => r.dateISO)) || testDate, hdrDue = earliestIso(rows.map(r => r.dueISO));
+  const hdrDate = earliestIso(rows.map(r => r.hdrDateISO)) || testDate, hdrDue = earliestIso(rows.map(r => r.dueISO));
   const nextDue = hdrDue ? fmtDate(hdrDue) : swbNextDue(meta);
   const hdr = xjHdr("swb", { site: sName, company: project.company, abn: project.abn, licence: project.licence, auditor: meta && meta.auditor, testDate: hdrDate ? fmtDate(hdrDate) : "", nextDue, logo });
   const res = allResults || {};
@@ -10989,9 +11006,13 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const patchItem=(areaId,boardId,itemKey,patch)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
     const old=bd[itemKey]||{status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
-    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,[itemKey]:itemDateApply({...old,...patch},itemHasStatus,meta.testDate||localISODate())}}}};
+    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:swbBoardDateApply({...bd,[itemKey]:itemDateApply({...old,...patch},itemHasStatus,meta.testDate||localISODate())},meta.testDate||localISODate())}}};
   });
 
+  const patchBoardDate=(areaId,boardId,v)=>setAllResults(prev=>{
+    const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
+    return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,_lastTested:v||meta.testDate||localISODate()}}}};
+  });
   const patchBoardPhotos=(areaId,boardId,photos)=>setAllResults(prev=>{
     const site=prev[activeProject]||{};const ar=site[areaId]||{};const bd=ar[boardId]||{};
     return {...prev,[activeProject]:{...site,[areaId]:{...ar,[boardId]:{...bd,_photos:photos}}}};
@@ -11079,7 +11100,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&!showGate&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
       ,view==="audit"&&project&&!showGate&&activeAreaId&&area&&!activeBoardId&&React.createElement(SWBBoardListView,{area,project,results:allResults,onSelectBoard:bid=>{setActiveBoardId(bid);setView("board");}})
-      ,!showGate&&view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
+      ,!showGate&&view==="board"&&board&&React.createElement(SWBBoardView,{board,area,project,results:allResults,meta,onPatchDate:v=>patchBoardDate(activeAreaId,activeBoardId,v),onOpenItem:key=>{setActiveItemKey(key);setView("item");},onResetBoard:()=>resetBoard(activeAreaId,activeBoardId),onPatchPhotos:photos=>patchBoardPhotos(activeAreaId,activeBoardId,photos),onBack:()=>{setActiveBoardId(null);setView("audit");}})
       ,!showGate&&view==="item"&&board&&activeItemKey&&React.createElement(SWBItemPage,{itemKey:activeItemKey,board,area,project,results:allResults,dropdowns:swbDropdowns,meta,onPatch:(key,patch)=>patchItem(activeAreaId,activeBoardId,key,patch),onClose:()=>{setActiveItemKey(null);setView("board");}})
       ,view==="report"&&project&&React.createElement(SWBReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,view==="manage"&&project&&React.createElement(SWBManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home"),
@@ -11281,7 +11302,7 @@ function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport
 // ─────────────────────────────────────────────────────────────────────────
 // BOARD VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatchPhotos,onBack}) {
+function SWBBoardView({board,area,project,results,meta,onPatchDate,onOpenItem,onResetBoard,onPatchPhotos,onBack}) {
   const SS=swbStyles();
   const bs=swbBoardSummary(results,project.id,area.id,board.id);
   const isComplete=swbBoardComplete(results,project.id,area.id,board.id);
@@ -11332,6 +11353,10 @@ function SWBBoardView({board,area,project,results,onOpenItem,onResetBoard,onPatc
       ,React.createElement('button',{type:"button",style:{width:"100%",padding:"10px",background:"transparent",color:"#7e22ce",border:"1px dashed #d8b4fe",borderRadius:10,fontSize:12,fontWeight:700,cursor:"pointer"},onClick:()=>photoInputRef.current&&photoInputRef.current.click()},"+ Add Photo")
       ,photoError&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},photoError)
     )
+    // Board date (only once a test on the board has a result) + its next due (PASS / FAIL only)
+    ,(()=>{const bd=((results[project.id]||{})[area.id]||{})[board.id]||{};return swbBoardHasResult(bd)&&React.createElement(React.Fragment,null
+      ,React.createElement(ItemDateField,{date:bd._lastTested||"",onChange:onPatchDate,S:SS})
+      ,React.createElement(ItemDueBanner,{iso:swbBoardTested(bd)&&bd._lastTested?itemNextDue(bd._lastTested,meta.testDate,meta.nextTestDate,d=>addYearsISO(d,1)):"",accent:"#7e22ce"}));})()
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:6}}
       ,SWB_CHECKLIST.map(({key,label})=>{
         const item=swbGetItem(results,project.id,area.id,board.id,key);
@@ -15976,7 +16001,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
 
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
