@@ -16163,9 +16163,164 @@ async function backupInspect(file) {
   const sites = {}; for (const m of BACKUP_MODULES) { const k = BACKUP_SITES_KEYS[m].find(x => data[x] !== undefined); let n = 0; try { const a = k ? JSON.parse(data[k]) : []; n = Array.isArray(a) ? a.length : 0; } catch (_) {} sites[m] = n; }
   return { ok: true, manifest, summary: { createdAtUtc: manifest.createdAtUtc, deviceLocalDate: manifest.deviceLocalDate, appVersion: String(manifest.appVersion || ""), formatVersion: manifest.formatVersion, includesPhotos: !!manifest.includesPhotos, fileBytes: file.size, keys: Object.keys(data).length - unknownKeys.length, unknownKeys: unknownKeys.sort(), sites, photos, logos, records } };
 }
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP / RESTORE — planner (Stage 2: READ-ONLY. Compares a backup file with THIS phone and says what a restore WOULD add. Nothing here writes to localStorage or IndexedDB.)
+// ═════════════════════════════════════════════════════════════════════════
+// Restore is ADD-ONLY: nothing already on this phone is modified or deleted. A site is "already on this phone" if its ID exists in that module's project list (ID only: renaming a site keeps its ID,
+// so names are never compared); the same rule applies to calendar events (by event ID) and History snapshots (by snapshot ID). Never read or planned: app settings, every dropdown list, the TAT
+// settings / frequencies / names / defaults, rcd-mode, iel-cat, the global logo, the photo-migration flags and the legacy keys. A photo, thumbnail or per-site logo that already exists is NEVER
+// overwritten: identical bytes are reused; different bytes make the WHOLE site "not restored: conflicting photos" (nothing is added for it).
+const BACKUP_MODULE_INFO = {
+  rcd:    { label: "RCD Testing",                   keys: { projects: K_PROJECTS,        results: K_RESULTS,        meta: K_META,        history: K_HISTORY,        active: K_RCD_ACTIVE },    photos: null },
+  iel:    { label: "IEL Testing",                   keys: { projects: K_IEL_PROJECTS,    results: K_IEL_RESULTS,    meta: K_IEL_META,    history: K_IEL_HISTORY,    active: K_IEL_ACTIVE },    photos: null },
+  tat:    { label: "Test & Tag",                    keys: { projects: K_TAT_PROJECTS,    results: K_TAT_RESULTS,    meta: K_TAT_META,    history: K_TAT_HISTORY,    active: K_TAT_ACTIVE },    photos: null },
+  thermo: { label: "Thermographic Scanning",        keys: { projects: K_THERMO_PROJECTS, results: K_THERMO_RESULTS, meta: K_THERMO_META, history: K_THERMO_HISTORY, active: K_THERMO_ACTIVE }, photos: null },
+  swb:    { label: "Switchboard",                   keys: { projects: K_SWB_PROJECTS,    results: K_SWB_RESULTS,    meta: K_SWB_META,    history: K_SWB_HISTORY,    active: K_SWB_ACTIVE },    photos: "site-photos" },
+  irt:    { label: "Insulation Resistance Testing", keys: { projects: K_IRT_PROJECTS,    results: K_IRT_RESULTS,    meta: K_IRT_META,    history: K_IRT_HISTORY,    active: K_IRT_ACTIVE },    photos: null },
+  elt:    { label: "Emergency Lighting",            keys: { projects: K_ELT_PROJECTS,    results: K_ELT_RESULTS,    meta: K_ELT_META,    history: K_ELT_HISTORY,    active: K_ELT_ACTIVE },    photos: "site-photos" },
+  welder: { label: "Welder Testing",                keys: { projects: K_WELDER_PROJECTS, results: K_WELDER_RESULTS, meta: K_WELDER_META, history: K_WELDER_HISTORY, active: K_WELDER_ACTIVE }, photos: "site-photos" },
+  gsd:    { label: "General Site Defects",          keys: { projects: K_GSD_PROJECTS,    results: K_GSD_ITEMS,      meta: K_GSD_META,    history: K_GSD_HISTORY,    active: K_GSD_ACTIVE },    photos: "gsd-photos" },
+};
+const backupIsObj = v => !!v && typeof v === "object" && !Array.isArray(v);
+const backupRoleOk = (role, v) => role === "projects" || role === "history" ? Array.isArray(v) : role === "active" ? backupIsObj(v) && v.v === AUDIT_ACTIVE_VERSION && backupIsObj(v.sites) : backupIsObj(v);
+// One key on THIS phone: { state: "absent" } | { state: "ok", v } | { state: "bad" } (present but not the shape the app writes). A key in the wrong shape is never inserted into.
+function backupReadKey(storage, key, role) {
+  let raw = null; try { raw = storage.getItem(key); } catch (_) { return { state: "bad" }; }
+  if (raw === null) return { state: "absent" };
+  try { const v = JSON.parse(raw); return backupRoleOk(role, v) ? { state: "ok", v } : { state: "bad" }; } catch (_) { return { state: "bad" }; }
+}
+// A backup key for the same module + same kind but a DIFFERENT version than this app uses (and no key with the current name) means the module is stored in another format: skipped and listed.
+function backupVersionMismatch(m, info, data) {
+  const out = [];
+  for (const role of Object.keys(info.keys)) {
+    const cur = info.keys[role]; if (data[cur] !== undefined) continue;
+    const kind = cur.split("-").slice(1, -1).join("-"); const re = new RegExp("^" + m + "-" + kind + "-v\\d+$");
+    const found = Object.keys(data).filter(k => re.test(k)).sort(); if (found.length) out.push({ role, found, expected: cur });
+  }
+  return out;
+}
+function backupCollectStrings(root, want) {            // every string in a JSON value that is in the set `want` (iterative: no recursion limit)
+  const hit = new Set(), stack = [root];
+  while (stack.length) { const v = stack.pop(); if (typeof v === "string") { if (want.has(v)) hit.add(v); } else if (Array.isArray(v)) { for (let i = 0; i < v.length; i++) stack.push(v[i]); } else if (v && typeof v === "object") { for (const k of Object.keys(v)) stack.push(v[k]); } }
+  return hit;
+}
+function backupSameBytes(a, b) { if (a.length !== b.length) return false; for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return false; return true; }
+function backupLocalBytes(storage) {
+  let total = 0; try { for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; total += (k.length + (storage.getItem(k) || "").length) * 2; } } catch (_) {}
+  return total;
+}
+async function backupIdbOpenExisting(name, store) {      // never creates a database just to look: if it is not there, there is nothing to compare with
+  if (typeof indexedDB === "undefined") return null;
+  try { if (typeof indexedDB.databases === "function") { const list = await indexedDB.databases(); if (!list.some(d => d.name === name)) return null; } } catch (_) {}
+  return backupIdbOpen(name, store);
+}
+const BACKUP_HEADROOM_MARGIN_BYTES = 20 * 1024 * 1024;   // free space that must remain after the photos are added
+const backupMb = n => (n / (1024 * 1024)).toFixed(1) + " MB";
+// The plan. `estimate` is () => Promise<{quota, usage}> (default: navigator.storage.estimate when the browser has it). Returns { ok:false, code, message } for an unreadable file, else
+// { ok:true, canRestore, modules[], events, counts, bytes, headroom, unknownKeys, summary, work } where `work` is what the restore engine will apply (parsed pieces + the photo / logo records to write).
+async function backupPlan(file, { storage = localStorage, inspected = null, estimate = undefined } = {}) {
+  const insp = inspected || await backupInspect(file); if (!insp.ok) return insp;
+  const manifest = insp.manifest; const z = await zipOpen(file);
+  const data = JSON.parse(new TextDecoder().decode(await z.bytes(manifest.localStorage.file)));
+  const dbs = {}; const openDb = async st => { if (!(st.id in dbs)) dbs[st.id] = await backupIdbOpenExisting(st.db, st.store); return dbs[st.id]; };
+  const listed = {}; for (const st of BACKUP_STORES) { listed[st.id] = new Map((manifest.stores[st.id] || []).map(r => [r.key, r])); }
+  const verdict = new Map();                          // "store\0key" -> "write" | "reuse" | "conflict" (a record is compared once however many sites use it)
+  const compare = async (st, r) => {
+    const id = st.id + "\u0000" + r.key; if (verdict.has(id)) return verdict.get(id);
+    const db = await openDb(st); let v = "write";
+    if (db) { const rec = await backupIdbGet(db, st.store, r.key); if (rec && rec.buf) { const mine = new Uint8Array(rec.buf); v = backupSameBytes(mine, await z.bytes(r.file)) ? "reuse" : "conflict"; } }
+    verdict.set(id, v); return v;
+  };
+  const storeById = Object.fromEntries(BACKUP_STORES.map(s => [s.id, s]));
+  const out = { modules: [], work: { modules: {}, events: [], writes: [] } }; const writeSet = new Map(); let insertChars = 0, journalIds = 0;
+  try {
+    for (const m of BACKUP_MODULES) {
+      const info = BACKUP_MODULE_INFO[m]; const mod = { id: m, label: info.label, status: "nothing", note: "", sites: { add: [], present: [], conflict: [] }, snapshots: { add: 0 }, photos: { write: 0, reuse: 0 } };
+      out.modules.push(mod);
+      const mismatch = backupVersionMismatch(m, info, data);
+      if (mismatch.length) { mod.status = "skipped-version"; mod.note = "This backup stores " + info.label + " in a different format version (" + mismatch.map(x => x.found.join(", ") + " instead of " + x.expected).join("; ") + "), so it was not restored."; continue; }
+      if (data[info.keys.projects] === undefined) continue;
+      const bk = {}; let bad = false;
+      for (const role of ["projects", "results", "meta", "history", "active"]) {
+        if (data[info.keys[role]] === undefined) { bk[role] = role === "projects" || role === "history" ? [] : role === "active" ? null : {}; continue; }
+        let v; try { v = JSON.parse(data[info.keys[role]]); } catch (_) { bad = true; break; }
+        if (role === "active") { bk.active = backupRoleOk("active", v) ? v.sites : null; continue; }
+        if (!backupRoleOk(role, v)) { bad = true; break; } bk[role] = v;
+      }
+      if (bad) { mod.status = "unreadable-backup"; mod.note = "This backup's " + info.label + " data is not in the expected shape, so it was not restored."; continue; }
+      const here = {}; let hereBad = false;
+      for (const role of ["projects", "results", "meta", "history", "active"]) { here[role] = backupReadKey(storage, info.keys[role], role); if (here[role].state === "bad") hereBad = true; }
+      if (hereBad) { mod.status = "unreadable-here"; mod.note = "This phone's " + info.label + " data can't be read, so nothing was added to it."; continue; }
+      const have = new Map(here.projects.state === "ok" ? here.projects.v.filter(p => p && typeof p.id === "string").map(p => [p.id, typeof p.name === "string" ? p.name : p.id]) : []);
+      const haveSnap = new Set(here.history.state === "ok" ? here.history.v.map(s => s && s.id) : []);
+      const seen = new Set(), cand = [];
+      for (const p of bk.projects) {
+        if (!p || typeof p.id !== "string" || seen.has(p.id)) continue; seen.add(p.id);
+        const nm = typeof p.name === "string" ? p.name : p.id;
+        if (have.has(p.id)) mod.sites.present.push({ id: p.id, name: nm, nameHere: have.get(p.id) }); else cand.push(p);   // listed by name in the confirmation
+      }
+      const orphan = (role, id) => here[role].state === "ok" && Object.prototype.hasOwnProperty.call(role === "active" ? here.active.v.sites : here[role].v, id);   // an entry already stored under that ID is never overwritten
+      const st = info.photos ? storeById[info.photos] : null; const baseIds = new Set(st ? [...listed[st.id].keys()].filter(k => !k.endsWith("~t")) : []);
+      // audit-active: "insert" = the key exists here, add the restored sites' entries; "create" = this phone has NO sites in this module and no key, so build the key from the backup (a restored mid-audit site keeps
+      // its exact state); "leave" = the key is absent but this phone HAS sites: a key holding only the restored sites would stop the app deriving every site's entry at load, so it stays absent.
+      const activeMode = !bk.active ? "leave" : here.active.state === "ok" ? "insert" : here.active.state === "absent" && have.size === 0 ? "create" : "leave";
+      const wk = { projects: [], results: {}, meta: {}, active: {}, history: [], activeMode };
+      const activeOk = activeMode !== "leave";
+      for (const p of cand) {
+        const nm = typeof p.name === "string" ? p.name : p.id;
+        if (orphan("results", p.id) || orphan("meta", p.id)) { mod.sites.conflict.push({ id: p.id, name: nm, reason: "existing data under the same ID", keys: 0 }); continue; }
+        const snaps = bk.history.filter(s => s && s.projectId === p.id && typeof s.id === "string" && !haveSnap.has(s.id));
+        const pieces = [p, bk.results[p.id], bk.meta[p.id], snaps];
+        const refs = st ? backupCollectStrings(pieces, baseIds) : new Set(); const keys = [];
+        for (const id of refs) { keys.push({ st, r: listed[st.id].get(id) }); const t = listed[st.id].get(id + "~t"); if (t) keys.push({ st, r: t }); }
+        const logo = listed["site-logos"].get(siteLogoKey(m, p.id)); if (logo) keys.push({ st: storeById["site-logos"], r: logo });
+        let conflict = 0, reuse = 0, write = 0; const verdicts = [];
+        for (const k of keys) { const v = await compare(k.st, k.r); verdicts.push(v); if (v === "conflict") conflict++; else if (v === "reuse") reuse++; else write++; }
+        if (conflict) { mod.sites.conflict.push({ id: p.id, name: nm, reason: "conflicting photos", keys: conflict }); continue; }
+        mod.sites.add.push({ id: p.id, name: nm }); mod.snapshots.add += snaps.length; mod.photos.write += write; mod.photos.reuse += reuse;
+        wk.projects.push(p); if (bk.results[p.id] !== undefined) wk.results[p.id] = bk.results[p.id]; if (bk.meta[p.id] !== undefined) wk.meta[p.id] = bk.meta[p.id];
+        if (activeOk && bk.active[p.id] !== undefined && !orphan("active", p.id)) wk.active[p.id] = bk.active[p.id];
+        for (const s of snaps) wk.history.push(s);
+        keys.forEach((k, i) => { if (verdicts[i] === "write") writeSet.set(k.st.id + "\u0000" + k.r.key, { store: k.st.id, key: k.r.key, file: k.r.file, type: k.r.type, size: k.r.size, sha256: k.r.sha256 }); });
+        insertChars += JSON.stringify(pieces).length + 40; journalIds += 1 + snaps.length;
+      }
+      if (mod.sites.add.length) { mod.status = "add"; out.work.modules[m] = wk; }   // History of a site already on this phone is skipped with that site
+    }
+    // calendar events: by event ID only; an event never depends on a site (it carries the site NAME as text)
+    const ev = { status: "nothing", note: "", add: [], present: [] };
+    const bev = data[K_CAL_EVENTS]; let bevArr = null; if (bev !== undefined) { try { const v = JSON.parse(bev); if (Array.isArray(v)) bevArr = v; } catch (_) {} }
+    if (bev !== undefined && !bevArr) { ev.status = "unreadable-backup"; ev.note = "This backup's calendar events are not in the expected shape, so they were not restored."; }
+    else if (bevArr) {
+      const here = backupReadKey(storage, K_CAL_EVENTS, "projects");
+      if (here.state === "bad") { ev.status = "unreadable-here"; ev.note = "This phone's calendar events can't be read, so nothing was added to them."; }
+      else {
+        const have = new Set(here.state === "ok" ? here.v.map(e => e && e.id) : []); const seen = new Set();
+        for (const e of bevArr) { if (!e || typeof e.id !== "string" || seen.has(e.id)) continue; seen.add(e.id); const label = [e.type, e.site, e.dueDate].filter(x => typeof x === "string" && x).join(" · ") || e.id; (have.has(e.id) ? ev.present : ev.add).push({ id: e.id, label }); }
+        if (ev.add.length) { ev.status = "add"; const addIds = new Set(ev.add.map(a => a.id)); out.work.events = [];   /* first occurrence of each ID only: */ for (const e of bevArr) if (e && addIds.delete(e.id)) out.work.events.push(e); insertChars += JSON.stringify(out.work.events).length + 40; journalIds += ev.add.length; }
+      }
+    }
+    out.events = ev;
+    out.work.writes = [...writeSet.values()]; journalIds += out.work.writes.length;
+    const writeBytes = out.work.writes.reduce((n, w) => n + w.size, 0);
+    const counts = { sitesAdd: 0, sitesPresent: 0, sitesConflict: 0, snapshotsAdd: 0, eventsAdd: ev.add.length, eventsPresent: ev.present.length, photosWrite: out.work.writes.length, photosReuse: 0, modulesSkipped: 0 };
+    for (const mod of out.modules) { counts.sitesAdd += mod.sites.add.length; counts.sitesPresent += mod.sites.present.length; counts.sitesConflict += mod.sites.conflict.length; counts.snapshotsAdd += mod.snapshots.add; counts.photosReuse += mod.photos.reuse; if (/^(skipped|unreadable)/.test(mod.status)) counts.modulesSkipped++; }
+    // headroom: (1) the app's own 5 MB saved-data assumption (localStorage), (2) the browser's storage estimate for the photos. Either one failing refuses with a message and changes nothing.
+    const localUsed = backupLocalBytes(storage), localAdd = (insertChars + journalIds * 40 + 2048) * 2, localLimit = STORAGE_QUOTA_ASSUMED_BYTES;
+    const hr = { local: { usedBytes: localUsed, addBytes: localAdd, limitBytes: localLimit, ok: localUsed + localAdd <= localLimit }, storage: { known: false, quota: 0, usage: 0, needBytes: writeBytes, ok: true }, ok: true, message: "" };
+    try { const est = estimate === undefined ? (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.estimate === "function" ? () => navigator.storage.estimate() : null) : estimate;
+      if (est) { const e = await est(); if (e && Number.isFinite(e.quota) && Number.isFinite(e.usage) && e.quota > 0) { hr.storage.known = true; hr.storage.quota = e.quota; hr.storage.usage = e.usage; hr.storage.needBytes = writeBytes + Math.max(BACKUP_HEADROOM_MARGIN_BYTES, Math.round(writeBytes * 0.1)); hr.storage.ok = e.usage + hr.storage.needBytes <= e.quota; } }
+    } catch (_) {}
+    hr.ok = hr.local.ok && hr.storage.ok;
+    if (!hr.local.ok) hr.message = "Not enough room in this phone's saved-data space: this restore needs about " + backupMb(localAdd) + " more, but only " + backupMb(Math.max(0, localLimit - localUsed)) + " of " + backupMb(localLimit) + " is free. Free up space by deleting sites, History snapshots or calendar events you no longer need, then try again. Nothing was changed.";
+    else if (!hr.storage.ok) hr.message = "Not enough free space on this device for the photos: about " + backupMb(hr.storage.needBytes) + " is needed (including a safety margin) but only " + backupMb(Math.max(0, hr.storage.quota - hr.storage.usage)) + " is available. Free up space (delete photos or other apps' data), then try again. Nothing was changed.";
+    else if (!hr.storage.known && writeBytes > 0) hr.message = "This device can't report free space, so it could not be checked in advance. If space runs out the restore stops and puts everything back exactly as it was.";
+    const anyAdd = counts.sitesAdd > 0 || counts.eventsAdd > 0;
+    return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, modules: out.modules, events: ev, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
+  } finally { for (const id of Object.keys(dbs)) { try { if (dbs[id]) dbs[id].close(); } catch (_) {} } }
+}
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
