@@ -335,6 +335,7 @@ A new module (or a new kind of item) must follow the same model:
 - [ ] **Migration:** add the module to `ITEM_DATE_WALKERS` (where its results hold items), call `itemDatesLoadStep(mod, results, metaAll, history)` in its load effect and put the returned data into state (no raw `setItem`).
 - [ ] **Export:** per-row date / next-due from the item (blank stays blank), header Date Tested = `earliestIso` of the PASS / FAIL item dates (N/A never counts), Next Test Due = the earliest item next-due, Home fallback; build the header AFTER the rows.
 - [ ] **No OVERDUE / DUE SOON flags** and no interval wording on screen.
+- [ ] **Group-level dates:** if a page lists a group of items (SWB board page), a group date is stored on the group record under a reserved scalar key (`_lastTested`), follows the same rules, is independent of the item dates, is backfilled from the earliest item date (never the Home date; blank stays blank), and every reader of the record is checked for the extra key.
 - [ ] **Tests:** an `item-dates-<module>.test.jsx` (first result stamps the Home date and not today; a changed result keeps it; "—" / clearing clears it; a hand-edited date holds; Reset and Complete clear it; NEXT TEST DUE only for PASS / FAIL; the export header rule incl. the Home fallback), the module added to `src/test/item-dates-fixtures.js` (migration + follow matrices), and old-format data seeded with `rawSetItem`.
 
 ---
