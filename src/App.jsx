@@ -16068,7 +16068,7 @@ const backupFilename = (d = new Date()) => `SparkCheck-backup-${localISODate(d)}
 const BACKUP_MODULES = ["rcd", "iel", "tat", "thermo", "swb", "irt", "elt", "welder", "gsd"];
 const BACKUP_KEY_RE = new RegExp("^(?:(?:" + BACKUP_MODULES.join("|") + ")-(?:projects|results|meta|history|dropdowns|audit-active|items|photos-migrated)-v\\d+|rcd-mode-v\\d+|iel-cat-v\\d+|tat-(?:settings|freqs|names|defaults)-v\\d+|cal-events-v\\d+|app-settings-v\\d+)$");
 const backupKeyAllowed = k => typeof k === "string" && BACKUP_KEY_RE.test(k);
-const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1");
+const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-last-backup-v1");
 function backupCollectLocalStorage(storage = localStorage) {
   const entries = {}, unknown = [], excluded = [];
   for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; if (backupKeyExcluded(k)) excluded.push(k); else if (backupKeyAllowed(k)) entries[k] = storage.getItem(k) || ""; else unknown.push(k); }
@@ -16541,9 +16541,65 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   try { backupWriteRecord(storage, { journal: null, undo: null, problem: rec.problem }); } catch (_) {}
   return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover };
 }
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP / RESTORE — delivery (Stage 4: measure before building, warn when large, hand the file to the share sheet with a download fallback, remember the "Last backup")
+// ═════════════════════════════════════════════════════════════════════════
+// Order the screen (Stage 5) must follow: backupMeasure -> (backupLargeWarning, the user may choose "without photos") -> backupBuild (slow) -> a SECOND tap -> backupDeliver. The share sheet only opens inside a tap
+// (iOS refuses navigator.share once the tap's "user activation" has expired, which a long build would cause), so building and sharing are separate steps; backupDeliver itself does no slow work before it shares.
+// "Last backup" is recorded only when the file was really handed over: a share that completes, or a download that was started. A closed share sheet records nothing.
+const BACKUP_LAST_KEY = "sparkcheck-last-backup-v1", BACKUP_LARGE_BYTES = 100 * 1024 * 1024;
+// Exact size of what a backup would hold, without building it: the localStorage text (as the file will hold it) + every photo / logo record's bytes, read ONE record at a time through a cursor.
+async function backupMeasure({ includePhotos = true, storage = localStorage } = {}) {
+  const dataBytes = new TextEncoder().encode(JSON.stringify(backupCollectLocalStorage(storage).entries)).length; let photoBytes = 0, records = 0;
+  for (const st of BACKUP_STORES) {
+    if (st.photos && !includePhotos) continue;
+    const db = await backupIdbOpenExisting(st.db, st.store); if (!db) continue;
+    try {
+      await new Promise((res, rej) => { const rq = db.transaction(st.store, "readonly").objectStore(st.store).openCursor(); rq.onerror = () => rej(rq.error); rq.onsuccess = () => { const c = rq.result; if (!c) { res(); return; } if (c.value && c.value.buf) { photoBytes += c.value.buf.byteLength; records++; } c.continue(); }; });
+    } finally { db.close(); }
+  }
+  return { dataBytes, photoBytes, records, estimatedBytes: dataBytes + photoBytes + records * 320 + 4096 };       // 320 B per record = its zip headers + its line in the manifest (calibrated by a test against real archives)
+}
+// The text shown before a large backup is built. Empty when the backup is small enough.
+function backupLargeWarning(bytes, { includesPhotos = true } = {}) {
+  if (!(bytes >= BACKUP_LARGE_BYTES)) return "";
+  return "This backup will be about " + Math.round(bytes / (1024 * 1024)) + " MB. Files this large can fail to share from an iPhone and need a lot of free space while they are made."
+    + (includesPhotos ? " You can make a smaller backup without photos instead: every site, result, History snapshot and calendar event is still included, only the photos and thumbnails are left out. Or continue with the full backup." : " It is already without photos, so the size is the data itself.");
+}
+// Hands the finished backup file over. Share sheet first (the file itself, so Save to Files, AirDrop, Mail and the rest all work); if the browser cannot share files, or sharing fails for any reason other than the
+// user closing the sheet, a normal download. Returns { ok:true, method:"share"|"download", recorded } | { ok:false, cancelled:true } | { ok:false, error:true, message }.
+async function backupDeliver(blob, filename, { now = new Date(), includesPhotos = true, storage = localStorage, nav = typeof navigator !== "undefined" ? navigator : null, doc = typeof document !== "undefined" ? document : null, urlApi = typeof URL !== "undefined" ? URL : null } = {}) {
+  let file = null; try { file = new File([blob], filename, { type: "application/zip" }); } catch (_) {}
+  let method = null, fallbackFrom = null;
+  if (file && nav && typeof nav.share === "function") {
+    let can = false; try { can = typeof nav.canShare === "function" ? !!nav.canShare({ files: [file] }) : false; } catch (_) {}
+    if (can) {
+      try { await nav.share({ files: [file], title: "SparkCheck backup" }); method = "share"; }
+      catch (e) { if (e && e.name === "AbortError") return { ok: false, cancelled: true, message: "The share sheet was closed, so no backup was saved." }; fallbackFrom = (e && e.name) || "share failed"; }
+    }
+  }
+  if (!method) {
+    try {
+      const url = urlApi.createObjectURL(blob); const a = doc.createElement("a"); a.href = url; a.download = filename; doc.body.appendChild(a); a.click(); doc.body.removeChild(a);
+      setTimeout(() => { try { urlApi.revokeObjectURL(url); } catch (_) {} }, 120000); method = "download";
+    } catch (e) { return { ok: false, error: true, message: "The backup could not be saved (" + ((e && e.message) || "unknown error") + "). Nothing was recorded as saved. Please try again." }; }
+  }
+  let recorded = true; try { storage.setItem(BACKUP_LAST_KEY, JSON.stringify({ v: 1, at: now.toISOString(), day: localISODate(now), bytes: blob.size, method, includesPhotos: !!includesPhotos })); } catch (_) { recorded = false; }
+  return { ok: true, method, recorded, ...(fallbackFrom ? { fallbackFrom } : {}) };
+}
+// The "Last backup" record, and the words for it: "never", "today", "1 day ago", "N days ago" (whole LOCAL days between the day it was made and today).
+function backupLastBackup(storage = localStorage) {
+  try { const r = JSON.parse(storage.getItem(BACKUP_LAST_KEY)); return r && r.v === 1 && typeof r.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.day || "") ? r : null; } catch (_) { return null; }
+}
+function backupLastBackupText(storage = localStorage, now = new Date()) {
+  const r = backupLastBackup(storage); if (!r) return "never";
+  const t = localISODate(now).split("-").map(Number), d = r.day.split("-").map(Number);
+  const days = Math.round((Date.UTC(t[0], t[1] - 1, t[2]) - Date.UTC(d[0], d[1] - 1, d[2])) / 864e5);
+  return days <= 0 ? "today" : days === 1 ? "1 day ago" : days + " days ago";
+}
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
