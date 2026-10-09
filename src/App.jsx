@@ -16640,9 +16640,67 @@ function backupKeysLabel(keys) {
   const shown = labels.slice(0, 4), more = labels.length - shown.length; if (more > 0) return shown.join(", ") + " and " + more + " more";
   return shown.length === 1 ? shown[0] : shown.slice(0, -1).join(", ") + " and " + shown[shown.length - 1];
 }
+// ── The words of the Restore screen. Everything here is PURE (a plan or a code in, text out) so a test can check every sentence. Rules: lists are capped at 10 lines per group with "and N more"; every TOTAL is exact whatever is
+// shown; no internal key name, file name or technical word ever appears (the engine's own technical messages stay in the code and go to the log).
+const BACKUP_LIST_CAP = 10;
+const backupMbText = b => !(b > 0) ? "0 MB" : b < 1048576 ? "under 1 MB" : (b / 1048576 < 10 ? (b / 1048576).toFixed(1) : String(Math.round(b / 1048576))) + " MB";
+const backupJoinWords = a => a.length <= 1 ? (a[0] || "") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
+const backupCap = items => items.length <= BACKUP_LIST_CAP ? { lines: items, more: 0 } : { lines: items.slice(0, BACKUP_LIST_CAP), more: items.length - BACKUP_LIST_CAP };
+// plan -> { title, groups: [{ id, mark, heading, summary, lines, more }], notes: [], canRestore }. A group with nothing in it is left out.
+function backupSummaryText(plan) {
+  if (!plan || !plan.ok) return null;
+  const mods = plan.modules || [], c = plan.counts || {}, writes = (plan.work && plan.work.writes) || [], ev = plan.events || { add: [], present: [] };
+  const groups = [];
+  const photos = writes.filter(w => w.store !== "site-logos" && !String(w.key).endsWith("~t")).length, logos = writes.filter(w => w.store === "site-logos").length;
+  const addedLines = []; mods.forEach(m => m.sites.add.forEach(x => addedLines.push(x.name + " (" + m.label + ")")));
+  const addParts = [c.sitesAdd ? nw(c.sitesAdd, "site") : null, c.snapshotsAdd ? nw(c.snapshotsAdd, "History snapshot") : null, c.eventsAdd ? nw(c.eventsAdd, "calendar event") : null, photos ? nw(photos, "photo") : null, logos ? nw(logos, "logo") : null].filter(Boolean);
+  if (addParts.length) groups.push({ id: "added", mark: "\u2713", heading: "Will be added", summary: backupJoinWords(addParts), ...backupCap(addedLines) });
+  const presentLines = []; mods.forEach(m => m.sites.present.forEach(x => presentLines.push(x.name + " (" + m.label + ")" + (x.nameHere && x.nameHere !== x.name ? ", called \"" + x.nameHere + "\" here" : ""))));
+  const presParts = [c.sitesPresent ? nw(c.sitesPresent, "site") : null, c.eventsPresent ? nw(c.eventsPresent, "calendar event") : null].filter(Boolean);
+  if (presParts.length) groups.push({ id: "present", mark: "\u25cb", heading: "Already on this phone (left exactly as they are)", summary: backupJoinWords(presParts), ...backupCap(presentLines) });
+  const skipped = [];
+  mods.forEach(m => {
+    m.sites.conflict.forEach(x => skipped.push(x.name + " (" + m.label + "): " + (x.reason === "conflicting photos" ? "its photos differ from photos already on this phone" : "this phone already holds leftover data for it")));
+    if (m.status === "skipped-version") skipped.push(m.label + ": made by a different version of SparkCheck, so it was not added");
+    if (m.status === "unreadable-here") skipped.push(m.label + ": this phone's saved data for it could not be read, so nothing was added");
+    if (m.status === "unreadable-backup") skipped.push(m.label + ": the data in the file could not be read, so it was not added");
+  });
+  if (ev.status === "unreadable-here") skipped.push("Calendar events: this phone's saved data for them could not be read, so nothing was added");
+  if (ev.status === "unreadable-backup") skipped.push("Calendar events: the data in the file could not be read, so they were not added");
+  const unknown = (plan.unknownKeys || []).length; if (unknown) skipped.push(unknown === 1 ? "1 item that is not SparkCheck data was ignored" : unknown + " items that are not SparkCheck data were ignored");
+  if (skipped.length) groups.push({ id: "skipped", mark: "\u2715", heading: "Not restored", summary: "", ...backupCap(skipped) });
+  const notes = [], hr = plan.headroom || {};
+  if (plan.includesPhotos === false) notes.push("This backup was made without photos, so the restored sites will show without them.");
+  if (hr.storage && hr.storage.known && hr.ok) notes.push("There is enough free space."); else if (hr.storage && !hr.storage.known && photos) notes.push("This device cannot report free space, so it could not be checked in advance. If space runs out, the restore stops and puts everything back exactly as it was.");
+  notes.push("Nothing already on this phone is changed or deleted.");
+  const sm = plan.summary || {};
+  return { title: "This backup, made " + backupDmy(sm.deviceLocalDate) + " (" + backupMbText(sm.fileBytes) + ")", groups, notes, canRestore: !!plan.canRestore };
+}
+// A refusal, a failure or an undo problem in short plain sentences: code (from backupInspect, backupRestore or backupUndo) -> { title, body }. `plan` (when there is one) supplies the numbers for "not enough room".
+function backupMessageText(code, plan) {
+  const bad = "This file cannot be restored", unfinished = "A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.";
+  switch (code) {
+    case "not-a-backup": case "wrong-format": return { title: bad, body: "This is not a SparkCheck backup file." };
+    case "damaged": return { title: bad, body: "This backup file is damaged, so it cannot be restored." };
+    case "invalid": return { title: bad, body: "This backup file is not complete, so it cannot be restored." };
+    case "newer-version": return { title: bad, body: "This backup was made by a newer version of SparkCheck. Update the app, then try again." };
+    case "nothing": return { title: "Nothing to add", body: "Everything in this backup is already on this phone, so there is nothing to add." };
+    case "headroom": { const h = plan && plan.headroom; if (h && h.storage && h.storage.known && !h.storage.ok) return { title: "Not enough room", body: "There is not enough free space for the photos. About " + backupMbText(h.storage.needBytes) + " is needed and " + backupMbText(Math.max(0, h.storage.quota - h.storage.usage)) + " is free. Free up some space, then try again. Nothing was changed." };
+      return { title: "Not enough room", body: "There is not enough room in this phone's saved data for this restore. Free up some space by deleting sites, History or calendar events you no longer need, then try again. Nothing was changed." }; }
+    case "unfinished": return { title: "A restore is still being put right", body: unfinished };
+    case "shape": return { title: "The restore did not start", body: "Something on this phone is not in the form the restore expects, so nothing was added. Nothing was changed." };
+    case "journal": return { title: "Not enough room to start", body: "There is not enough room on this phone to start the restore. Free up some space, then try again. Nothing was changed." };
+    case "failed": return { title: "The restore did not finish", body: "The restore could not be completed. Everything was put back exactly as it was." };
+    case "rollback": return { title: "The restore did not finish", body: "The restore could not be completed, and one part of this phone's saved data could not be read, so it was left as it was. Make a backup now and contact support, quoting this message." };
+    case "none": return { title: "Nothing to undo", body: "There is no restore to undo." };
+    case "expired": return { title: "Undo is no longer available", body: "The undo period for the last restore has ended." };
+    case "undo-failed": return { title: "The undo did not finish", body: "The undo could not be completed. Nothing was changed." };
+    default: return { title: "Something went wrong", body: "That did not work. Nothing was changed." };
+  }
+}
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, backupKeyLabel, backupKeysLabel, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, backupKeyLabel, backupKeysLabel, BACKUP_LIST_CAP, backupMbText, backupSummaryText, backupMessageText, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
