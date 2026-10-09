@@ -16415,7 +16415,7 @@ function backupRecoverAtStart(storage = localStorage, { crashAt = null } = {}) {
   try {
     const rec = backupReadRecord(storage); if (!rec || !rec.journal) return { recovered: false, pending: 0, unresolved: [], semantic: [] };
     let unresolved = rec.journal.unresolved || [], semantic = rec.journal.semantic || []; const put = rec.journal.put || [];
-    if (rec.journal.phase !== "idb") { const r = backupRollbackKeys(rec.journal, storage, crashAt); unresolved = r.unresolved; semantic = r.semantic; storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: { phase: "idb", put, unresolved, semantic }, undo: rec.undo })); }
+    if (rec.journal.phase !== "idb") { const r = backupRollbackKeys(rec.journal, storage, crashAt); unresolved = r.unresolved; semantic = r.semantic; storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: { phase: "idb", put, unresolved, semantic }, undo: rec.undo, ...(rec.problem ? { problem: rec.problem } : {}) })); }
     return { recovered: true, pending: put.length, unresolved, semantic };
   } catch (e) { if (e instanceof BackupCrash) throw e; return { recovered: false, pending: 0, unresolved: [], semantic: [], error: true }; }
 }
@@ -16428,9 +16428,9 @@ async function backupIdbDelete(storeId, key) {
 async function backupFinishRecovery(storage = localStorage) {
   const rec = backupReadRecord(storage); if (!rec || !rec.journal || rec.journal.phase !== "idb") return { ok: true, deleted: 0 };
   const unresolved = rec.journal.unresolved || [];
-  if (unresolved.length) { try { backupWriteRecord(storage, { journal: null, undo: rec.undo, problem: { keys: unresolved, at: new Date().toISOString() } }); } catch (_) { return { ok: false, deleted: 0 }; } return { ok: true, deleted: 0, kept: true, unresolved }; }
+  if (unresolved.length) { try { backupWriteRecord(storage, { journal: null, undo: rec.undo, problem: { keys: [...new Set([...(rec.problem ? rec.problem.keys : []), ...unresolved])], at: new Date().toISOString() } }); } catch (_) { return { ok: false, deleted: 0 }; } return { ok: true, deleted: 0, kept: true, unresolved }; }
   let n = 0; try { for (const p of rec.journal.put || []) { await backupIdbDelete(p.s, p.k); n++; } } catch (e) { return { ok: false, deleted: n }; }
-  try { backupWriteRecord(storage, { journal: null, undo: rec.undo }); } catch (_) { return { ok: false, deleted: n }; }
+  try { backupWriteRecord(storage, { journal: null, undo: rec.undo, problem: rec.problem }); } catch (_) { return { ok: false, deleted: n }; }
   return { ok: true, deleted: n, unresolved: [], semantic: rec.journal.semantic || [] };
 }
 // APPLY. Returns { ok:true, summary } | { ok:false, code, message, plan? }. Nothing is written unless the plan can be restored. `crashAt(stage, i)` is the test seam (may be async; may throw BackupCrash).
@@ -16445,7 +16445,7 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
   let inserts; try { inserts = backupBuildInserts(plan, storage); } catch (e) { return { ok: false, code: "shape", message: "The restore was not started: " + e.message + ". Nothing was changed.", plan }; }
   const z = await zipOpen(file); const writes = plan.work.writes;
   const journal = { startedAt: now.toISOString(), keys: inserts.map(backupJournalEntry), put: writes.map(w => ({ s: w.store, k: w.key })) };
-  try { storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal, undo: prev ? prev.undo : null })); }
+  try { storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal, undo: prev ? prev.undo : null, ...(prev && prev.problem ? { problem: prev.problem } : {}) })); }
   catch (e) { return { ok: false, code: "journal", message: "There is not enough room in this phone's saved-data space to start the restore. Free up space by deleting sites, History snapshots or calendar events you no longer need, then try again. Nothing was changed.", plan }; }
   const dbs = {};
   try {
@@ -16469,7 +16469,7 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
     const undo = { restoredAt: now.toISOString(), expiresOn: localISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + RESTORE_UNDO_DAYS)), put: journal.put, created: inserts.filter(e => e.kind === "absent").map(e => e.key),
       sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.length } };
     for (const m of Object.keys(plan.work.modules)) { const w = plan.work.modules[m]; undo.sites[m] = w.projects.map(p => p.id); undo.snaps[m] = w.history.map(s => s.id); undo.active[m] = Object.keys(w.active); }
-    storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo }));          // THE COMMIT: one write replaces the journal by the undo record
+    storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo }));          // THE COMMIT: one write replaces the journal by the undo record (and is the ONLY write that drops a recorded problem)
     await hook("committed");
     return { ok: true, summary: { sitesAdded: plan.counts.sitesAdd, snapshotsAdded: plan.counts.snapshotsAdd, eventsAdded: plan.counts.eventsAdd, photosWritten: writes.length, alreadyOnPhone: plan.counts.sitesPresent + plan.counts.eventsPresent, notRestored: plan.counts.sitesConflict, modulesSkipped: plan.counts.modulesSkipped, undoUntil: undo.expiresOn }, plan };
   } catch (e) {
@@ -16499,7 +16499,7 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   const rec = backupReadRecord(storage);
   if (rec && rec.journal) return { ok: false, code: "unfinished", message: "A restore is still being put right. Close and reopen SparkCheck, then try again." };
   if (!rec || !rec.undo) return { ok: false, code: "none", message: "There is no restore to undo." };
-  if (localISODate(now) > rec.undo.expiresOn) { try { backupWriteRecord(storage, { journal: null, undo: null }); } catch (_) {} return { ok: false, code: "expired", message: "The undo period for the last restore has ended." }; }
+  if (localISODate(now) > rec.undo.expiresOn) { try { backupWriteRecord(storage, { journal: null, undo: null, problem: rec.problem }); } catch (_) {} return { ok: false, code: "expired", message: "The undo period for the last restore has ended." }; }
   const u = rec.undo; const removed = { sites: 0, snapshots: 0, events: 0 }; const photoRemoved = { "site-photos": new Set(), "gsd-photos": new Set() }; const logoKeys = new Set(u.put.filter(p => p.s === "site-logos").map(p => p.k));
   const newVals = {};                                                                    // key -> the value AFTER the undo (also used to find the photos still in use)
   const read = (key, role) => { const c = backupReadRaw(storage, key, role); if (c.state === "bad") throw new Error(key + " can't be read"); return c.state === "ok" ? c.v : null; };
@@ -16538,7 +16538,7 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   let leftover = 0;                                                                      // the photo / logo records: best effort (a record left behind is invisible: nothing refers to it)
   for (const stId of Object.keys(photoRemoved)) for (const key of photoRemoved[stId]) { try { await backupIdbDelete(stId, key); } catch (_) { leftover++; } }
   for (const key of logoKeys) { try { await backupIdbDelete("site-logos", key); } catch (_) { leftover++; } }
-  try { backupWriteRecord(storage, { journal: null, undo: null }); } catch (_) {}
+  try { backupWriteRecord(storage, { journal: null, undo: null, problem: rec.problem }); } catch (_) {}
   return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover };
 }
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,

@@ -262,3 +262,48 @@ describe('UNDO removes exactly what the restore added', () => {
     expect(await backupUndo({ storage: S })).toMatchObject({ ok: false, code: 'unfinished' }); expect(backupUndoInfo(S)).toBeNull();
   });
 });
+
+describe('A RECORDED PROBLEM is carried forward by every write of the record; ONLY a successful commit clears it', () => {
+  const PROBLEM = { keys: ['rcd-projects-v6'], at: '2026-10-05T01:00:00.000Z' };
+  const record = () => JSON.parse(localStorage.getItem(RESTORE_KEY));
+  const plant = (extra = {}) => { const cur = localStorage.getItem(RESTORE_KEY) ? record() : { v: 1, journal: null, undo: null }; rawSetItem(RESTORE_KEY, JSON.stringify({ ...cur, ...extra, problem: PROBLEM })); };
+  it('the JOURNAL write carries it: with the journal in place the same record still holds the problem', async () => {
+    const file = await sourceFile(); await seedTarget(); plant();
+    await expect(backupRestore(file, { storage: S, crashAt: crashAt('journal') })).rejects.toBeInstanceOf(BackupCrash);
+    expect(record()).toMatchObject({ journal: { keys: expect.any(Array) }, problem: PROBLEM });
+  });
+  it('a restore that FAILS after the journal (rolled back in the same call) still holds the problem afterwards', async () => {
+    const file = await sourceFile(); await seedTarget(); plant();
+    const r = await backupRestore(file, { storage: failingNth(3) }); expect(r).toMatchObject({ ok: false, code: 'failed' });
+    expect(record()).toEqual({ v: 1, journal: null, undo: null, problem: PROBLEM }); expect(backupRestoreProblem(S)).toEqual(PROBLEM);
+  });
+  it('a restore killed part-way and recovered at the next start (both halves) still holds the problem', async () => {
+    const file = await sourceFile(); await seedTarget(); const before = await snap(); plant();
+    await expect(backupRestore(file, { storage: S, crashAt: crashAt('key', 2) })).rejects.toBeInstanceOf(BackupCrash);
+    expect(backupRecoverAtStart(S)).toMatchObject({ recovered: true }); expect(record().problem).toEqual(PROBLEM);              // after the synchronous half
+    expect(await backupFinishRecovery(S)).toMatchObject({ ok: true }); expect(record()).toEqual({ v: 1, journal: null, undo: null, problem: PROBLEM });   // after the background half
+    for (const k of Object.keys(before.ls)) expect(localStorage.getItem(k), k).toBe(before.ls[k]);
+  });
+  it('a restore refused before the journal (no room to start) leaves the record, and so the problem, exactly as it was', async () => {
+    const file = await sourceFile(); await seedTarget(); plant(); const raw = localStorage.getItem(RESTORE_KEY);
+    const r = await backupRestore(file, { storage: adapter({ setItem: (k, v) => { if (k === RESTORE_KEY) throw quota(); rawSetItem(k, v); } }) });
+    expect(r).toMatchObject({ ok: false, code: 'journal' }); expect(localStorage.getItem(RESTORE_KEY)).toBe(raw);
+  });
+  it('a new unresolved key is ADDED to the recorded problem (the earlier key is not forgotten)', async () => {
+    const file = await sourceFile(); await seedTarget(); plant();
+    const r = await backupRestore(file, { storage: S, crashAt: async (s) => { if (s === 'keys-done') rawSetItem('iel-results-v2', '{broken'); } });
+    expect(r).toMatchObject({ ok: false, code: 'rollback', unresolved: ['iel-results-v2'] }); expect(record().problem.keys.slice().sort()).toEqual(['iel-results-v2', 'rcd-projects-v6']);
+  });
+  it('a successful UNDO and an expired undo do not clear it either', async () => {
+    const file = await backupOf(() => { seedModule(FM.rcd); }); const t0 = new Date(2026, 9, 5, 12, 0);
+    expect((await backupRestore(file, { storage: S, now: t0 })).ok).toBe(true); plant(); expect(record().undo).toBeTruthy();
+    expect((await backupUndo({ storage: S, now: t0 })).ok).toBe(true); expect(record()).toEqual({ v: 1, journal: null, undo: null, problem: PROBLEM });
+    expect((await backupRestore(file, { storage: S, now: t0 })).ok).toBe(true); expect(record().problem).toBeUndefined();     // (this restore was a successful commit: see the next test)
+    plant(); expect(await backupUndo({ storage: S, now: new Date(2026, 9, 25) })).toMatchObject({ ok: false, code: 'expired' }); expect(record()).toEqual({ v: 1, journal: null, undo: null, problem: PROBLEM });
+  });
+  it('ONLY a successful commit clears it', async () => {
+    const file = await sourceFile(); await seedTarget(); plant(); expect(backupRestoreProblem(S)).toEqual(PROBLEM);
+    const r = await backupRestore(file, { storage: S }); expect(r.ok).toBe(true);
+    expect(backupRestoreProblem(S)).toBeNull(); expect(record()).toMatchObject({ v: 1, journal: null, undo: expect.any(Object) }); expect(record().problem).toBeUndefined();
+  });
+});
