@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
+import App, { backupRecoverAtStart, backupFinishRecovery } from './App.jsx'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // A build lands as a new service worker in the background but does not take over
@@ -40,6 +40,10 @@ function UpdateToast() {
     }, 'Later')
   )
 }
+
+// An interrupted restore is put right HERE, synchronously, before anything renders (localStorage only: a few getItem / setItem calls); the photo / logo records it wrote are then deleted in the
+// background. Never throws: a problem here must not stop the app from starting.
+try { if (backupRecoverAtStart().recovered) backupFinishRecovery().catch(() => {}) } catch (_) {}
 
 try {
   const root = ReactDOM.createRoot(document.getElementById('root'))

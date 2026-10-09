@@ -1,6 +1,9 @@
 // Shared seeding helpers for the backup / restore tests (FICTIONAL data). A "phone" = localStorage + the four IndexedDB databases; `seedModule` puts the fixture site (id s1 by default) into one module with its
 // results, meta, one History snapshot and an audit-active entry; `backupOf(seed)` builds a backup file from whatever `seed` puts on a phone and then wipes the phone.
-import { backupBuild, BACKUP_MODULE_INFO, sitePhotoStore, gsdPhotoStore, appLogoStore, siteLogoStore } from '../App.jsx';
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import AppRoot, { backupBuild, BACKUP_MODULE_INFO, sitePhotoStore, gsdPhotoStore, appLogoStore, siteLogoStore } from '../App.jsx';
 import { MODULES, liveStore, metaStore, histStore } from './item-dates-fixtures.js';
 
 export const DBS = [['sparkcheck-site-photos', 'photos'], ['sparkcheck-gsd-photos', 'photos'], ['sparkcheck-app-settings', 'logo'], ['sparkcheck-site-logos', 'logos']];
@@ -48,4 +51,36 @@ export function naiveApply(plan) {
     if (w.activeMode === 'create') rawSetItem(k.active, JSON.stringify({ v: 1, sites: w.active }));
     else if (w.activeMode === 'insert') { const a = read(k.active, null); rawSetItem(k.active, JSON.stringify({ ...a, sites: { ...a.sites, ...w.active } })); }
   }
+}
+
+// the REAL photo shapes each module's delete handler walks: SWB board `_photos` + item `photos`, ELT / Welder asset `photos`, GSD item `photos` (live AND in a History snapshot)
+export const PHOTO_SETUP = {
+  swb:    { store: sitePhotoStore, live: r => { r.a1.b1._photos = [{ id: 'live1', w: 1, h: 1 }]; r.a1.b1.enclosure.photos = [{ id: 'live2', w: 1, h: 1 }]; }, hist: r => { r.a1.b1._photos = [{ id: 'hist1', w: 1, h: 1 }]; } },
+  elt:    { store: sitePhotoStore, live: r => { const a = Object.values(r)[0]; a.photos = [{ id: 'live1', w: 1, h: 1 }, { id: 'live2', w: 1, h: 1 }]; }, hist: r => { Object.values(r)[0].photos = [{ id: 'hist1', w: 1, h: 1 }]; } },
+  welder: { store: sitePhotoStore, live: r => { const a = Object.values(r)[0]; a.photos = [{ id: 'live1', w: 1, h: 1 }, { id: 'live2', w: 1, h: 1 }]; }, hist: r => { Object.values(r)[0].photos = [{ id: 'hist1', w: 1, h: 1 }]; } },
+  gsd:    { store: gsdPhotoStore,  live: r => { r[0].photos = [{ id: 'live1', w: 1, h: 1 }, { id: 'live2', w: 1, h: 1 }]; }, hist: r => { r[0].photos = [{ id: 'hist1', w: 1, h: 1 }]; } },
+};
+export const PHOTO_IDS = ['live1', 'live1~t', 'live2', 'live2~t', 'hist1', 'hist1~t'];
+export const patchKey = (key, fn) => { const v = JSON.parse(localStorage.getItem(key)); fn(v); rawSetItem(key, JSON.stringify(v)); };
+export async function seedSite(f) {
+  seedModule(f);
+  const ps = PHOTO_SETUP[f.mod];
+  if (ps) {
+    patchKey(f.keys.r, v => ps.live(v.s1)); patchKey(f.keys.h, v => ps.hist(f.mod === 'gsd' ? v[0].items : v[0].results));
+    for (const id of PHOTO_IDS) await ps.store.put(id, rec(id.length, 7));
+  }
+  await siteLogoStore.put(f.mod, 's1', rec(42));
+}
+
+// open the module's site list, press the site's own red delete button and confirm (the DeleteButton two-step: no window.confirm)
+export async function deleteSiteViaApp(f) {
+  const user = userEvent.setup(); render(React.createElement(AppRoot));
+  await user.click(screen.getByText(f.tile, { exact: true }));
+  let el = await screen.findByText('Site One', { selector: 'div' });
+  const sel = 'button[style*="239, 68, 68"]';
+  while (el && !el.querySelector(sel)) el = el.parentElement;
+  await user.click(el.querySelector(sel));
+  const label = await screen.findByText('Remove site?');
+  await user.click(label.parentElement.querySelector('button'));                 // the first button after the label is the confirm
+  await new Promise(r => setTimeout(r, 400));                                    // the save effects + the async IndexedDB deletes settle
 }

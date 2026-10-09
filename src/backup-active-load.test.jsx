@@ -4,13 +4,16 @@
 //  * phone with other sites and no key: the key stays ABSENT, so the app derives every site's entry itself at load (progress => active; RCD / IEL also honour this phone's legacy rcd-mode / iel-cat).
 import 'fake-indexeddb/auto';
 import React from 'react';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { render, screen, cleanup, configure } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppRoot from './App.jsx';
 import { backupPlan } from './App.jsx';
 import { MODULES } from './test/item-dates-fixtures.js';
 import { seedModule, wipe, backupOf, naiveApply } from './test/backup-fixtures.js';
+
+vi.setConfig({ testTimeout: 30000 });                       // multi-screen flows run several renders; keep them stable under a loaded / parallel run
+configure({ asyncUtilTimeout: 10000 });                  // the first render of the whole app can take over RTL's 1 s default when the full suite runs in parallel
 
 const MID_AUDIT = { rcd: { mode: 'inject' }, iel: { cat: 'isolators' } };            // distinct from what the app would DERIVE from the fixture's progress (push / estops)
 const DERIVED = { rcd: { mode: 'push' }, iel: { cat: 'estops' } };

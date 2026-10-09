@@ -16068,7 +16068,7 @@ const backupFilename = (d = new Date()) => `SparkCheck-backup-${localISODate(d)}
 const BACKUP_MODULES = ["rcd", "iel", "tat", "thermo", "swb", "irt", "elt", "welder", "gsd"];
 const BACKUP_KEY_RE = new RegExp("^(?:(?:" + BACKUP_MODULES.join("|") + ")-(?:projects|results|meta|history|dropdowns|audit-active|items|photos-migrated)-v\\d+|rcd-mode-v\\d+|iel-cat-v\\d+|tat-(?:settings|freqs|names|defaults)-v\\d+|cal-events-v\\d+|app-settings-v\\d+)$");
 const backupKeyAllowed = k => typeof k === "string" && BACKUP_KEY_RE.test(k);
-const backupKeyExcluded = k => typeof k === "string" && /-preMigration-v\d+$/.test(k);
+const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1");
 function backupCollectLocalStorage(storage = localStorage) {
   const entries = {}, unknown = [], excluded = [];
   for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; if (backupKeyExcluded(k)) excluded.push(k); else if (backupKeyAllowed(k)) entries[k] = storage.getItem(k) || ""; else unknown.push(k); }
@@ -16318,9 +16318,232 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
     return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, modules: out.modules, events: ev, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
   } finally { for (const id of Object.keys(dbs)) { try { if (dbs[id]) dbs[id].close(); } catch (_) {} } }
 }
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP / RESTORE — engine (Stage 3: APPLY a plan, ADD-ONLY; roll back; recover after a kill; undo)
+// ═════════════════════════════════════════════════════════════════════════
+// The guarantee: after ANY failure (a failed IndexedDB put, a throwing setItem, a tab killed at any point) this phone's data is EXACTLY what it was before, byte for byte, or the restore is fully added.
+// Never a mix. There is no multi-store transaction in IndexedDB, so the order is: (1) compute every change in memory, (2) write ONE journal record, (3) add the photos / logos, one at a time, (4) add the
+// localStorage text by PURE INSERTION (every existing byte stays; nothing is re-serialised), (5) verify, (6) commit with ONE write that replaces the journal by the undo record. Rollback removes exactly the
+// inserted text (checked by length + CRC-32) and deletes the records the restore wrote. A kill is recovered synchronously at the next start, before the first render (backupRecoverAtStart).
+// ONE localStorage key holds { journal, undo }: the commit is a single setItem, so there is never a moment where both "applying" and "committed" are true.
+const RESTORE_KEY = "sparkcheck-restore-v1", RESTORE_UNDO_DAYS = 14;
+class BackupCrash extends Error {}                    // test seam: thrown by a crashAt hook to simulate the tab being killed (nothing after it runs: no rollback, no cleanup)
+const backupTextCrc = s => zipCrc32(new TextEncoder().encode(s));
+function backupReadRecord(storage) {
+  let raw = null; try { raw = storage.getItem(RESTORE_KEY); } catch (_) { return null; }
+  if (!raw) return null;
+  try { const r = JSON.parse(raw); return r && r.v === 1 ? { journal: r.journal || null, undo: r.undo || null, problem: r.problem || null } : null; } catch (_) { return null; }
+}
+function backupWriteRecord(storage, rec) { if (!rec.journal && !rec.undo && !rec.problem) storage.removeItem(RESTORE_KEY); else storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: rec.journal || null, undo: rec.undo || null, ...(rec.problem ? { problem: rec.problem } : {}) })); }
+// A restore that could not be fully put back (a key that is no longer valid JSON): the keys, so Settings can say so. Cleared by the next successful restore.
+const backupRestoreProblem = (storage = localStorage) => { const r = backupReadRecord(storage); return r && r.problem ? r.problem : null; };
+// One key on this phone with its raw text: { state: "absent" } | { state: "ok", raw, v } | { state: "bad" }
+function backupReadRaw(storage, key, role) {
+  let raw = null; try { raw = storage.getItem(key); } catch (_) { return { state: "bad" }; }
+  if (raw === null) return { state: "absent" };
+  try { const v = JSON.parse(raw); return backupRoleOk(role, v) ? { state: "ok", raw, v } : { state: "bad" }; } catch (_) { return { state: "bad" }; }
+}
+// PURE INSERTION: the new elements go immediately before the closing bracket of the existing array / object. Valid JSON ends with its top-level closer (after optional whitespace), so that is where they go.
+function backupInsertInto(key, cur, add) {
+  const isArr = Array.isArray(cur.v), t = cur.raw.replace(/\s+$/, ""), at = t.length - 1;
+  if (at < 1 || t[at] !== (isArr ? "]" : "}")) throw new Error("unexpected shape of " + key);
+  const body = isArr ? add.map(x => JSON.stringify(x)).join(",") : Object.keys(add).map(k => JSON.stringify(k) + ":" + JSON.stringify(add[k])).join(",");
+  const piece = (isArr ? cur.v.length === 0 : Object.keys(cur.v).length === 0) ? body : "," + body;
+  return { key, kind: "insert", orig: cur.raw, at, insLen: piece.length, text: cur.raw.slice(0, at) + piece + cur.raw.slice(at), piece, ids: isArr ? add.map(x => x && x.id) : Object.keys(add) };
+}
+// Every localStorage change the plan needs, computed WITHOUT writing anything. kind: "insert" (pure insertion into an existing key), "absent" (the key did not exist: created whole, removed on rollback),
+// "text" (the tiny audit-active map: its whole original text is kept in the journal and put back verbatim).
+function backupBuildInserts(plan, storage) {
+  const out = [];
+  const put = (key, role, addList, addMap) => {
+    const cur = backupReadRaw(storage, key, role); if (cur.state === "bad") throw new Error("this phone's " + key + " can't be read");
+    const add = addList || addMap, n = addList ? addList.length : Object.keys(addMap).length; if (!n) return;
+    if (cur.state === "absent") out.push({ key, kind: "absent", text: JSON.stringify(addList ? addList : addMap) });
+    else out.push(backupInsertInto(key, cur, add));
+  };
+  for (const m of BACKUP_MODULES) {
+    const w = plan.work.modules[m]; if (!w) continue; const k = BACKUP_MODULE_INFO[m].keys;
+    put(k.projects, "projects", w.projects, null); put(k.results, "results", null, w.results); put(k.meta, "meta", null, w.meta); put(k.history, "history", w.history, null);
+    if (w.activeMode === "insert" && Object.keys(w.active).length) { const cur = backupReadRaw(storage, k.active, "active"); if (cur.state !== "ok") throw new Error("this phone's " + k.active + " can't be read"); out.push({ key: k.active, kind: "text", orig: cur.raw, text: JSON.stringify({ ...cur.v, sites: { ...cur.v.sites, ...w.active } }) }); }
+    else if (w.activeMode === "create" && Object.keys(w.active).length) out.push({ key: k.active, kind: "absent", text: JSON.stringify({ v: AUDIT_ACTIVE_VERSION, sites: w.active }) });
+  }
+  if (plan.work.events.length) put(K_CAL_EVENTS, "projects", plan.work.events, null);
+  for (const e of out) { let v; try { v = JSON.parse(e.text); } catch (_) { throw new Error("internal error: the new text for " + e.key + " is not valid JSON"); } if (v === null || typeof v !== "object") throw new Error("internal error: the new text for " + e.key + " has the wrong shape"); }   // nothing written yet
+  return out;
+}
+const backupJournalEntry = e => e.kind === "insert" ? { key: e.key, kind: "insert", at: e.at, insLen: e.insLen, origLen: e.orig.length, origCrc: backupTextCrc(e.orig), ids: e.ids } : e.kind === "text" ? { key: e.key, kind: "text", orig: e.orig } : { key: e.key, kind: "absent" };
+// After the writes and before the commit: every touched key parses, has the right shape, still contains every original byte exactly where it was, and holds the new IDs.
+function backupVerifyApplied(inserts, storage) {
+  for (const e of inserts) {
+    const cur = storage.getItem(e.key); if (cur === null) throw new Error("verify: " + e.key + " is missing");
+    let v; try { v = JSON.parse(cur); } catch (_) { throw new Error("verify: " + e.key + " is not valid JSON"); }
+    if (cur !== e.text) throw new Error("verify: " + e.key + " does not hold what was written");
+    if (e.kind === "insert") { if (cur.length !== e.orig.length + e.insLen || cur.slice(0, e.at) !== e.orig.slice(0, e.at) || cur.slice(e.at + e.insLen) !== e.orig.slice(e.at)) throw new Error("verify: " + e.key + " lost an original byte"); if (typeof v !== "object" || v === null) throw new Error("verify: " + e.key + " has the wrong shape"); }
+  }
+}
+// Puts the localStorage keys back (synchronous). "insert": already original -> nothing; original + inserted text -> cut exactly the inserted text out and check the result against the journal's length + CRC;
+// anything else (the key was changed by something else since) is NOT cut by position: exactly the IDs the restore inserted are removed by parsing (the other changes stay; the formatting of that key may differ), reported in
+// `semantic`. Only a key that is no longer valid JSON is `unresolved` (and then nothing is deleted: see backupFinishRecovery). crashAt is a SYNC test hook.
+function backupRemoveIds(e, cur, storage) {
+  let v; try { v = JSON.parse(cur); } catch (_) { return false; }
+  const ids = new Set(e.ids || []);
+  if (Array.isArray(v)) storage.setItem(e.key, JSON.stringify(v.filter(x => !(x && ids.has(x.id)))));
+  else if (v && typeof v === "object") { for (const id of ids) delete v[id]; storage.setItem(e.key, JSON.stringify(v)); }
+  else return false;
+  return true;
+}
+function backupRollbackKeys(journal, storage, crashAt) {
+  const unresolved = [], semantic = [];
+  journal.keys.forEach((e, i) => {
+    try {
+      const cur = storage.getItem(e.key);
+      const byId = () => { if (backupRemoveIds(e, cur, storage)) semantic.push(e.key); else unresolved.push(e.key); };
+      if (e.kind === "absent") { if (cur !== null) storage.removeItem(e.key); }
+      else if (e.kind === "text") { if (cur !== e.orig) storage.setItem(e.key, e.orig); }
+      else if (cur === null) { /* the key is gone: nothing of ours is left in it */ }
+      else if (cur.length === e.origLen && backupTextCrc(cur) === e.origCrc) { /* nothing was inserted */ }
+      else if (cur.length === e.origLen + e.insLen) { const r = cur.slice(0, e.at) + cur.slice(e.at + e.insLen); if (r.length === e.origLen && backupTextCrc(r) === e.origCrc) storage.setItem(e.key, r); else byId(); }
+      else byId();
+    } catch (_) { unresolved.push(e.key); }
+    if (crashAt) crashAt("rollback-key", i);
+  });
+  return { unresolved, semantic };
+}
+// SYNCHRONOUS, never throws (except the BackupCrash test seam): called by main.jsx BEFORE the first render. An interrupted restore (a journal in the "applying" phase) has its localStorage part put back at once;
+// the photo / logo records the restore wrote are then deleted in the background (backupFinishRecovery) and are invisible meanwhile (nothing refers to them).
+function backupRecoverAtStart(storage = localStorage, { crashAt = null } = {}) {
+  try {
+    const rec = backupReadRecord(storage); if (!rec || !rec.journal) return { recovered: false, pending: 0, unresolved: [], semantic: [] };
+    let unresolved = rec.journal.unresolved || [], semantic = rec.journal.semantic || []; const put = rec.journal.put || [];
+    if (rec.journal.phase !== "idb") { const r = backupRollbackKeys(rec.journal, storage, crashAt); unresolved = r.unresolved; semantic = r.semantic; storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: { phase: "idb", put, unresolved, semantic }, undo: rec.undo })); }
+    return { recovered: true, pending: put.length, unresolved, semantic };
+  } catch (e) { if (e instanceof BackupCrash) throw e; return { recovered: false, pending: 0, unresolved: [], semantic: [], error: true }; }
+}
+async function backupIdbDelete(storeId, key) {
+  const st = BACKUP_STORES.find(s => s.id === storeId); if (!st) return;
+  const db = await backupIdbOpenExisting(st.db, st.store); if (!db) return;
+  try { await backupIdbReq(db, st.store, "readwrite", s => s.delete(key)); } finally { db.close(); }
+}
+// Background half of the recovery: delete the records the interrupted restore wrote, then clear the journal. Any failure leaves the journal for the next start (deleting is idempotent).
+async function backupFinishRecovery(storage = localStorage) {
+  const rec = backupReadRecord(storage); if (!rec || !rec.journal || rec.journal.phase !== "idb") return { ok: true, deleted: 0 };
+  const unresolved = rec.journal.unresolved || [];
+  if (unresolved.length) { try { backupWriteRecord(storage, { journal: null, undo: rec.undo, problem: { keys: unresolved, at: new Date().toISOString() } }); } catch (_) { return { ok: false, deleted: 0 }; } return { ok: true, deleted: 0, kept: true, unresolved }; }
+  let n = 0; try { for (const p of rec.journal.put || []) { await backupIdbDelete(p.s, p.k); n++; } } catch (e) { return { ok: false, deleted: n }; }
+  try { backupWriteRecord(storage, { journal: null, undo: rec.undo }); } catch (_) { return { ok: false, deleted: n }; }
+  return { ok: true, deleted: n, unresolved: [], semantic: rec.journal.semantic || [] };
+}
+// APPLY. Returns { ok:true, summary } | { ok:false, code, message, plan? }. Nothing is written unless the plan can be restored. `crashAt(stage, i)` is the test seam (may be async; may throw BackupCrash).
+async function backupRestore(file, { storage = localStorage, now = new Date(), inspected = null, crashAt = null, estimate = undefined } = {}) {
+  const hook = (stage, i) => crashAt ? crashAt(stage, i) : undefined;      // the test seam; with none, the localStorage writes below never yield
+  const plan = await backupPlan(file, { storage, inspected, estimate }); if (!plan.ok) return plan;
+  if (plan.nothingToAdd) return { ok: false, code: "nothing", message: "Everything in this backup is already on this phone, so there is nothing to add.", plan };
+  if (!plan.canRestore) return { ok: false, code: "headroom", message: plan.headroom.message, plan };
+  let prev = backupReadRecord(storage);
+  if (prev && prev.journal) { backupRecoverAtStart(storage); try { await backupFinishRecovery(storage); } catch (_) {} prev = backupReadRecord(storage); }      // an earlier interrupted restore is finished first
+  if (prev && prev.journal) return { ok: false, code: "unfinished", message: "A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.", plan };
+  let inserts; try { inserts = backupBuildInserts(plan, storage); } catch (e) { return { ok: false, code: "shape", message: "The restore was not started: " + e.message + ". Nothing was changed.", plan }; }
+  const z = await zipOpen(file); const writes = plan.work.writes;
+  const journal = { startedAt: now.toISOString(), keys: inserts.map(backupJournalEntry), put: writes.map(w => ({ s: w.store, k: w.key })) };
+  try { storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal, undo: prev ? prev.undo : null })); }
+  catch (e) { return { ok: false, code: "journal", message: "There is not enough room in this phone's saved-data space to start the restore. Free up space by deleting sites, History snapshots or calendar events you no longer need, then try again. Nothing was changed.", plan }; }
+  const dbs = {};
+  try {
+    await hook("journal");
+    for (let i = 0; i < writes.length; i++) {                                           // photos / logos: one at a time, each released before the next
+      const w = writes[i], st = BACKUP_STORES.find(s => s.id === w.store); const u8 = await z.bytes(w.file);
+      if (u8.length !== w.size || await backupSha256(u8) !== w.sha256) throw new Error("a photo or logo in the file does not match its checksum");
+      if (!dbs[st.id]) dbs[st.id] = await backupIdbOpen(st.db, st.store);
+      await backupIdbReq(dbs[st.id], st.store, "readwrite", s => s.put({ buf: u8.buffer, type: w.type }, w.key));
+      await hook("put", i);
+    }
+    for (const w of writes) {                                                           // verify counts + sizes + checksums of what was written
+      const st = BACKUP_STORES.find(s => s.id === w.store); const r = await backupIdbGet(dbs[st.id], st.store, w.key);
+      if (!r || !r.buf || r.buf.byteLength !== w.size || await backupSha256(new Uint8Array(r.buf)) !== w.sha256) throw new Error("a photo or logo was not stored correctly");
+    }
+    await hook("puts-done");
+    for (let j = 0; j < inserts.length; j++) { storage.setItem(inserts[j].key, inserts[j].text); if (crashAt) await hook("key", j); }
+    await hook("keys-done");
+    backupVerifyApplied(inserts, storage);
+    await hook("verified");
+    const undo = { restoredAt: now.toISOString(), expiresOn: localISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + RESTORE_UNDO_DAYS)), put: journal.put, created: inserts.filter(e => e.kind === "absent").map(e => e.key),
+      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.length } };
+    for (const m of Object.keys(plan.work.modules)) { const w = plan.work.modules[m]; undo.sites[m] = w.projects.map(p => p.id); undo.snaps[m] = w.history.map(s => s.id); undo.active[m] = Object.keys(w.active); }
+    storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo }));          // THE COMMIT: one write replaces the journal by the undo record
+    await hook("committed");
+    return { ok: true, summary: { sitesAdded: plan.counts.sitesAdd, snapshotsAdded: plan.counts.snapshotsAdd, eventsAdded: plan.counts.eventsAdd, photosWritten: writes.length, alreadyOnPhone: plan.counts.sitesPresent + plan.counts.eventsPresent, notRestored: plan.counts.sitesConflict, modulesSkipped: plan.counts.modulesSkipped, undoUntil: undo.expiresOn }, plan };
+  } catch (e) {
+    if (e instanceof BackupCrash) throw e;                                               // a simulated kill: nothing runs after it
+    for (const id of Object.keys(dbs)) { try { dbs[id].close(); } catch (_) {} } for (const id of Object.keys(dbs)) delete dbs[id];
+    const r = backupRecoverAtStart(storage); let fin = { ok: false }; try { fin = await backupFinishRecovery(storage); } catch (_) {}
+    if (r.error || r.unresolved.length) return { ok: false, code: "rollback", message: "The restore failed (" + e.message + ") and this could not be put back, because it is no longer readable: " + r.unresolved.join(", ") + ". The photos were left in place. Nothing else was changed by the restore.", plan, unresolved: r.unresolved };
+    if (r.semantic.length) return { ok: false, code: "failed", message: "The restore could not be completed (" + e.message + "). Everything it added was removed again. " + r.semantic.join(", ") + " had been changed by something else in the meantime, so the restored entries were taken out by ID and the rest of it was left as it now is.", plan, semantic: r.semantic };
+    return { ok: false, code: "failed", message: "The restore could not be completed (" + e.message + "). Everything was put back exactly as it was." + (fin.ok ? "" : " Some leftover photo records will be cleaned up the next time SparkCheck starts."), plan };
+  } finally { for (const id of Object.keys(dbs)) { try { dbs[id].close(); } catch (_) {} } }
+}
+// ── UNDO: removes exactly the sites / History snapshots / events the last restore added (by ID), by PARSING the current data (you may have worked in the restored sites since, so text offsets no longer line up).
+// Work done inside the restored sites since is removed with them. Photos and logos go with the sites they belonged to; a photo still used by a remaining site stays.
+const backupDmy = iso => String(iso || "").split("-").reverse().join("/");
+// The text the Undo confirmation shows. It says plainly that work done INSIDE the restored sites since the restore goes too.
+function backupUndoConfirmText(info) {
+  const c = (info && info.counts) || {};
+  return "Undo the last restore? This removes the " + nw(c.sites || 0, "site") + ", " + nw(c.snapshots || 0, "History snapshot") + " and " + nw(c.events || 0, "calendar event") + " it added, with their photos. "
+    + "It also removes any work you have done inside those restored sites since the restore (results, photos, History). Everything else on this phone stays exactly as it is. Undo is available until " + backupDmy(info && info.until) + ".";
+}
+function backupUndoInfo(storage = localStorage, now = new Date()) {
+  const rec = backupReadRecord(storage); if (!rec || rec.journal || !rec.undo) return null;
+  if (localISODate(now) > rec.undo.expiresOn) return null;
+  return { until: rec.undo.expiresOn, restoredAt: rec.undo.restoredAt, counts: rec.undo.counts };
+}
+async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
+  const rec = backupReadRecord(storage);
+  if (rec && rec.journal) return { ok: false, code: "unfinished", message: "A restore is still being put right. Close and reopen SparkCheck, then try again." };
+  if (!rec || !rec.undo) return { ok: false, code: "none", message: "There is no restore to undo." };
+  if (localISODate(now) > rec.undo.expiresOn) { try { backupWriteRecord(storage, { journal: null, undo: null }); } catch (_) {} return { ok: false, code: "expired", message: "The undo period for the last restore has ended." }; }
+  const u = rec.undo; const removed = { sites: 0, snapshots: 0, events: 0 }; const photoRemoved = { "site-photos": new Set(), "gsd-photos": new Set() }; const logoKeys = new Set(u.put.filter(p => p.s === "site-logos").map(p => p.k));
+  const newVals = {};                                                                    // key -> the value AFTER the undo (also used to find the photos still in use)
+  const read = (key, role) => { const c = backupReadRaw(storage, key, role); if (c.state === "bad") throw new Error(key + " can't be read"); return c.state === "ok" ? c.v : null; };
+  const removedPieces = { "site-photos": [], "gsd-photos": [] };
+  try {
+    for (const m of Object.keys(u.sites)) {
+      const ids = new Set(u.sites[m]), snapIds = new Set(u.snaps[m] || []), k = BACKUP_MODULE_INFO[m].keys, store = BACKUP_MODULE_INFO[m].photos;
+      const track = (piece) => { if (store) removedPieces[store].push(piece); };
+      const pv = read(k.projects, "projects"); if (pv) { const keep = pv.filter(p => !(p && ids.has(p.id))); pv.filter(p => p && ids.has(p.id)).forEach(p => { removed.sites++; track(p); }); if (keep.length !== pv.length) newVals[k.projects] = keep; }
+      for (const role of ["results", "meta"]) { const v = read(k[role], role); if (!v) continue; let ch = false; const n = { ...v }; for (const id of ids) if (id in n) { track(n[id]); delete n[id]; ch = true; } if (ch) newVals[k[role]] = n; }
+      const hv = read(k.history, "history"); if (hv) { const gone = hv.filter(s => s && (snapIds.has(s.id) || ids.has(s.projectId))); if (gone.length) { gone.forEach(s => { removed.snapshots++; track(s); }); newVals[k.history] = hv.filter(s => !gone.includes(s)); } }
+      const av = read(k.active, "active"); if (av) { let ch = false; const sites = { ...av.sites }; for (const id of ids) if (id in sites) { delete sites[id]; ch = true; } if (ch) newVals[k.active] = { ...av, sites }; }
+      for (const id of ids) logoKeys.add(siteLogoKey(m, id));
+    }
+    const ev = read(K_CAL_EVENTS, "projects"); if (ev && u.events.length) { const ids = new Set(u.events); const keep = ev.filter(e => !(e && ids.has(e.id))); removed.events = ev.length - keep.length; if (keep.length !== ev.length) newVals[K_CAL_EVENTS] = keep; }
+    // photos: those the restore wrote + any referenced by the removed data, minus any still referenced by data that REMAINS
+    for (const stId of Object.keys(photoRemoved)) {
+      const st = BACKUP_STORES.find(s => s.id === stId); const db = await backupIdbOpenExisting(st.db, st.store); if (!db) continue;
+      try {
+        const have = new Set((await backupIdbKeys(db, st.store)).map(String)); const base = new Set([...have].filter(x => !x.endsWith("~t")));
+        const cand = backupCollectStrings(removedPieces[stId], base); u.put.filter(p => p.s === stId && !p.k.endsWith("~t") && have.has(p.k)).forEach(p => cand.add(p.k));
+        if (!cand.size) continue;
+        const remaining = []; for (const m of BACKUP_MODULES) { if (BACKUP_MODULE_INFO[m].photos !== stId) continue; const k = BACKUP_MODULE_INFO[m].keys; for (const role of ["projects", "results", "history"]) remaining.push(k[role] in newVals ? newVals[k[role]] : read(k[role], role)); }
+        const still = backupCollectStrings(remaining, cand); for (const id of cand) if (!still.has(id)) { photoRemoved[stId].add(id); photoRemoved[stId].add(id + "~t"); }
+      } finally { db.close(); }
+    }
+  } catch (e) { return { ok: false, code: "failed", message: "The undo could not be completed (" + e.message + "). Nothing was changed." }; }
+  const done = [];                                                                       // apply: on any failure put back what was already changed
+  try {
+    for (const key of Object.keys(newVals)) {
+      const orig = storage.getItem(key), v = newVals[key];
+      if (u.created.includes(key) && (Array.isArray(v) ? v.length === 0 : (v.sites ? Object.keys(v.sites).length === 0 : Object.keys(v).length === 0))) storage.removeItem(key); else storage.setItem(key, JSON.stringify(v));
+      done.push([key, orig]);
+    }
+  } catch (e) { for (const [key, orig] of done.reverse()) { try { if (orig === null) storage.removeItem(key); else storage.setItem(key, orig); } catch (_) {} } return { ok: false, code: "failed", message: "The undo could not be completed (" + e.message + "). Everything was put back as it was." }; }
+  let leftover = 0;                                                                      // the photo / logo records: best effort (a record left behind is invisible: nothing refers to it)
+  for (const stId of Object.keys(photoRemoved)) for (const key of photoRemoved[stId]) { try { await backupIdbDelete(stId, key); } catch (_) { leftover++; } }
+  for (const key of logoKeys) { try { await backupIdbDelete("site-logos", key); } catch (_) { leftover++; } }
+  try { backupWriteRecord(storage, { journal: null, undo: null }); } catch (_) {}
+  return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover };
+}
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
