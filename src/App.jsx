@@ -16433,9 +16433,23 @@ async function backupFinishRecovery(storage = localStorage) {
   try { backupWriteRecord(storage, { journal: null, undo: rec.undo, problem: rec.problem }); } catch (_) { return { ok: false, deleted: n }; }
   return { ok: true, deleted: n, unresolved: [], semantic: rec.journal.semantic || [] };
 }
+// Optional progress for the screen: onProgress({ phase, done, total }) with phase "photos" | "verifying" | "saving". It is THROTTLED (at most one call per 150 ms, plus always the last call of a phase), never awaited (so it
+// can never slow the restore), and a failure inside it can NEVER fail the restore: a throw or a rejected promise is swallowed, and logged once by its error NAME only (never a message, which could carry anything). The callback
+// gets numbers and a phase word only, no names. It must not write storage. Not called during the synchronous localStorage writes themselves.
+function backupProgressNotifier(cb, minMs = 150) {
+  if (typeof cb !== "function") return () => {};
+  const clock = () => (typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now());
+  let last = -Infinity, warned = false;
+  const fail = e => { if (!warned) { warned = true; try { console.warn("[SparkCheck backup] the progress callback failed (" + ((e && e.name) || "error") + "); the restore carries on"); } catch (_) {} } };
+  return (phase, done, total) => {
+    const now = clock(); if (done < total && now - last < minMs) return; last = now;
+    try { const r = cb({ phase, done, total }); if (r && typeof r.then === "function") r.then(undefined, fail); } catch (e) { fail(e); }
+  };
+}
 // APPLY. Returns { ok:true, summary } | { ok:false, code, message, plan? }. Nothing is written unless the plan can be restored. `crashAt(stage, i)` is the test seam (may be async; may throw BackupCrash).
-async function backupRestore(file, { storage = localStorage, now = new Date(), inspected = null, crashAt = null, estimate = undefined } = {}) {
+async function backupRestore(file, { storage = localStorage, now = new Date(), inspected = null, crashAt = null, estimate = undefined, onProgress = null } = {}) {
   const hook = (stage, i) => crashAt ? crashAt(stage, i) : undefined;      // the test seam; with none, the localStorage writes below never yield
+  const progress = backupProgressNotifier(onProgress);
   const plan = await backupPlan(file, { storage, inspected, estimate }); if (!plan.ok) return plan;
   if (plan.nothingToAdd) return { ok: false, code: "nothing", message: "Everything in this backup is already on this phone, so there is nothing to add.", plan };
   if (!plan.canRestore) return { ok: false, code: "headroom", message: plan.headroom.message, plan };
@@ -16455,14 +16469,18 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
       if (u8.length !== w.size || await backupSha256(u8) !== w.sha256) throw new Error("a photo or logo in the file does not match its checksum");
       if (!dbs[st.id]) dbs[st.id] = await backupIdbOpen(st.db, st.store);
       await backupIdbReq(dbs[st.id], st.store, "readwrite", s => s.put({ buf: u8.buffer, type: w.type }, w.key));
-      await hook("put", i);
+      progress("photos", i + 1, writes.length); await hook("put", i);
     }
+    let checked = 0;
     for (const w of writes) {                                                           // verify counts + sizes + checksums of what was written
       const st = BACKUP_STORES.find(s => s.id === w.store); const r = await backupIdbGet(dbs[st.id], st.store, w.key);
       if (!r || !r.buf || r.buf.byteLength !== w.size || await backupSha256(new Uint8Array(r.buf)) !== w.sha256) throw new Error("a photo or logo was not stored correctly");
+      progress("verifying", ++checked, writes.length);
     }
     await hook("puts-done");
+    progress("saving", 0, inserts.length);
     for (let j = 0; j < inserts.length; j++) { storage.setItem(inserts[j].key, inserts[j].text); if (crashAt) await hook("key", j); }
+    progress("saving", inserts.length, inserts.length);
     await hook("keys-done");
     backupVerifyApplied(inserts, storage);
     await hook("verified");
