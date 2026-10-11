@@ -10231,7 +10231,7 @@ function useGlobalLogoPreview() {
   }, []);
   return url;
 }
-function GlobalSettingsView({ onGoHome }) {
+function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: optional, for tests only (a fake share sheet / a slow restore); the app passes none
   const [loaded, setLoaded] = React.useState(false);
   const [businessName, setBusinessName] = React.useState("");
   const [abn, setAbn] = React.useState("");
@@ -10242,6 +10242,7 @@ function GlobalSettingsView({ onGoHome }) {
   const [saved, setSaved] = React.useState(false);
   const [storageBytes, setStorageBytes] = React.useState(0);
   const urlRef = React.useRef("");
+  const gate = React.useRef({ busy: false, reloadPending: false, reveal: null });      // shared with the Backup and restore section (see below)
 
   React.useEffect(() => {
     let alive = true;
@@ -10291,7 +10292,7 @@ function GlobalSettingsView({ onGoHome }) {
       , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 4 } }
         // the Modules pill alone on the top row, where a Back pill would be (40px = Back's 30px + its 10px margin), title on the line below
         , React.createElement('div', { "data-testid": "header-pill-row", style: { display: "flex", justifyContent: "flex-end", alignItems: "flex-start", minHeight: 40 } }
-          , React.createElement(ModulesPill, { onClick: onGoHome }))
+          , React.createElement(ModulesPill, { onClick: () => { const g = gate.current; if (g.busy) { if (g.reveal) g.reveal(); return; } if (g.reloadPending) { (g.reload || backupReloadApp)(); return; } onGoHome(); } }))   // while a restore / undo runs it does nothing (it shows where the work is); after one it reloads (which ends on Home)
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
         , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
@@ -10322,8 +10323,188 @@ function GlobalSettingsView({ onGoHome }) {
       , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
         , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
         , saved && React.createElement('span', { style: { fontSize: 12, color: "#166534", fontWeight: 600 } }, "Saved"))
+      , React.createElement(BackupRestoreSection, { gate, deps: backupDeps })
     )
   );
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP AND RESTORE — the section at the bottom of Global Settings (Stage 5). ONE function component, appended after the Save row; nothing above it moves. Every state is in the approved mockups.
+// Rules it keeps: confirmations are the module-style inline two-step (never window.confirm / alert); every card has an icon AND a title in words (meaning is never colour alone) and its text passes 4.5:1 on its fill;
+// the built backup, the chosen file and the plan live in refs that are cleared when you leave Settings; Share backup calls the share sheet as the FIRST thing in its tap (iOS only opens it inside a tap); while a restore or
+// undo is running the Modules pill does nothing (leaving would unmount the screen and a reload would kill the restore); after a successful restore or undo, Done (or the Modules pill) reloads the app.
+// The engine's own technical messages never reach the screen: the screen shows short plain sentences, and the technical text goes to the console log only (backupLog), redacted of anything quoted.
+// ═════════════════════════════════════════════════════════════════════════
+const BACKUP_UI = {
+  slate: "#475569", ink: "#18181b", muted: "#52525b", label: "#5f5b57", line: "#d4d4d8", page: "#e8e6e2", slateText: "#334155", red: "#991b1b", white: "#ffffff", disabledBg: "#e4e4e7", disabledFg: "#52525b", twoStepBg: "#f0eeea",
+  card: { info: { bg: "#f7f6f3", border: "#d4d4d8", title: "#18181b", body: "#3f3f46", icon: "info" }, ok: { bg: "#e3f1e7", border: "#7fb392", title: "#14532d", body: "#1b3a27", icon: "check" },
+    warn: { bg: "#fdf0d0", border: "#cf9f3f", title: "#5a3500", body: "#4a2c00", icon: "warn" }, err: { bg: "#fbe6e6", border: "#d28a8a", title: "#7f1d1d", body: "#5f1616", icon: "x" } },
+};
+const BACKUP_ICONS = { info: [["circle", { cx: 12, cy: 12, r: 10 }], ["line", { x1: 12, y1: 16, x2: 12, y2: 12 }], ["line", { x1: 12, y1: 8, x2: 12.01, y2: 8 }]], check: [["polyline", { points: "20 6 9 17 4 12" }]],
+  warn: [["path", { d: "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" }], ["line", { x1: 12, y1: 9, x2: 12, y2: 13 }], ["line", { x1: 12, y1: 17, x2: 12.01, y2: 17 }]],
+  x: [["circle", { cx: 12, cy: 12, r: 10 }], ["line", { x1: 15, y1: 9, x2: 9, y2: 15 }], ["line", { x1: 9, y1: 9, x2: 15, y2: 15 }]], share: [["path", { d: "M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" }], ["polyline", { points: "16 6 12 2 8 6" }], ["line", { x1: 12, y1: 2, x2: 12, y2: 15 }]] };
+const bsIcon = (name, size = 16) => React.createElement("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, style: { flexShrink: 0, marginTop: 1 } }, ...BACKUP_ICONS[name].map(([tag, props], i) => React.createElement(tag, { key: i, ...props })));
+const bsHeading = t => React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: BACKUP_UI.ink, marginBottom: 10 } }, t);
+const bsHelp = (t, mb = 0, mt = 0) => React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, margin: `${mt}px 0 ${mb}px`, lineHeight: 1.45 } }, t);
+const bsCard = (kind, title, body, testId) => { const c = BACKUP_UI.card[kind]; return React.createElement("div", { role: kind === "err" ? "alert" : "status", "data-testid": testId || "backup-card-" + kind, style: { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: 12, margin: "12px 0" } },
+  React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", color: c.title } }, bsIcon(c.icon), React.createElement("div", { style: { fontSize: 13, fontWeight: 800, lineHeight: 1.3 } }, title)),
+  body ? React.createElement("div", { style: { fontSize: 12, color: c.body, lineHeight: 1.5, marginTop: 6 } }, body) : null); };
+const bsBtn = (label, onClick, o = {}) => {
+  const base = { minHeight: 44, borderRadius: 10, fontSize: 14, fontWeight: 800, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontFamily: "inherit", boxSizing: "border-box", ...(o.flex ? { flex: 1 } : { width: "100%" }) };
+  const look = o.disabled ? { background: BACKUP_UI.disabledBg, color: BACKUP_UI.disabledFg, border: `1px solid ${BACKUP_UI.line}`, cursor: "not-allowed" }
+    : o.kind === "secondary" ? { background: "transparent", color: BACKUP_UI.slateText, border: `1px solid ${BACKUP_UI.slate}`, cursor: "pointer" } : o.kind === "danger" ? { background: BACKUP_UI.red, color: BACKUP_UI.white, border: "none", cursor: "pointer" } : { background: BACKUP_UI.slate, color: BACKUP_UI.white, border: "none", cursor: "pointer" };
+  return React.createElement("button", { type: "button", onClick: o.disabled ? undefined : onClick, disabled: !!o.disabled, "aria-disabled": o.disabled ? true : undefined, "data-testid": o.id, style: { ...base, ...look } }, o.icon ? bsIcon(o.icon, 18) : null, label);
+};
+const bsLink = (label, onClick, id, disabled) => React.createElement("button", { type: "button", onClick: disabled ? undefined : onClick, disabled: !!disabled, "data-testid": id, style: { minHeight: 44, background: "transparent", border: "none", color: disabled ? BACKUP_UI.disabledFg : BACKUP_UI.slateText, fontSize: 13, fontWeight: 700, textDecoration: "underline", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", width: "100%" } }, label);
+const bsSpinner = () => React.createElement("div", { "aria-hidden": true, style: { width: 18, height: 18, border: "3px solid #d4d4d8", borderTop: `3px solid ${BACKUP_UI.slate}`, borderRadius: "50%", flexShrink: 0, animation: "spin 0.8s linear infinite" } });
+const bsBusyRow = (text, sub) => React.createElement("div", { role: "status", style: { display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: BACKUP_UI.ink, margin: "4px 0 12px" } }, bsSpinner(), React.createElement("div", null, text, sub ? React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, marginTop: 2 } }, sub) : null));
+const bsDivider = () => React.createElement("div", { style: { borderTop: `1px solid ${BACKUP_UI.line}`, margin: "20px 0 16px" } });
+const bsTwoStep = (boxRef, question, yes, no, onYes, onNo, o = {}) => React.createElement("div", { ref: boxRef, "data-testid": o.id, style: { background: BACKUP_UI.twoStepBg, border: `1px solid ${BACKUP_UI.line}`, borderRadius: 10, padding: 12, marginTop: 8 } },
+  React.createElement("div", { style: { fontSize: 12, color: BACKUP_UI.ink, marginBottom: 10, fontWeight: 600, lineHeight: 1.5 } }, question),
+  React.createElement("div", { style: { display: "flex", gap: 8 } }, bsBtn(yes, onYes, { kind: o.danger ? "danger" : "primary", flex: true, id: o.id + "-yes" }),
+    React.createElement("button", { type: "button", onClick: onNo, "data-testid": o.id + "-no", style: { flex: 1, minHeight: 44, background: "transparent", color: BACKUP_UI.label, border: `1px solid ${BACKUP_UI.line}`, borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" } }, no)));
+const bsSummaryCard = t => bsCard("info", t.title, React.createElement("div", null, ...t.groups.map(g => React.createElement("div", { key: g.id, style: { margin: "8px 0" } }, React.createElement("b", null, g.mark + " " + g.heading),
+  g.summary ? React.createElement("div", null, "• " + g.summary) : null, ...g.lines.map((l, i) => React.createElement("div", { key: i }, "• " + l)), g.more ? React.createElement("div", null, "• and " + g.more + " more") : null)),
+  ...t.notes.map((n, i) => React.createElement("div", { key: "n" + i, style: { marginTop: 8 } }, n))), "backup-summary");
+// The log: the engine's fixed wording only. The engine wraps whatever a failing browser call said in brackets, "(...)", and such text could in theory quote a piece of the data, so the log keeps the engine's own sentence and WITHHOLDS the bracketed
+// detail, anything in quotes or backticks, and any storage-key name that came out of the file. Client and site names are never passed in, and this makes sure none can ride along. The line is capped.
+const backupLogReason = m => String(m == null ? "" : m).replace(/\([^()]*\)/g, "(detail withheld)").replace(/["`\u201c\u201d][^"`\u201c\u201d]{0,200}["`\u201c\u201d]/g, "[removed]").replace(/\bfor \S+?(?= that is not text|\.$)/g, "for a key").slice(0, 300);
+function backupLog(code, technical) { try { console.warn("[SparkCheck backup]", String(code || "error"), backupLogReason(technical)); } catch (_) {} }
+const backupReloadApp = () => window.location.reload();
+const backupLastRestoreLine = info => { const c = (info && info.counts) || {}; const parts = [c.sites ? nw(c.sites, "site") : null, c.snapshots ? nw(c.snapshots, "History snapshot") : null, c.events ? nw(c.events, "calendar event") : null, c.photoFiles ? nw(c.photoFiles, "photo") : null].filter(Boolean);
+  return "Last restore: " + (backupJoinWords(parts) || "nothing") + " added on " + backupDmy(localISODate(new Date(info.restoredAt))) + ". Undo is available until " + backupDmy(info.until) + "."; };
+
+function BackupRestoreSection({ gate, deps }) {
+  const d = { measure: backupMeasure, build: backupBuild, deliver: backupDeliver, inspect: backupInspect, plan: backupPlan, restore: backupRestore, undoInfo: () => backupUndoInfo(), undo: () => backupUndo(), undoText: backupUndoConfirmText,
+    lastText: () => backupLastBackupText(), problem: () => backupRestoreProblem(), reload: backupReloadApp, now: () => new Date(), ...(deps || {}) };
+  const [photos, setPhotos] = React.useState(true);
+  const [bk, setBk] = React.useState({ phase: "idle" });            // idle | measuring | large | building | ready | failed
+  const [notes, setNotes] = React.useState([]);                     // cards after a share attempt
+  const [last, setLast] = React.useState(() => d.lastText());
+  const [rs, setRs] = React.useState({ phase: "idle" });            // idle | checking | summary | confirming | restoring | result
+  const [un, setUn] = React.useState(() => ({ phase: "idle", info: d.undoInfo() }));   // idle | confirming | undoing | result
+  const [problem, setProblem] = React.useState(() => d.problem());
+  const held = React.useRef({ blob: null, filename: "", includesPhotos: true }), heldRestore = React.useRef({ file: null, insp: null, plan: null });
+  const alive = React.useRef(true), fileInput = React.useRef(null), sectionRef = React.useRef(null), rsBox = React.useRef(null), unBox = React.useRef(null);
+  React.useEffect(() => {
+    alive.current = true; gate.current.reload = d.reload; gate.current.reveal = () => { const el = sectionRef.current; if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" }); };
+    return () => { alive.current = false; held.current = { blob: null, filename: "", includesPhotos: true }; heldRestore.current = { file: null, insp: null, plan: null }; gate.current.busy = false; gate.current.reveal = null; gate.current.reload = null; };   // leaving Settings drops everything
+  }, []);
+  useCollapsible(rs.phase === "confirming", () => setRs(s => s.phase === "confirming" ? { ...s, phase: "summary" } : s), rsBox);
+  useCollapsible(un.phase === "confirming", () => setUn(s => s.phase === "confirming" ? { ...s, phase: "idle" } : s), unBox);
+  const busy = bk.phase === "measuring" || bk.phase === "building" || rs.phase === "checking" || rs.phase === "restoring" || un.phase === "undoing";
+
+  // ── making and sharing a backup
+  const build = async (withPhotos, bytes) => {
+    setBk({ phase: "building", bytes });
+    try { const r = await d.build({ includePhotos: withPhotos, now: d.now() }); if (!alive.current) return; held.current = { blob: r.blob, filename: r.filename, includesPhotos: withPhotos }; setBk({ phase: "ready", bytes: r.blob.size, filename: r.filename }); }
+    catch (e) { backupLog("build-failed", e && e.name); if (alive.current) setBk({ phase: "failed" }); }
+  };
+  const make = async (withPhotos, forced) => {
+    setNotes([]); setBk({ phase: "measuring" }); let m;
+    try { m = await d.measure({ includePhotos: withPhotos }); } catch (e) { backupLog("measure-failed", e && e.name); if (alive.current) setBk({ phase: "failed" }); return; }
+    if (!alive.current) return;
+    if (!forced && m.estimatedBytes >= BACKUP_LARGE_BYTES) { let small = null; if (withPhotos) { try { small = await d.measure({ includePhotos: false }); } catch (_) {} } if (!alive.current) return; setBk({ phase: "large", bytes: m.estimatedBytes, smallBytes: small ? small.estimatedBytes : null, withPhotos }); return; }
+    build(withPhotos, m.estimatedBytes);
+  };
+  const share = () => {
+    const h = held.current; if (!h.blob) return;
+    const p = d.deliver(h.blob, h.filename, { includesPhotos: h.includesPhotos, now: d.now() });      // the FIRST thing in the tap: the share sheet only opens inside it
+    p.then(r => {
+      if (!alive.current) return;
+      if (r.ok) { const n = [];
+        if (r.method === "share") n.push({ kind: "ok", title: "Backup shared", body: "If you chose Save to Files, it is in the folder you picked." });
+        else n.push({ kind: "info", title: "Backup download started", body: ["This device could not open the share sheet, so the backup was downloaded instead. Check the Files app.", React.createElement("br", { key: "b" }), React.createElement("b", { key: "f" }, h.filename)] });
+        if (!r.recorded) n.push({ kind: "warn", title: "Backup saved, but the date could not be recorded", body: "Your backup file is fine. This phone has no room left to note today's date, so \"Last backup\" may show an older date. See Storage above." });
+        held.current = { blob: null, filename: "", includesPhotos: true }; setNotes(n); setBk({ phase: "idle" }); setLast(d.lastText()); }
+      else if (r.cancelled) setNotes([{ kind: "info", title: "The share sheet was closed, so no backup was saved.", body: "Your backup is still ready. Tap Share backup to try again, or discard it." }]);
+      else { backupLog("share-failed", r.message); setNotes([{ kind: "err", title: "The backup could not be saved", body: "The backup could not be saved. Nothing was recorded as saved. Please try again." }]); }
+    }).catch(e => { backupLog("share-failed", e && e.name); if (alive.current) setNotes([{ kind: "err", title: "The backup could not be saved", body: "The backup could not be saved. Nothing was recorded as saved. Please try again." }]); });
+  };
+  const discard = () => { held.current = { blob: null, filename: "", includesPhotos: true }; setNotes([]); setBk({ phase: "idle" }); };
+
+  // ── restoring
+  const refuse = (code, plan, technical, kind) => { backupLog(code, technical); heldRestore.current = { file: null, insp: null, plan: null }; setRs({ phase: "result", kind: kind || "err", ...backupMessageText(code, plan) }); };
+  const pick = async file => {
+    if (!file) return; setRs({ phase: "checking" });
+    try {
+      const insp = await d.inspect(file); if (!alive.current) return; if (!insp.ok) { refuse(insp.code, null, insp.message); return; }
+      const plan = await d.plan(file, { inspected: insp }); if (!alive.current) return;
+      if (!plan.ok) { refuse(plan.code, null, plan.message); return; }
+      if (plan.nothingToAdd) { refuse("nothing", plan, "nothing to add", "info"); return; }
+      if (!plan.canRestore) { refuse("headroom", plan, plan.headroom && plan.headroom.message); return; }
+      heldRestore.current = { file, insp, plan }; setRs({ phase: "summary", text: backupSummaryText(plan) });
+    } catch (e) { if (alive.current) refuse("failed", null, e && e.name); }
+  };
+  const run = async () => {
+    const hr = heldRestore.current; if (!hr.file) return; const added = (rs.text && rs.text.groups.find(g => g.id === "added")) || { summary: "" };
+    gate.current.busy = true; setRs({ phase: "restoring", progress: null }); let r;
+    try { r = await d.restore(hr.file, { inspected: hr.insp, onProgress: e => { if (alive.current) setRs(s => s.phase === "restoring" ? { ...s, progress: e } : s); } }); } catch (e) { r = { ok: false, code: "failed", message: e && e.name }; }
+    gate.current.busy = false; heldRestore.current = { file: null, insp: null, plan: null };        // the file and the parsed plan are dropped either way
+    if (!alive.current) return;
+    setProblem(d.problem());
+    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "idle", info: d.undoInfo() }); setRs({ phase: "result", kind: "ok", added: added.summary, summary: r.summary }); }
+    else { backupLog(r.code, r.message); setRs({ phase: "result", kind: "err", ...backupMessageText(r.code, r.plan) }); }
+  };
+  // ── undoing
+  const doUndo = async () => {
+    gate.current.busy = true; setUn(s => ({ ...s, phase: "undoing" })); let r;
+    try { r = await d.undo(); } catch (e) { r = { ok: false, code: "undo-failed", message: e && e.name }; }
+    gate.current.busy = false; if (!alive.current) return;
+    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "result", kind: "ok", removed: r.removed, photosRemoved: r.photosRemoved, info: null }); }
+    else { backupLog(r.code, r.message); setUn({ phase: "result", kind: "err", ...backupMessageText(r.code === "none" || r.code === "expired" || r.code === "unfinished" ? r.code : "undo-failed"), info: d.undoInfo() }); }
+  };
+
+  // ── drawing it
+  const make1 = (label, o = {}) => bsBtn(label, () => make(photos), { id: "backup-make", disabled: busy || o.disabled, kind: o.kind });
+  const backUp = () => {
+    if (bk.phase === "measuring") return [bsBusyRow("Checking the size…"), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
+    if (bk.phase === "building") return [bsBusyRow("Making your backup, about " + backupMbText(bk.bytes) + ". Keep this screen open until it says ready."), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
+    if (bk.phase === "failed") return [bsCard("err", "The backup could not be made", "Something went wrong while making the backup. Nothing was changed. Please try again."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
+    if (bk.phase === "large") return [bsCard("warn", "This is a large backup", backupLargeWarning(bk.bytes, { includesPhotos: bk.withPhotos }), "backup-card-large"),
+      bk.withPhotos ? React.createElement("div", { key: "lg", style: { display: "flex", flexDirection: "column", gap: 8 } }, bsBtn("Make it without photos" + (bk.smallBytes ? " (about " + backupMbText(bk.smallBytes) + ")" : ""), () => { setPhotos(false); make(false, true); }, { id: "backup-make-small" }), bsBtn("Continue with photos (" + backupMbText(bk.bytes) + ")", () => build(true, bk.bytes), { kind: "secondary", id: "backup-make-big" }))
+        : bsBtn("Make backup", () => build(false, bk.bytes), { id: "backup-make-big" })];
+    if (bk.phase === "ready") return [bsCard("ok", "Backup ready, " + backupMbText(bk.bytes), [bk.filename, React.createElement("br", { key: "b" }), "It is ", React.createElement("b", { key: "n" }, "not saved yet"), ". Tap ", React.createElement("b", { key: "s" }, "Share backup"), ", then choose ", React.createElement("b", { key: "f" }, "Save to Files"), " or another place to keep it."], "backup-card-ready"),
+      React.createElement("div", { key: "rd", style: { display: "flex", flexDirection: "column", gap: 2 } }, bsBtn("Share backup", share, { id: "backup-share", icon: "share" }), bsLink("Discard this backup", discard, "backup-discard"))];
+    return [React.createElement("label", { key: "cb", style: { display: "flex", alignItems: "center", gap: 10, minHeight: 44, fontSize: 13, color: BACKUP_UI.ink } }, React.createElement("input", { type: "checkbox", checked: photos, disabled: busy, "data-testid": "backup-photos", onChange: e => setPhotos(e.target.checked), style: { width: 22, height: 22, margin: 0, accentColor: BACKUP_UI.slate } }), photos ? "Include photos (the file is larger)" : "Include photos"),
+      make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Makes one file. You then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it, for example to Files."], 0, 8)];
+  };
+  const noteCards = () => notes.map((n, i) => React.createElement(React.Fragment, { key: "note" + i }, bsCard(n.kind, n.title, n.body, "backup-note-" + n.kind)));
+  const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : "Nothing was added.", r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null,
+      r.summary.notRestored ? React.createElement("div", { key: "n" }, r.summary.notRestored + " not restored.") : null, React.createElement("div", { key: "u", style: { marginTop: 6 } }, "You can undo this until ", React.createElement("b", { key: "d" }, backupDmy(r.summary.undoUntil)), ".")], "backup-result-ok")
+    : bsCard(r.kind === "info" ? "info" : "err", r.title, r.body, "backup-result-" + (r.kind === "info" ? "info" : "err"));
+  const restoreBlock = () => {
+    const out = [bsHeading("Restore")];
+    const choose = (label, disabled) => bsBtn(label, () => fileInput.current && fileInput.current.click(), { kind: "secondary", id: "backup-choose", disabled: disabled || busy });
+    const input = React.createElement("input", { key: "fi", ref: fileInput, type: "file", accept: ".zip,application/zip,application/x-zip-compressed", "data-testid": "backup-file-input", "aria-label": "Choose backup file", style: { display: "none" }, onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pick(f); } });
+    if (rs.phase === "idle") out.push(bsHelp("Adds the sites, results, History and calendar events from a backup file that are not already on this phone. Nothing already on this phone is changed or deleted.", 10), choose("Choose backup file…"));
+    else if (rs.phase === "checking") out.push(bsBusyRow("Checking the file…"), choose("Choose backup file…", true));
+    else if (rs.phase === "summary" || rs.phase === "confirming") {
+      out.push(bsSummaryCard(rs.text));
+      if (rs.phase === "summary") out.push(bsBtn("Restore…", () => setRs(s => ({ ...s, phase: "confirming" })), { id: "backup-restore", disabled: busy }), React.createElement("div", { key: "sp", style: { height: 8 } }), bsLink("Choose a different file", () => { heldRestore.current = { file: null, insp: null, plan: null }; setRs({ phase: "idle" }); }, "backup-different"));
+      else out.push(bsTwoStep(rsBox, "Add these to this phone? Nothing already here is changed or deleted. Keep this screen open while it works.", "Yes, add them", "Cancel", run, () => setRs(s => ({ ...s, phase: "summary" })), { id: "backup-restore-confirm" }));
+    } else if (rs.phase === "restoring") {
+      const p = rs.progress; const text = !p ? "Restoring…" : p.phase === "photos" ? "Restoring… photos " + p.done + " of " + p.total + "." : p.phase === "verifying" ? "Checking what was added… " + p.done + " of " + p.total + "." : "Saving…";
+      out.push(bsBusyRow(text, "Keep this screen open. If the app closes part-way, everything is put back the next time you open it."), bsBtn("Restore…", null, { id: "backup-restore", disabled: true }));
+    } else if (rs.phase === "result") out.push(resultCard(rs), rs.kind === "ok" ? bsBtn("Done", () => d.reload(), { id: "backup-done" }) : bsBtn(rs.kind === "info" ? "Choose a different file" : "OK", () => setRs({ phase: "idle" }), { kind: "secondary", id: "backup-ok" }));
+    return [...out, input];
+  };
+  const undoBlock = () => {
+    if (un.phase === "result") return [bsHeading("Undo"), un.kind === "ok" ? bsCard("ok", "Restore undone", [nw(un.removed.sites, "site"), ", ", nw(un.removed.snapshots, "History snapshot"), " and ", nw(un.removed.events, "calendar event"), " were removed, with ", nw(un.photosRemoved || 0, "photo"), "."], "backup-undo-result-ok") : bsCard("err", un.title, un.body, "backup-undo-result-err"),
+      un.kind === "ok" ? bsBtn("Done", () => d.reload(), { id: "backup-undo-done" }) : bsBtn("OK", () => setUn({ phase: "idle", info: d.undoInfo() }), { kind: "secondary", id: "backup-undo-ok" })];
+    if (!un.info) return [];
+    if (un.phase === "confirming") return [bsHeading("Undo"), bsTwoStep(unBox, d.undoText(un.info), "Yes, undo", "No, keep them", doUndo, () => setUn(s => ({ ...s, phase: "idle" })), { id: "backup-undo-confirm", danger: true })];
+    if (un.phase === "undoing") return [bsHeading("Undo"), bsBusyRow("Undoing the restore…", "Keep this screen open."), bsBtn("Undo last restore…", null, { kind: "secondary", id: "backup-undo-open", disabled: true })];
+    return [bsHeading("Undo"), bsHelp(backupLastRestoreLine(un.info), 10), bsBtn("Undo last restore…", () => setUn(s => ({ ...s, phase: "confirming" })), { kind: "secondary", id: "backup-undo-open", disabled: busy })];
+  };
+  const undo = undoBlock();
+  return React.createElement("div", { ref: sectionRef, "data-testid": "backup-section", style: { marginTop: 32, paddingTop: 18, borderTop: `1px solid ${BACKUP_UI.line}` } },
+    bsHeading("Backup and restore"),
+    problem && problem.keys && problem.keys.length ? bsCard("err", "A restore could not be fully put back", [`One part of this phone's saved data could not be read, so it was left exactly as it was: `, React.createElement("b", { key: "k" }, backupKeysLabel(problem.keys)), ". The photos from that restore were kept and everything else was put back. Other modules are not affected.",
+      React.createElement("div", { key: "n", style: { marginTop: 8 } }, React.createElement("b", null, "Next step:"), " Make a backup now and contact support, quoting this message."), React.createElement("div", { key: "g", style: { marginTop: 8 } }, "This message goes away after the next successful restore.")], "backup-problem") : null,
+    bsHelp("A backup file holds your sites, results, History, calendar events, photos and logos. It contains client names, the ABN and photos, so store it somewhere safe."),
+    React.createElement("div", { "data-testid": "backup-last", style: { fontSize: 12, color: BACKUP_UI.muted, margin: "10px 0 18px" } }, "Last backup: ", React.createElement("b", { style: { color: BACKUP_UI.ink } }, last)),
+    bsHeading("Back up"), ...noteCards(), ...backUp(), bsDivider(), ...restoreBlock(), ...(undo.length ? [bsDivider(), ...undo] : []));
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -16141,7 +16322,7 @@ async function backupInspect(file) {
     if (!z.has(ls.file)) return bad("damaged", "This backup file is damaged (the data entry is missing).");
     const dataBytes = await z.bytes(ls.file); if (dataBytes.length !== ls.size || await backupSha256(dataBytes) !== ls.sha256) return bad("damaged", "This backup file is damaged (the data does not match its checksum).");
     data = JSON.parse(new TextDecoder().decode(dataBytes));
-  } catch (e) { return bad(e && e.code === "zip" ? "damaged" : "invalid", "This backup file's data could not be read (" + (e && e.message) + ")."); }
+  } catch (e) { const zipErr = e && e.code === "zip"; return bad(zipErr ? "damaged" : "invalid", "This backup file's data could not be read" + (zipErr ? " (" + e.message + ")" : " (it is not valid data)") + "."); }
   if (!data || typeof data !== "object" || Array.isArray(data)) return bad("invalid", "This backup file's data is not in the expected shape.");
   for (const k of Object.keys(data)) {
     if (typeof data[k] !== "string") return bad("invalid", "This backup file holds a value for " + k + " that is not text.");
@@ -16485,7 +16666,7 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
     backupVerifyApplied(inserts, storage);
     await hook("verified");
     const undo = { restoredAt: now.toISOString(), expiresOn: localISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + RESTORE_UNDO_DAYS)), put: journal.put, created: inserts.filter(e => e.kind === "absent").map(e => e.key),
-      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.length } };
+      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.length, photoFiles: writes.filter(w => w.store !== "site-logos" && !w.key.endsWith("~t")).length, logoFiles: writes.filter(w => w.store === "site-logos").length } };
     for (const m of Object.keys(plan.work.modules)) { const w = plan.work.modules[m]; undo.sites[m] = w.projects.map(p => p.id); undo.snaps[m] = w.history.map(s => s.id); undo.active[m] = Object.keys(w.active); }
     storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo }));          // THE COMMIT: one write replaces the journal by the undo record (and is the ONLY write that drops a recorded problem)
     await hook("committed");
@@ -16700,7 +16881,7 @@ function backupMessageText(code, plan) {
 }
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, backupKeyLabel, backupKeysLabel, BACKUP_LIST_CAP, backupMbText, backupSummaryText, backupMessageText, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BackupRestoreSection, BACKUP_UI, backupLog, backupLogReason, backupReloadApp, backupLastRestoreLine, backupKeyLabel, backupKeysLabel, BACKUP_LIST_CAP, backupMbText, backupSummaryText, backupMessageText, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
