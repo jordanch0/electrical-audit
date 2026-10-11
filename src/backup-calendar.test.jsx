@@ -37,7 +37,7 @@ describe('the Calendar and a restore', () => {
     const file = await sourceFile(); local(); const user = userEvent.setup(); const first = render(<AppRoot />);
     await openCalendar(user); await user.click(screen.getByText('Modules')); await screen.findByTestId('settings-pill');           // out of the Calendar, Home
     await user.click(screen.getByTestId('settings-pill')); await screen.findByText('Business Identity'); first.unmount(); cleanup();                                 // (Settings is rendered below with its own reload)
-    const reload = vi.fn(); render(<GlobalSettingsView onGoHome={() => {}} backupDeps={settingsDeps(reload)} />);
+    const reload = vi.fn(); render(<GlobalSettingsView onGoHome={() => {}} backupDeps={settingsDeps(reload)} />); await user.click(await screen.findByRole('tab', { name: 'Data' }));
     await user.upload(await screen.findByTestId('backup-file-input'), new File([file], 'b.zip')); await screen.findByTestId('backup-summary'); await user.click(screen.getByTestId('backup-restore')); await user.click(screen.getByTestId('backup-restore-confirm-yes'));
     await screen.findByTestId('backup-result-ok'); expect(ids()).toEqual(['e1', 'e2', 'eL']); expect(reload).not.toHaveBeenCalled(); await user.click(screen.getByTestId('backup-done')); expect(reload).toHaveBeenCalledTimes(1);
     cleanup(); render(<AppRoot />);                                                                                // the app after the reload: Home, nothing carried in memory
@@ -48,7 +48,7 @@ describe('the Calendar and a restore', () => {
 
   it('THE SAME FOR AN UNDO: after Done and a fresh app, a later Calendar save keeps the local event and does not bring the removed ones back', async () => {
     const file = await sourceFile(); local(); await backupRestore(file, { storage: S, now: NOW }); const user = userEvent.setup(); const reload = vi.fn();
-    render(<GlobalSettingsView onGoHome={() => {}} backupDeps={settingsDeps(reload)} />); await user.click(await screen.findByTestId('backup-undo-open')); await user.click(screen.getByTestId('backup-undo-confirm-yes')); await screen.findByTestId('backup-undo-result-ok');
+    render(<GlobalSettingsView onGoHome={() => {}} backupDeps={settingsDeps(reload)} />); await user.click(await screen.findByRole('tab', { name: 'Data' })); await user.click(await screen.findByTestId('backup-undo-open')); await user.click(screen.getByTestId('backup-undo-confirm-yes')); await screen.findByTestId('backup-undo-result-ok');
     expect(ids()).toEqual(['eL']); await user.click(screen.getByTestId('backup-undo-done')); expect(reload).toHaveBeenCalledTimes(1);
     cleanup(); render(<AppRoot />); const mark = await openCalendar(user); await user.click(mark);
     await waitFor(() => expect(JSON.parse(localStorage.getItem('cal-events-v1')).find(e => e.id === 'eL').completed).toBe(true)); expect(ids()).toEqual(['eL']);

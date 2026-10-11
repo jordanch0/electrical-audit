@@ -10231,7 +10231,7 @@ function useGlobalLogoPreview() {
   }, []);
   return url;
 }
-function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: optional, for tests only (a fake share sheet / a slow restore); the app passes none
+function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // backupDeps: optional, for tests only (a fake share sheet / a slow restore); the app passes none. initialTab: "company" | "data" (the Stage 6 Settings-only screen passes "data")
   const [loaded, setLoaded] = React.useState(false);
   const [businessName, setBusinessName] = React.useState("");
   const [abn, setAbn] = React.useState("");
@@ -10242,7 +10242,13 @@ function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: opti
   const [saved, setSaved] = React.useState(false);
   const [storageBytes, setStorageBytes] = React.useState(0);
   const urlRef = React.useRef("");
-  const gate = React.useRef({ busy: false, reloadPending: false, reveal: null });      // shared with the Backup and restore section (see below)
+  // Two tabs. BOTH panes stay mounted (the hidden one is display:none), so typing that is not saved yet, the logo preview and a running restore all survive a switch. Opens on Data when a restore problem is recorded (or when asked to); otherwise on Company.
+  const [tab, setTab] = React.useState(() => initialTab === "data" || initialTab === "company" ? initialTab : (backupRestoreProblem() ? "data" : "company"));
+  const [locked, setLocked] = React.useState(false);                       // a restore, undo, backup build or file check is running: the tabs hold still
+  const [problemFlag, setProblemFlag] = React.useState(() => !!backupRestoreProblem());
+  const scrollRef = React.useRef(null), tabRefs = React.useRef({});
+  const gate = React.useRef({ busy: false, reloadPending: false, reveal: null, setLocked, setProblem: setProblemFlag, drop: null });      // shared with the Backup and restore section (see below)
+  const goTab = next => { if (locked || next === tab) return; if (tab === "data" && gate.current.drop) gate.current.drop(); setTab(next); if (scrollRef.current) scrollRef.current.scrollTop = 0; };   // leaving Data drops a made-but-not-shared backup
 
   React.useEffect(() => {
     let alive = true;
@@ -10287,6 +10293,16 @@ function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: opti
   if (!loaded) return React.createElement('div', { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } },
     React.createElement('div', { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GS_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
 
+  // the Manual Entry | Import Excel tab pattern, in this screen's slate: 44 px tall, and the active tab is marked by a check, a heavier border and bold text as well as its tint
+  const gsTab = (id, label) => { const active = tab === id, off = locked && !active, warn = id === "data" && problemFlag;
+    return React.createElement('button', { type: "button", role: "tab", id: "gs-tab-" + id, "data-testid": "gs-tab-" + id, "aria-selected": active, "aria-controls": "gs-panel-" + id, "aria-disabled": off ? true : undefined, "aria-label": warn ? "Data, a restore problem needs attention" : undefined,
+      tabIndex: active ? 0 : -1, ref: el => { tabRefs.current[id] = el; }, onClick: () => goTab(id),
+      style: { flex: 1, minHeight: 44, boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 8, fontFamily: "inherit", fontSize: 13, cursor: off ? "not-allowed" : "pointer",
+        ...(active ? { background: "#e2e8f0", border: "2px solid " + GS_COLOR, color: "#1e293b", fontWeight: 800 } : off ? { background: "#e4e4e7", border: "2px solid #d4d4d8", color: "#52525b", fontWeight: 600 } : { background: "#e8e6e2", border: "2px solid #d4d4d8", color: "#52525b", fontWeight: 600 }) } },
+      active ? bsIcon("check", 15) : null, warn ? bsIcon("warn", 15) : null, label); };
+  const onTabKey = e => { if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return; e.preventDefault(); if (locked) return; const next = tab === "company" ? "data" : "company"; goTab(next); const el = tabRefs.current[next]; if (el) el.focus(); };
+  const pane = id => ({ id: "gs-panel-" + id, role: "tabpanel", "aria-labelledby": "gs-tab-" + id, "data-testid": "gs-panel-" + id, hidden: tab !== id, style: tab === id ? undefined : { display: "none" } });
+
   return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
     , React.createElement('div', { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
       , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 4 } }
@@ -10296,7 +10312,9 @@ function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: opti
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
         , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
-    , React.createElement('div', { style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
+    , React.createElement('div', { role: "tablist", "aria-label": "Global Settings sections", "data-testid": "gs-tabs", onKeyDown: onTabKey, style: { flexShrink: 0, padding: "12px 16px 0", background: "#e8e6e2", display: "flex", gap: 8 } }, gsTab("company", "Company"), gsTab("data", "Data"))
+    , React.createElement('div', { ref: scrollRef, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
+      , React.createElement('div', pane("company")
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
       , field("BUSINESS NAME", businessName, setBusinessName, "Company name")
       , field("ABN", abn, setAbn, "e.g. 12 345 678 901")
@@ -10308,6 +10326,11 @@ function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: opti
       , error && React.createElement('div', { style: { fontSize: 11, color: "#b91c1c", marginBottom: 10 } }, error)
       , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
 
+      , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
+        , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
+        , saved && React.createElement('span', { style: { fontSize: 12, color: "#166534", fontWeight: 600 } }, "Saved"))
+      )
+      , React.createElement('div', pane("data")
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Storage")
       , (() => {
           const pct = Math.min(100, (storageBytes / STORAGE_QUOTA_ASSUMED_BYTES) * 100);
@@ -10319,17 +10342,14 @@ function GlobalSettingsView({ onGoHome, backupDeps }) {      // backupDeps: opti
               , React.createElement('div', { style: { height: "100%", width: `${pct}%`, background: color, borderRadius: 999 } }))
             , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Site data, results and history — not photos (those live in a separate, much larger store)."));
         })()
-
-      , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
-        , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
-        , saved && React.createElement('span', { style: { fontSize: 12, color: "#166534", fontWeight: 600 } }, "Saved"))
       , React.createElement(BackupRestoreSection, { gate, deps: backupDeps })
+      )
     )
   );
 }
 
 // ═════════════════════════════════════════════════════════════════════════
-// BACKUP AND RESTORE — the section at the bottom of Global Settings (Stage 5). ONE function component, appended after the Save row; nothing above it moves. Every state is in the approved mockups.
+// BACKUP AND RESTORE — the section at the bottom of Global Settings (Stage 5). ONE function component, on the Data tab after the Storage block. Every state is in the approved mockups.
 // Rules it keeps: confirmations are the module-style inline two-step (never window.confirm / alert); every card has an icon AND a title in words (meaning is never colour alone) and its text passes 4.5:1 on its fill;
 // the built backup, the chosen file and the plan live in refs that are cleared when you leave Settings; Share backup calls the share sheet as the FIRST thing in its tap (iOS only opens it inside a tap); while a restore or
 // undo is running the Modules pill does nothing (leaving would unmount the screen and a reload would kill the restore); after a successful restore or undo, Done (or the Modules pill) reloads the app.
@@ -10387,12 +10407,14 @@ function BackupRestoreSection({ gate, deps }) {
   const held = React.useRef({ blob: null, filename: "", includesPhotos: true }), heldRestore = React.useRef({ file: null, insp: null, plan: null });
   const alive = React.useRef(true), fileInput = React.useRef(null), sectionRef = React.useRef(null), rsBox = React.useRef(null), unBox = React.useRef(null);
   React.useEffect(() => {
-    alive.current = true; gate.current.reload = d.reload; gate.current.reveal = () => { const el = sectionRef.current; if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" }); };
-    return () => { alive.current = false; held.current = { blob: null, filename: "", includesPhotos: true }; heldRestore.current = { file: null, insp: null, plan: null }; gate.current.busy = false; gate.current.reveal = null; gate.current.reload = null; };   // leaving Settings drops everything
+    alive.current = true; gate.current.reload = d.reload; gate.current.drop = () => { if (!held.current.blob) return; held.current = { blob: null, filename: "", includesPhotos: true }; setNotes([]); setBk({ phase: "idle" }); }; gate.current.reveal = () => { const el = sectionRef.current; if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" }); };
+    return () => { alive.current = false; held.current = { blob: null, filename: "", includesPhotos: true }; heldRestore.current = { file: null, insp: null, plan: null }; gate.current.busy = false; gate.current.reveal = null; gate.current.reload = null; gate.current.drop = null; };   // leaving Settings drops everything
   }, []);
   useCollapsible(rs.phase === "confirming", () => setRs(s => s.phase === "confirming" ? { ...s, phase: "summary" } : s), rsBox);
   useCollapsible(un.phase === "confirming", () => setUn(s => s.phase === "confirming" ? { ...s, phase: "idle" } : s), unBox);
   const busy = bk.phase === "measuring" || bk.phase === "building" || rs.phase === "checking" || rs.phase === "restoring" || un.phase === "undoing";
+  React.useEffect(() => { if (gate.current.setLocked) gate.current.setLocked(busy); }, [busy]);                                              // the tabs hold still while something is running
+  React.useEffect(() => { if (gate.current.setProblem) gate.current.setProblem(!!(problem && problem.keys && problem.keys.length)); }, [problem]);   // the Data tab shows a warning mark while a problem is recorded
 
   // ── making and sharing a backup
   const build = async (withPhotos, bytes) => {
