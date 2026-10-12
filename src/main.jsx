@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App, { backupRecoverAtStart, backupFinishRecovery, eraseStartup } from './App.jsx'
+import App, { backupRecoverAtStart, backupFinishRecovery, eraseStartup, eraseRuntime, requestPersistentStorage } from './App.jsx'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // A build lands as a new service worker in the background but does not take over
@@ -57,6 +57,9 @@ try {
     React.createElement(UpdateToast)
   ))
   if (window.__hideLoading) window.__hideLoading()
+  // Ask the browser to keep this app's data (navigator.storage.persist; silent, no prompt). Only AFTER the first render has been handed to React, a tick later, and never while an unfinished erase has the app on the
+  // Settings-only screen. It comes after the erase and the recovery above, never inside them. Never throws.
+  setTimeout(() => { try { if (!eraseRuntime.state.settingsOnly) requestPersistentStorage() } catch (_) {} }, 0)
 } catch (e) {
   document.body.style.overflow = 'auto'
   document.body.innerHTML =

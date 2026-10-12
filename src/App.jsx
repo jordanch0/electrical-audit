@@ -16993,5 +16993,11 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export { eltHasProgress, welderHasProgress, gsdHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
+// Asks the browser to treat this app's data as persistent (storage the browser should not clear when it is short of space). The browser decides: nothing is shown, no prompt, nothing is stored, and the answer is not used. Where the
+// browser has no navigator.storage.persist (jsdom, older browsers) nothing happens. Never throws and never rejects; resolves true / false (the browser's answer) or null (no such call, or it failed).
+async function requestPersistentStorage(nav = typeof navigator !== "undefined" ? navigator : null) {
+  try { const st = nav && nav.storage; if (!st || typeof st.persist !== "function") return null; const r = await st.persist(); return typeof r === "boolean" ? r : null; } catch (_) { return null; }
+}
+export { requestPersistentStorage };
 export { backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export default AppRoot;
