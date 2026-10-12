@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App, { backupRecoverAtStart, backupFinishRecovery } from './App.jsx'
+import App, { backupRecoverAtStart, backupFinishRecovery, eraseStartup } from './App.jsx'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // A build lands as a new service worker in the background but does not take over
@@ -41,6 +41,11 @@ function UpdateToast() {
   )
 }
 
+// An unfinished "Delete all data" is finished HERE, before anything renders (App.jsx: eraseStartup). Normally it is done in well under a tenth of a second; if it takes longer than 2 s the app starts on the
+// Global Settings screen only and the erase carries on. Never throws: a problem here must not stop the app from starting.
+const startApp = async () => {
+try { await eraseStartup() } catch (_) {}
+
 // An interrupted restore is put right HERE, synchronously, before anything renders (localStorage only: a few getItem / setItem calls); the photo / logo records it wrote are then deleted in the
 // background. Never throws: a problem here must not stop the app from starting.
 try { if (backupRecoverAtStart().recovered) backupFinishRecovery().catch(() => {}) } catch (_) {}
@@ -59,3 +64,5 @@ try {
     '<h2 style="color:#a3530f">Mount Error</h2><b>' + e.message + '</b><br><br>' +
     '<pre style="font-size:10px;color:#52525b;white-space:pre-wrap">' + e.stack + '</pre></div>'
 }
+}
+startApp()

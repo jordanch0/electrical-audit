@@ -10243,8 +10243,9 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
   const [storageBytes, setStorageBytes] = React.useState(0);
   const urlRef = React.useRef("");
   // Two tabs. BOTH panes stay mounted (the hidden one is display:none), so typing that is not saved yet, the logo preview and a running restore all survive a switch. Opens on Data when a restore problem is recorded (or when asked to); otherwise on Company.
-  const [tab, setTab] = React.useState(() => initialTab === "data" || initialTab === "company" ? initialTab : (backupRestoreProblem() ? "data" : "company"));
-  const [locked, setLocked] = React.useState(false);                       // a restore, undo, backup build or file check is running: the tabs hold still
+  const er = useEraseRuntime(), settingsOnly = er.settingsOnly;          // an unfinished erase (Stage 6): this is the only screen, it opens on Data, and the tabs hold still
+  const [tab, setTab] = React.useState(() => settingsOnly || initialTab === "data" ? "data" : initialTab === "company" ? "company" : (backupRestoreProblem() ? "data" : "company"));
+  const [lockedNow, setLocked] = React.useState(false), locked = lockedNow || settingsOnly;       // a restore, undo, backup build or file check is running (or an erase is unfinished): the tabs hold still
   const [problemFlag, setProblemFlag] = React.useState(() => !!backupRestoreProblem());
   const scrollRef = React.useRef(null), tabRefs = React.useRef({});
   const gate = React.useRef({ busy: false, reloadPending: false, reveal: null, setLocked, setProblem: setProblemFlag, drop: null });      // shared with the Backup and restore section (see below)
@@ -10308,7 +10309,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
       , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 4 } }
         // the Modules pill alone on the top row, where a Back pill would be (40px = Back's 30px + its 10px margin), title on the line below
         , React.createElement('div', { "data-testid": "header-pill-row", style: { display: "flex", justifyContent: "flex-end", alignItems: "flex-start", minHeight: 40 } }
-          , React.createElement(ModulesPill, { onClick: () => { const g = gate.current; if (g.busy) { if (g.reveal) g.reveal(); return; } if (g.reloadPending) { (g.reload || backupReloadApp)(); return; } onGoHome(); } }))   // while a restore / undo runs it does nothing (it shows where the work is); after one it reloads (which ends on Home)
+          , !settingsOnly && React.createElement(ModulesPill, { onClick: () => { const g = gate.current; if (g.busy) { if (g.reveal) g.reveal(); return; } if (g.reloadPending) { (g.reload || backupReloadApp)(); return; } onGoHome(); } }))   // while a restore / undo runs it does nothing (it shows where the work is); after one it reloads (which ends on Home)
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
         , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
@@ -10404,6 +10405,9 @@ function BackupRestoreSection({ gate, deps }) {
   const [rs, setRs] = React.useState({ phase: "idle" });            // idle | checking | summary | confirming | restoring | result
   const [un, setUn] = React.useState(() => ({ phase: "idle", info: d.undoInfo() }));   // idle | confirming | undoing | result
   const [problem, setProblem] = React.useState(() => d.problem());
+  const [del, setDel] = React.useState({ phase: "idle" });          // idle | confirming | starting | failed
+  const er = useEraseRuntime();
+  const delBox = React.useRef(null);
   const held = React.useRef({ blob: null, filename: "", includesPhotos: true }), heldRestore = React.useRef({ file: null, insp: null, plan: null });
   const alive = React.useRef(true), fileInput = React.useRef(null), sectionRef = React.useRef(null), rsBox = React.useRef(null), unBox = React.useRef(null);
   React.useEffect(() => {
@@ -10412,7 +10416,8 @@ function BackupRestoreSection({ gate, deps }) {
   }, []);
   useCollapsible(rs.phase === "confirming", () => setRs(s => s.phase === "confirming" ? { ...s, phase: "summary" } : s), rsBox);
   useCollapsible(un.phase === "confirming", () => setUn(s => s.phase === "confirming" ? { ...s, phase: "idle" } : s), unBox);
-  const busy = bk.phase === "measuring" || bk.phase === "building" || rs.phase === "checking" || rs.phase === "restoring" || un.phase === "undoing";
+  useCollapsible(del.phase === "confirming", () => setDel(s => s.phase === "confirming" ? { phase: "idle" } : s), delBox);
+  const busy = bk.phase === "measuring" || bk.phase === "building" || rs.phase === "checking" || rs.phase === "restoring" || un.phase === "undoing" || del.phase === "starting";
   React.useEffect(() => { if (gate.current.setLocked) gate.current.setLocked(busy); }, [busy]);                                              // the tabs hold still while something is running
   React.useEffect(() => { if (gate.current.setProblem) gate.current.setProblem(!!(problem && problem.keys && problem.keys.length)); }, [problem]);   // the Data tab shows a warning mark while a problem is recorded
 
@@ -10477,6 +10482,26 @@ function BackupRestoreSection({ gate, deps }) {
     else { backupLog(r.code, r.message); setUn({ phase: "result", kind: "err", ...backupMessageText(r.code === "none" || r.code === "expired" || r.code === "unfinished" ? r.code : "undo-failed"), info: d.undoInfo() }); }
   };
 
+  // ── deleting everything: writes the marker, then reloads; the erase itself runs at the next start (see eraseStartup)
+  const startErase = () => {
+    if (gate.current.drop) gate.current.drop();
+    try { (d.eraseBegin || eraseBegin)(); } catch (e) { backupLog("erase-failed", e && e.name); setDel({ phase: "failed" }); return; }
+    gate.current.busy = true; setDel({ phase: "starting" }); d.reload();
+  };
+  const leftover = er.mode === "none" ? (d.leftover ? d.leftover() : eraseLeftover()) : null;
+  const S1_PARAS = { erase: ["Removes everything SparkCheck keeps on this phone: every site, result, History snapshot, calendar event, photo and site logo, and also your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed.", React.createElement("div", { key: "s1b", "data-testid": "erase-restore-note", style: { marginTop: 6 } }, "A backup file brings back your sites, results, History, calendar events, photos and site logos. It does not bring back your business details, company logo, dropdown lists or TAT lists, so note those down first.")] };      // S1: what the delete removes, and what a backup can and cannot bring back (the restore never reads business details, the company logo, dropdown lists, TAT lists, rcd-mode or iel-cat)
+  const deleteBlock = () => {
+    const first = [bsHeading("Delete all data")];
+    if (er.mode === "working") return [...first, bsCard("info", "Finishing the erase…", "SparkCheck is clearing the last of your data. This can take a moment. Please wait: the app opens by itself when it is done. You do not need to do anything.", "erase-working"), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
+    if (del.phase === "starting") return [...first, bsBusyRow("Deleting… the app restarts by itself.", "Keep this screen open."), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
+    const lead = er.mode === "retry" ? [bsCard("err", "A previous erase didn't finish. Tap Delete all data to finish.", "Some of your data may still be on this phone. Tap Delete all data below to finish clearing it. The modules stay closed until it is done, so nothing is half cleared.", "erase-retry")]
+      : leftover ? [bsCard("warn", "Some photo storage could not be cleared.", "All your sites and results are gone. Only some old photos are still taking up space on this phone, and the app cannot see them. Tap Delete all data to try clearing them again, or leave it: nothing else is affected.", "erase-leftover")]
+      : [bsHelp(S1_PARAS.erase, 10)];
+    const fail = del.phase === "failed" ? [bsCard("err", "The delete could not be started", "Nothing was deleted. Please try again.", "erase-failed")] : [];
+    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases every site, result, History snapshot, calendar event, photo and site logo, and also your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed. A backup file can bring back the sites, results, History, calendar events, photos and site logos, but not your business details, company logo, dropdown lists or TAT lists. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
+    return [...first, ...lead, ...fail, bsBtn("Delete all data…", () => setDel({ phase: "confirming" }), { kind: "secondary", id: "erase-open", disabled: busy })];
+  };
+
   // ── drawing it
   const make1 = (label, o = {}) => bsBtn(label, () => make(photos), { id: "backup-make", disabled: busy || o.disabled, kind: o.kind });
   const backUp = () => {
@@ -10520,13 +10545,14 @@ function BackupRestoreSection({ gate, deps }) {
     return [bsHeading("Undo"), bsHelp(backupLastRestoreLine(un.info), 10), bsBtn("Undo last restore…", () => setUn(s => ({ ...s, phase: "confirming" })), { kind: "secondary", id: "backup-undo-open", disabled: busy })];
   };
   const undo = undoBlock();
+  if (er.settingsOnly) return React.createElement("div", { ref: sectionRef, "data-testid": "backup-section", style: { marginTop: 32, paddingTop: 18, borderTop: `1px solid ${BACKUP_UI.line}` } }, ...deleteBlock());
   return React.createElement("div", { ref: sectionRef, "data-testid": "backup-section", style: { marginTop: 32, paddingTop: 18, borderTop: `1px solid ${BACKUP_UI.line}` } },
     bsHeading("Backup and restore"),
     problem && problem.keys && problem.keys.length ? bsCard("err", "A restore could not be fully put back", [`One part of this phone's saved data could not be read, so it was left exactly as it was: `, React.createElement("b", { key: "k" }, backupKeysLabel(problem.keys)), ". The photos from that restore were kept and everything else was put back. Other modules are not affected.",
       React.createElement("div", { key: "n", style: { marginTop: 8 } }, React.createElement("b", null, "Next step:"), " Make a backup now and contact support, quoting this message."), React.createElement("div", { key: "g", style: { marginTop: 8 } }, "This message goes away after the next successful restore.")], "backup-problem") : null,
     bsHelp("A backup file holds your sites, results, History, calendar events, photos and logos. It contains client names, the ABN and photos, so store it somewhere safe."),
     React.createElement("div", { "data-testid": "backup-last", style: { fontSize: 12, color: BACKUP_UI.muted, margin: "10px 0 18px" } }, "Last backup: ", React.createElement("b", { style: { color: BACKUP_UI.ink } }, last)),
-    bsHeading("Back up"), ...noteCards(), ...backUp(), bsDivider(), ...restoreBlock(), ...(undo.length ? [bsDivider(), ...undo] : []));
+    bsHeading("Back up"), ...noteCards(), ...backUp(), bsDivider(), ...restoreBlock(), ...(undo.length ? [bsDivider(), ...undo] : []), bsDivider(), ...deleteBlock());
 }
 
 // ═════════════════════════════════════════════════════════════════════════
@@ -10566,6 +10592,8 @@ function AppRoot() {
     }
   }, [module]);
 
+  const er = useEraseRuntime();
+  if (er.settingsOnly) return React.createElement(GlobalSettingsView, {onGoHome: ()=>{}});      // an erase is unfinished: Global Settings only, no module can open
   if (module === "rcd") return React.createElement(RCDAppWrapper, {onGoHome: ()=>setModule(null)});
   if (module === "iel") return React.createElement(IELApp, {onGoHome: ()=>setModule(null)});
   if (module === "tat") return React.createElement(TATApp, {onGoHome: ()=>setModule(null)});
@@ -16271,7 +16299,7 @@ const backupFilename = (d = new Date()) => `SparkCheck-backup-${localISODate(d)}
 const BACKUP_MODULES = ["rcd", "iel", "tat", "thermo", "swb", "irt", "elt", "welder", "gsd"];
 const BACKUP_KEY_RE = new RegExp("^(?:(?:" + BACKUP_MODULES.join("|") + ")-(?:projects|results|meta|history|dropdowns|audit-active|items|photos-migrated)-v\\d+|rcd-mode-v\\d+|iel-cat-v\\d+|tat-(?:settings|freqs|names|defaults)-v\\d+|cal-events-v\\d+|app-settings-v\\d+)$");
 const backupKeyAllowed = k => typeof k === "string" && BACKUP_KEY_RE.test(k);
-const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-last-backup-v1");
+const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-last-backup-v1" || k === "sparkcheck-erase-pending-v1" || k === "sparkcheck-leftover-v1");
 function backupCollectLocalStorage(storage = localStorage) {
   const entries = {}, unknown = [], excluded = [];
   for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; if (backupKeyExcluded(k)) excluded.push(k); else if (backupKeyAllowed(k)) entries[k] = storage.getItem(k) || ""; else unknown.push(k); }
@@ -16636,6 +16664,62 @@ async function backupFinishRecovery(storage = localStorage) {
   try { backupWriteRecord(storage, { journal: null, undo: rec.undo, problem: rec.problem }); } catch (_) { return { ok: false, deleted: n }; }
   return { ok: true, deleted: n, unresolved: [], semantic: rec.journal.semantic || [] };
 }
+// ═════════════════════════════════════════════════════════════════════════
+// DELETE ALL DATA (Stage 6). Tapping the confirmed button writes a small MARKER (sparkcheck-erase-pending-v1) and reloads; the erase itself runs at the next START, before anything renders, so no module is holding
+// data in memory that could be written back (the Calendar hazard). What it removes: every localStorage key this app owns (the backed-up keys, the temporary *-preMigration copies, the restore record, the last-backup
+// note, the leftover note and, last, the marker itself) and every record in the four IndexedDB stores. Anything else on the origin is left alone. HANG RULE (approved): each store step is limited to max(5 s, 18 ms per MB
+// stored, 500 MB if unknown), capped at 30 s; the app waits 2 s for the erase before it renders (normally it is done in well under a tenth of a second); a step that runs out of time ends that attempt; after 3 attempts the
+// marker is replaced by the leftover note and the app opens normally (every localStorage key is already gone by then, so only unreferenced photo / logo records can remain).
+// ═════════════════════════════════════════════════════════════════════════
+const ERASE_KEY = "sparkcheck-erase-pending-v1", LEFTOVER_KEY = "sparkcheck-leftover-v1", ERASE_MAX_ATTEMPTS = 3, ERASE_RENDER_BUDGET_MS = 2000, ERASE_ESTIMATE_WAIT_MS = 1000, ERASE_FALLBACK_MB = 500;
+const eraseStepLimitMs = usageBytes => { const mb = typeof usageBytes === "number" && isFinite(usageBytes) && usageBytes >= 0 ? usageBytes / 1048576 : ERASE_FALLBACK_MB; return Math.min(30000, Math.max(5000, Math.round(18 * mb))); };
+const eraseReadJson = (storage, key) => { try { const r = storage.getItem(key); const v = r ? JSON.parse(r) : null; return v && typeof v === "object" ? v : null; } catch (_) { return null; } };
+const eraseMarker = (storage = localStorage) => eraseReadJson(storage, ERASE_KEY);
+const eraseLeftover = (storage = localStorage) => eraseReadJson(storage, LEFTOVER_KEY);
+// Writes the marker (the confirmed Delete all data button). The attempt count carries over from an unfinished erase so the three-attempt rule still holds. Throws if the phone has no room for it (nothing was changed).
+function eraseBegin(storage = localStorage, now = new Date()) { const m = eraseMarker(storage); storage.setItem(ERASE_KEY, JSON.stringify({ v: 1, attempts: m && Number.isInteger(m.attempts) && m.attempts >= 0 ? m.attempts : 0, at: now.toISOString() })); }
+// Removes every owned localStorage key except the marker and the leftover note (those two are settled at the end). Synchronous. A key that cannot be removed is counted, never thrown.
+function eraseOwnedKeys(storage = localStorage) {
+  const keys = []; for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k != null && k !== ERASE_KEY && k !== LEFTOVER_KEY && (backupKeyAllowed(k) || backupKeyExcluded(k))) keys.push(k); }
+  let failed = 0; for (const k of keys) { try { storage.removeItem(k); } catch (_) { failed++; } }
+  return { removed: keys.length - failed, failed };
+}
+async function eraseClearStore(st) { const db = await backupIdbOpenExisting(st.db, st.store); if (!db) return; try { await backupIdbReq(db, st.store, "readwrite", s => s.clear()); } finally { db.close(); } }
+function eraseStep(st, limitMs, clear) {      // true if the store was cleared within the limit, false if it failed or ran out of time (the late result is ignored)
+  return new Promise(res => { let done = false; const t = setTimeout(() => { if (!done) { done = true; res(false); } }, limitMs); const fin = ok => { if (!done) { done = true; clearTimeout(t); res(ok); } }; Promise.resolve().then(() => clear(st)).then(() => fin(true), () => fin(false)); });
+}
+// ADDITION TO THE APPROVED HANG RULE (decision 10-j): the rule sizes each step from the stored bytes, so the erase first asks navigator.storage.estimate(); that ask itself may hang, so it is given 1 s (ERASE_ESTIMATE_WAIT_MS), after which the 500 MB fallback is used. The 1 s is not part of the approved rule's numbers.
+async function eraseUsage(estimate) {
+  let t; try { const e = await Promise.race([Promise.resolve().then(() => (estimate ? estimate() : navigator.storage.estimate())), new Promise(r => { t = setTimeout(() => r(null), ERASE_ESTIMATE_WAIT_MS); })]); return e && typeof e.usage === "number" ? e.usage : null; } catch (_) { return null; } finally { clearTimeout(t); }
+}
+// What the app is doing about an erase, for the screens: "none" | "working" (still running after the render budget) | "retry" (an attempt ran out of time). Only working / retry put the app on the Settings-only screen.
+const eraseRuntime = { state: { mode: "none", settingsOnly: false }, subs: new Set() };
+const eraseSet = mode => { eraseRuntime.state = { mode, settingsOnly: mode === "working" || mode === "retry" }; eraseRuntime.subs.forEach(f => f()); };
+const useEraseRuntime = () => React.useSyncExternalStore(f => { eraseRuntime.subs.add(f); return () => { eraseRuntime.subs.delete(f); }; }, () => eraseRuntime.state);
+// Called by main.jsx before the first render. Resolves { render: "normal" } or { render: "settings-only", mode }. With no marker it does nothing. Never throws on its own; the caller still guards it.
+function eraseStartup({ storage = localStorage, estimate, clear = eraseClearStore, budgetMs = ERASE_RENDER_BUDGET_MS, now = () => new Date(), onFinished = () => window.location.reload() } = {}) {
+  let present = null; try { present = storage.getItem(ERASE_KEY); } catch (_) {}
+  if (present === null) return Promise.resolve({ render: "normal" });
+  const m = eraseMarker(storage) || {}, k = (Number.isInteger(m.attempts) && m.attempts >= 0 ? m.attempts : 0) + 1, at = typeof m.at === "string" ? m.at : now().toISOString();
+  eraseOwnedKeys(storage);                                                                   // synchronous, first, on every attempt
+  const giveUp = ids => { try { storage.setItem(LEFTOVER_KEY, JSON.stringify({ v: 1, at: now().toISOString(), stores: ids })); } catch (_) {} try { storage.removeItem(ERASE_KEY); } catch (_) {} };
+  if (k > ERASE_MAX_ATTEMPTS) { giveUp(BACKUP_STORES.map(s => s.id)); return Promise.resolve({ render: "normal" }); }
+  try { storage.setItem(ERASE_KEY, JSON.stringify({ v: 1, attempts: k, at })); } catch (_) {}
+  const run = (async () => {
+    const limit = eraseStepLimitMs(await eraseUsage(estimate)); let i = 0;
+    for (; i < BACKUP_STORES.length; i++) { if (!(await eraseStep(BACKUP_STORES[i], limit, clear))) break; }
+    if (i === BACKUP_STORES.length) { try { storage.removeItem(LEFTOVER_KEY); } catch (_) {} try { storage.removeItem(ERASE_KEY); } catch (_) {} return "done"; }
+    if (k >= ERASE_MAX_ATTEMPTS) { giveUp(BACKUP_STORES.slice(i).map(s => s.id)); return "final"; }
+    return "retry";
+  })().catch(() => "retry");
+  return new Promise(resolve => {
+    let decided = false; const timer = setTimeout(() => { if (decided) return; decided = true; eraseSet("working"); resolve({ render: "settings-only", mode: "working" }); }, budgetMs);
+    run.then(out => {
+      if (!decided) { decided = true; clearTimeout(timer); if (out === "retry") { eraseSet("retry"); resolve({ render: "settings-only", mode: "retry" }); } else resolve({ render: "normal" }); return; }
+      if (out === "retry") eraseSet("retry"); else onFinished();                             // it finished after the screen was up: reload into the first-run state (or, after the third failure, into the normal app with the leftover note)
+    });
+  });
+}
 // Optional progress for the screen: onProgress({ phase, done, total }) with phase "photos" | "verifying" | "saving". It is THROTTLED (at most one call per 150 ms, plus always the last call of a phase), never awaited (so it
 // can never slow the restore), and a failure inside it can NEVER fail the restore: a throw or a rejected promise is swallowed, and logged once by its error NAME only (never a message, which could carry anything). The callback
 // gets numbers and a phase word only, no names. It must not write storage. Not called during the synchronous localStorage writes themselves.
@@ -16909,4 +16993,5 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export { eltHasProgress, welderHasProgress, gsdHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
+export { backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export default AppRoot;
