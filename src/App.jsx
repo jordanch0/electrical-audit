@@ -10312,7 +10312,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
         , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
-    , React.createElement('div', { role: "tablist", "aria-label": "Global Settings sections", "data-testid": "gs-tabs", onKeyDown: onTabKey, style: { flexShrink: 0, padding: "12px 16px 0", background: "#e8e6e2", display: "flex", gap: 8 } }, gsTab("company", "Company"), gsTab("data", "Data"))
+    , React.createElement('div', { role: "tablist", "aria-label": "Global Settings sections", "data-testid": "gs-tabs", onKeyDown: onTabKey, style: { flexShrink: 0, padding: "12px 16px 10px", background: "#e8e6e2", borderBottom: "1px solid #d4d4d8", display: "flex", gap: 8 } }, gsTab("company", "Company"), gsTab("data", "Data"))
     , React.createElement('div', { ref: scrollRef, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
       , React.createElement('div', pane("company")
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")

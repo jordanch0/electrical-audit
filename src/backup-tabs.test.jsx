@@ -47,6 +47,11 @@ describe('the tabs: roles, look and keys', () => {
   it('clicking a tab switches, and resets the column to the top', async () => {
     const { user } = mount(); await screen.findByRole('tablist'); const col = panel('company').parentElement; col.scrollTop = 120; await user.click(tabs().data); expect(col.scrollTop).toBe(0); expect(selected()).toEqual(['data']);
   });
+  it('the tab bar keeps 10 px under the buttons and a 1 px line under the bar, and sits OUTSIDE the scrolling column, so scrolled text is cut under the line and never against the buttons', async () => {
+    mount(); const bar = await screen.findByRole('tablist'); const col = panel('company').parentElement;
+    expect(bar.style.paddingBottom).toBe('10px'); expect(bar.style.paddingTop).toBe('12px'); expect(bar.style.borderBottom).toBe('1px solid rgb(212, 212, 216)'); expect(bar.style.borderBottomColor).toBe(tabs().data.style.borderColor);      // the same grey as the inactive tab's border
+    expect(bar.contains(col)).toBe(false); expect(bar.nextElementSibling).toBe(col); expect(col.style.overflowY).toBe('auto');                 // the bar does not scroll with the column; the column is clipped at the bar's bottom edge, which is below the line
+  });
 });
 
 describe('what is on which tab', () => {
