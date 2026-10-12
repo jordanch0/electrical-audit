@@ -1,6 +1,7 @@
 // DELETE ALL DATA (Stage 6). FICTIONAL data. The engine (marker, owned-key erase, store steps, the approved hang rule, the three-attempt leftover fallback), the screens (Data tab block, the Settings-only screen with its
 // three states) and the startup through the real src/main.jsx. The hang tests use fake timers and a store step that never completes; the success tests use the real fake-indexeddb databases.
 import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import fs from 'fs';
 import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -85,6 +86,23 @@ describe('the erase at startup, with the real databases', () => {
   });
   it('erasing an empty phone (no databases yet) is fine and leaves no databases behind', async () => {
     marker(0); const r = await eraseStartup({ storage: S }); expect(r.render).toBe('normal'); expect(OWNED_LEFT()).toEqual([]);
+  });
+  it('a database that exists but has no object store holds nothing to clear: the erase does not fail on it, and the stores after it are still cleared', async () => {
+    // A fresh fake IndexedDB for this one test (connections the app's own stores keep open in the shared one would block the set-up), put back afterwards.
+    const real = globalThis.indexedDB; globalThis.indexedDB = new IDBFactory();
+    const emptyDb = n => new Promise((res, rej) => { const rq = indexedDB.open(n); rq.onsuccess = () => { rq.result.close(); res(); }; rq.onerror = () => rej(rq.error); });
+    const storesOf = n => new Promise((res, rej) => { const rq = indexedDB.open(n); rq.onsuccess = () => { const l = [...rq.result.objectStoreNames]; rq.result.close(); res(l); }; rq.onerror = () => rej(rq.error); });
+    try {
+      seedPhone(); marker(0); await emptyDb('sparkcheck-site-photos'); await emptyDb('sparkcheck-app-settings');
+      await withDb('sparkcheck-gsd-photos', 'photos', st => st.put({ buf: new Uint8Array([1, 2, 3]).buffer, type: 'image/jpeg' }, 'g1')); await withDb('sparkcheck-site-logos', 'logos', st => st.put({ buf: new Uint8Array([4]).buffer, type: 'image/png' }, 'l1'));
+      expect(await storesOf('sparkcheck-site-photos')).toEqual([]); expect(await storesOf('sparkcheck-app-settings')).toEqual([]);
+      expect(await withDb('sparkcheck-gsd-photos', 'photos', st => st.count())).toBe(1); expect(await withDb('sparkcheck-site-logos', 'logos', st => st.count())).toBe(1);
+      const onFinished = vi.fn(); const r = await eraseStartup({ storage: S, onFinished });
+      expect(r).toEqual({ render: 'normal' }); expect(onFinished).not.toHaveBeenCalled(); expect(eraseRuntime.state.settingsOnly).toBe(false);
+      expect(eraseMarker(S)).toBe(null); expect(eraseLeftover(S)).toBe(null); expect(OWNED_LEFT()).toEqual([]);
+      expect(await withDb('sparkcheck-gsd-photos', 'photos', st => st.count())).toBe(0); expect(await withDb('sparkcheck-site-logos', 'logos', st => st.count())).toBe(0);
+      expect(await storesOf('sparkcheck-site-photos')).toEqual([]); expect(await storesOf('sparkcheck-app-settings')).toEqual([]);
+    } finally { globalThis.indexedDB = real; }
   });
 });
 

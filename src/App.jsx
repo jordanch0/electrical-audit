@@ -16684,7 +16684,7 @@ function eraseOwnedKeys(storage = localStorage) {
   let failed = 0; for (const k of keys) { try { storage.removeItem(k); } catch (_) { failed++; } }
   return { removed: keys.length - failed, failed };
 }
-async function eraseClearStore(st) { const db = await backupIdbOpenExisting(st.db, st.store); if (!db) return; try { await backupIdbReq(db, st.store, "readwrite", s => s.clear()); } finally { db.close(); } }
+async function eraseClearStore(st) { const db = await backupIdbOpenExisting(st.db, st.store); if (!db) return; try { if (!db.objectStoreNames.contains(st.store)) return; await backupIdbReq(db, st.store, "readwrite", s => s.clear()); } finally { db.close(); } }      // a database that exists but has no such store holds nothing to clear
 function eraseStep(st, limitMs, clear) {      // true if the store was cleared within the limit, false if it failed or ran out of time (the late result is ignored)
   return new Promise(res => { let done = false; const t = setTimeout(() => { if (!done) { done = true; res(false); } }, limitMs); const fin = ok => { if (!done) { done = true; clearTimeout(t); res(ok); } }; Promise.resolve().then(() => clear(st)).then(() => fin(true), () => fin(false)); });
 }
