@@ -16377,6 +16377,7 @@ async function backupInspect(file) {
   for (const k of Object.keys(data)) {
     if (typeof data[k] !== "string") return bad("invalid", "This backup file holds a value for " + k + " that is not text.");
     if (!backupKeyAllowed(k)) { unknownKeys.push(k); continue; }
+    if (/-photos-migrated-v\d+$/.test(k)) continue;                                                 // the app writes this marker as plain date text, not JSON, and a restore never reads it
     try { JSON.parse(data[k]); } catch (_) { return bad("invalid", "This backup file holds damaged data for " + k + "."); }
   }
   let photos = 0, logos = 0, records = 0; const seen = new Set();
