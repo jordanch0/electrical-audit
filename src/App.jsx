@@ -16904,15 +16904,19 @@ async function backupDeliver(blob, filename, { now = new Date(), includesPhotos 
   let recorded = true; try { storage.setItem(BACKUP_LAST_KEY, JSON.stringify({ v: 1, at: now.toISOString(), day: localISODate(now), bytes: blob.size, method, includesPhotos: !!includesPhotos })); } catch (_) { recorded = false; }
   return { ok: true, method, recorded, ...(fallbackFrom ? { fallbackFrom } : {}) };
 }
-// The "Last backup" record, and the words for it: "never", "today", "1 day ago", "N days ago" (whole LOCAL days between the day it was made and today).
+// The "Last backup" record, and the words for it: "never", or the day and the time in the device's own local time: "today, 4:38 pm", "yesterday, 4:38 pm", "13/10/2026, 4:38 pm" (whole LOCAL days between the day it was made and today).
+// The time comes from the record's `at` (an ISO timestamp every record has carried since it was introduced); a record whose `at` cannot be read, or is not on its own `day` (the device's time zone changed), shows the day only. Nothing here writes the record.
 function backupLastBackup(storage = localStorage) {
   try { const r = JSON.parse(storage.getItem(BACKUP_LAST_KEY)); return r && r.v === 1 && typeof r.at === "string" && /^\d{4}-\d{2}-\d{2}$/.test(r.day || "") ? r : null; } catch (_) { return null; }
 }
+// "4:38 pm": the device's 12-hour clock with lowercase am / pm, written by hand (Intl differs between phones and can put a narrow no-break space before pm).
+const backupTimeText = d => (d.getHours() % 12 || 12) + ":" + String(d.getMinutes()).padStart(2, "0") + " " + (d.getHours() < 12 ? "am" : "pm");
 function backupLastBackupText(storage = localStorage, now = new Date()) {
   const r = backupLastBackup(storage); if (!r) return "never";
   const t = localISODate(now).split("-").map(Number), d = r.day.split("-").map(Number);
   const days = Math.round((Date.UTC(t[0], t[1] - 1, t[2]) - Date.UTC(d[0], d[1] - 1, d[2])) / 864e5);
-  return days <= 0 ? "today" : days === 1 ? "1 day ago" : days + " days ago";
+  const at = new Date(r.at), time = !isNaN(at.getTime()) && localISODate(at) === r.day ? ", " + backupTimeText(at) : "";
+  return (days <= 0 ? "today" : days === 1 ? "yesterday" : backupDmy(r.day)) + time;
 }
 // ── Plain words for the saved-data keys, for messages a person reads ("RCD Testing, list of sites"), never the key itself. Covers every key the app can name: the module keys (any version), the calendar, the settings, the
 // copies kept before an update, and the app's own records. A key the app does not know (another app's, or anything else) is never echoed: it reads "other saved data".

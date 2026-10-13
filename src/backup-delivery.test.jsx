@@ -95,22 +95,33 @@ describe('backupDeliver: the share sheet first, a download as the fallback', () 
   });
 });
 
-describe('"Last backup": never / today / 1 day ago / N days ago, in whole LOCAL days', () => {
-  const put = day => rawSetItem(BACKUP_LAST_KEY, JSON.stringify({ v: 1, at: day + 'T00:00:00.000Z', day, bytes: 1, method: 'share', includesPhotos: true }));
+describe('"Last backup": never / today / yesterday / the date, with the time, in whole LOCAL days and the device\'s own clock', () => {
+  const put = (day, h = 16, m = 38) => { const [y, mo, d] = day.split('-').map(Number); rawSetItem(BACKUP_LAST_KEY, JSON.stringify({ v: 1, at: new Date(y, mo - 1, d, h, m).toISOString(), day, bytes: 1, method: 'share', includesPhotos: true })); };
   it('never when there is no record, or the record is damaged / of another version / has a bad day', () => {
     expect(backupLastBackupText()).toBe('never');
     for (const bad of ['{broken', '"text"', JSON.stringify({ v: 2, at: 'x', day: '2026-10-05' }), JSON.stringify({ v: 1, at: 'x', day: 'yesterday' }), JSON.stringify({ v: 1, day: '2026-10-05' })]) { rawSetItem(BACKUP_LAST_KEY, bad); expect(backupLastBackupText()).toBe('never'); expect(backupLastBackup()).toBeNull(); }
   });
-  it('counts whole local days between the day it was made and today', () => {
+  it('counts whole local days between the day it was made and today, and adds the time it was made', () => {
     put('2026-10-05'); const t = (d, h = 12, m = 0) => new Date(2026, 9, d, h, m);
-    expect(backupLastBackupText(localStorage, t(5))).toBe('today'); expect(backupLastBackupText(localStorage, t(6))).toBe('1 day ago'); expect(backupLastBackupText(localStorage, t(7))).toBe('2 days ago'); expect(backupLastBackupText(localStorage, new Date(2026, 10, 5))).toBe('31 days ago');
-    expect(backupLastBackupText(localStorage, t(4))).toBe('today');                                                  // the clock is before the record (device date moved back): never a negative
+    expect(backupLastBackupText(localStorage, t(5))).toBe('today, 4:38 pm'); expect(backupLastBackupText(localStorage, t(6))).toBe('yesterday, 4:38 pm'); expect(backupLastBackupText(localStorage, t(7))).toBe('05/10/2026, 4:38 pm'); expect(backupLastBackupText(localStorage, new Date(2026, 10, 5))).toBe('05/10/2026, 4:38 pm');
+    expect(backupLastBackupText(localStorage, t(4))).toBe('today, 4:38 pm');                                                  // the clock is before the record (device date moved back): never a negative
   });
-  it('at 00:30 and 23:30 it is the LOCAL day that counts (a backup at 23:30 is 1 day ago at 00:30 the next day; one at 00:30 is today at 23:30)', async () => {
+  it('at 00:30 and 23:30 it is the LOCAL day that counts (a backup at 23:30 is yesterday, 11:30 pm at 00:30 the next day; one at 00:30 is today, 12:30 am at 23:30)', async () => {
     const { nav } = shareNav();
     await backupDeliver(blobOf(5), 'b.zip', { now: new Date(2026, 9, 5, 23, 30), nav }); expect(backupLastBackup().day).toBe('2026-10-05');
-    expect(backupLastBackupText(localStorage, new Date(2026, 9, 5, 23, 59))).toBe('today'); expect(backupLastBackupText(localStorage, new Date(2026, 9, 6, 0, 30))).toBe('1 day ago');
-    await backupDeliver(blobOf(5), 'b.zip', { now: new Date(2026, 9, 5, 0, 30), nav }); expect(backupLastBackup().day).toBe('2026-10-05'); expect(backupLastBackupText(localStorage, new Date(2026, 9, 5, 23, 30))).toBe('today');
+    expect(backupLastBackupText(localStorage, new Date(2026, 9, 5, 23, 59))).toBe('today, 11:30 pm'); expect(backupLastBackupText(localStorage, new Date(2026, 9, 6, 0, 30))).toBe('yesterday, 11:30 pm');
+    await backupDeliver(blobOf(5), 'b.zip', { now: new Date(2026, 9, 5, 0, 30), nav }); expect(backupLastBackup().day).toBe('2026-10-05'); expect(backupLastBackupText(localStorage, new Date(2026, 9, 5, 23, 30))).toBe('today, 12:30 am');
+  });
+  it('the time is the device\'s 12-hour clock with lowercase am / pm, no leading zero on the hour: midnight 12:05 am, 1:07 am, noon 12:00 pm, 11:59 pm', () => {
+    const at = (h, m) => { put('2026-10-05', h, m); return backupLastBackupText(localStorage, new Date(2026, 9, 5, 23, 59)); };
+    expect([at(0, 5), at(1, 7), at(9, 0), at(12, 0), at(13, 9), at(23, 59)]).toEqual(['today, 12:05 am', 'today, 1:07 am', 'today, 9:00 am', 'today, 12:00 pm', 'today, 1:09 pm', 'today, 11:59 pm']);
+  });
+  it('a record whose time cannot be used shows the DAY ONLY, exactly the day words it has: an unreadable `at`, or an `at` that is not on its own day (the device\'s time zone changed); it is never altered', () => {
+    const raw = o => rawSetItem(BACKUP_LAST_KEY, JSON.stringify({ v: 1, bytes: 1, method: 'share', includesPhotos: true, ...o })); const t = d => new Date(2026, 9, d, 12, 0);
+    raw({ at: 'x', day: '2026-10-05' }); const before = localStorage.getItem(BACKUP_LAST_KEY);
+    expect([backupLastBackupText(localStorage, t(5)), backupLastBackupText(localStorage, t(6)), backupLastBackupText(localStorage, t(8))]).toEqual(['today', 'yesterday', '05/10/2026']);
+    raw({ at: new Date(2026, 9, 7, 9, 0).toISOString(), day: '2026-10-05' }); expect(backupLastBackupText(localStorage, t(5))).toBe('today');             // `at` falls on another local day than `day`
+    raw({ at: 'x', day: '2026-10-05' }); expect(localStorage.getItem(BACKUP_LAST_KEY)).toBe(before);                                                    // reading never writes
   });
   it('the record is NOT part of a backup (listed as excluded, absent from data.json) so a restore can never bring someone else\'s date back', async () => {
     await seedSourceFull(); put('2026-10-05'); const b = await backupBuild(); expect(b.manifest.notBackedUp.excludedKeys).toContain(BACKUP_LAST_KEY); expect(b.manifest.notBackedUp.unknownKeys).not.toContain(BACKUP_LAST_KEY);

@@ -80,10 +80,10 @@ describe('the large-file warning (100 MB)', () => {
 
 describe('sharing: the share sheet first, the download as the fallback', () => {
   const ready = async (d) => { await seedSourceFull(); const m = mount(d); await m.user.click(T('backup-make')); await screen.findByTestId('backup-card-ready'); return m; };
-  it('Share backup hands THE FILE to the share sheet, then: "Backup shared", Last backup: today, the built file dropped (Make another backup)', async () => {
+  it('Share backup hands THE FILE to the share sheet, then: "Backup shared", Last backup: today with the time, the built file dropped (Make another backup)', async () => {
     const share = vi.fn(async () => {}); const { user } = await ready(shareDeps({ canShare: () => true, share })); await user.click(T('backup-share'));
     await screen.findByTestId('backup-note-ok'); expect(share).toHaveBeenCalledTimes(1); expect(share.mock.calls[0][0].files[0].name).toBe('SparkCheck-backup-2026-10-09.zip'); expect(T('backup-note-ok').textContent).toBe('Backup sharedIf you chose Save to Files, it is in the folder you picked.');
-    await waitFor(() => expect(T('backup-last').textContent).toBe('Last backup: today')); expect(screen.queryByTestId('backup-share')).toBeNull(); expect(T('backup-make').textContent).toBe('Make another backup'); expect(JSON.parse(localStorage.getItem(BACKUP_LAST_KEY))).toMatchObject({ method: 'share' });
+    await waitFor(() => expect(T('backup-last').textContent).toBe('Last backup: today, 12:00 pm')); expect(screen.queryByTestId('backup-share')).toBeNull(); expect(T('backup-make').textContent).toBe('Make another backup'); expect(JSON.parse(localStorage.getItem(BACKUP_LAST_KEY))).toMatchObject({ method: 'share' });
   });
   it('the share sheet is called INSIDE the tap: synchronously, before anything is awaited', async () => {
     const deliver = vi.fn(() => new Promise(() => {})); await ready(deps({ deliver })); fireEvent.click(T('backup-share')); expect(deliver).toHaveBeenCalledTimes(1);
@@ -94,7 +94,7 @@ describe('sharing: the share sheet first, the download as the fallback', () => {
   });
   it('no share sheet: a download; "Backup download started", "This device ...", "Check the Files app." and the file name', async () => {
     const { user } = await ready(shareDeps({})); await user.click(T('backup-share')); const n = await screen.findByTestId('backup-note-info');
-    expect(n.textContent).toBe('Backup download startedThis device could not open the share sheet, so the backup was downloaded instead. Check the Files app.SparkCheck-backup-2026-10-09.zip'); await waitFor(() => expect(T('backup-last').textContent).toBe('Last backup: today')); expect(JSON.parse(localStorage.getItem(BACKUP_LAST_KEY))).toMatchObject({ method: 'download' });
+    expect(n.textContent).toBe('Backup download startedThis device could not open the share sheet, so the backup was downloaded instead. Check the Files app.SparkCheck-backup-2026-10-09.zip'); await waitFor(() => expect(T('backup-last').textContent).toBe('Last backup: today, 12:00 pm')); expect(JSON.parse(localStorage.getItem(BACKUP_LAST_KEY))).toMatchObject({ method: 'download' });
   });
   it('the date could not be recorded: the file is saved, a warning says what that means', async () => {
     const real = Storage.prototype.setItem; vi.spyOn(Storage.prototype, 'setItem').mockImplementation(function (k, v) { if (k === BACKUP_LAST_KEY) throw Object.assign(new Error('quota'), { name: 'QuotaExceededError' }); return real.call(this, k, v); });
