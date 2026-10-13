@@ -119,9 +119,8 @@ describe('"Last backup": never / today / yesterday / the date, with the time, in
   it('a record whose time cannot be used shows the DAY ONLY, exactly the day words it has: an unreadable `at`, or an `at` that is not on its own day (the device\'s time zone changed); it is never altered', () => {
     const raw = o => rawSetItem(BACKUP_LAST_KEY, JSON.stringify({ v: 1, bytes: 1, method: 'share', includesPhotos: true, ...o })); const t = d => new Date(2026, 9, d, 12, 0);
     raw({ at: 'x', day: '2026-10-05' }); const before = localStorage.getItem(BACKUP_LAST_KEY);
-    expect([backupLastBackupText(localStorage, t(5)), backupLastBackupText(localStorage, t(6)), backupLastBackupText(localStorage, t(8))]).toEqual(['today', 'yesterday', '05/10/2026']);
-    raw({ at: new Date(2026, 9, 7, 9, 0).toISOString(), day: '2026-10-05' }); expect(backupLastBackupText(localStorage, t(5))).toBe('today');             // `at` falls on another local day than `day`
-    raw({ at: 'x', day: '2026-10-05' }); expect(localStorage.getItem(BACKUP_LAST_KEY)).toBe(before);                                                    // reading never writes
+    expect([backupLastBackupText(localStorage, t(5)), backupLastBackupText(localStorage, t(6)), backupLastBackupText(localStorage, t(8))]).toEqual(['today', 'yesterday', '05/10/2026']); expect(localStorage.getItem(BACKUP_LAST_KEY)).toBe(before);       // reading never writes
+    raw({ at: new Date(2026, 9, 7, 9, 0).toISOString(), day: '2026-10-05' }); const second = localStorage.getItem(BACKUP_LAST_KEY); expect(backupLastBackupText(localStorage, t(5))).toBe('today'); expect(localStorage.getItem(BACKUP_LAST_KEY)).toBe(second);             // `at` falls on another local day than `day`; reading never writes
   });
   it('the record is NOT part of a backup (listed as excluded, absent from data.json) so a restore can never bring someone else\'s date back', async () => {
     await seedSourceFull(); put('2026-10-05'); const b = await backupBuild(); expect(b.manifest.notBackedUp.excludedKeys).toContain(BACKUP_LAST_KEY); expect(b.manifest.notBackedUp.unknownKeys).not.toContain(BACKUP_LAST_KEY);
