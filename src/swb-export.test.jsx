@@ -109,26 +109,26 @@ describe('exportSWBExcel structure', () => {
     expect(V(sh.getCell('A2'))).toBe('Hearse Road - Firestone  –  Switchboard / Enclosure Audit  (Visual Inspection)');
     expect(V(sh.getCell('A4'))).toBe('Auditor: Jane  |  Date Tested: 13/07/2026  |  Next Audit Due: 13/07/2027');
     expect(V(sh.getCell('A6'))).toBe('Asset Details');                          // (A6:B6 is merged: B6 reads back as the master's text)
-    expect([7, 8].map(r => [V(sh.getCell(r, 1)), V(sh.getCell(r, 2))])).toEqual([['Area', 'Wash Plant'], ['Board', 'MCC 1']]);
-    expect(V(sh.getCell('A10'))).toBe('Audit Summary');                          // after Asset Details + one blank row (9)
-    const summary = {}; for (let r = 11; r <= 17; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
+    expect([7, 8, 9, 10].map(r => [V(sh.getCell(r, 1)), V(sh.getCell(r, 2))])).toEqual([['Area', 'Wash Plant'], ['Board', 'MCC 1'], ['Date Tested', ''], ['Next Audit Due', '13/07/2027']]);      // the board's OWN date (blank: no board date here) and next due (the Register row's values)
+    expect(V(sh.getCell('A12'))).toBe('Audit Summary');                          // after Asset Details + one blank row (11)
+    const summary = {}; for (let r = 13; r <= 19; r++) summary[V(sh.getCell(r, 1))] = V(sh.getCell(r, 2));
     expect(summary).toEqual({ 'Total Items': '11', Pass: '1', Fail: '1', 'N/A': '1', Untested: '8', Score: '10.0%', Overall: 'UNTESTED' });
-    expect(V(sh.getCell('A19'))).toBe('Item'); expect(V(sh.getCell('G19'))).toBe('Responsibility / Action');
-    for (let i = 0; i < 11; i++) expect(V(sh.getCell(20 + i, 1))).toBe(`${i + 1}. ${SWB_CHECKLIST[i].label}`);
-    expect(V(sh.getCell('B20'))).toMatch(/structurally sound/);                       // pass criteria text
-    // Enclosure (row 20) PASSED but retains a risk / defect id -> blank in the export (a plain comment is not defect data and stays);
-    // Ventilation (row 21) FAILED -> defect details shown
-    expect([V(sh.getCell('C20')), V(sh.getCell('D20')), V(sh.getCell('E20')), V(sh.getCell('F20'))]).toEqual(['Pass', '', 'old', '']);
-    expect([V(sh.getCell('C21')), V(sh.getCell('D21')), V(sh.getCell('E21')), V(sh.getCell('F21')), V(sh.getCell('G21'))]).toEqual(['Fail', 'D-7', 'blocked', 'M', 'Scheduled for Repair | Site Electrician']);
-    expect(V(sh.getCell('C22'))).toBe('N/A'); expect(V(sh.getCell('C23'))).toBe('');
-    expect(JSON.stringify(sh.getRow(20).values)).not.toMatch(/STALE/);        // the stale defect id never appears
+    expect(V(sh.getCell('A21'))).toBe('Item'); expect(V(sh.getCell('G21'))).toBe('Responsibility / Action');
+    for (let i = 0; i < 11; i++) expect(V(sh.getCell(22 + i, 1))).toBe(`${i + 1}. ${SWB_CHECKLIST[i].label}`);
+    expect(V(sh.getCell('B22'))).toMatch(/structurally sound/);                       // pass criteria text
+    // Enclosure (row 22) PASSED but retains a risk / defect id -> blank in the export (a plain comment is not defect data and stays);
+    // Ventilation (row 23) FAILED -> defect details shown
+    expect([V(sh.getCell('C22')), V(sh.getCell('D22')), V(sh.getCell('E22')), V(sh.getCell('F22'))]).toEqual(['Pass', '', 'old', '']);
+    expect([V(sh.getCell('C23')), V(sh.getCell('D23')), V(sh.getCell('E23')), V(sh.getCell('F23')), V(sh.getCell('G23'))]).toEqual(['Fail', 'D-7', 'blocked', 'M', 'Scheduled for Repair | Site Electrician']);
+    expect(V(sh.getCell('C24'))).toBe('N/A'); expect(V(sh.getCell('C25'))).toBe('');
+    expect(JSON.stringify(sh.getRow(22).values)).not.toMatch(/STALE/);        // the stale defect id never appears
   });
 
   it('a complete board reads Overall FAIL / PASS on its sheet', async () => {
     const wb = await build(project, results);
-    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B17'))).toBe('FAIL');
-    expect(V(wb.getWorksheet('MSB').getCell('B17'))).toBe('PASS');
-    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B16'))).toBe('90.9%');
+    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B19'))).toBe('FAIL');
+    expect(V(wb.getWorksheet('MSB').getCell('B19'))).toBe('PASS');
+    expect(V(wb.getWorksheet('MSB (Sub Station)').getCell('B18'))).toBe('90.9%');
   });
 
   it('photos land on their OWN board sheet (1:1), one per row, nothing on the Register or other boards', async () => {

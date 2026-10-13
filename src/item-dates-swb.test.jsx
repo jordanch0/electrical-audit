@@ -1,6 +1,6 @@
 // SWB ITEM DATES (FICTIONAL data): each checklist point carries its own date. First result stamps the Home date; a changed result keeps it; "—" clears it; a hand-edited date holds;
 // Reset and Complete clear it; NEXT TEST DUE (+1 year, the Home chosen date wins) for PASS / FAIL only; Report export: a board's Date Tested = the earliest PASS / FAIL item date,
-// Next Audit Due = the earliest item next-due, header = the earliest of the boards, Home values when none qualifies; the board sheets gain a "Date Tested" column.
+// Next Audit Due = the earliest item next-due, header = the earliest of the boards, Home values when none qualifies; the board sheets have no per-test "Date Tested" column (release l).
 // IMPORT: the SWB importer is structure-only (Area / Board from the Register), so the extra board-sheet column changes nothing: OLD exports still import, NEW exports round-trip.
 import React from 'react';
 import fs from 'fs';
@@ -25,28 +25,21 @@ async function openItem(user, label = 'Enclosure Condition') {
 }
 
 describe('item page', () => {
-  it('no date field until there is a result; the first result stamps the Home date (not today); a changed result keeps it; "—" clears it', async () => {
+  it('the item page has NO date field and NO next due, before and after a result; the first result still stamps the Home date on the item (stored, not shown); a changed result keeps it; "—" clears it', async () => {
     at(7); const user = userEvent.setup(); await openItem(user);
     expect(screen.queryByLabelText('Date tested')).toBeNull();
     await user.click(screen.getByRole('button', { name: 'FAIL' })); await waitFor(() => expect(item('enclosure')).toMatchObject({ status: 'fail', lastTested: HOME }));
-    expect(screen.getByLabelText('Date tested')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Date tested')).toBeNull(); expect(screen.queryByText('NEXT TEST DUE:')).toBeNull();
     at(9); await user.click(screen.getByRole('button', { name: 'N/A' })); await waitFor(() => expect(item('enclosure')).toMatchObject({ status: 'na', lastTested: HOME }));
     await user.click(screen.getByRole('button', { name: '—' })); await waitFor(() => expect(item('enclosure').lastTested).toBe(''));
     expect(screen.queryByLabelText('Date tested')).toBeNull();
   });
-  it('NEXT TEST DUE under the date: PASS / FAIL only, +1 year; a hand-edited date holds across a changed result and the due follows it', async () => {
+  it('whatever the result (PASS, FAIL, N/A) the item page shows no date field and no NEXT TEST DUE, and the stored item date stays the Home date', async () => {
     at(7); const user = userEvent.setup(); await openItem(user);
-    await user.click(screen.getByRole('button', { name: 'PASS' })); expect(await screen.findByText('NEXT TEST DUE:')).toBeInTheDocument(); expect(screen.getByText('05/10/2027')).toBeInTheDocument();
-    setDate('Date tested', '2026-09-01'); await waitFor(() => expect(item('enclosure').lastTested).toBe('2026-09-01'));
-    await user.click(screen.getByRole('button', { name: 'FAIL' })); expect(item('enclosure').lastTested).toBe('2026-09-01');
-    await user.click(screen.getByRole('button', { name: 'N/A' })); await waitFor(() => expect(item('enclosure').status).toBe('na'));
-    expect(screen.queryByText('NEXT TEST DUE:')).toBeNull(); expect(screen.getByLabelText('Date tested')).toBeInTheDocument();
-  });
-  it('without a chosen Home next-due (the default) the due is the item date + 1 year', async () => {
-    localStorage.setItem('swb-meta-v1', JSON.stringify({ s1: { ...META, nextTestDate: '2027-10-05' } }));
-    at(7); const user = userEvent.setup(); await openItem(user);
-    await user.click(screen.getByRole('button', { name: 'PASS' })); await waitFor(() => expect(item('enclosure').lastTested).toBe(HOME));
-    setDate('Date tested', '2026-03-01'); expect(await screen.findByText('01/03/2027')).toBeInTheDocument();
+    for (const [button, status] of [['PASS', 'pass'], ['FAIL', 'fail'], ['N/A', 'na']]) {
+      await user.click(screen.getByRole('button', { name: button })); await waitFor(() => expect(item('enclosure')).toMatchObject({ status, lastTested: HOME }));
+      expect(screen.queryByText('NEXT TEST DUE:')).toBeNull(); expect(screen.queryByLabelText('Date tested')).toBeNull();
+    }
   });
 });
 
@@ -75,12 +68,12 @@ describe('Report export + import', () => {
     // the board date shows even though the board is only part answered; its Next Audit Due is the board next-due
     expect(row(7)[2]).toBe('13/07/2026'); expect(row(7)[3]).toBe('13/07/2027');
   });
-  it('board sheet: a "Date Tested" column (H) with each answered item\'s own date; untested items blank; the header merge covers 8 columns', async () => {
+  it('board sheet: NO per-test "Date Tested" column (seven columns A-G, column H empty); the header merge covers 7 columns', async () => {
     await exportSWBExcel(proj, results, meta); const wb = await load(); const sh = wb.getWorksheet('MSB');
     let hr = 0; sh.eachRow((row, n) => { if (String(row.getCell(1).value) === 'Item') hr = n; });
-    expect(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(c => String(sh.getCell(c + hr).value))).toEqual(['Item', 'Test / Pass Criteria', 'Result', 'Defect ID', 'Comments', 'Risk Rating', 'Responsibility / Action', 'Date Tested']);
-    expect([1, 2, 3, 4].map(i => String(sh.getCell('H' + (hr + i)).value ?? ''))).toEqual(['20/08/2026', '13/07/2026', '05/01/2026', '']);
-    expect(Object.values(sh._merges).map(m => m.range)).toContain('A1:H1');
+    expect(['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(c => String(sh.getCell(c + hr).value ?? ''))).toEqual(['Item', 'Test / Pass Criteria', 'Result', 'Defect ID', 'Comments', 'Risk Rating', 'Responsibility / Action', '']);
+    expect([1, 2, 3, 4].map(i => String(sh.getCell('H' + (hr + i)).value ?? ''))).toEqual(['', '', '', '']);
+    expect(Object.values(sh._merges).map(m => m.range)).toContain('A1:G1'); expect(Object.values(sh._merges).map(m => m.range)).not.toContain('A1:H1');
   });
   it('nothing qualifying -> the Home date and the Home next-due', async () => {
     await exportSWBExcel(proj, { s1: { a1: { b1: { [K[0]]: { status: 'na', lastTested: '2026-01-05' } } } } }, meta); const wb = await load();
@@ -102,6 +95,6 @@ describe('Report export + import', () => {
     expect(p.siteName).toBe('Site One'); expect({ company: p.company, abn: p.abn, licence: p.licence }).toEqual({ company: 'Co', abn: '1', licence: 'L' });
     expect(p.areas.map(a => a.name)).toEqual(['Plant']); expect(p.areas[0].boards.map(b => b.name)).toEqual(['MSB', 'DB1']);
     expect(JSON.stringify(p)).not.toMatch(/2026-07-13|13\/07\/2026/);                                      // no result data crosses the import
-    const board = XLSX.utils.sheet_to_json(data.Sheets['MSB'], { header: 1, defval: '' }).find(r => r[0] === 'Item'); expect(board[7]).toBe('Date Tested');
+    const board = XLSX.utils.sheet_to_json(data.Sheets['MSB'], { header: 1, defval: '' }).find(r => r[0] === 'Item'); expect(board.slice(0, 8)).toEqual(['Item', 'Test / Pass Criteria', 'Result', 'Defect ID', 'Comments', 'Risk Rating', 'Responsibility / Action']);
   });
 });

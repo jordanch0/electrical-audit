@@ -84,11 +84,11 @@ describe('board page', () => {
     at(9); await setResult(user, 'Enclosure Condition', 'FAIL'); await setResult(user, 'Ventilation', 'PASS'); expect(board()._lastTested).toBe('2026-03-01');
     setDate('Date tested', ''); await waitFor(() => expect(board()._lastTested).toBe(HOME));
   });
-  it('INDEPENDENT of the per-test dates: editing the board date does not rewrite the tests; editing a test date does not rewrite the board', async () => {
+  it('INDEPENDENT of the stored per-test dates: editing the board date does not rewrite the tests; a later result does not rewrite the board date; the item page has no date field', async () => {
     at(7); const user = userEvent.setup(); await openBoard(user); await setResult(user, 'Enclosure Condition', 'PASS'); await setResult(user, 'Ventilation', 'PASS');
     setDate('Date tested', '2026-03-01'); await waitFor(() => expect(board()._lastTested).toBe('2026-03-01')); expect(board().enclosure.lastTested).toBe(HOME); expect(board().ventilation.lastTested).toBe(HOME);
-    await user.click(screen.getByText('Enclosure Condition')); setDate('Date tested', '2026-02-02'); await waitFor(() => expect(board().enclosure.lastTested).toBe('2026-02-02'));
-    expect(board()._lastTested).toBe('2026-03-01'); expect(board().ventilation.lastTested).toBe(HOME);
+    await user.click(screen.getByText('Enclosure Condition')); expect(screen.queryByLabelText('Date tested')).toBeNull(); expect(screen.queryByText('NEXT TEST DUE:')).toBeNull(); await user.click(screen.getByRole('button', { name: 'FAIL' })); await back(user); await screen.findByText('BOARD PHOTOS');
+    expect(board()._lastTested).toBe('2026-03-01'); expect(board().enclosure.lastTested).toBe(HOME); expect(board().ventilation.lastTested).toBe(HOME);
   });
   it('Reset board clears the board date (and only that board\'s)', async () => {
     at(7); const user = userEvent.setup(); await openBoard(user); await setResult(user, 'Enclosure Condition', 'PASS'); expect(board()._lastTested).toBe(HOME);
@@ -156,7 +156,7 @@ describe('the scalar `_lastTested` key is safe for every reader of a board recor
   });
 });
 
-describe('export: the Register and the header use the BOARD date (the board sheets keep their per-test Date Tested column)', () => {
+describe('export: the Register and the header use the BOARD date (the board sheets have no per-test Date Tested column)', () => {
   let payload; beforeEach(() => { payload = null; window.webkit = { messageHandlers: { shareFile: { postMessage: p => { payload = p; } } } }; }); afterEach(() => { delete window.webkit; });
   const proj = { id: 's1', name: 'Site One', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'a1', name: 'Plant', boards: [{ id: 'b1', name: 'MSB' }, { id: 'b2', name: 'DB1' }, { id: 'b3', name: 'DB2' }] }] };
   const meta = { auditor: 'J', testDate: '2026-09-30', nextTestDate: '2027-09-30' };
@@ -172,9 +172,16 @@ describe('export: the Register and the header use the BOARD date (the board shee
     const row = r => [reg.getCell(r, 2).value, reg.getCell(r, 3).value ?? '', reg.getCell(r, 16).value ?? ''].map(String);
     expect(row(7)).toEqual(['MSB', '01/06/2026', '01/06/2027']); expect(row(8)).toEqual(['DB1', '05/01/2026', '30/09/2027']); expect(row(9)).toEqual(['DB2', '', '30/09/2027']);   // N/A-only: its date, no own due -> the Home value; no board date: blank
   });
-  it('the per-test Date Tested column on the board sheet is unchanged (each test\'s own date)', async () => {
+  it('each board sheet shows its OWN Date Tested and Next Audit Due in the Asset Details block (rows 9-10, the same values as its Register row); the header (row 4) stays the report-level earliest', async () => {
+    await exportSWBExcel(proj, results, meta); const wb = await load();
+    const own = n => [9, 10].map(r => [String(wb.getWorksheet(n).getCell(r, 1).value), String(wb.getWorksheet(n).getCell(r, 2).value ?? '')]);
+    expect(own('MSB')).toEqual([['Date Tested', '01/06/2026'], ['Next Audit Due', '01/06/2027']]); expect(own('DB1')).toEqual([['Date Tested', '05/01/2026'], ['Next Audit Due', '30/09/2027']]); expect(own('DB2')).toEqual([['Date Tested', ''], ['Next Audit Due', '30/09/2027']]);
+    for (const n of ['MSB', 'DB1', 'DB2']) expect(String(wb.getWorksheet(n).getCell('A4').value)).toBe('Auditor: J  |  Date Tested: 01/06/2026  |  Next Audit Due: 01/06/2027');
+    const reg = wb.getWorksheet('Register'); ['MSB', 'DB1', 'DB2'].forEach((n, i) => expect([String(reg.getCell(7 + i, 3).value ?? ''), String(reg.getCell(7 + i, 16).value ?? '')]).toEqual([own(n)[0][1], own(n)[1][1]]));
+  });
+  it('the board sheet has NO per-test Date Tested column: the headings end at Responsibility / Action and column H is empty', async () => {
     await exportSWBExcel(proj, results, meta); const sh = (await load()).getWorksheet('MSB'); let hr = 0; sh.eachRow((r, n) => { if (String(r.getCell(1).value) === 'Item') hr = n; });
-    expect(String(sh.getCell('H' + hr).value)).toBe('Date Tested'); expect([1, 2, 3].map(i => String(sh.getCell('H' + (hr + i)).value ?? ''))).toEqual(['20/08/2026', '13/07/2026', '']);
+    expect(String(sh.getCell('G' + hr).value)).toBe('Responsibility / Action'); expect(String(sh.getCell('H' + hr).value ?? '')).toBe(''); expect([1, 2, 3].map(i => String(sh.getCell('H' + (hr + i)).value ?? ''))).toEqual(['', '', '']);
   });
   it('no board date anywhere -> the Home date and the Home next-due; a Home next-due the auditor CHOSE wins for every board', async () => {
     await exportSWBExcel(proj, { s1: { a1: { b1: { [K[0]]: { status: 'pass', lastTested: '2026-08-20' } } } } }, meta); expect(String((await load()).getWorksheet('Register').getCell('A4').value)).toBe('Auditor: J  |  Date Tested: 30/09/2026  |  Next Audit Due: 30/09/2027');

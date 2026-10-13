@@ -92,19 +92,19 @@ describe('Export header block: merge spans the real column count AND is centred 
 
 describe('Export header block: the direct-write sheets use the SAME shared header (xjHeader) as the xjSheet modules', () => {
   const HDR_TEXT = (title, extra) => ({ title, co: 'Co  |  ABN: 1  |  Electrical Licence: L', ...extra });
-  it('SWB Register (16 cols) and per-board sheet (8 cols): identical rows 1-5; Area / Board are an "Asset Details" block from row 6', async () => {
+  it('SWB Register (16 cols) and per-board sheet (7 cols): identical rows 1-5; Area / Board are an "Asset Details" block from row 6', async () => {
     const project = { id: 's1', name: 'Site S', company: 'Co', abn: '1', licence: 'L', areas: [{ id: 'ar1', name: 'Area 1', boards: [{ id: 'b1', name: 'MSB' }] }] };
     const results = { s1: { ar1: { b1: { enclosure: { status: 'pass' } } } } };
     const wb = await load(exportSWBExcel, project, results, { auditor: 'J', testDate: '2026-09-21' });
     const reg = wb.getWorksheet('Register'); const board = wb.getWorksheet('MSB');
-    expectSharedHeader(reg, 16); expectSharedHeader(board, 8);
+    expectSharedHeader(reg, 16); expectSharedHeader(board, 7);
     [reg, board].forEach(ws => {
       expect(String(ws.getCell(2, 1).value)).toBe('Site S  –  Switchboard / Enclosure Audit  (Visual Inspection)');
       expect(String(ws.getCell(3, 1).value)).toBe('Co  |  ABN: 1  |  Electrical Licence: L');
       expect(String(ws.getCell(4, 1).value)).toBe('Auditor: J  |  Date Tested: 21/09/2026  |  Next Audit Due: 21/09/2027');
     });
     expect(String(reg.getCell(6, 1).value)).toBe('Area');                      // the Register's table headings are row 6
-    expect(['A6', 'A7', 'B7', 'A8', 'B8', 'A10'].map(a => String(board.getCell(a).value))).toEqual(['Asset Details', 'Area', 'Area 1', 'Board', 'MSB', 'Audit Summary']);
+    expect(['A6', 'A7', 'B7', 'A8', 'B8', 'A9', 'A10', 'A12'].map(a => String(board.getCell(a).value))).toEqual(['Asset Details', 'Area', 'Area 1', 'Board', 'MSB', 'Date Tested', 'Next Audit Due', 'Audit Summary']);
   });
 
   it('Welder Register (13 cols) and per-welder sheet (5 cols): identical rows 1-5; identity + Test Instruments are an "Asset Details" block from row 6', async () => {

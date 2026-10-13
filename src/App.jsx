@@ -11014,12 +11014,12 @@ async function exportSWBExcel(project, allResults, meta) {
     const sh = wb.addWorksheet(swbSheetName(board, area, used));
     const put = (ref,val,st) => { const c = sh.getCell(ref); c.value = val != null ? val : ""; swbApplyXlStyle(c,st); };
     // Shared header rows 1-5 (same as the Register — only the merge width is this sheet's 7 columns); widths first, the merge + logo centring read them.
-    [34,52,10,12,36,10,30,13].forEach((w,i) => { sh.getColumn(i+1).width = w; });
-    xjHeader(sh, wb, hdr, 8);
+    [34,52,10,12,36,10,30].forEach((w,i) => { sh.getColumn(i+1).width = w; });
+    xjHeader(sh, wb, hdr, 7);
     // Asset Details (2026-10-02): the Area / Board that used to sit in header row 3 — a labelled block directly under the header, styled like Audit Summary.
     let rr = XJ_TABLE_START;
     put('A'+rr,"Asset Details",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
-    [["Area",area.name],["Board",board.name]].forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,cellSt(XJ_COLOURS.white)); rr++; });
+    [["Area",area.name],["Board",board.name],["Date Tested",row.cells[2]],["Next Audit Due",row.cells[15]]].forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,cellSt(XJ_COLOURS.white)); rr++; });      // this BOARD's own date and next due (the Register row's values: blank stays blank), not only the report-level header
     rr++;   // blank row
     // Audit summary
     put('A'+rr,"Audit Summary",headSt); put('B'+rr,"",headSt); sh.mergeCells(rr,1,rr,2); rr++;
@@ -11028,7 +11028,7 @@ async function exportSWBExcel(project, allResults, meta) {
       .forEach(([l,v]) => { put('A'+rr,l,cellSt(XJ_COLOURS.white)); put('B'+rr,v,(l==="Overall"?overallSt:(l==="Pass"&&+v>0)?passSt:(l==="Fail"&&+v>0)?failSt:cellSt(XJ_COLOURS.white,{horizontal:"center"}))); rr++; });
     // Checklist
     rr++;
-    ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action","Date Tested"].forEach((t,i) => put("ABCDEFGH"[i]+rr,t,headSt)); rr++;
+    ["Item","Test / Pass Criteria","Result","Defect ID","Comments","Risk Rating","Responsibility / Action"].forEach((t,i) => put("ABCDEFG"[i]+rr,t,headSt)); rr++;
     SWB_CHECKLIST.forEach(({key,label},idx) => {
       const raw = (((res[project.id]||{})[area.id]||{})[board.id]||{})[key] || {status:SWB_STATUS.UNTESTED,defectId:"",comment:"",risk:"",rectified:"",responsibility:"",priority:""};
       const item = defectGateByStatus(raw);                    // defect details only for FAIL items
@@ -11043,7 +11043,6 @@ async function exportSWBExcel(project, allResults, meta) {
       put('E'+rr,item.comment||"",rs);
       put('F'+rr,item.risk||"",xjPriorityStyle(item.risk,{vertical:"center",wrap:true}) || swbXCS(bg,{sz:10,color:{rgb:XJ_COLOURS.darkGrey}},{wrapText:true,horizontal:"center"},swbXAB()));
       put('G'+rr,(item.rectified||"")+(item.responsibility?` | ${item.responsibility}`:""),rs);
-      put('H'+rr,st===SWB_STATUS.UNTESTED?"":fmtDate(item.lastTested),cellSt(bg,{horizontal:"center"}));
       rr++;
     });
     // Photos — this board's photos, one per row
@@ -11682,9 +11681,6 @@ function SWBItemPage({itemKey,board,area,project,results,dropdowns,meta,onPatch,
           })
         )
       )
-      // Date tested (only once the item has a result) + its next due (PASS / FAIL only)
-      ,status!==SWB_STATUS.UNTESTED&&React.createElement(ItemDateField,{date:item.lastTested||"",onChange:v=>put({lastTested:v}),S:SS})
-      ,React.createElement(ItemDueBanner,{iso:itemDue({status,lastTested:item.lastTested},meta.testDate,meta.nextTestDate,d=>addYearsISO(d,1)),accent:"#7e22ce"})
       ,isFail&&React.createElement('div',{style:{background:"#fee2e2",border:"1px solid #fca5a5",borderRadius:10,padding:"12px",marginBottom:4}}
         ,React.createElement('div',{style:{fontSize:10,fontWeight:800,color:"#b91c1c",letterSpacing:1,marginBottom:10}},"⚠ FAIL — DEFECT DETAILS")
         ,React.createElement('div',{style:{...SS.modalField,flex:1}}

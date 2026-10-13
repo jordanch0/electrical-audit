@@ -49,7 +49,7 @@ describe('SWB / ELT data-row borders', () => {
 
     const swbDataCells = [];
     for (let c = 1; c <= 12; c++) swbDataCells.push(reg.getCell(7, c));                       // Register: headings row 6, data from row 7
-    for (let r = 20; r <= 30; r++) for (let c = 1; c <= 7; c++) swbDataCells.push(board.getCell(r, c)); // board sheet: the 11 checklist rows (after the Asset Details block + Audit Summary)
+    for (let r = 22; r <= 32; r++) for (let c = 1; c <= 7; c++) swbDataCells.push(board.getCell(r, c)); // board sheet: the 11 checklist rows (after the Asset Details block + Audit Summary)
     const eltDataCells = [];
     for (let r = 7; r <= 8; r++) for (let c = 1; c <= 15; c++) eltDataCells.push(elt.getCell(r, c));
 
@@ -77,7 +77,7 @@ describe('SWB / ELT data-row borders', () => {
     expect(Object.keys(reg._merges).map(k => reg._merges[k].range).sort()).toEqual(['A1:P1', 'A2:P2', 'A3:P3', 'A4:P4', 'A5:P5'].sort());
     const board = wb.getWorksheet('MSB');
     expect(board.getCell('A6').fill.fgColor.argb).toBe('FFD9D9D9');                            // "Asset Details" heading (styled like Audit Summary)
-    expect(board.getCell('A10').fill.fgColor.argb).toBe('FFD9D9D9');                           // "Audit Summary" heading
+    expect(board.getCell('A12').fill.fgColor.argb).toBe('FFD9D9D9');                           // "Audit Summary" heading
   });
 
   it('SWB photos are embedded on the board\'s own sheet (one per row), with the defect row intact', async () => {
@@ -89,9 +89,9 @@ describe('SWB / ELT data-row borders', () => {
     const labels = [];
     ws.eachRow(row => labels.push(String(row.getCell(1).value || '')));
     expect(labels).toEqual(expect.arrayContaining(['Photo 1', 'Photo 2']));
-    expect(String(ws.getCell('A21').value)).toBe('2. Ventilation');
-    expect(String(ws.getCell('C21').value)).toBe('Fail');
-    expect(String(ws.getCell('D21').value)).toBe('D1');
-    expect(String(ws.getCell('E21').value)).toBe('blocked');
+    expect(String(ws.getCell('A23').value)).toBe('2. Ventilation');
+    expect(String(ws.getCell('C23').value)).toBe('Fail');
+    expect(String(ws.getCell('D23').value)).toBe('D1');
+    expect(String(ws.getCell('E23').value)).toBe('blocked');
   });
 });
