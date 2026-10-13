@@ -112,7 +112,7 @@ describe('while something runs, the tabs hold still', () => {
     await act(async () => { await s.finish(); }); await screen.findByTestId('backup-result-ok'); await waitFor(() => expect(tabs().company.getAttribute('aria-disabled')).toBeNull()); await user.click(tabs().company); expect(selected()).toEqual(['company']);
   });
   it('while a backup is being built the tabs also hold still', async () => {
-    let release; const d = deps({ measure: async () => ({ estimatedBytes: 5 * 1024 * 1024 }), build: () => new Promise(r => { release = () => r({ blob: new Blob(['x']), filename: 'f.zip' }); }) }); const { user } = mount({ initialTab: 'data', backupDeps: d }); await screen.findByRole('tablist');
+    let release; const d = deps({ measure: async () => ({ estimatedBytes: 5 * 1024 * 1024 }), inspect: async () => ({ ok: true }), build: () => new Promise(r => { release = () => r({ blob: new Blob(['x']), filename: 'f.zip' }); }) }); const { user } = mount({ initialTab: 'data', backupDeps: d }); await screen.findByRole('tablist');
     await user.click(screen.getByTestId('backup-make')); await screen.findByText(/Making your backup/); await user.click(tabs().company); expect(selected()).toEqual(['data']); await act(async () => { release(); }); await screen.findByTestId('backup-card-ready'); await waitFor(() => expect(tabs().company.getAttribute('aria-disabled')).toBeNull());
   });
 });

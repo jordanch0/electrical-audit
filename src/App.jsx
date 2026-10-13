@@ -10424,7 +10424,12 @@ function BackupRestoreSection({ gate, deps }) {
   // ── making and sharing a backup
   const build = async (withPhotos, bytes) => {
     setBk({ phase: "building", bytes });
-    try { const r = await d.build({ includePhotos: withPhotos, now: d.now() }); if (!alive.current) return; held.current = { blob: r.blob, filename: r.filename, includesPhotos: withPhotos }; setBk({ phase: "ready", bytes: r.blob.size, filename: r.filename }); }
+    try {
+      const r = await d.build({ includePhotos: withPhotos, now: d.now() }); if (!alive.current) return;
+      const chk = await d.inspect(r.blob); if (!alive.current) return;                              // the file just built must pass the same check a restore runs; a file that would not restore is never offered
+      if (!chk.ok) { backupLog("build-check-failed", chk.message); setBk({ phase: "unusable" }); return; }
+      held.current = { blob: r.blob, filename: r.filename, includesPhotos: withPhotos }; setBk({ phase: "ready", bytes: r.blob.size, filename: r.filename });
+    }
     catch (e) { backupLog("build-failed", e && e.name); if (alive.current) setBk({ phase: "failed" }); }
   };
   const make = async (withPhotos, forced) => {
@@ -10507,6 +10512,7 @@ function BackupRestoreSection({ gate, deps }) {
   const backUp = () => {
     if (bk.phase === "measuring") return [bsBusyRow("Checking the size…"), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
     if (bk.phase === "building") return [bsBusyRow("Making your backup, about " + backupMbText(bk.bytes) + ". Keep this screen open until it says ready."), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
+    if (bk.phase === "unusable") return [bsCard("err", "The backup could not be used", "SparkCheck made the backup, then checked it and found that it could not be restored from, so it is not offered. Nothing on this phone was changed. Please try again. If this happens again, contact support."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
     if (bk.phase === "failed") return [bsCard("err", "The backup could not be made", "Something went wrong while making the backup. Nothing was changed. Please try again."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
     if (bk.phase === "large") return [bsCard("warn", "This is a large backup", backupLargeWarning(bk.bytes, { includesPhotos: bk.withPhotos }), "backup-card-large"),
       bk.withPhotos ? React.createElement("div", { key: "lg", style: { display: "flex", flexDirection: "column", gap: 8 } }, bsBtn("Make it without photos" + (bk.smallBytes ? " (about " + backupMbText(bk.smallBytes) + ")" : ""), () => { setPhotos(false); make(false, true); }, { id: "backup-make-small" }), bsBtn("Continue with photos (" + backupMbText(bk.bytes) + ")", () => build(true, bk.bytes), { kind: "secondary", id: "backup-make-big" }))

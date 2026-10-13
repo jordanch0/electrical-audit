@@ -46,7 +46,7 @@ describe('making a backup', () => {
     expect(T('backup-share').textContent).toBe('Share backup'); expect(T('backup-discard').textContent).toBe('Discard this backup'); expect(T('backup-last').textContent).toBe('Last backup: never');
   });
   it('the progress shows the size and disables the button, in words', async () => {
-    let release; const d = deps({ measure: async () => ({ estimatedBytes: 42 * MB }), build: () => new Promise(r => { release = () => r({ blob: new Blob(['x']), filename: 'f.zip' }); }) }); const { user } = mount(d); await user.click(T('backup-make'));
+    let release; const d = deps({ measure: async () => ({ estimatedBytes: 42 * MB }), inspect: async () => ({ ok: true }), build: () => new Promise(r => { release = () => r({ blob: new Blob(['x']), filename: 'f.zip' }); }) }); const { user } = mount(d); await user.click(T('backup-make'));
     await screen.findByText('Making your backup, about 42 MB. Keep this screen open until it says ready.'); expect(T('backup-make')).toBeDisabled(); expect(T('backup-make').getAttribute('aria-disabled')).toBe('true'); release(); await screen.findByTestId('backup-card-ready');
   });
   it('unticking "Include photos" makes the small file (no photo records in it) ', async () => {
@@ -61,7 +61,7 @@ describe('making a backup', () => {
 });
 
 describe('the large-file warning (100 MB)', () => {
-  const sized = (withPhotos, withoutPhotos) => deps({ measure: vi.fn(async ({ includePhotos }) => ({ estimatedBytes: includePhotos ? withPhotos : withoutPhotos })), build: vi.fn(async () => ({ blob: new Blob(['x']), filename: 'f.zip' })) });
+  const sized = (withPhotos, withoutPhotos) => deps({ measure: vi.fn(async ({ includePhotos }) => ({ estimatedBytes: includePhotos ? withPhotos : withoutPhotos })), inspect: async () => ({ ok: true }), build: vi.fn(async () => ({ blob: new Blob(['x']), filename: 'f.zip' })) });
   it('at exactly 100 MB: the warning (the engine\'s exact text) and the two choices; nothing is built yet', async () => {
     const d = sized(BACKUP_LARGE_BYTES, 4 * MB); const { user } = mount(d); await user.click(T('backup-make')); const card = await screen.findByTestId('backup-card-large');
     expect(card.textContent).toBe('This is a large backup' + backupLargeWarning(BACKUP_LARGE_BYTES, { includesPhotos: true })); expect(T('backup-make-small').textContent).toBe('Make it without photos (about 4.0 MB)'); expect(T('backup-make-big').textContent).toBe('Continue with photos (100 MB)'); expect(d.build).not.toHaveBeenCalled();
