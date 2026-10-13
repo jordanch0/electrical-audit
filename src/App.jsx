@@ -16886,7 +16886,7 @@ async function backupDeliver(blob, filename, { now = new Date(), includesPhotos 
   if (file && nav && typeof nav.share === "function") {
     let can = false; try { can = typeof nav.canShare === "function" ? !!nav.canShare({ files: [file] }) : false; } catch (_) {}
     if (can) {
-      try { await nav.share({ files: [file], title: "SparkCheck backup" }); method = "share"; }
+      try { await nav.share({ files: [file] }); method = "share"; }       // the file ONLY: a title or text makes iOS save a second little text file ("text N") next to the zip in Files
       catch (e) { if (e && e.name === "AbortError") return { ok: false, cancelled: true, message: "The share sheet was closed, so no backup was saved." }; fallbackFrom = (e && e.name) || "share failed"; }
     }
   }

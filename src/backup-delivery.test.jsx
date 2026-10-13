@@ -49,7 +49,7 @@ describe('backupDeliver: the share sheet first, a download as the fallback', () 
   it('shares THE FILE (name, zip type, the same bytes) through the share sheet; nothing is downloaded; Last backup is recorded', async () => {
     const blob = blobOf(1000); const { nav, shared } = shareNav(); const dl = fakeDownload();
     const r = await backupDeliver(blob, 'SparkCheck-backup-2026-10-05.zip', { now: at, nav, doc: dl.doc, urlApi: dl.urlApi });
-    expect(r).toEqual({ ok: true, method: 'share', recorded: true }); expect(shared.length).toBe(1); expect(shared[0].title).toBe('SparkCheck backup');
+    expect(r).toEqual({ ok: true, method: 'share', recorded: true }); expect(shared.length).toBe(1); expect(Object.keys(shared[0])).toEqual(['files']);
     const f = shared[0].files[0]; expect(f.name).toBe('SparkCheck-backup-2026-10-05.zip'); expect(f.type).toBe('application/zip'); expect(f.size).toBe(1000); expect(dl.clicks).toEqual([]);
     expect(backupLastBackup()).toEqual({ v: 1, at: at.toISOString(), day: '2026-10-05', bytes: 1000, method: 'share', includesPhotos: true });
   });
