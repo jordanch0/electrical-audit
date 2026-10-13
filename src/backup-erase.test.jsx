@@ -152,7 +152,7 @@ describe('the hang rule, with a store step that never completes (fake timers)', 
 
 // ── the screens
 const mountSettings = (over = {}) => { const user = userEvent.setup(); const reload = vi.fn(); const r = render(<GlobalSettingsView onGoHome={() => {}} backupDeps={{ reload, now: () => NOW, eraseBegin: () => eraseBegin(S, NOW), ...over }} />); return { user, reload, ...r }; };
-const dataTab = async user => { await user.click(await screen.findByRole('tab', { name: 'Data' })); };
+const dataTab = async user => { await user.click(await screen.findByRole('tab', { name: 'Backup & Data' })); };
 const sec = () => screen.getByTestId('backup-section');
 describe('the Delete all data block on the Data tab', () => {
   it('is the last block of the section, after Undo, with the heading, the plain intro and a 44 px Delete all data… button; no window.confirm / alert', async () => {
@@ -201,8 +201,8 @@ describe('the Delete all data block on the Data tab', () => {
 describe('the Settings-only screen (an erase is unfinished)', () => {
   it('while it is still working: Global Settings only, no Modules pill, opens on Data, the Company tab holds still, only the delete block shows, and its button is disabled; the words are the approved ones', async () => {
     eraseSet('working'); const user = userEvent.setup(); render(<GlobalSettingsView onGoHome={() => {}} />);
-    expect(screen.getByRole('tab', { name: 'Data' })).toHaveAttribute('aria-selected', 'true'); expect(screen.getByRole('tab', { name: 'Company' })).toHaveAttribute('aria-disabled', 'true'); expect(screen.queryByTestId('settings-pill')).toBeNull(); expect(screen.queryByText('Modules')).toBeNull();
-    await user.click(screen.getByRole('tab', { name: 'Company' })); expect(screen.getByRole('tab', { name: 'Data' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Backup & Data' })).toHaveAttribute('aria-selected', 'true'); expect(screen.getByRole('tab', { name: 'Business' })).toHaveAttribute('aria-disabled', 'true'); expect(screen.queryByTestId('settings-pill')).toBeNull(); expect(screen.queryByText('Modules')).toBeNull();
+    await user.click(screen.getByRole('tab', { name: 'Business' })); expect(screen.getByRole('tab', { name: 'Backup & Data' })).toHaveAttribute('aria-selected', 'true');
     const card = screen.getByTestId('erase-working'); expect(card.textContent).toContain('Finishing the erase…'); expect(card.textContent).toContain('SparkCheck is clearing the last of your data. This can take a moment. Please wait: the app opens by itself when it is done. You do not need to do anything.');
     expect(screen.getByTestId('erase-open')).toBeDisabled(); for (const id of ['backup-make', 'backup-choose', 'backup-last', 'backup-undo-open']) expect(screen.queryByTestId(id)).toBeNull(); expect(sec().textContent).not.toMatch(/Back up|Restore|Undo/);
   });
@@ -219,7 +219,7 @@ describe('the Settings-only screen (an erase is unfinished)', () => {
     eraseSet('working'); render(<GlobalSettingsView onGoHome={() => {}} />); expect(screen.getByTestId('erase-working')).toBeInTheDocument(); act(() => eraseSet('retry')); expect(screen.queryByTestId('erase-working')).toBeNull(); expect(screen.getByTestId('erase-retry')).toBeInTheDocument(); expect(screen.getByTestId('erase-open')).toBeEnabled();
   });
   it('the normal screen is unchanged: the Modules pill is there and the Company tab works (negative control)', async () => {
-    const user = userEvent.setup(); render(<GlobalSettingsView onGoHome={() => {}} />); expect(screen.getByText('Modules')).toBeInTheDocument(); await dataTab(user); await user.click(screen.getByRole('tab', { name: 'Company' })); expect(screen.getByRole('tab', { name: 'Company' })).toHaveAttribute('aria-selected', 'true');
+    const user = userEvent.setup(); render(<GlobalSettingsView onGoHome={() => {}} />); expect(screen.getByText('Modules')).toBeInTheDocument(); await dataTab(user); await user.click(screen.getByRole('tab', { name: 'Business' })); expect(screen.getByRole('tab', { name: 'Business' })).toHaveAttribute('aria-selected', 'true');
   });
 });
 

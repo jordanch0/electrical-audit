@@ -20,12 +20,12 @@ const openSettings = async () => { const user = userEvent.setup(); const r = ren
 describe('the Global Settings screen with the new section', () => {
   it('everything that was on the screen is unchanged, element by element, against the committed screen from before the section and the tabs existed: header, Modules pill, every Company item, the Storage block; only the tab bar and the two panes are new', async () => {
     const { container } = await openSettings(); const base = document.createElement('div'); base.innerHTML = BASELINE; const bRoot = base.firstElementChild, aRoot = container.firstElementChild;
-    expect(aRoot.getAttribute('style')).toBe(bRoot.getAttribute('style'));                                              // the screen's own frame
+    expect(aRoot.getAttribute('style').replace(' position: relative; overflow: hidden;', '')).toBe(bRoot.getAttribute('style')); expect(aRoot.style.position).toBe('relative'); expect(aRoot.style.overflow).toBe('hidden');                                              // the screen's own frame
     expect(Array.from(aRoot.children).map(c => c.getAttribute('data-testid') || c.getAttribute('role') || 'div').length).toBe(3); expect(bRoot.children.length).toBe(2);
-    const [aHead, aBar, aScroll] = Array.from(aRoot.children), [bHead, bScroll] = Array.from(bRoot.children);
+    const [aHead, aScroll, aNav] = Array.from(aRoot.children), [bHead, bScroll] = Array.from(bRoot.children);
     expect(aHead.outerHTML).toBe(bHead.outerHTML);                                                                       // header, Modules pill, title, subtitle, gradient line
-    expect(aBar.getAttribute('role')).toBe('tablist');                                                                   // the one new element between them
-    expect(aScroll.getAttribute('style')).toBe(bScroll.getAttribute('style'));                                           // the scrolling column keeps its padding (the bottom spacing) and overflow
+    expect(aNav.tagName).toBe('NAV'); expect(aNav.firstElementChild.getAttribute('role')).toBe('tablist');                                                                   // the one new element between them
+    expect(aScroll.getAttribute('style').replace(/padding: 18px 16px calc\(.*\);$/, 'padding: 18px 16px 40px;')).toBe(bScroll.getAttribute('style')); expect(aScroll.style.paddingBottom).toMatch(/^calc\(68px \+ max\(8px/);                                           // the scrolling column keeps its padding (the bottom spacing) and overflow
     const bKids = Array.from(bScroll.children), iStorage = bKids.findIndex(k => k.textContent === 'Storage'), saveRow = bKids[bKids.length - 1];
     const company = [...bKids.slice(0, iStorage), saveRow], storage = bKids.slice(iStorage, iStorage + 2); expect(storage[1].textContent).toMatch(/^Storage used/); expect(saveRow.textContent).toMatch(/^Save/);
     expect(Array.from(panel('company').children).map(c => c.outerHTML)).toEqual(company.map(c => c.outerHTML));          // Company = every item before Storage, then the Save row, unchanged

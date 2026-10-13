@@ -10294,17 +10294,18 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
   if (!loaded) return React.createElement('div', { style: { display: "flex", flex: 1, alignItems: "center", justifyContent: "center", background: "#e8e6e2" } },
     React.createElement('div', { style: { width: 36, height: 36, border: "3px solid #d4d4d8", borderTop: `3px solid ${GS_COLOR}`, borderRadius: "50%", animation: "spin 0.8s linear infinite" } }));
 
-  // the Manual Entry | Import Excel tab pattern, in this screen's slate: 44 px tall, and the active tab is marked by a check, a heavier border and bold text as well as its tint
-  const gsTab = (id, label) => { const active = tab === id, off = locked && !active, warn = id === "data" && problemFlag;
-    return React.createElement('button', { type: "button", role: "tab", id: "gs-tab-" + id, "data-testid": "gs-tab-" + id, "aria-selected": active, "aria-controls": "gs-panel-" + id, "aria-disabled": off ? true : undefined, "aria-label": warn ? "Data, a restore problem needs attention" : undefined,
+  // The Calendar's floating pill (NAV_PILL_STYLE + NAV_BTN_STYLE + the NavBtn colours), here at the BOTTOM of the screen. The active tab is marked by the highlight, bold text and aria-selected; a locked tab shows a lock; the Data tab shows a warning
+  // mark while a restore problem is recorded. The scrolling column ends with NAV_CLEARANCE, so the last item always stops above the pill (the same rule as every module); the pill hides while a text field has the keyboard (index.html: html.kb-open #root nav).
+  const gsTab = id => { const active = tab === id, off = locked && !active, warn = id === "data" && problemFlag, label = GS_TAB_LABELS[id];
+    return React.createElement('button', { type: "button", role: "tab", id: "gs-tab-" + id, "data-testid": "gs-tab-" + id, "aria-selected": active, "aria-controls": "gs-panel-" + id, "aria-disabled": off ? true : undefined, "aria-label": warn ? label + ", a restore problem needs attention" : undefined,
       tabIndex: active ? 0 : -1, ref: el => { tabRefs.current[id] = el; }, onClick: () => goTab(id),
-      style: { flex: 1, minHeight: 44, boxSizing: "border-box", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, borderRadius: 8, fontFamily: "inherit", fontSize: 13, cursor: off ? "not-allowed" : "pointer",
-        ...(active ? { background: "#e2e8f0", border: "2px solid " + GS_COLOR, color: "#1e293b", fontWeight: 800 } : off ? { background: "#e4e4e7", border: "2px solid #d4d4d8", color: "#52525b", fontWeight: 600 } : { background: "#e8e6e2", border: "2px solid #d4d4d8", color: "#52525b", fontWeight: 600 }) } },
-      active ? bsIcon("check", 15) : null, warn ? bsIcon("warn", 15) : null, label); };
+      style: { ...NAV_BTN_STYLE, background: active ? NAV_ACTIVE_BG : "transparent", color: active ? NAV_ACTIVE_FG : off ? "#52525b" : NAV_INACTIVE_FG, cursor: off ? "not-allowed" : "pointer" } },
+      bsIcon(warn ? "warn" : off ? "lock" : id === "company" ? "building" : "database", 16),
+      React.createElement('span', { style: { fontSize: 11, fontWeight: active ? 700 : 500, letterSpacing: 0, lineHeight: "13px", whiteSpace: "nowrap" } }, label)); };
   const onTabKey = e => { if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return; e.preventDefault(); if (locked) return; const next = tab === "company" ? "data" : "company"; goTab(next); const el = tabRefs.current[next]; if (el) el.focus(); };
   const pane = id => ({ id: "gs-panel-" + id, role: "tabpanel", "aria-labelledby": "gs-tab-" + id, "data-testid": "gs-panel-" + id, hidden: tab !== id, style: tab === id ? undefined : { display: "none" } });
 
-  return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
+  return React.createElement('div', { style: { display: "flex", flexDirection: "column", flex: 1, minHeight: 0, position: "relative", overflow: "hidden", background: "#e8e6e2", color: "#18181b", fontFamily: "'DM Sans','SF Pro Display',-apple-system,sans-serif" } }
     , React.createElement('div', { style: { padding: "48px 18px 12px", borderBottom: "1px solid #f0eeea", background: "#f0eeea", flexShrink: 0 } }
       , React.createElement('div', { style: { display: "flex", flexDirection: "column", gap: 4 } }
         // the Modules pill alone on the top row, where a Back pill would be (40px = Back's 30px + its 10px margin), title on the line below
@@ -10313,8 +10314,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
         , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
-    , React.createElement('div', { role: "tablist", "aria-label": "Global Settings sections", "data-testid": "gs-tabs", onKeyDown: onTabKey, style: { flexShrink: 0, padding: "12px 16px 10px", background: "#e8e6e2", borderBottom: "1px solid #d4d4d8", display: "flex", gap: 8 } }, gsTab("company", "Company"), gsTab("data", "Data"))
-    , React.createElement('div', { ref: scrollRef, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 40px" } }
+    , React.createElement('div', { ref: scrollRef, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 0", paddingBottom: NAV_CLEARANCE } }
       , React.createElement('div', pane("company")
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
       , field("BUSINESS NAME", businessName, setBusinessName, "Company name")
@@ -10346,6 +10346,8 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
       , React.createElement(BackupRestoreSection, { gate, deps: backupDeps })
       )
     )
+    , React.createElement('nav', { "data-testid": "gs-nav", style: NAV_PILL_STYLE }
+      , React.createElement('div', { role: "tablist", "aria-label": "Global Settings sections", "data-testid": "gs-tabs", onKeyDown: onTabKey, style: { display: "flex", flex: 1, minWidth: 0 } }, gsTab("company"), gsTab("data")))
   );
 }
 
@@ -10364,6 +10366,13 @@ const BACKUP_UI = {
 const BACKUP_ICONS = { info: [["circle", { cx: 12, cy: 12, r: 10 }], ["line", { x1: 12, y1: 16, x2: 12, y2: 12 }], ["line", { x1: 12, y1: 8, x2: 12.01, y2: 8 }]], check: [["polyline", { points: "20 6 9 17 4 12" }]],
   warn: [["path", { d: "M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" }], ["line", { x1: 12, y1: 9, x2: 12, y2: 13 }], ["line", { x1: 12, y1: 17, x2: 12.01, y2: 17 }]],
   x: [["circle", { cx: 12, cy: 12, r: 10 }], ["line", { x1: 15, y1: 9, x2: 9, y2: 15 }], ["line", { x1: 9, y1: 9, x2: 15, y2: 15 }]], share: [["path", { d: "M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7" }], ["polyline", { points: "16 6 12 2 8 6" }], ["line", { x1: 12, y1: 2, x2: 12, y2: 15 }]] };
+// The two Global Settings sections (the labels are shown on the pill and are the tabs' accessible names; the ids stay `company` / `data`) and the icons the pill adds.
+const GS_TAB_LABELS = { company: "Business", data: "Backup & Data" };
+Object.assign(BACKUP_ICONS, {
+  building: [["rect", { x: 2, y: 7, width: 20, height: 14, rx: 2 }], ["path", { d: "M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" }]],
+  database: [["ellipse", { cx: 12, cy: 5, rx: 9, ry: 3 }], ["path", { d: "M21 12c0 1.66-4 3-9 3s-9-1.34-9-3" }], ["path", { d: "M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5" }]],
+  lock: [["rect", { x: 4, y: 11, width: 16, height: 10, rx: 2 }], ["path", { d: "M8 11V7a4 4 0 0 1 8 0v4" }]],
+});
 const bsIcon = (name, size = 16) => React.createElement("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, style: { flexShrink: 0, marginTop: 1 } }, ...BACKUP_ICONS[name].map(([tag, props], i) => React.createElement(tag, { key: i, ...props })));
 const bsHeading = t => React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: BACKUP_UI.ink, marginBottom: 10 } }, t);
 const bsHelp = (t, mb = 0, mt = 0) => React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, margin: `${mt}px 0 ${mb}px`, lineHeight: 1.45 } }, t);
@@ -17006,5 +17015,6 @@ async function requestPersistentStorage(nav = typeof navigator !== "undefined" ?
   try { const st = nav && nav.storage; if (!st || typeof st.persist !== "function") return null; const r = await st.persist(); return typeof r === "boolean" ? r : null; } catch (_) { return null; }
 }
 export { requestPersistentStorage };
+export { GS_TAB_LABELS };
 export { backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export default AppRoot;

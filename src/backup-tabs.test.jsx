@@ -1,4 +1,4 @@
-// GLOBAL SETTINGS IN TWO TABS: Company | Data (Round e). FICTIONAL data. Proves: the tab semantics and look rules (44 px, the active tab is marked by more than colour, 4.5:1, Left/Right keys), that Storage sits on the Data tab, which tab opens, that switching tabs
+// GLOBAL SETTINGS IN TWO TABS: Business | Backup & Data (Round e; the Calendar's floating pill, at the bottom). FICTIONAL data. Proves: the tab semantics and look rules (44 px, the active tab is marked by more than colour, 4.5:1, Left/Right keys), that Storage sits on the Data tab, which tab opens, that switching tabs
 // never loses unsaved typing or the logo preview (with a negative control that shows the test can fail), that tabs hold still while a restore runs, that a made-but-not-shared backup is dropped when the Data tab is left, and the arrangement of the screen.
 import 'fake-indexeddb/auto';
 import React from 'react';
@@ -25,21 +25,21 @@ beforeEach(async () => { await wipe(); });
 afterEach(() => cleanup());
 
 describe('the tabs: roles, look and keys', () => {
-  it('a tablist with two tabs, Company and Data, each controlling a labelled tabpanel; exactly one is selected and only its panel is shown', async () => {
+  it('a tablist with two tabs, Business and Backup & Data, each controlling a labelled tabpanel; exactly one is selected and only its panel is shown', async () => {
     mount(); const list = await screen.findByRole('tablist'); expect(list.getAttribute('aria-label')).toBe('Global Settings sections');
-    const t = screen.getAllByRole('tab'); expect(t.map(x => x.textContent)).toEqual(['Company', 'Data']);
+    const t = screen.getAllByRole('tab'); expect(t.map(x => x.textContent)).toEqual(['Business', 'Backup & Data']);
     for (const id of ['company', 'data']) { const tab = screen.getByTestId('gs-tab-' + id), p = screen.getByTestId('gs-panel-' + id, { hidden: true }); expect(tab.getAttribute('aria-controls')).toBe(p.id); expect(p.getAttribute('aria-labelledby')).toBe(tab.id); expect(p.getAttribute('role')).toBe('tabpanel'); }
     expect(selected()).toEqual(['company']); expect(panel('company').hidden).toBe(false); expect(panel('data').hidden).toBe(true); expect(panel('data').style.display).toBe('none'); expect(tabs().data.getAttribute('tabindex')).toBe('-1'); expect(tabs().company.getAttribute('tabindex')).toBe('0');
   });
-  it('every tab is at least 44 px tall, and the active one is marked by more than colour: a check mark, a heavier border and bold text, plus aria-selected', async () => {
+  it('every tab is at least 44 px tall, and the active one is marked by more than colour: the highlight shape, bold text, plus aria-selected', async () => {
     const { user } = mount(); await screen.findByRole('tablist'); const check = () => { const { company, data } = tabs(); for (const b of [company, data]) expect(parseInt(b.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
-      const a = selected()[0], on = tabs()[a], off = tabs()[a === 'company' ? 'data' : 'company']; expect(on.querySelector('svg')).toBeTruthy(); expect(off.querySelector('svg')).toBeNull(); expect(on.style.fontWeight).toBe('800'); expect(off.style.fontWeight).toBe('600'); expect(on.style.border).toMatch(/^2px solid/); expect(off.style.border).toMatch(/^2px solid/); expect(on.style.border).not.toBe(off.style.border); };
+      const a = selected()[0], on = tabs()[a], off = tabs()[a === 'company' ? 'data' : 'company']; expect(on.querySelector('svg')).toBeTruthy(); expect(off.querySelector('svg')).toBeTruthy(); expect(on.querySelector('span').style.fontWeight).toBe('700'); expect(off.querySelector('span').style.fontWeight).toBe('500'); expect(on.style.background).toBe('rgb(253, 234, 219)'); expect(off.style.background).toBe('transparent'); expect(on.getAttribute('aria-selected')).toBe('true'); expect(off.getAttribute('aria-selected')).toBe('false'); };
     check(); await user.click(tabs().data); check();
   });
-  it('colour pairs: active text on its fill, inactive text on the page, disabled text on its grey, the active border against the page: all at least 4.5:1 (the border at least 3:1)', () => {
-    expect(ratio('#1e293b', '#e2e8f0')).toBeGreaterThanOrEqual(4.5); expect(ratio('#52525b', '#e8e6e2')).toBeGreaterThanOrEqual(4.5); expect(ratio('#52525b', '#e4e4e7')).toBeGreaterThanOrEqual(4.5); expect(ratio('#475569', '#e8e6e2')).toBeGreaterThanOrEqual(3);
+  it('colour pairs: active text on its fill, inactive text on the pill, disabled text on the pill, the active text on the pill: all at least 4.5:1', () => {
+    expect(ratio('#a3530f', '#fdeadb')).toBeGreaterThanOrEqual(4.5); expect(ratio('#3f3f46', '#f7f6f3')).toBeGreaterThanOrEqual(4.5); expect(ratio('#52525b', '#f7f6f3')).toBeGreaterThanOrEqual(4.5); expect(ratio('#a3530f', '#f7f6f3')).toBeGreaterThanOrEqual(4.5);
   });
-  it('the tab styles in the code are those pairs', async () => { mount(); await screen.findByRole('tablist'); const { company, data } = tabs(); expect(company.style.background).toBe('rgb(226, 232, 240)'); expect(company.style.color).toBe('rgb(30, 41, 59)'); expect(data.style.background).toBe('rgb(232, 230, 226)'); expect(data.style.color).toBe('rgb(82, 82, 91)'); });
+  it('the tab styles in the code are those pairs', async () => { mount(); await screen.findByRole('tablist'); const { company, data } = tabs(); expect(company.style.background).toBe('rgb(253, 234, 219)'); expect(company.style.color).toBe('rgb(163, 83, 15)'); expect(data.style.background).toBe('transparent'); expect(data.style.color).toBe('rgb(63, 63, 70)'); });
   it('Left and Right arrow keys move between the two tabs and move the focus with them', async () => {
     mount(); await screen.findByRole('tablist'); tabs().company.focus(); fireEvent.keyDown(tabs().company, { key: 'ArrowRight' }); expect(selected()).toEqual(['data']); expect(document.activeElement).toBe(tabs().data);
     fireEvent.keyDown(tabs().data, { key: 'ArrowLeft' }); expect(selected()).toEqual(['company']); expect(document.activeElement).toBe(tabs().company); fireEvent.keyDown(tabs().company, { key: 'ArrowDown' }); expect(selected()).toEqual(['company']);
@@ -47,10 +47,10 @@ describe('the tabs: roles, look and keys', () => {
   it('clicking a tab switches, and resets the column to the top', async () => {
     const { user } = mount(); await screen.findByRole('tablist'); const col = panel('company').parentElement; col.scrollTop = 120; await user.click(tabs().data); expect(col.scrollTop).toBe(0); expect(selected()).toEqual(['data']);
   });
-  it('the tab bar keeps 10 px under the buttons and a 1 px line under the bar, and sits OUTSIDE the scrolling column, so scrolled text is cut under the line and never against the buttons', async () => {
-    mount(); const bar = await screen.findByRole('tablist'); const col = panel('company').parentElement;
-    expect(bar.style.paddingBottom).toBe('10px'); expect(bar.style.paddingTop).toBe('12px'); expect(bar.style.borderBottom).toBe('1px solid rgb(212, 212, 216)'); expect(bar.style.borderBottomColor).toBe(tabs().data.style.borderColor);      // the same grey as the inactive tab's border
-    expect(bar.contains(col)).toBe(false); expect(bar.nextElementSibling).toBe(col); expect(col.style.overflowY).toBe('auto');                 // the bar does not scroll with the column; the column is clipped at the bar's bottom edge, which is below the line
+  it('the pill is the Calendar\'s floating bar: a nav, absolute, 14 px from each side, OUTSIDE the scrolling column and after it; the column still scrolls and the screen is its containing block', async () => {
+    const { container } = mount(); const nav = (await screen.findByRole('tablist')).parentElement; const col = panel('company').parentElement;
+    expect(nav.tagName).toBe('NAV'); expect(nav.getAttribute('data-testid')).toBe('gs-nav'); expect(nav.style.position).toBe('absolute'); expect(nav.style.left).toBe('14px'); expect(nav.style.right).toBe('14px'); expect(nav.style.zIndex).toBe('50'); expect(container.firstElementChild.style.position).toBe('relative');      // the same pill as every module's bar
+    expect(nav.contains(col)).toBe(false); expect(col.nextElementSibling).toBe(nav); expect(col.style.overflowY).toBe('auto');                 // the bar does not scroll with the column; it is the last child of the screen, as the Calendar's is
   });
 });
 
@@ -68,7 +68,7 @@ describe('which tab opens', () => {
   it('the Settings pill opens on Company', async () => { const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByTestId('settings-pill')); await screen.findByText('Business Identity'); expect(selected()).toEqual(['company']); });
   it('a recorded restore problem opens on Data, with the problem card showing and a warning mark on the Data tab; it goes when the problem is cleared', async () => {
     rawSetItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo: null, problem: { keys: ['rcd-projects-v6'], at: 'x' } })); mount(); await screen.findByRole('tablist');
-    expect(selected()).toEqual(['data']); expect(panel('data').hidden).toBe(false); expect(screen.getByTestId('backup-problem')).toBeVisible(); expect(tabs().data.querySelector('svg + svg')).toBeTruthy(); expect(tabs().data.getAttribute('aria-label')).toBe('Data, a restore problem needs attention');
+    expect(selected()).toEqual(['data']); expect(panel('data').hidden).toBe(false); expect(screen.getByTestId('backup-problem')).toBeVisible(); expect(tabs().data.querySelector('svg path').getAttribute('d')).toMatch(/^M10\.3 3\.9/); expect(tabs().data.getAttribute('aria-label')).toBe('Backup & Data, a restore problem needs attention');
     cleanup(); rawSetItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo: null, problem: null })); mount(); await screen.findByRole('tablist'); expect(selected()).toEqual(['company']); expect(tabs().data.getAttribute('aria-label')).toBeNull();
   });
   it('initialTab="data" (the Stage 6 Settings-only screen) opens on Data; initialTab="company" opens on Company even with a problem recorded', async () => {
@@ -104,10 +104,10 @@ describe('switching tabs never loses what you typed', () => {
 
 describe('while something runs, the tabs hold still', () => {
   const slow = () => { let finish; const restore = (f, o) => new Promise(r => { finish = async () => r(await backupRestore(f, { ...o, storage: S, now: NOW })); }); return { restore, finish: () => finish() }; };
-  it('a running restore: Company cannot be switched to (tap or arrow key; it is aria-disabled and greyed), the restore keeps running, and after it finishes the tabs work again', async () => {
+  it('a running restore: Business cannot be switched to (tap or arrow key; it is aria-disabled, dimmed and shows a lock), the restore keeps running, and after it finishes the tabs work again', async () => {
     const file = await backupOf(seedSourceFull); const s = slow(); const { user } = mount({ initialTab: 'data', backupDeps: deps({ restore: s.restore }) }); await screen.findByRole('tablist');
     await user.upload(screen.getByTestId('backup-file-input'), new File([file], 'b.zip')); await screen.findByTestId('backup-summary'); await user.click(screen.getByTestId('backup-restore')); await user.click(screen.getByTestId('backup-restore-confirm-yes')); await screen.findByText('Restoring…');
-    await waitFor(() => expect(tabs().company.getAttribute('aria-disabled')).toBe('true')); expect(tabs().company.style.background).toBe('rgb(228, 228, 231)'); await user.click(tabs().company); fireEvent.keyDown(tabs().data, { key: 'ArrowLeft' });
+    await waitFor(() => expect(tabs().company.getAttribute('aria-disabled')).toBe('true')); expect(tabs().company.style.color).toBe('rgb(82, 82, 91)'); expect(tabs().company.style.cursor).toBe('not-allowed'); expect(tabs().company.querySelector('svg path').getAttribute('d')).toMatch(/^M8 11V7/); await user.click(tabs().company); fireEvent.keyDown(tabs().data, { key: 'ArrowLeft' });
     expect(selected()).toEqual(['data']); expect(panel('data').hidden).toBe(false); expect(screen.getByText('Restoring…')).toBeVisible();
     await act(async () => { await s.finish(); }); await screen.findByTestId('backup-result-ok'); await waitFor(() => expect(tabs().company.getAttribute('aria-disabled')).toBeNull()); await user.click(tabs().company); expect(selected()).toEqual(['company']);
   });
