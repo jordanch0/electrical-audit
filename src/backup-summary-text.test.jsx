@@ -26,7 +26,7 @@ describe('the summary of a real plan', () => {
     expect(t.groups.map(g => g.id)).toEqual(['added']); const g = group(t, 'added');
     expect(g).toMatchObject({ mark: '✓', heading: 'Will be added', summary: '11 sites, 11 History snapshots, 2 calendar events, 3 photos and 1 logo', more: 1 }); expect(g.lines.length).toBe(10);
     expect(g.lines[0]).toBe('Site One (RCD Testing)'); expect(g.lines[4]).toBe('Site One (Switchboard)'); expect(g.lines.length + g.more).toBe(11);
-    expect(t.notes).toEqual(['There is enough free space.', 'Nothing already on this phone is changed or deleted.']);
+    expect(t.notes).toEqual(['There is enough free space.']);
     expect(allText(t)).not.toMatch(/-v\d|projects|results|\.json|rcd-|swb-|iel-/);
   });
   it('a phone that already has some of it: "Already on this phone" with the name it has here, and a calendar event', async () => {
@@ -75,11 +75,11 @@ describe('what is not restored, in plain words', () => {
 });
 
 describe('notes and the title', () => {
-  it('a backup without photos says so; free space known or unknown; the last note is always there', () => {
+  it('a backup without photos says so; free space known or unknown; the add-only sentence is NOT repeated in the notes (it is in the restore question)', () => {
     expect(backupSummaryText(mk({ top: { includesPhotos: false } })).notes[0]).toBe('This backup was made without photos, so the restored sites will show without them.');
-    expect(backupSummaryText(mk({ headroom: { ok: true, storage: { known: false, ok: true } }, writes: [{ store: 'site-photos', key: 'a' }] })).notes[0]).toMatch(/^This device cannot report free space, so it could not be checked in advance\./);
-    expect(backupSummaryText(mk({ headroom: { ok: true, storage: { known: false, ok: true } } })).notes).toEqual(['Nothing already on this phone is changed or deleted.']);          // nothing to check: no remark
-    for (const t of [mk(), mk({ top: { includesPhotos: false } })]) expect(backupSummaryText(t).notes.slice(-1)[0]).toBe('Nothing already on this phone is changed or deleted.');
+    expect(backupSummaryText(mk({ headroom: { ok: true, storage: { known: false, ok: true } }, writes: [{ store: 'site-photos', key: 'a' }] })).notes[0]).toMatch(/^This phone cannot report free space, so it could not be checked in advance\./);
+    expect(backupSummaryText(mk({ headroom: { ok: true, storage: { known: false, ok: true } } })).notes).toEqual([]);          // nothing to check: no remark (and the add-only sentence is not repeated here: it is in the restore question)
+    for (const t of [mk(), mk({ top: { includesPhotos: false } })]) expect(backupSummaryText(t).notes).not.toContain('Nothing already on this phone is changed or deleted.');
   });
   it('the title: the day it was made (as d/m/y) and the file size in MB', () => {
     expect(backupMbText(0)).toBe('0 MB'); expect(backupMbText(500 * 1024)).toBe('under 1 MB'); expect(backupMbText(1.5 * MB)).toBe('1.5 MB'); expect(backupMbText(9.96 * MB)).toBe('10.0 MB'); expect(backupMbText(41.4 * MB)).toBe('41 MB'); expect(backupMbText(120.6 * MB)).toBe('121 MB'); expect(backupMbText(undefined)).toBe('0 MB');
@@ -89,11 +89,11 @@ describe('notes and the title', () => {
 });
 
 describe('refusals and failures: short plain sentences', () => {
-  const E = { 'not-a-backup': ['This file cannot be restored', 'This is not a SparkCheck backup file.'], 'wrong-format': ['This file cannot be restored', 'This is not a SparkCheck backup file.'], damaged: ['This file cannot be restored', 'This backup file is damaged, so it cannot be restored.'],
-    invalid: ['This file cannot be restored', 'This backup file is not complete, so it cannot be restored.'], 'newer-version': ['This file cannot be restored', 'This backup was made by a newer version of SparkCheck. Update the app, then try again.'],
-    nothing: ['Nothing to add', 'Everything in this backup is already on this phone, so there is nothing to add.'], unfinished: ['A restore is still being put right', 'A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.'],
+  const E = { 'not-a-backup': ['This file cannot be restored', 'This is not a SparkCheck backup file.'], 'wrong-format': ['This file cannot be restored', 'This is not a SparkCheck backup file.'], damaged: ['This file cannot be restored', 'This backup file is damaged.'],
+    invalid: ['This file cannot be restored', 'This backup file is not complete.'], 'newer-version': ['This file cannot be restored', 'This backup was made by a newer version of SparkCheck. Update the app, then try again.'],
+    nothing: ['Nothing to add', 'Everything in this backup is already on this phone.'], unfinished: ['A restore is still being put right', 'A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.'],
     shape: ['The restore did not start', 'Something on this phone is not in the form the restore expects, so nothing was added. Nothing was changed.'], journal: ['Not enough room to start', 'There is not enough room on this phone to start the restore. Free up some space, then try again. Nothing was changed.'],
-    failed: ['The restore did not finish', 'The restore could not be completed. Everything was put back exactly as it was.'], rollback: ['The restore did not finish', "The restore could not be completed, and one part of this phone's saved data could not be read, so it was left as it was. Make a backup now and contact support, quoting this message."],
+    failed: ['The restore did not finish', 'Everything was put back exactly as it was.'], rollback: ['The restore did not finish', "One part of this phone's saved data could not be read, so it was left as it was. Make a backup now and contact support, quoting this message."],
     none: ['Nothing to undo', 'There is no restore to undo.'], expired: ['Undo is no longer available', 'The undo period for the last restore has ended.'], 'undo-failed': ['The undo did not finish', 'The undo could not be completed. Nothing was changed.'] };
   it.each(Object.entries(E))('%s', (code, [title, body]) => { expect(backupMessageText(code)).toEqual({ title, body }); });
   it('not enough room: the numbers when the device reports them, otherwise the saved-data wording', () => {

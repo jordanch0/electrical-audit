@@ -36,11 +36,11 @@ describe('backupMeasure: the size of a backup, before it is built', () => {
 describe('backupLargeWarning', () => {
   it('is silent below 100 MB and speaks at 100 MB and above, naming the size and offering the version without photos', () => {
     expect(BACKUP_LARGE_BYTES).toBe(100 * MB); expect(backupLargeWarning(99.9 * MB)).toBe(''); expect(backupLargeWarning(0)).toBe(''); expect(backupLargeWarning(undefined)).toBe('');
-    const w = backupLargeWarning(100 * MB); expect(w).toMatch(/^This backup will be about 100 MB\./); expect(w).toContain('can fail to share from an iPhone'); expect(w).toContain('without photos'); expect(w).toContain('every site, result, History snapshot and calendar event is still included');
+    const w = backupLargeWarning(100 * MB); expect(w).toMatch(/^This backup will be about 100 MB\./); expect(w).toContain('can fail to share from an iPhone'); expect(w).toContain('without photos'); expect(w).toContain('still includes every site, result, History snapshot and calendar event');
     expect(backupLargeWarning(250.4 * MB)).toContain('about 250 MB');
   });
   it('when the backup is already without photos it does not offer that again', () => {
-    const w = backupLargeWarning(120 * MB, { includesPhotos: false }); expect(w).toContain('about 120 MB'); expect(w).toContain('already without photos'); expect(w).not.toContain('You can make a smaller backup');
+    const w = backupLargeWarning(120 * MB, { includesPhotos: false }); expect(w).toContain('about 120 MB'); expect(w).toContain('already without photos'); expect(w).not.toContain('A backup without photos is much smaller');
   });
 });
 

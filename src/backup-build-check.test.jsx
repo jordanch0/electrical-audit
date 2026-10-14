@@ -29,7 +29,7 @@ describe('Make backup checks the file it built', () => {
     rawSetItem('welder-meta-v1', '{not json');                                                         // a damaged key; the real build copies it, the real check refuses it
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {}); const user = mount(deps()); await user.click(T('backup-make'));
     const card = await screen.findByTestId('backup-card-err');
-    expect(card.textContent).toBe('The backup could not be used' + 'SparkCheck made the backup, then checked it and found that it could not be restored from, so it is not offered. Nothing on this phone was changed. Please try again. If this happens again, contact support.');
+    expect(card.textContent).toBe('The backup could not be used' + 'SparkCheck checked this backup and found it cannot be restored, so it was not offered. Nothing on this phone was changed. Please try again, or contact support if it keeps happening.');
     expect(Q('backup-share')).toBeNull(); expect(Q('backup-card-ready')).toBeNull(); expect(localStorage.getItem(BACKUP_LAST_KEY)).toBeNull();
     expect(card.textContent).not.toMatch(/welder-meta|JSON|manifest|checksum|invalid/i);                  // no key names or jargon on screen; the technical reason goes to the log only
     expect(warn.mock.calls.some(c => String(c[1]) === 'build-check-failed')).toBe(true);

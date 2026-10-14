@@ -157,13 +157,13 @@ const sec = () => screen.getByTestId('backup-section');
 describe('the Delete all data block on the Data tab', () => {
   it('is the last block of the section, after Undo, with the heading, the plain intro and a 44 px Delete all data… button; no window.confirm / alert', async () => {
     const spy = vi.spyOn(window, 'confirm'); const { user } = mountSettings(); await dataTab(user);
-    expect(within(sec()).getByText('Delete all data')).toBeInTheDocument(); expect(sec().textContent).toContain("Removes everything SparkCheck keeps on this phone: every site, result, History snapshot, calendar event, photo and site logo, and also your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed."); expect(screen.getByTestId('erase-restore-note').textContent).toBe("A backup file brings back your sites, results, History, calendar events, photos and site logos. It does not bring back your business details, company logo, dropdown lists or TAT lists, so note those down first.");
+    expect(within(sec()).getByText('Delete all data')).toBeInTheDocument(); expect(screen.getByTestId('erase-caption').textContent).toBe("Removes everything SparkCheck keeps on this phone, including your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed."); expect(screen.queryByTestId('erase-restore-note')).toBeNull();      // ONE caption now: what goes, that it cannot be undone, that saved files stay, what a backup does not include (pinned whole, with toBe)
     const b = screen.getByTestId('erase-open'); expect(b.textContent).toBe('Delete all data…'); expect(b.style.minHeight).toBe('44px'); expect(sec().lastElementChild.contains(b)).toBe(true); expect(spy).not.toHaveBeenCalled();
     const heads = Array.from(sec().querySelectorAll('div')).filter(e => e.textContent === 'Delete all data' || e.textContent === 'Back up' || e.textContent === 'Restore'); expect(heads[heads.length - 1].textContent).toBe('Delete all data');
   });
   it('tapping it asks first (the module-style two-step, with what goes, the last backup and what happens next); No keeps everything and writes nothing', async () => {
     const { user, reload } = mountSettings(); await dataTab(user); await user.click(screen.getByTestId('erase-open')); const box = screen.getByTestId('erase-confirm');
-    expect(box.textContent).toContain("Delete everything on this phone? This erases every site, result, History snapshot, calendar event, photo and site logo, and also your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed. A backup file can bring back the sites, results, History, calendar events, photos and site logos, but not your business details, company logo, dropdown lists or TAT lists. Last backup: never. The app restarts when it is done.");
+    expect(box.textContent).toContain("Delete everything on this phone? This erases your sites, results, photos and business details and cannot be undone. A backup does not include business details, the company logo or lists, so note them down first. Last backup: never. The app restarts when it is done.");
     expect(within(box).getByText('Yes, delete everything')).toBeInTheDocument(); expect(localStorage.getItem(ERASE_KEY)).toBeNull();
     await user.click(screen.getByTestId('erase-confirm-no')); expect(screen.queryByTestId('erase-confirm')).toBeNull(); expect(localStorage.getItem(ERASE_KEY)).toBeNull(); expect(reload).not.toHaveBeenCalled(); expect(screen.getByTestId('erase-open')).toBeInTheDocument();
   });
@@ -193,7 +193,7 @@ describe('the Delete all data block on the Data tab', () => {
   });
   it('a leftover note shows the plain card (words, and a warning icon) with the button still there; a second confirmed delete starts again from attempt 0', async () => {
     rawSetItem(LEFTOVER_KEY, JSON.stringify({ v: 1, stores: ['site-photos'] })); const { user, reload } = mountSettings({ leftover: () => eraseLeftover(S) }); await dataTab(user); const card = screen.getByTestId('erase-leftover');
-    expect(card.textContent).toContain('Some photo storage could not be cleared.'); expect(card.textContent).toContain('All your sites and results are gone. Only some old photos are still taking up space on this phone, and the app cannot see them. Tap Delete all data to try clearing them again, or leave it: nothing else is affected.'); expect(card.querySelector('svg')).not.toBeNull();
+    expect(card.textContent).toContain('Some photo storage could not be cleared.'); expect(card.textContent).toContain('All your sites and results are gone. Some old photos are still taking up space and the app cannot see them. Tap Delete all data to try again, or leave it: nothing else is affected.'); expect(card.querySelector('svg')).not.toBeNull();
     await user.click(screen.getByTestId('erase-open')); await user.click(screen.getByTestId('erase-confirm-yes')); expect(reload).toHaveBeenCalled(); expect(eraseMarker(S).attempts).toBe(0);
   });
 });
@@ -203,12 +203,12 @@ describe('the Settings-only screen (an erase is unfinished)', () => {
     eraseSet('working'); const user = userEvent.setup(); render(<GlobalSettingsView onGoHome={() => {}} />);
     expect(screen.getByRole('tab', { name: 'Backup & Data' })).toHaveAttribute('aria-selected', 'true'); expect(screen.getByRole('tab', { name: 'Business' })).toHaveAttribute('aria-disabled', 'true'); expect(screen.queryByTestId('settings-pill')).toBeNull(); expect(screen.queryByText('Modules')).toBeNull();
     await user.click(screen.getByRole('tab', { name: 'Business' })); expect(screen.getByRole('tab', { name: 'Backup & Data' })).toHaveAttribute('aria-selected', 'true');
-    const card = screen.getByTestId('erase-working'); expect(card.textContent).toContain('Finishing the erase…'); expect(card.textContent).toContain('SparkCheck is clearing the last of your data. This can take a moment. Please wait: the app opens by itself when it is done. You do not need to do anything.');
+    const card = screen.getByTestId('erase-working'); expect(card.textContent).toContain('Finishing the erase…'); expect(card.textContent).toContain('SparkCheck is clearing the last of your data. This can take a moment. The app opens by itself when it is done.');
     expect(screen.getByTestId('erase-open')).toBeDisabled(); for (const id of ['backup-make', 'backup-choose', 'backup-last', 'backup-undo-open']) expect(screen.queryByTestId(id)).toBeNull(); expect(sec().textContent).not.toMatch(/Back up|Restore|Undo/);
   });
   it('after an attempt ran out of time: the approved words, the button works through the same two-step, and the attempt count is kept', async () => {
     marker(1); eraseSet('retry'); const user = userEvent.setup(); const reload = vi.fn(); render(<GlobalSettingsView onGoHome={() => {}} backupDeps={{ reload, eraseBegin: () => eraseBegin(S, NOW) }} />);
-    const card = screen.getByTestId('erase-retry'); expect(card.getAttribute('role')).toBe('alert'); expect(card.textContent).toContain("A previous erase didn't finish. Tap Delete all data to finish."); expect(card.textContent).toContain('Some of your data may still be on this phone. Tap Delete all data below to finish clearing it. The modules stay closed until it is done, so nothing is half cleared.');
+    const card = screen.getByTestId('erase-retry'); expect(card.getAttribute('role')).toBe('alert'); expect(card.textContent).toContain("A previous erase didn't finish. Tap Delete all data to finish."); expect(card.textContent).toContain('Some of your data may still be on this phone. Tap Delete all data to finish clearing it. The modules stay closed until it is cleared, so nothing is half cleared.');
     await user.click(screen.getByTestId('erase-open')); await user.click(screen.getByTestId('erase-confirm-yes')); expect(reload).toHaveBeenCalled(); expect(eraseMarker(S).attempts).toBe(1);
   });
   it('the whole app (not only Settings) shows this screen: no module tile, no Modules pill; with no unfinished erase the same app shows the module grid (negative control)', async () => {
@@ -223,7 +223,7 @@ describe('the Settings-only screen (an erase is unfinished)', () => {
   });
 });
 
-// The words on the Delete all data screen say what a backup file can and cannot bring back. This proves them against the real engines: seed a full phone, back it up, delete everything (the real startup erase), restore the backup.
+// The Delete question says a backup does not include business details, the company logo or lists (the dropdown lists and the TAT lists). This proves that against the real engines: seed a full phone, back it up, delete everything (the real startup erase), restore the backup.
 describe('what a restore brings back after Delete all data (the wording is true)', () => {
   it('sites, results, History, calendar events, photos and site logos come back; business details, the company logo, every dropdown list, the TAT lists, rcd-mode and iel-cat do NOT', async () => {
     await seedSourceFull(); rawSetItem('tat-names-v1', '{"x":"y"}'); rawSetItem('tat-defaults-v1', '{"d":1}'); rawSetItem('tat-settings-v1', '{"s":1}'); rawSetItem('iel-cat-v2', '"cat"'); rawSetItem('rcd-mode-v6', '"mode"'); rawSetItem('iel-dropdowns-v1', '{"a":["b"]}'); rawSetItem('gsd-dropdowns-v1', '{"a":["b"]}');
@@ -235,7 +235,7 @@ describe('what a restore brings back after Delete all data (the wording is true)
     expect(OWNED_LEFT()).toEqual([]); expect(await idbCount()).toBe(0);                                                  // everything is gone
     const r = await backupRestore(new File([blob], 'b.zip', { type: 'application/zip' }), { storage: S, now: NOW }); expect(r.ok).toBe(true);
     const after = lsSnapshot(), afterIdb = await idbSnapshot();
-    for (const k of NOT_RESTORED) expect(after[k], k + ' must not come back').toBeUndefined();                           // what the screen says is NOT brought back
+    for (const k of NOT_RESTORED) expect(after[k], k + ' must not come back').toBeUndefined();                           // what the question says a backup does NOT include: business details (app-settings), dropdown lists, TAT lists (and the two modes, which the screen does not name)
     expect(afterIdb['sparkcheck-app-settings']).toEqual({});                                                              // the company logo does not come back
     for (const k of ['rcd-projects-v6', 'rcd-results-v6', 'rcd-history-v6', 'swb-projects-v1', 'gsd-projects-v1', 'cal-events-v1']) expect(after[k], k + ' must come back').toBe(before[k]);   // what the screen says IS brought back (identical text)
     expect(Object.keys(afterIdb['sparkcheck-site-photos']).sort()).toEqual(Object.keys(beforeIdb['sparkcheck-site-photos']).filter(k => k !== 'unused').sort());   // photos (the unreferenced one is not backed up)

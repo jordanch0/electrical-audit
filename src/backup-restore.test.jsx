@@ -5,7 +5,7 @@
 // injected by wrapping that adapter, so exactly the calls the engine makes are the calls that fail.
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { backupBuild, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, backupBuildInserts, backupPlan, backupRestoreProblem, backupUndoConfirmText, BackupCrash, RESTORE_KEY, BACKUP_MODULE_INFO, BACKUP_MODULES,
+import { backupBuild, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, backupBuildInserts, backupPlan, backupRestoreProblem, backupUndoConfirmText, backupLastRestoreLine, BackupCrash, RESTORE_KEY, BACKUP_MODULE_INFO, BACKUP_MODULES,
   sitePhotoStore, siteLogoStore, appLogoStore } from './App.jsx';
 import { idbSnapshot, lsSnapshot, rec, FM, seedModule, seedPhone, wipe, backupOf, seedSourceFull } from './test/backup-fixtures.js';
 
@@ -173,7 +173,7 @@ describe('THE GUARANTEES, each proved: write order, the single commit write, onl
   });
   it('the undo confirmation says that work done inside the restored sites since the restore is removed too', async () => {
     const file = await sourceFile(); await backupRestore(file, { storage: S, now: new Date(2026, 9, 5, 12, 0) }); const text = backupUndoConfirmText(backupUndoInfo(S, new Date(2026, 9, 6)));
-    expect(text).toContain('also removes any work you have done inside those restored sites since the restore'); expect(text).toContain('11 sites'); expect(text).toContain('2 calendar events'); expect(text).toContain('Undo is available until 19/10/2026.');
+    expect(text).toContain('and any work you have done in them since'); expect(text).toContain('11 sites'); expect(text).toContain('2 calendar events'); expect(backupLastRestoreLine(backupUndoInfo(S, new Date(2026, 9, 6)))).toContain('Undo is available until 19/10/2026.');      // the undo window is stated in the Undo block's own line (and the restore result), not repeated in the question
   });
 });
 

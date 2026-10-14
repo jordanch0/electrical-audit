@@ -49,7 +49,7 @@ describe('Global Settings: Storage used line', () => {
   it('label says approximate and excludes photos', async () => {
     render(<GlobalSettingsView onGoHome={() => {}} />);
     await screen.findByText(/approximate/);
-    await screen.findByText(/not photos/);
+    await screen.findByText(/Photos are stored separately/);
   });
 });
 

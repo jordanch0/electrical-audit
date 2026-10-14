@@ -11,7 +11,13 @@ import AppRoot from './App.jsx';
 
 vi.setConfig({ testTimeout: 30000 });
 configure({ asyncUtilTimeout: 10000 });
-const BASELINE = fs.readFileSync(path.join(__dirname, '__fixtures__', 'global-settings-before-backup-section.html'), 'utf8');
+// The committed screen from before the section existed, with the four texts that were REWORDED (the page subtitle, the two Company captions and the Storage caption) (and nothing else) swapped for their new text: every other element must still match it exactly.
+const swap = (s, a, b) => { if (s.split(a).length !== 2) throw new Error('baseline text not found: ' + a.slice(0, 40)); return s.split(a).join(b); };
+const BASELINE = swap(swap(swap(swap(fs.readFileSync(path.join(__dirname, '__fixtures__', 'global-settings-before-backup-section.html'), 'utf8'),
+  'Pre-fills the "Add Site" form in every module. Fully editable there — this never changes a site already created.', 'Pre-fills the Add Site form in every module. Existing sites are not changed.'),
+  'Appears as a centred strip above the header on every exported report, in every module.', 'Appears at the top of every exported report.'),
+  'Defaults for every new site, and the logo on every export', 'Defaults for new sites and exports'),
+  'Site data, results and history — not photos (those live in a separate, much larger store).', 'Includes site data, results and History. Photos are stored separately.');
 beforeEach(() => { localStorage.clear(); });
 afterEach(() => cleanup());
 const panel = id => screen.getByTestId('gs-panel-' + id);

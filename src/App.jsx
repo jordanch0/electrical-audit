@@ -10312,7 +10312,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
         , React.createElement('div', { "data-testid": "header-pill-row", style: { display: "flex", justifyContent: "flex-end", alignItems: "flex-start", minHeight: 40 } }
           , !settingsOnly && React.createElement(ModulesPill, { onClick: () => { const g = gate.current; if (g.busy) { if (g.reveal) g.reveal(); return; } if (g.reloadPending) { (g.reload || backupReloadApp)(); return; } onGoHome(); } }))   // while a restore / undo runs it does nothing (it shows where the work is); after one it reloads (which ends on Home)
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
-        , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for every new site, and the logo on every export"))
+        , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for new sites and exports"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
     , React.createElement('div', { ref: scrollRef, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 0", paddingBottom: NAV_CLEARANCE } }
       , React.createElement('div', pane("company")
@@ -10320,12 +10320,12 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
       , field("BUSINESS NAME", businessName, setBusinessName, "Company name")
       , field("ABN", abn, setAbn, "e.g. 12 345 678 901")
       , field("ELECTRICAL LICENCE", licence, setLicence, "e.g. 123456C")
-      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 20 } }, "Pre-fills the \"Add Site\" form in every module. Fully editable there — this never changes a site already created.")
+      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 20 } }, "Pre-fills the Add Site form in every module. Existing sites are not changed.")
 
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Company Logo")
       , React.createElement('div', { style: { marginBottom: 10 } }, React.createElement(LogoField, { value: logoUrl, onUpload, onRemove: onRemoveLogo }))
       , error && React.createElement('div', { style: { fontSize: 11, color: "#b91c1c", marginBottom: 10 } }, error)
-      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears as a centred strip above the header on every exported report, in every module.")
+      , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginBottom: 24 } }, "Appears at the top of every exported report.")
 
       , React.createElement('div', { style: { display: "flex", alignItems: "center", gap: 12 } }
         , React.createElement('button', { style: { padding: "11px 22px", background: GS_COLOR, color: "#fff", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 800, cursor: "pointer" }, onClick: onSave }, "Save")
@@ -10341,7 +10341,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
               , `Storage used: ${fmtBytes(storageBytes)} of ~5 MB (${pct.toFixed(0)}%, approximate)`)
             , React.createElement('div', { style: { height: 6, borderRadius: 999, background: "#e4e4e7", overflow: "hidden" } }
               , React.createElement('div', { style: { height: "100%", width: `${pct}%`, background: color, borderRadius: 999 } }))
-            , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Site data, results and history — not photos (those live in a separate, much larger store)."));
+            , React.createElement('div', { style: { fontSize: 11, color: "#52525b", marginTop: 6 } }, "Includes site data, results and History. Photos are stored separately."));
         })()
       , React.createElement(BackupRestoreSection, { gate, deps: backupDeps })
       )
@@ -10455,12 +10455,12 @@ function BackupRestoreSection({ gate, deps }) {
       if (!alive.current) return;
       if (r.ok) { const n = [];
         if (r.method === "share") n.push({ kind: "ok", title: "Backup shared", body: "If you chose Save to Files, it is in the folder you picked." });
-        else n.push({ kind: "info", title: "Backup download started", body: ["This device could not open the share sheet, so the backup was downloaded instead. Check the Files app.", React.createElement("br", { key: "b" }), React.createElement("b", { key: "f" }, h.filename)] });
-        if (!r.recorded) n.push({ kind: "warn", title: "Backup saved, but the date could not be recorded", body: "Your backup file is fine. This phone has no room left to note today's date, so \"Last backup\" may show an older date. See Storage above." });
+        else n.push({ kind: "info", title: "Backup download started", body: ["This phone could not open the share sheet, so the backup was downloaded. Find it in the Files app.", React.createElement("br", { key: "b" }), React.createElement("b", { key: "f" }, h.filename)] });
+        if (!r.recorded) n.push({ kind: "warn", title: "Backup saved, but the date could not be recorded", body: "Your backup is fine, but this phone has no room to record today's date, so \"Last backup\" may show an older one. See Storage above." });
         held.current = { blob: null, filename: "", includesPhotos: true }; setNotes(n); setBk({ phase: "idle" }); setLast(d.lastText()); }
-      else if (r.cancelled) setNotes([{ kind: "info", title: "The share sheet was closed, so no backup was saved.", body: "Your backup is still ready. Tap Share backup to try again, or discard it." }]);
-      else { backupLog("share-failed", r.message); setNotes([{ kind: "err", title: "The backup could not be saved", body: "The backup could not be saved. Nothing was recorded as saved. Please try again." }]); }
-    }).catch(e => { backupLog("share-failed", e && e.name); if (alive.current) setNotes([{ kind: "err", title: "The backup could not be saved", body: "The backup could not be saved. Nothing was recorded as saved. Please try again." }]); });
+      else if (r.cancelled) setNotes([{ kind: "info", title: "The share sheet was closed, so no backup was saved.", body: "Your backup is still ready. Tap Share backup to try again." }]);
+      else { backupLog("share-failed", r.message); setNotes([{ kind: "err", title: "The backup could not be saved", body: "Nothing was recorded as saved. Please try again." }]); }
+    }).catch(e => { backupLog("share-failed", e && e.name); if (alive.current) setNotes([{ kind: "err", title: "The backup could not be saved", body: "Nothing was recorded as saved. Please try again." }]); });
   };
   const discard = () => { held.current = { blob: null, filename: "", includesPhotos: true }; setNotes([]); setBk({ phase: "idle" }); };
 
@@ -10503,16 +10503,16 @@ function BackupRestoreSection({ gate, deps }) {
     gate.current.busy = true; setDel({ phase: "starting" }); d.reload();
   };
   const leftover = er.mode === "none" ? (d.leftover ? d.leftover() : eraseLeftover()) : null;
-  const S1_PARAS = { erase: ["Removes everything SparkCheck keeps on this phone: every site, result, History snapshot, calendar event, photo and site logo, and also your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed.", React.createElement("div", { key: "s1b", "data-testid": "erase-restore-note", style: { marginTop: 6 } }, "A backup file brings back your sites, results, History, calendar events, photos and site logos. It does not bring back your business details, company logo, dropdown lists or TAT lists, so note those down first.")] };      // S1: what the delete removes, and what a backup can and cannot bring back (the restore never reads business details, the company logo, dropdown lists, TAT lists, rcd-mode or iel-cat)
+  const S1_PARAS = { erase: [React.createElement("span", { key: "s1", "data-testid": "erase-caption" }, "Removes everything SparkCheck keeps on this phone, including your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed.")] };      // S1: what the delete removes, and what a backup can and cannot bring back (the restore never reads business details, the company logo, dropdown lists, TAT lists, rcd-mode or iel-cat)
   const deleteBlock = () => {
     const first = [bsHeading("Delete all data")];
-    if (er.mode === "working") return [...first, bsCard("info", "Finishing the erase…", "SparkCheck is clearing the last of your data. This can take a moment. Please wait: the app opens by itself when it is done. You do not need to do anything.", "erase-working"), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
+    if (er.mode === "working") return [...first, bsCard("info", "Finishing the erase…", "SparkCheck is clearing the last of your data. This can take a moment. The app opens by itself when it is done.", "erase-working"), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
     if (del.phase === "starting") return [...first, bsBusyRow("Deleting… the app restarts by itself.", "Keep this screen open."), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
-    const lead = er.mode === "retry" ? [bsCard("err", "A previous erase didn't finish. Tap Delete all data to finish.", "Some of your data may still be on this phone. Tap Delete all data below to finish clearing it. The modules stay closed until it is done, so nothing is half cleared.", "erase-retry")]
-      : leftover ? [bsCard("warn", "Some photo storage could not be cleared.", "All your sites and results are gone. Only some old photos are still taking up space on this phone, and the app cannot see them. Tap Delete all data to try clearing them again, or leave it: nothing else is affected.", "erase-leftover")]
+    const lead = er.mode === "retry" ? [bsCard("err", "A previous erase didn't finish. Tap Delete all data to finish.", "Some of your data may still be on this phone. Tap Delete all data to finish clearing it. The modules stay closed until it is cleared, so nothing is half cleared.", "erase-retry")]
+      : leftover ? [bsCard("warn", "Some photo storage could not be cleared.", "All your sites and results are gone. Some old photos are still taking up space and the app cannot see them. Tap Delete all data to try again, or leave it: nothing else is affected.", "erase-leftover")]
       : [bsHelp(S1_PARAS.erase, 10)];
     const fail = del.phase === "failed" ? [bsCard("err", "The delete could not be started", "Nothing was deleted. Please try again.", "erase-failed")] : [];
-    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases every site, result, History snapshot, calendar event, photo and site logo, and also your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed. A backup file can bring back the sites, results, History, calendar events, photos and site logos, but not your business details, company logo, dropdown lists or TAT lists. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
+    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases your sites, results, photos and business details and cannot be undone. A backup does not include business details, the company logo or lists, so note them down first. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
     return [...first, ...lead, ...fail, bsBtn("Delete all data…", () => setDel({ phase: "confirming" }), { kind: "secondary", id: "erase-open", disabled: busy })];
   };
 
@@ -10520,16 +10520,16 @@ function BackupRestoreSection({ gate, deps }) {
   const make1 = (label, o = {}) => bsBtn(label, () => make(photos), { id: "backup-make", disabled: busy || o.disabled, kind: o.kind });
   const backUp = () => {
     if (bk.phase === "measuring") return [bsBusyRow("Checking the size…"), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
-    if (bk.phase === "building") return [bsBusyRow("Making your backup, about " + backupMbText(bk.bytes) + ". Keep this screen open until it says ready."), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
-    if (bk.phase === "unusable") return [bsCard("err", "The backup could not be used", "SparkCheck made the backup, then checked it and found that it could not be restored from, so it is not offered. Nothing on this phone was changed. Please try again. If this happens again, contact support."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
-    if (bk.phase === "failed") return [bsCard("err", "The backup could not be made", "Something went wrong while making the backup. Nothing was changed. Please try again."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
+    if (bk.phase === "building") return [bsBusyRow("Making your backup, about " + backupMbText(bk.bytes) + ". Keep this screen open."), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
+    if (bk.phase === "unusable") return [bsCard("err", "The backup could not be used", "SparkCheck checked this backup and found it cannot be restored, so it was not offered. Nothing on this phone was changed. Please try again, or contact support if it keeps happening."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
+    if (bk.phase === "failed") return [bsCard("err", "The backup could not be made", "Nothing was changed. Please try again."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
     if (bk.phase === "large") return [bsCard("warn", "This is a large backup", backupLargeWarning(bk.bytes, { includesPhotos: bk.withPhotos }), "backup-card-large"),
       bk.withPhotos ? React.createElement("div", { key: "lg", style: { display: "flex", flexDirection: "column", gap: 8 } }, bsBtn("Make it without photos" + (bk.smallBytes ? " (about " + backupMbText(bk.smallBytes) + ")" : ""), () => { setPhotos(false); make(false, true); }, { id: "backup-make-small" }), bsBtn("Continue with photos (" + backupMbText(bk.bytes) + ")", () => build(true, bk.bytes), { kind: "secondary", id: "backup-make-big" }))
         : bsBtn("Make backup", () => build(false, bk.bytes), { id: "backup-make-big" })];
-    if (bk.phase === "ready") return [bsCard("ok", "Backup ready, " + backupMbText(bk.bytes), [bk.filename, React.createElement("br", { key: "b" }), "It is ", React.createElement("b", { key: "n" }, "not saved yet"), ". Tap ", React.createElement("b", { key: "s" }, "Share backup"), ", then choose ", React.createElement("b", { key: "f" }, "Save to Files"), " or another place to keep it."], "backup-card-ready"),
+    if (bk.phase === "ready") return [bsCard("ok", "Backup ready, " + backupMbText(bk.bytes), [bk.filename, React.createElement("br", { key: "b" }), React.createElement("b", { key: "n" }, "Not saved yet"), ". Tap ", React.createElement("b", { key: "s" }, "Share backup"), ", then choose ", React.createElement("b", { key: "f" }, "Save to Files"), " or another location."], "backup-card-ready"),
       React.createElement("div", { key: "rd", style: { display: "flex", flexDirection: "column", gap: 2 } }, bsBtn("Share backup", share, { id: "backup-share", icon: "share" }), bsLink("Discard this backup", discard, "backup-discard"))];
     return [React.createElement("label", { key: "cb", style: { display: "flex", alignItems: "center", gap: 10, minHeight: 44, fontSize: 13, color: BACKUP_UI.ink } }, React.createElement("input", { type: "checkbox", checked: photos, disabled: busy, "data-testid": "backup-photos", onChange: e => setPhotos(e.target.checked), style: { width: 22, height: 22, margin: 0, accentColor: BACKUP_UI.slate } }), photos ? "Include photos (the file is larger)" : "Include photos"),
-      make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Makes one file. You then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it, for example to Files."], 0, 8)];
+      make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Creates one file. Then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it. The file includes client names, your ABN and photos, so store it somewhere safe."], 0, 8)];
   };
   const noteCards = () => notes.map((n, i) => React.createElement(React.Fragment, { key: "note" + i }, bsCard(n.kind, n.title, n.body, "backup-note-" + n.kind)));
   const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : "Nothing was added.", r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null,
@@ -10539,15 +10539,15 @@ function BackupRestoreSection({ gate, deps }) {
     const out = [bsHeading("Restore")];
     const choose = (label, disabled) => bsBtn(label, () => fileInput.current && fileInput.current.click(), { kind: "secondary", id: "backup-choose", disabled: disabled || busy });
     const input = React.createElement("input", { key: "fi", ref: fileInput, type: "file", accept: ".zip,application/zip,application/x-zip-compressed", "data-testid": "backup-file-input", "aria-label": "Choose backup file", style: { display: "none" }, onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pick(f); } });
-    if (rs.phase === "idle") out.push(bsHelp("Adds the sites, results, History and calendar events from a backup file that are not already on this phone. Nothing already on this phone is changed or deleted.", 10), choose("Choose backup file…"));
+    if (rs.phase === "idle") out.push(bsHelp("Adds anything in a backup file that is not already on this phone.", 10), choose("Choose backup file…"));
     else if (rs.phase === "checking") out.push(bsBusyRow("Checking the file…"), choose("Choose backup file…", true));
     else if (rs.phase === "summary" || rs.phase === "confirming") {
       out.push(bsSummaryCard(rs.text));
       if (rs.phase === "summary") out.push(bsBtn("Restore…", () => setRs(s => ({ ...s, phase: "confirming" })), { id: "backup-restore", disabled: busy }), React.createElement("div", { key: "sp", style: { height: 8 } }), bsLink("Choose a different file", () => { heldRestore.current = { file: null, insp: null, plan: null }; setRs({ phase: "idle" }); }, "backup-different"));
-      else out.push(bsTwoStep(rsBox, "Add these to this phone? Nothing already here is changed or deleted. Keep this screen open while it works.", "Yes, add them", "Cancel", run, () => setRs(s => ({ ...s, phase: "summary" })), { id: "backup-restore-confirm" }));
+      else out.push(bsTwoStep(rsBox, "Add these to this phone? No existing data on this phone is changed or removed. Keep this screen open while it works.", "Yes, add them", "Cancel", run, () => setRs(s => ({ ...s, phase: "summary" })), { id: "backup-restore-confirm" }));
     } else if (rs.phase === "restoring") {
       const p = rs.progress; const text = !p ? "Restoring…" : p.phase === "photos" ? "Restoring… photos " + p.done + " of " + p.total + "." : p.phase === "verifying" ? "Checking what was added… " + p.done + " of " + p.total + "." : "Saving…";
-      out.push(bsBusyRow(text, "Keep this screen open. If the app closes part-way, everything is put back the next time you open it."), bsBtn("Restore…", null, { id: "backup-restore", disabled: true }));
+      out.push(bsBusyRow(text, "Keep this screen open. If the app closes, everything is put back the next time you open it."), bsBtn("Restore…", null, { id: "backup-restore", disabled: true }));
     } else if (rs.phase === "result") out.push(resultCard(rs), rs.kind === "ok" ? bsBtn("Done", () => d.reload(), { id: "backup-done" }) : bsBtn(rs.kind === "info" ? "Choose a different file" : "OK", () => setRs({ phase: "idle" }), { kind: "secondary", id: "backup-ok" }));
     return [...out, input];
   };
@@ -10563,9 +10563,9 @@ function BackupRestoreSection({ gate, deps }) {
   if (er.settingsOnly) return React.createElement("div", { ref: sectionRef, "data-testid": "backup-section", style: { marginTop: 32, paddingTop: 18, borderTop: `1px solid ${BACKUP_UI.line}` } }, ...deleteBlock());
   return React.createElement("div", { ref: sectionRef, "data-testid": "backup-section", style: { marginTop: 32, paddingTop: 18, borderTop: `1px solid ${BACKUP_UI.line}` } },
     bsHeading("Backup and restore"),
-    problem && problem.keys && problem.keys.length ? bsCard("err", "A restore could not be fully put back", [`One part of this phone's saved data could not be read, so it was left exactly as it was: `, React.createElement("b", { key: "k" }, backupKeysLabel(problem.keys)), ". The photos from that restore were kept and everything else was put back. Other modules are not affected.",
+    problem && problem.keys && problem.keys.length ? bsCard("err", "A restore could not be fully put back", [`One part of this phone's saved data could not be read, so it was left exactly as it was: `, React.createElement("b", { key: "k" }, backupKeysLabel(problem.keys)), ". The photos were kept and everything else was put back. Other modules are not affected.",
       React.createElement("div", { key: "n", style: { marginTop: 8 } }, React.createElement("b", null, "Next step:"), " Make a backup now and contact support, quoting this message."), React.createElement("div", { key: "g", style: { marginTop: 8 } }, "This message goes away after the next successful restore.")], "backup-problem") : null,
-    bsHelp("A backup file holds your sites, results, History, calendar events, photos and logos. It contains client names, the ABN and photos, so store it somewhere safe."),
+    bsHelp("Save a copy of your sites, results, History, calendar events, photos and site logos."),
     React.createElement("div", { "data-testid": "backup-last", style: { fontSize: 12, color: BACKUP_UI.muted, margin: "10px 0 18px" } }, "Last backup: ", React.createElement("b", { style: { color: BACKUP_UI.ink } }, last)),
     bsHeading("Back up"), ...noteCards(), ...backUp(), bsDivider(), ...restoreBlock(), ...(undo.length ? [bsDivider(), ...undo] : []), bsDivider(), ...deleteBlock());
 }
@@ -16804,8 +16804,8 @@ const backupDmy = iso => String(iso || "").split("-").reverse().join("/");
 // The text the Undo confirmation shows. It says plainly that work done INSIDE the restored sites since the restore goes too.
 function backupUndoConfirmText(info) {
   const c = (info && info.counts) || {};
-  return "Undo the last restore? This removes the " + nw(c.sites || 0, "site") + ", " + nw(c.snapshots || 0, "History snapshot") + " and " + nw(c.events || 0, "calendar event") + " it added, with their photos. "
-    + "It also removes any work you have done inside those restored sites since the restore (results, photos, History). Everything else on this phone stays exactly as it is. Undo is available until " + backupDmy(info && info.until) + ".";
+  return "Undo the last restore? This removes the " + nw(c.sites || 0, "site") + ", " + nw(c.snapshots || 0, "History snapshot") + " and " + nw(c.events || 0, "calendar event") + " it added, with their photos, and any work you have done in them since. "
+    + "Everything else is left as it is.";
 }
 function backupUndoInfo(storage = localStorage, now = new Date()) {
   const rec = backupReadRecord(storage); if (!rec || rec.journal || !rec.undo) return null;
@@ -16880,8 +16880,8 @@ async function backupMeasure({ includePhotos = true, storage = localStorage } = 
 // The text shown before a large backup is built. Empty when the backup is small enough.
 function backupLargeWarning(bytes, { includesPhotos = true } = {}) {
   if (!(bytes >= BACKUP_LARGE_BYTES)) return "";
-  return "This backup will be about " + Math.round(bytes / (1024 * 1024)) + " MB. Files this large can fail to share from an iPhone and need a lot of free space while they are made."
-    + (includesPhotos ? " You can make a smaller backup without photos instead: every site, result, History snapshot and calendar event is still included, only the photos and thumbnails are left out. Or continue with the full backup." : " It is already without photos, so the size is the data itself.");
+  return "This backup will be about " + Math.round(bytes / (1024 * 1024)) + " MB. Large files can fail to share from an iPhone and need a lot of free space."
+    + (includesPhotos ? " A backup without photos is much smaller and still includes every site, result, History snapshot and calendar event." : " It is already without photos, so the size is the data itself.");
 }
 // Hands the finished backup file over. Share sheet first (the file itself, so Save to Files, AirDrop, Mail and the rest all work); if the browser cannot share files, or sharing fails for any reason other than the
 // user closing the sheet, a normal download. Returns { ok:true, method:"share"|"download", recorded } | { ok:false, cancelled:true } | { ok:false, error:true, message }.
@@ -16974,8 +16974,7 @@ function backupSummaryText(plan) {
   if (skipped.length) groups.push({ id: "skipped", mark: "\u2715", heading: "Not restored", summary: "", ...backupCap(skipped) });
   const notes = [], hr = plan.headroom || {};
   if (plan.includesPhotos === false) notes.push("This backup was made without photos, so the restored sites will show without them.");
-  if (hr.storage && hr.storage.known && hr.ok) notes.push("There is enough free space."); else if (hr.storage && !hr.storage.known && photos) notes.push("This device cannot report free space, so it could not be checked in advance. If space runs out, the restore stops and puts everything back exactly as it was.");
-  notes.push("Nothing already on this phone is changed or deleted.");
+  if (hr.storage && hr.storage.known && hr.ok) notes.push("There is enough free space."); else if (hr.storage && !hr.storage.known && photos) notes.push("This phone cannot report free space, so it could not be checked in advance. If space runs out, the restore stops and puts everything back exactly as it was.");
   const sm = plan.summary || {};
   return { title: "This backup, made " + backupDmy(sm.deviceLocalDate) + " (" + backupMbText(sm.fileBytes) + ")", groups, notes, canRestore: !!plan.canRestore };
 }
@@ -16984,17 +16983,17 @@ function backupMessageText(code, plan) {
   const bad = "This file cannot be restored", unfinished = "A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.";
   switch (code) {
     case "not-a-backup": case "wrong-format": return { title: bad, body: "This is not a SparkCheck backup file." };
-    case "damaged": return { title: bad, body: "This backup file is damaged, so it cannot be restored." };
-    case "invalid": return { title: bad, body: "This backup file is not complete, so it cannot be restored." };
+    case "damaged": return { title: bad, body: "This backup file is damaged." };
+    case "invalid": return { title: bad, body: "This backup file is not complete." };
     case "newer-version": return { title: bad, body: "This backup was made by a newer version of SparkCheck. Update the app, then try again." };
-    case "nothing": return { title: "Nothing to add", body: "Everything in this backup is already on this phone, so there is nothing to add." };
+    case "nothing": return { title: "Nothing to add", body: "Everything in this backup is already on this phone." };
     case "headroom": { const h = plan && plan.headroom; if (h && h.storage && h.storage.known && !h.storage.ok) return { title: "Not enough room", body: "There is not enough free space for the photos. About " + backupMbText(h.storage.needBytes) + " is needed and " + backupMbText(Math.max(0, h.storage.quota - h.storage.usage)) + " is free. Free up some space, then try again. Nothing was changed." };
       return { title: "Not enough room", body: "There is not enough room in this phone's saved data for this restore. Free up some space by deleting sites, History or calendar events you no longer need, then try again. Nothing was changed." }; }
     case "unfinished": return { title: "A restore is still being put right", body: unfinished };
     case "shape": return { title: "The restore did not start", body: "Something on this phone is not in the form the restore expects, so nothing was added. Nothing was changed." };
     case "journal": return { title: "Not enough room to start", body: "There is not enough room on this phone to start the restore. Free up some space, then try again. Nothing was changed." };
-    case "failed": return { title: "The restore did not finish", body: "The restore could not be completed. Everything was put back exactly as it was." };
-    case "rollback": return { title: "The restore did not finish", body: "The restore could not be completed, and one part of this phone's saved data could not be read, so it was left as it was. Make a backup now and contact support, quoting this message." };
+    case "failed": return { title: "The restore did not finish", body: "Everything was put back exactly as it was." };
+    case "rollback": return { title: "The restore did not finish", body: "One part of this phone's saved data could not be read, so it was left as it was. Make a backup now and contact support, quoting this message." };
     case "none": return { title: "Nothing to undo", body: "There is no restore to undo." };
     case "expired": return { title: "Undo is no longer available", body: "The undo period for the last restore has ended." };
     case "undo-failed": return { title: "The undo did not finish", body: "The undo could not be completed. Nothing was changed." };
