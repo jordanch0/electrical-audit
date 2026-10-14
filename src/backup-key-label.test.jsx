@@ -48,11 +48,33 @@ describe('a key the app does not know is never echoed', () => {
 });
 
 describe('several keys in one sentence', () => {
-  it('each label once; "A", "A and B", "A, B and C"; at most 4 named, then "and N more"; nothing for none', () => {
+  it('each label once; one label as it is; several grouped by module ("A (x, y) and B (z)"); at most 4 named, then "and N more"; nothing for none', () => {
     expect(backupKeysLabel([])).toBe(''); expect(backupKeysLabel(undefined)).toBe(''); expect(backupKeysLabel(['rcd-projects-v6'])).toBe('RCD Testing, list of sites');
-    expect(backupKeysLabel(['rcd-projects-v6', 'rcd-projects-v6'])).toBe('RCD Testing, list of sites'); expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2'])).toBe('RCD Testing, list of sites and IEL Testing, test results');
-    expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'cal-events-v1'])).toBe('RCD Testing, list of sites, IEL Testing, test results and Calendar events');
-    expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'cal-events-v1', 'swb-meta-v1', 'gsd-items-v1', 'elt-history-v2'])).toBe('RCD Testing, list of sites, IEL Testing, test results, Calendar events, Switchboard, audit details and 2 more');
+    expect(backupKeysLabel(['rcd-projects-v6', 'rcd-projects-v6'])).toBe('RCD Testing, list of sites'); expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2'])).toBe('RCD Testing (list of sites) and IEL Testing (test results)');
+    expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'cal-events-v1'])).toBe('RCD Testing (list of sites), IEL Testing (test results) and Calendar events');
+    expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'cal-events-v1', 'swb-meta-v1', 'gsd-items-v1', 'elt-history-v2'])).toBe('RCD Testing (list of sites), IEL Testing (test results), Calendar events, Switchboard (audit details) and 2 more');
     expect(backupKeysLabel(['mystery', 'another'])).toBe('other saved data');                                  // two unknown keys: one label, never the keys
+  });
+});
+
+describe('several keys grouped by module: a module name is said once', () => {
+  const count = (s, w) => s.split(w).length - 1;
+  it('one module, one part: the label as it is', () => { expect(backupKeysLabel(['gsd-items-v1'])).toBe('General Site Defects, list of defects'); });
+  it('one module, several parts: the name once, the parts in brackets, in the order given', () => {
+    const l = backupKeysLabel(['gsd-projects-v1', 'gsd-items-v1', 'gsd-meta-v1']); expect(l).toBe('General Site Defects (list of sites, list of defects, audit details)'); expect(count(l, 'General Site Defects')).toBe(1);
+    expect(backupKeysLabel(['gsd-meta-v1', 'gsd-projects-v1'])).toBe('General Site Defects (audit details, list of sites)');
+  });
+  it('several modules: each name once with its own parts, whatever the order the keys come in', () => {
+    const l = backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'rcd-results-v6', 'gsd-items-v1', 'gsd-meta-v1']);
+    expect(l).toBe('RCD Testing (list of sites, test results), IEL Testing (test results) and General Site Defects (list of defects, audit details)');
+    for (const n of ['RCD Testing', 'IEL Testing', 'General Site Defects']) expect(count(l, n), n).toBe(1);
+  });
+  it('a module with several parts next to one with a single part and to the Calendar; the 4-name cap counts modules, not parts', () => {
+    expect(backupKeysLabel(['gsd-projects-v1', 'gsd-items-v1', 'rcd-projects-v6', 'cal-events-v1'])).toBe('General Site Defects (list of sites, list of defects), RCD Testing (list of sites) and Calendar events');
+    expect(backupKeysLabel(['gsd-projects-v1', 'gsd-items-v1', 'gsd-meta-v1', 'gsd-results-v1', 'gsd-history-v1'])).toBe('General Site Defects (list of sites, list of defects, audit details, test results, History)');
+    expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'swb-meta-v1', 'elt-history-v2', 'gsd-items-v1'])).toBe('RCD Testing (list of sites), IEL Testing (test results), Switchboard (audit details), Emergency Lighting (History) and 1 more');
+  });
+  it('the Test & Tag words and the business details keep their own labels inside the grouping', () => {
+    expect(backupKeysLabel(['tat-settings-v1', 'tat-freqs-v1'])).toBe('Test & Tag (equipment types, test frequencies)'); expect(backupKeysLabel(['app-settings-v1', 'tat-names-v1'])).toBe('Business details (Global Settings) and Test & Tag (appliance names)');
   });
 });

@@ -151,7 +151,7 @@ describe('restoring a file', () => {
 describe('refusals and failures: short plain sentences, the technical text in the log', () => {
   const zipBlob = (entries) => { const w = zipWriter(new Date(2026, 9, 5, 12)); entries.forEach(([n, b]) => w.add(n, new TextEncoder().encode(b))); return w.finish(); };
   const expectCard = async (kind, title, body) => { const c = await screen.findByTestId('backup-result-' + kind); expect(c.textContent).toBe(title + body); expect(c.getAttribute('role')).toBe(kind === 'err' ? 'alert' : 'status'); return c; };
-  it('not a SparkCheck file', async () => { const { user } = mount(); await upload(user, new Blob([new Uint8Array(500)])); await expectCard('err', 'This file cannot be restored', 'This is not a SparkCheck backup file.'); expect(warn.mock.calls.some(c => c[1] === 'not-a-backup')).toBe(true); expect(screen.queryByTestId('backup-restore')).toBeNull(); });
+  it('not a SparkCheck file', async () => { const { user } = mount(); await upload(user, new Blob([new Uint8Array(500)])); await expectCard('err', 'This file cannot be restored', 'This is not a SparkCheck backup file, or it is incomplete.'); expect(warn.mock.calls.some(c => c[1] === 'not-a-backup')).toBe(true); expect(screen.queryByTestId('backup-restore')).toBeNull(); });
   it('made by a newer version', async () => { const { user } = mount(); await upload(user, zipBlob([['manifest.json', JSON.stringify({ format: 'sparkcheck-backup', formatVersion: 2 })]])); await expectCard('err', 'This file cannot be restored', 'This backup was made by a newer version of SparkCheck. Update the app, then try again.'); });
   it('nothing to add (an info card, not an error) with "Choose a different file"', async () => { await seedSourceFull(); const { backupBuild: bb } = await import('./App.jsx'); const { blob } = await bb(); const { user } = mount(); await upload(user, blob); await expectCard('info', 'Nothing to add', 'Everything in this backup is already on this phone.'); expect(T('backup-ok').textContent).toBe('Choose a different file'); });
   it('not enough room: the numbers from the device', async () => {
@@ -193,7 +193,7 @@ describe('undo', () => {
 describe('the recorded problem', () => {
   it('is shown at the top with plain labels and a next step; a successful restore clears it', async () => {
     rawSetItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo: null, problem: { keys: ['rcd-projects-v6', 'gsd-items-v1'], at: '2026-10-05T01:00:00.000Z' } })); const { user } = mount(); const c = T('backup-problem');
-    expect(c.textContent).toBe("A restore could not be fully put backOne part of this phone's saved data could not be read, so it was left exactly as it was: RCD Testing, list of sites and General Site Defects, list of defects. The photos were kept and everything else was put back. Other modules are not affected.Next step: Make a backup now and contact support, quoting this message.This message goes away after the next successful restore.");
+    expect(c.textContent).toBe("A restore could not be fully put backOne part of this phone's saved data could not be read, so it was left exactly as it was: RCD Testing (list of sites) and General Site Defects (list of defects). The photos were kept and everything else was put back. Other modules are not affected.Next step: Make a backup now and contact support, quoting this message.This message goes away after the next successful restore.");
     expect(c.getAttribute('role')).toBe('alert'); expect(c.textContent).not.toMatch(/-v\d|projects-|items-/);
     cleanup(); const file = await backupOf(seedSourceFull); rawSetItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo: null, problem: { keys: ['rcd-projects-v6'], at: 'x' } })); const m = mount(); await upload(m.user, file); await screen.findByTestId('backup-summary'); await m.user.click(T('backup-restore')); await m.user.click(T('backup-restore-confirm-yes')); await screen.findByTestId('backup-result-ok');
     expect(screen.queryByTestId('backup-problem')).toBeNull();
@@ -239,5 +239,34 @@ describe('the Modules pill (through the real Global Settings screen)', () => {
   });
   it('after an UNDO the pill reloads too', async () => {
     const file = await backupOf(seedSourceFull); await backupRestore(file, { storage: S, now: NOW }); const reload = vi.fn(); const { user, onGoHome } = mountSettings(deps({ reload })); await user.click(await screen.findByRole('tab', { name: 'Backup & Data' })); await user.click(await screen.findByTestId('backup-undo-open')); await user.click(T('backup-undo-confirm-yes')); await screen.findByTestId('backup-undo-result-ok'); await user.click(pill()); expect(reload).toHaveBeenCalledTimes(1); expect(onGoHome).not.toHaveBeenCalled();
+  });
+});
+
+describe('wording: "about" only before a number; the recorded problem names are grouped by module', () => {
+  it('a backup under 1 MB: the building row and the without-photos button say "under 1 MB", never "about under 1 MB"; a number still gets "about"', async () => {
+    let release; const d = deps({ measure: vi.fn(async ({ includePhotos }) => ({ estimatedBytes: includePhotos ? BACKUP_LARGE_BYTES : 100 * 1024 })), inspect: async () => ({ ok: true }), build: vi.fn(() => new Promise(r => { release = () => r({ blob: new Blob(['x']), filename: 'f.zip' }); })) });
+    const { user } = mount(d); await user.click(T('backup-make')); await screen.findByTestId('backup-card-large'); expect(T('backup-make-small').textContent).toBe('Make it without photos (under 1 MB)');
+    await user.click(T('backup-make-small')); await screen.findByText('Making your backup, under 1 MB. Keep this screen open.'); expect(text()).not.toContain('about under'); release(); await screen.findByTestId('backup-card-ready');
+  });
+  it('the recorded problem: one module with several parts reads "General Site Defects (list of sites, list of defects, audit details)", the name once', async () => {
+    rawSetItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo: null, problem: { keys: ['gsd-projects-v1', 'gsd-items-v1', 'gsd-meta-v1'], at: 'x' } })); mount(); const c = T('backup-problem');
+    expect(c.textContent).toContain('so it was left exactly as it was: General Site Defects (list of sites, list of defects, audit details). The photos were kept'); expect(c.textContent.split('General Site Defects').length - 1).toBe(1);
+  });
+  it('the recorded problem: one module with one part keeps "RCD Testing, list of sites"', async () => {
+    rawSetItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo: null, problem: { keys: ['rcd-projects-v6'], at: 'x' } })); mount(); expect(T('backup-problem').textContent).toContain('so it was left exactly as it was: RCD Testing, list of sites. The photos were kept');
+  });
+});
+
+describe('a rollback: the instruction is said ONCE on the screen, by the note at the top', () => {
+  it('after a restore that cannot be put back: the recorded-problem card (top of Backup & Data) carries "Make a backup now and contact support, quoting this message."; the result card only points to it', async () => {
+    const file = await backupOf(seedSourceFull); let rec = null;
+    const d = deps({ problem: () => rec, restore: async () => { rec = { keys: ['rcd-projects-v6', 'gsd-items-v1'], at: 'x' }; return { ok: false, code: 'rollback', message: 'technical text, never shown' }; } });
+    const { user } = mount(d); await upload(user, file); await screen.findByTestId('backup-summary'); await user.click(T('backup-restore')); await user.click(T('backup-restore-confirm-yes'));
+    const result = await screen.findByTestId('backup-result-err'); const problem = await screen.findByTestId('backup-problem');
+    expect(result.textContent).toBe("The restore did not finishOne part of this phone's saved data could not be read, so it was left as it was. The note at the top of this screen says what to do next.");
+    expect(problem.textContent).toContain('Next step: Make a backup now and contact support, quoting this message.');
+    expect(text().split('Make a backup now and contact support, quoting this message.').length - 1).toBe(1);        // once on the whole screen
+    expect(problem.compareDocumentPosition(result) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();                // the note really IS above the result card, as the words say
+    expect(text()).not.toMatch(/below/);
   });
 });

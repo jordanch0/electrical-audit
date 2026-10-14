@@ -163,7 +163,7 @@ describe('the Delete all data block on the Data tab', () => {
   });
   it('tapping it asks first (the module-style two-step, with what goes, the last backup and what happens next); No keeps everything and writes nothing', async () => {
     const { user, reload } = mountSettings(); await dataTab(user); await user.click(screen.getByTestId('erase-open')); const box = screen.getByTestId('erase-confirm');
-    expect(box.textContent).toContain("Delete everything on this phone? This erases your sites, results, photos and business details and cannot be undone. A backup does not include business details, the company logo or lists, so note them down first. Last backup: never. The app restarts when it is done.");
+    expect(box.textContent).toContain("Delete everything on this phone? This erases all your data and cannot be undone. A backup does not include your business details, company logo or lists, so note them down first. Last backup: never. The app restarts when it is done.");
     expect(within(box).getByText('Yes, delete everything')).toBeInTheDocument(); expect(localStorage.getItem(ERASE_KEY)).toBeNull();
     await user.click(screen.getByTestId('erase-confirm-no')); expect(screen.queryByTestId('erase-confirm')).toBeNull(); expect(localStorage.getItem(ERASE_KEY)).toBeNull(); expect(reload).not.toHaveBeenCalled(); expect(screen.getByTestId('erase-open')).toBeInTheDocument();
   });
@@ -208,7 +208,7 @@ describe('the Settings-only screen (an erase is unfinished)', () => {
   });
   it('after an attempt ran out of time: the approved words, the button works through the same two-step, and the attempt count is kept', async () => {
     marker(1); eraseSet('retry'); const user = userEvent.setup(); const reload = vi.fn(); render(<GlobalSettingsView onGoHome={() => {}} backupDeps={{ reload, eraseBegin: () => eraseBegin(S, NOW) }} />);
-    const card = screen.getByTestId('erase-retry'); expect(card.getAttribute('role')).toBe('alert'); expect(card.textContent).toContain("A previous erase didn't finish. Tap Delete all data to finish."); expect(card.textContent).toContain('Some of your data may still be on this phone. Tap Delete all data to finish clearing it. The modules stay closed until it is cleared, so nothing is half cleared.');
+    const card = screen.getByTestId('erase-retry'); expect(card.getAttribute('role')).toBe('alert'); expect(card.textContent.startsWith("A previous erase did not finish.Some of your data")).toBe(true); expect(card.textContent).toContain('Some of your data may still be on this phone. Tap Delete all data to finish clearing it. The modules stay closed until it is cleared, so nothing is half cleared.');
     await user.click(screen.getByTestId('erase-open')); await user.click(screen.getByTestId('erase-confirm-yes')); expect(reload).toHaveBeenCalled(); expect(eraseMarker(S).attempts).toBe(1);
   });
   it('the whole app (not only Settings) shows this screen: no module tile, no Modules pill; with no unfinished erase the same app shows the module grid (negative control)', async () => {

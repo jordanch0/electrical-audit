@@ -49,8 +49,8 @@ describe('Delete all data through the real main.jsx', () => {
     fakeTimers(['setTimeout', 'clearTimeout']); await boot(); await vi.advanceTimersByTimeAsync(2100); await vi.waitFor(() => expect(document.body.textContent).toContain('Finishing the erase…'));
     // jsdom has no navigator.storage, so the stored size is unknown: the step limit is the 500 MB figure, 18 ms x 500 = 9000 ms (inside the 5 s to 30 s band). The step started at about t = 0. (vi.waitFor itself moves the fake clock on a little, so the lower bound keeps a 900 ms margin; the exact 9000 ms is pinned in backup-erase.test.jsx.)
     await vi.advanceTimersByTimeAsync(6000);                                             // t = 8100 ms (nominal), before the limit: still working
-    expect(document.body.textContent).toContain('Finishing the erase…'); expect(document.body.textContent).not.toContain("A previous erase didn't finish.");
+    expect(document.body.textContent).toContain('Finishing the erase…'); expect(document.body.textContent).not.toContain("A previous erase did not finish.");
     await vi.advanceTimersByTimeAsync(1100);                                             // t = 9200 ms (nominal), past the limit
-    await vi.waitFor(() => expect(document.body.textContent).toContain("A previous erase didn't finish. Tap Delete all data to finish.")); expect(document.body.textContent).not.toContain('RCD TESTING');
+    await vi.waitFor(() => expect(document.body.textContent).toContain("A previous erase did not finish.")); expect(document.body.textContent).toContain('Tap Delete all data to finish clearing it.'); expect(document.body.textContent).not.toContain('RCD TESTING');
   });
 });

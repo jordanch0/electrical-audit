@@ -10536,11 +10536,11 @@ function BackupRestoreSection({ gate, deps }) {
     const first = [bsHeading("Delete all data")];
     if (er.mode === "working") return [...first, bsCard("info", "Finishing the erase…", "SparkCheck is clearing the last of your data. This can take a moment. The app opens by itself when it is done.", "erase-working"), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
     if (del.phase === "starting") return [...first, bsBusyRow("Deleting… the app restarts by itself.", "Keep this screen open."), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
-    const lead = er.mode === "retry" ? [bsCard("err", "A previous erase didn't finish. Tap Delete all data to finish.", "Some of your data may still be on this phone. Tap Delete all data to finish clearing it. The modules stay closed until it is cleared, so nothing is half cleared.", "erase-retry")]
+    const lead = er.mode === "retry" ? [bsCard("err", "A previous erase did not finish.", "Some of your data may still be on this phone. Tap Delete all data to finish clearing it. The modules stay closed until it is cleared, so nothing is half cleared.", "erase-retry")]
       : leftover ? [bsCard("warn", "Some photo storage could not be cleared.", "All your sites and results are gone. Some old photos are still taking up space and the app cannot see them. Tap Delete all data to try again, or leave it: nothing else is affected.", "erase-leftover")]
       : [bsHelp(S1_PARAS.erase, 10)];
     const fail = del.phase === "failed" ? [bsCard("err", "The delete could not be started", "Nothing was deleted. Please try again.", "erase-failed")] : [];
-    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases your sites, results, photos and business details and cannot be undone. A backup does not include business details, the company logo or lists, so note them down first. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
+    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases all your data and cannot be undone. A backup does not include your business details, company logo or lists, so note them down first. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
     return [...first, ...lead, ...fail, bsBtn("Delete all data…", () => setDel({ phase: "confirming" }), { kind: "secondary", id: "erase-open", disabled: busy })];
   };
 
@@ -10548,11 +10548,11 @@ function BackupRestoreSection({ gate, deps }) {
   const make1 = (label, o = {}) => bsBtn(label, () => make(photos), { id: "backup-make", disabled: busy || o.disabled, kind: o.kind });
   const backUp = () => {
     if (bk.phase === "measuring") return [bsBusyRow("Checking the size…"), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
-    if (bk.phase === "building") return [bsBusyRow("Making your backup, about " + backupMbText(bk.bytes) + ". Keep this screen open."), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
+    if (bk.phase === "building") return [bsBusyRow("Making your backup, " + backupAboutMb(bk.bytes) + ". Keep this screen open."), bsBtn("Make backup", null, { id: "backup-make", disabled: true })];
     if (bk.phase === "unusable") return [bsCard("err", "The backup could not be used", "SparkCheck checked this backup and found it cannot be restored, so it was not offered. Nothing on this phone was changed. Please try again, or contact support if it keeps happening."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
     if (bk.phase === "failed") return [bsCard("err", "The backup could not be made", "Nothing was changed. Please try again."), bsBtn("Try again", () => { setBk({ phase: "idle" }); }, { id: "backup-retry", disabled: busy })];
     if (bk.phase === "large") return [bsCard("warn", "This is a large backup", backupLargeWarning(bk.bytes, { includesPhotos: bk.withPhotos }), "backup-card-large"),
-      bk.withPhotos ? React.createElement("div", { key: "lg", style: { display: "flex", flexDirection: "column", gap: 8 } }, bsBtn("Make it without photos" + (bk.smallBytes ? " (about " + backupMbText(bk.smallBytes) + ")" : ""), () => { setPhotos(false); make(false, true); }, { id: "backup-make-small" }), bsBtn("Continue with photos (" + backupMbText(bk.bytes) + ")", () => build(true, bk.bytes), { kind: "secondary", id: "backup-make-big" }))
+      bk.withPhotos ? React.createElement("div", { key: "lg", style: { display: "flex", flexDirection: "column", gap: 8 } }, bsBtn("Make it without photos" + (bk.smallBytes ? " (" + backupAboutMb(bk.smallBytes) + ")" : ""), () => { setPhotos(false); make(false, true); }, { id: "backup-make-small" }), bsBtn("Continue with photos (" + backupMbText(bk.bytes) + ")", () => build(true, bk.bytes), { kind: "secondary", id: "backup-make-big" }))
         : bsBtn("Make backup", () => build(false, bk.bytes), { id: "backup-make-big" })];
     if (bk.phase === "ready") return [bsCard("ok", "Backup ready, " + backupMbText(bk.bytes), [bk.filename, React.createElement("br", { key: "b" }), React.createElement("b", { key: "n" }, "Not saved yet"), ". Tap ", React.createElement("b", { key: "s" }, "Share backup"), ", then choose ", React.createElement("b", { key: "f" }, "Save to Files"), " or another location."], "backup-card-ready"),
       React.createElement("div", { key: "rd", style: { display: "flex", flexDirection: "column", gap: 2 } }, bsBtn("Share backup", share, { id: "backup-share", icon: "share" }), bsLink("Discard this backup", discard, "backup-discard"))];
@@ -16965,16 +16965,28 @@ function backupKeyLabel(key) {
   if (/^app-settings-v\d+$/.test(k)) return "Business details (Global Settings)";
   return "other saved data";
 }
-// Several keys in one sentence: each label once, "A", "A and B", "A, B and C", at most 4 named then "and N more".
+// Several keys in one sentence, grouped by module so a module's name is said once: one label as it is ("RCD Testing, list of sites"); several: "General Site Defects (list of sites, list of defects, audit details)", "RCD Testing (list of sites) and IEL Testing (test results)";
+// labels that belong to no module (Calendar events, Business details, the app's own notes, "other saved data") stand alone; each label once, at most 4 named then "and N more".
 function backupKeysLabel(keys) {
   const labels = [...new Set((Array.isArray(keys) ? keys : []).map(backupKeyLabel))]; if (!labels.length) return "";
-  const shown = labels.slice(0, 4), more = labels.length - shown.length; if (more > 0) return shown.join(", ") + " and " + more + " more";
+  if (labels.length === 1) return labels[0];
+  const mods = Object.values(BACKUP_MODULE_INFO).map(i => i.label), order = [], parts = new Map();
+  for (const l of labels) {
+    const at = l.indexOf(", "), mod = at > 0 && mods.includes(l.slice(0, at)) ? l.slice(0, at) : null;
+    if (!mod) { order.push(l); continue; }
+    if (!parts.has(mod)) { parts.set(mod, []); order.push(mod); }
+    parts.get(mod).push(l.slice(at + 2));
+  }
+  const items = order.map(o => parts.has(o) ? o + " (" + parts.get(o).join(", ") + ")" : o);
+  const shown = items.slice(0, 4), more = items.length - shown.length; if (more > 0) return shown.join(", ") + " and " + more + " more";
   return shown.length === 1 ? shown[0] : shown.slice(0, -1).join(", ") + " and " + shown[shown.length - 1];
 }
 // ── The words of the Restore screen. Everything here is PURE (a plan or a code in, text out) so a test can check every sentence. Rules: lists are capped at 10 lines per group with "and N more"; every TOTAL is exact whatever is
 // shown; no internal key name, file name or technical word ever appears (the engine's own technical messages stay in the code and go to the log).
 const BACKUP_LIST_CAP = 10;
 const backupMbText = b => !(b > 0) ? "0 MB" : b < 1048576 ? "under 1 MB" : (b / 1048576 < 10 ? (b / 1048576).toFixed(1) : String(Math.round(b / 1048576))) + " MB";
+// "about" only before a number: "about 40 MB", never "about under 1 MB".
+const backupAboutMb = b => { const t = backupMbText(b); return /^[0-9]/.test(t) ? "about " + t : t; };
 const backupJoinWords = a => a.length <= 1 ? (a[0] || "") : a.slice(0, -1).join(", ") + " and " + a[a.length - 1];
 const backupCap = items => items.length <= BACKUP_LIST_CAP ? { lines: items, more: 0 } : { lines: items.slice(0, BACKUP_LIST_CAP), more: items.length - BACKUP_LIST_CAP };
 // plan -> { title, groups: [{ id, mark, heading, summary, lines, more }], notes: [], canRestore }. A group with nothing in it is left out.
@@ -17010,7 +17022,7 @@ function backupSummaryText(plan) {
 function backupMessageText(code, plan) {
   const bad = "This file cannot be restored", unfinished = "A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.";
   switch (code) {
-    case "not-a-backup": case "wrong-format": return { title: bad, body: "This is not a SparkCheck backup file." };
+    case "not-a-backup": case "wrong-format": return { title: bad, body: "This is not a SparkCheck backup file, or it is incomplete." };
     case "damaged": return { title: bad, body: "This backup file is damaged." };
     case "invalid": return { title: bad, body: "This backup file is not complete." };
     case "newer-version": return { title: bad, body: "This backup was made by a newer version of SparkCheck. Update the app, then try again." };
@@ -17021,7 +17033,7 @@ function backupMessageText(code, plan) {
     case "shape": return { title: "The restore did not start", body: "Something on this phone is not in the form the restore expects, so nothing was added. Nothing was changed." };
     case "journal": return { title: "Not enough room to start", body: "There is not enough room on this phone to start the restore. Free up some space, then try again. Nothing was changed." };
     case "failed": return { title: "The restore did not finish", body: "Everything was put back exactly as it was." };
-    case "rollback": return { title: "The restore did not finish", body: "One part of this phone's saved data could not be read, so it was left as it was. Make a backup now and contact support, quoting this message." };
+    case "rollback": return { title: "The restore did not finish", body: "One part of this phone's saved data could not be read, so it was left as it was. The note at the top of this screen says what to do next." };
     case "none": return { title: "Nothing to undo", body: "There is no restore to undo." };
     case "expired": return { title: "Undo is no longer available", body: "The undo period for the last restore has ended." };
     case "undo-failed": return { title: "The undo did not finish", body: "The undo could not be completed. Nothing was changed." };
