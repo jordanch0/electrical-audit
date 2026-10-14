@@ -7,7 +7,7 @@ const MODULE_NAME = { rcd: 'RCD Testing', iel: 'IEL Testing', tat: 'Test & Tag',
 const KIND_WORDS = { projects: 'list of sites', results: 'test results', items: 'list of defects', meta: 'audit details', history: 'History', dropdowns: 'dropdown lists', 'audit-active': 'audit in progress', 'photos-migrated': 'photo storage note' };
 const KINDS = Object.keys(KIND_WORDS);
 const SPECIAL = { 'rcd-mode-v6': 'RCD Testing, last test mode', 'iel-cat-v2': 'IEL Testing, last category', 'tat-settings-v1': 'Test & Tag, equipment types', 'tat-freqs-v1': 'Test & Tag, test frequencies', 'tat-names-v1': 'Test & Tag, appliance names', 'tat-defaults-v1': 'Test & Tag, default settings',
-  'cal-events-v1': 'Calendar events', 'app-settings-v1': 'Business details (Global Settings)', 'sparkcheck-restore-v1': 'Restore record', 'sparkcheck-last-backup-v1': 'Last backup note', 'sparkcheck-leftover-v1': 'Erase leftover note', 'sparkcheck-erase-pending-v1': 'Erase in progress note' };
+  'cal-events-v1': 'Calendar events', 'app-settings-v1': 'Business tab', 'sparkcheck-restore-v1': 'Restore record', 'sparkcheck-last-backup-v1': 'Last backup note', 'sparkcheck-leftover-v1': 'Erase leftover note', 'sparkcheck-erase-pending-v1': 'Erase in progress note' };
 const KEY_SYNTAX = /-v\d|preMigration|\.json|projects|audit-active|photos-migrated|dropdowns|[_]|sparkcheck-|-(results|meta|history|items|mode|cat|events|settings|freqs|names|defaults)\b/;
 
 describe('every key the restore can name', () => {
@@ -74,7 +74,7 @@ describe('several keys grouped by module: a module name is said once', () => {
     expect(backupKeysLabel(['gsd-projects-v1', 'gsd-items-v1', 'gsd-meta-v1', 'gsd-results-v1', 'gsd-history-v1'])).toBe('General Site Defects (list of sites, list of defects, audit details, test results, History)');
     expect(backupKeysLabel(['rcd-projects-v6', 'iel-results-v2', 'swb-meta-v1', 'elt-history-v2', 'gsd-items-v1'])).toBe('RCD Testing (list of sites), IEL Testing (test results), Switchboard (audit details), Emergency Lighting (History) and 1 more');
   });
-  it('the Test & Tag words and the business details keep their own labels inside the grouping', () => {
-    expect(backupKeysLabel(['tat-settings-v1', 'tat-freqs-v1'])).toBe('Test & Tag (equipment types, test frequencies)'); expect(backupKeysLabel(['app-settings-v1', 'tat-names-v1'])).toBe('Business details (Global Settings) and Test & Tag (appliance names)');
+  it('the Test & Tag words and the Business tab keep their own labels inside the grouping', () => {
+    expect(backupKeysLabel(['tat-settings-v1', 'tat-freqs-v1'])).toBe('Test & Tag (equipment types, test frequencies)'); expect(backupKeysLabel(['app-settings-v1', 'tat-names-v1'])).toBe('Business tab and Test & Tag (appliance names)');
   });
 });

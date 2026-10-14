@@ -10531,7 +10531,7 @@ function BackupRestoreSection({ gate, deps }) {
     gate.current.busy = true; setDel({ phase: "starting" }); d.reload();
   };
   const leftover = er.mode === "none" ? (d.leftover ? d.leftover() : eraseLeftover()) : null;
-  const S1_PARAS = { erase: [React.createElement("span", { key: "s1", "data-testid": "erase-caption" }, "Removes everything SparkCheck keeps on this phone, including your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed.")] };      // S1: what the delete removes, and what a backup can and cannot bring back (the restore never reads business details, the company logo, dropdown lists, TAT lists, rcd-mode or iel-cat)
+  const S1_PARAS = { erase: [React.createElement("span", { key: "s1", "data-testid": "erase-caption" }, "Removes everything SparkCheck keeps on this phone, including what is saved in the Business tab (name, ABN and licence), the company logo, and the lists and settings in each module. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed.")] };      // S1: what the delete removes. The backup FILE holds all of it (the Business tab record, the company logo, every module's lists and settings); a RESTORE never reads it back (see the list in backupPlan's header and the test 'what a restore brings back after Delete all data')
   const deleteBlock = () => {
     const first = [bsHeading("Delete all data")];
     if (er.mode === "working") return [...first, bsCard("info", "Finishing the erase…", "SparkCheck is clearing the last of your data. This can take a moment. The app opens by itself when it is done.", "erase-working"), bsBtn("Delete all data…", null, { kind: "secondary", id: "erase-open", disabled: true })];
@@ -10540,7 +10540,7 @@ function BackupRestoreSection({ gate, deps }) {
       : leftover ? [bsCard("warn", "Some photo storage could not be cleared.", "All your sites and results are gone. Some old photos are still taking up space and the app cannot see them. Tap Delete all data to try again, or leave it: nothing else is affected.", "erase-leftover")]
       : [bsHelp(S1_PARAS.erase, 10)];
     const fail = del.phase === "failed" ? [bsCard("err", "The delete could not be started", "Nothing was deleted. Please try again.", "erase-failed")] : [];
-    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases all your data and cannot be undone. A backup does not include your business details, company logo or lists, so note them down first. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
+    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases all your data and cannot be undone. A restore does not bring back what is saved in the Business tab (name, ABN and licence), the company logo, or the lists and settings in each module, so note them down first. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
     return [...first, ...lead, ...fail, bsBtn("Delete all data…", () => setDel({ phase: "confirming" }), { kind: "secondary", id: "erase-open", disabled: busy })];
   };
 
@@ -10557,7 +10557,7 @@ function BackupRestoreSection({ gate, deps }) {
     if (bk.phase === "ready") return [bsCard("ok", "Backup ready, " + backupMbText(bk.bytes), [bk.filename, React.createElement("br", { key: "b" }), React.createElement("b", { key: "n" }, "Not saved yet"), ". Tap ", React.createElement("b", { key: "s" }, "Share backup"), ", then choose ", React.createElement("b", { key: "f" }, "Save to Files"), " or another location."], "backup-card-ready"),
       React.createElement("div", { key: "rd", style: { display: "flex", flexDirection: "column", gap: 2 } }, bsBtn("Share backup", share, { id: "backup-share", icon: "share" }), bsLink("Discard this backup", discard, "backup-discard"))];
     return [React.createElement("label", { key: "cb", style: { display: "flex", alignItems: "center", gap: 10, minHeight: 44, fontSize: 13, color: BACKUP_UI.ink } }, React.createElement("input", { type: "checkbox", checked: photos, disabled: busy, "data-testid": "backup-photos", onChange: e => setPhotos(e.target.checked), style: { width: 22, height: 22, margin: 0, accentColor: BACKUP_UI.slate } }), photos ? "Include photos (the file is larger)" : "Include photos"),
-      make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Creates one file. Then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it. The file includes client names, your ABN and photos, so store it somewhere safe."], 0, 8)];
+      make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Creates one file. Then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it. The file includes client names, ABNs, licence numbers, logos and photos, so store it somewhere safe."], 0, 8)];
   };
   const noteCards = () => notes.map((n, i) => React.createElement(React.Fragment, { key: "note" + i }, bsCard(n.kind, n.title, n.body, "backup-note-" + n.kind)));
   const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : "Nothing was added.", r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null,
@@ -10567,7 +10567,7 @@ function BackupRestoreSection({ gate, deps }) {
     const out = [bsHeading("Restore")];
     const choose = (label, disabled) => bsBtn(label, () => fileInput.current && fileInput.current.click(), { kind: "secondary", id: "backup-choose", disabled: disabled || busy });
     const input = React.createElement("input", { key: "fi", ref: fileInput, type: "file", accept: ".zip,application/zip,application/x-zip-compressed", "data-testid": "backup-file-input", "aria-label": "Choose backup file", style: { display: "none" }, onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pick(f); } });
-    if (rs.phase === "idle") out.push(bsHelp("Adds anything in a backup file that is not already on this phone.", 10), choose("Choose backup file…"));
+    if (rs.phase === "idle") out.push(bsHelp("Adds the sites, results, History, calendar events, photos and site logos in a backup file that are not already on this phone.", 10), choose("Choose backup file…"));
     else if (rs.phase === "checking") out.push(bsBusyRow("Checking the file…"), choose("Choose backup file…", true));
     else if (rs.phase === "summary" || rs.phase === "confirming") {
       out.push(bsSummaryCard(rs.text));
@@ -16778,7 +16778,7 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
   const hook = (stage, i) => crashAt ? crashAt(stage, i) : undefined;      // the test seam; with none, the localStorage writes below never yield
   const progress = backupProgressNotifier(onProgress);
   const plan = await backupPlan(file, { storage, inspected, estimate }); if (!plan.ok) return plan;
-  if (plan.nothingToAdd) return { ok: false, code: "nothing", message: "Everything in this backup is already on this phone, so there is nothing to add.", plan };
+  if (plan.nothingToAdd) return { ok: false, code: "nothing", message: "The sites, History and calendar events in this backup are already on this phone, so there is nothing to add.", plan };
   if (!plan.canRestore) return { ok: false, code: "headroom", message: plan.headroom.message, plan };
   let prev = backupReadRecord(storage);
   if (prev && prev.journal) { backupRecoverAtStart(storage); try { await backupFinishRecovery(storage); } catch (_) {} prev = backupReadRecord(storage); }      // an earlier interrupted restore is finished first
@@ -16962,11 +16962,11 @@ function backupKeyLabel(key) {
   m = /^tat-(settings|freqs|names|defaults)-v\d+$/.exec(k);
   if (m) return BACKUP_MODULE_INFO.tat.label + ", " + { settings: "equipment types", freqs: "test frequencies", names: "appliance names", defaults: "default settings" }[m[1]];
   if (/^cal-events-v\d+$/.test(k)) return "Calendar events";
-  if (/^app-settings-v\d+$/.test(k)) return "Business details (Global Settings)";
+  if (/^app-settings-v\d+$/.test(k)) return "Business tab";
   return "other saved data";
 }
 // Several keys in one sentence, grouped by module so a module's name is said once: one label as it is ("RCD Testing, list of sites"); several: "General Site Defects (list of sites, list of defects, audit details)", "RCD Testing (list of sites) and IEL Testing (test results)";
-// labels that belong to no module (Calendar events, Business details, the app's own notes, "other saved data") stand alone; each label once, at most 4 named then "and N more".
+// labels that belong to no module (Calendar events, Business tab, the app's own notes, "other saved data") stand alone; each label once, at most 4 named then "and N more".
 function backupKeysLabel(keys) {
   const labels = [...new Set((Array.isArray(keys) ? keys : []).map(backupKeyLabel))]; if (!labels.length) return "";
   if (labels.length === 1) return labels[0];
@@ -17026,7 +17026,7 @@ function backupMessageText(code, plan) {
     case "damaged": return { title: bad, body: "This backup file is damaged." };
     case "invalid": return { title: bad, body: "This backup file is not complete." };
     case "newer-version": return { title: bad, body: "This backup was made by a newer version of SparkCheck. Update the app, then try again." };
-    case "nothing": return { title: "Nothing to add", body: "Everything in this backup is already on this phone." };
+    case "nothing": return { title: "Nothing to add", body: "The sites, History and calendar events in this backup are already on this phone." };
     case "headroom": { const h = plan && plan.headroom; if (h && h.storage && h.storage.known && !h.storage.ok) return { title: "Not enough room", body: "There is not enough free space for the photos. About " + backupMbText(h.storage.needBytes) + " is needed and " + backupMbText(Math.max(0, h.storage.quota - h.storage.usage)) + " is free. Free up some space, then try again. Nothing was changed." };
       return { title: "Not enough room", body: "There is not enough room in this phone's saved data for this restore. Free up some space by deleting sites, History or calendar events you no longer need, then try again. Nothing was changed." }; }
     case "unfinished": return { title: "A restore is still being put right", body: unfinished };

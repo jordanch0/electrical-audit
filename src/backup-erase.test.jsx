@@ -7,7 +7,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor, within, configure, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppRoot, { GlobalSettingsView, BACKUP_UI, backupBuild, backupRestore, backupKeyAllowed, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS, RESTORE_KEY, BACKUP_LAST_KEY } from './App.jsx';
+import AppRoot, { GlobalSettingsView, BACKUP_UI, BACKUP_MODULES, zipOpen, backupBuild, backupRestore, backupMessageText, backupKeyAllowed, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS, RESTORE_KEY, BACKUP_LAST_KEY } from './App.jsx';
 import { idbSnapshot, lsSnapshot, seedPhone, wipe, seedSourceFull, withDb } from './test/backup-fixtures.js';
 
 vi.setConfig({ testTimeout: 30000 });
@@ -157,13 +157,13 @@ const sec = () => screen.getByTestId('backup-section');
 describe('the Delete all data block on the Data tab', () => {
   it('is the last block of the section, after Undo, with the heading, the plain intro and a 44 px Delete all data… button; no window.confirm / alert', async () => {
     const spy = vi.spyOn(window, 'confirm'); const { user } = mountSettings(); await dataTab(user);
-    expect(within(sec()).getByText('Delete all data')).toBeInTheDocument(); expect(screen.getByTestId('erase-caption').textContent).toBe("Removes everything SparkCheck keeps on this phone, including your business details, company logo, dropdown lists and TAT lists. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed."); expect(screen.queryByTestId('erase-restore-note')).toBeNull();      // ONE caption now: what goes, that it cannot be undone, that saved files stay, what a backup does not include (pinned whole, with toBe)
+    expect(within(sec()).getByText('Delete all data')).toBeInTheDocument(); expect(screen.getByTestId('erase-caption').textContent).toBe("Removes everything SparkCheck keeps on this phone, including what is saved in the Business tab (name, ABN and licence), the company logo, and the lists and settings in each module. It cannot be undone. Files you saved, such as backups and Excel exports, are not removed."); expect(screen.queryByTestId('erase-restore-note')).toBeNull();      // ONE caption now: what goes, that it cannot be undone, that saved files stay, what a backup does not include (pinned whole, with toBe)
     const b = screen.getByTestId('erase-open'); expect(b.textContent).toBe('Delete all data…'); expect(b.style.minHeight).toBe('44px'); expect(sec().lastElementChild.contains(b)).toBe(true); expect(spy).not.toHaveBeenCalled();
     const heads = Array.from(sec().querySelectorAll('div')).filter(e => e.textContent === 'Delete all data' || e.textContent === 'Back up' || e.textContent === 'Restore'); expect(heads[heads.length - 1].textContent).toBe('Delete all data');
   });
   it('tapping it asks first (the module-style two-step, with what goes, the last backup and what happens next); No keeps everything and writes nothing', async () => {
     const { user, reload } = mountSettings(); await dataTab(user); await user.click(screen.getByTestId('erase-open')); const box = screen.getByTestId('erase-confirm');
-    expect(box.textContent).toContain("Delete everything on this phone? This erases all your data and cannot be undone. A backup does not include your business details, company logo or lists, so note them down first. Last backup: never. The app restarts when it is done.");
+    expect(box.textContent).toContain("Delete everything on this phone? This erases all your data and cannot be undone. A restore does not bring back what is saved in the Business tab (name, ABN and licence), the company logo, or the lists and settings in each module, so note them down first. Last backup: never. The app restarts when it is done.");
     expect(within(box).getByText('Yes, delete everything')).toBeInTheDocument(); expect(localStorage.getItem(ERASE_KEY)).toBeNull();
     await user.click(screen.getByTestId('erase-confirm-no')); expect(screen.queryByTestId('erase-confirm')).toBeNull(); expect(localStorage.getItem(ERASE_KEY)).toBeNull(); expect(reload).not.toHaveBeenCalled(); expect(screen.getByTestId('erase-open')).toBeInTheDocument();
   });
@@ -223,22 +223,80 @@ describe('the Settings-only screen (an erase is unfinished)', () => {
   });
 });
 
-// The Delete question says a backup does not include business details, the company logo or lists (the dropdown lists and the TAT lists). This proves that against the real engines: seed a full phone, back it up, delete everything (the real startup erase), restore the backup.
+// WHAT DELETE ALL DATA REMOVES THAT A RESTORE DOES NOT BRING BACK (2026-10, release m). The Delete caption and the Delete question name it in three phrases that cover every module without naming one: what is saved in the Business tab
+// (name, ABN, licence), the company logo, and the lists and settings in each module. The backup FILE holds all of it (data.json and files/app-logo); only a RESTORE leaves it out. This proves the words against the real engines, and it
+// FAILS when a storage key (or class of key) is added that is not classified here, so a new list cannot be added without the words and this test being brought into line.
+//   restored        = the restore adds it back (sites, results, audit details, History, audit in progress, calendar events; photos and site logos live in IndexedDB)
+//   business        = app-settings-v1 (the Business tab record); with the company logo (IndexedDB 'sparkcheck-app-settings') it is what the words call "what is saved in the Business tab" and "the company logo"
+//   lists-settings  = every module's dropdown lists, the Test & Tag lists and defaults, rcd-mode, iel-cat: "the lists and settings in each module"
+//   internal        = the app's own notes (photo-migration markers, copies kept before an update, the restore record, the last-backup note, the erase notes): nothing a person typed, so the words do not name them
+const KEY_CLASS = k => {
+  const mods = BACKUP_MODULES.join('|');
+  if (new RegExp('^(?:' + mods + ')-(?:projects|results|meta|history|items|audit-active)-v\\d+$').test(k) || /^cal-events-v\d+$/.test(k)) return 'restored';
+  if (/^app-settings-v\d+$/.test(k)) return 'business';
+  if (new RegExp('^(?:' + mods + ')-dropdowns-v\\d+$').test(k) || /^tat-(?:settings|freqs|names|defaults)-v\d+$/.test(k) || /^(?:rcd-mode|iel-cat)-v\d+$/.test(k)) return 'lists-settings';
+  if (new RegExp('^(?:' + mods + ')-photos-migrated-v\\d+$').test(k) || /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY].includes(k)) return 'internal';
+  return null;
+};
+const NOT_IN_FILE = k => /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY].includes(k);       // the app's own bookkeeping is deliberately not written into a backup
+const NOT_RESTORED_CLASSES = ['business', 'logo', 'lists-settings'];                                                                       // what a restore leaves out that a person typed or chose ('logo' = the IndexedDB company logo)
+const WORDS = { business: 'what is saved in the Business tab (name, ABN and licence)', logo: 'the company logo', 'lists-settings': 'the lists and settings in each module' };
+// every key the app source can name, the module x role names the key pattern accepts, and the copies kept before an update
+const candidateKeys = () => {
+  const src = fs.readFileSync(process.cwd() + '/src/App.jsx', 'utf8'), found = new Set();
+  for (const m of src.matchAll(/["'`]([a-z][a-z0-9-]*-v\d+)["'`]/g)) found.add(m[1]);
+  const line = src.split('\n').find(l => l.startsWith('const BACKUP_KEY_RE')); expect(line).toBeTruthy();
+  const roles = /\)-\(\?:([a-z|-]+)\)-v/.exec(line)[1].split('|'), tat = /tat-\(\?:([a-z|]+)\)-v/.exec(line)[1].split('|');
+  for (const m of BACKUP_MODULES) { for (const r of roles) found.add(m + '-' + r + '-v1'); for (const r of ['results', 'history']) found.add(m + '-' + r + '-preMigration-v1'); }
+  for (const t of tat) found.add('tat-' + t + '-v1');
+  for (const m of line.matchAll(/\|([a-z]+(?:-[a-z]+)*)-v\\\\d\+/g)) found.add(m[1] + '-v1');
+  return [...found].sort();
+};
 describe('what a restore brings back after Delete all data (the wording is true)', () => {
-  it('sites, results, History, calendar events, photos and site logos come back; business details, the company logo, every dropdown list, the TAT lists, rcd-mode and iel-cat do NOT', async () => {
-    await seedSourceFull(); rawSetItem('tat-names-v1', '{"x":"y"}'); rawSetItem('tat-defaults-v1', '{"d":1}'); rawSetItem('tat-settings-v1', '{"s":1}'); rawSetItem('iel-cat-v2', '"cat"'); rawSetItem('rcd-mode-v6', '"mode"'); rawSetItem('iel-dropdowns-v1', '{"a":["b"]}'); rawSetItem('gsd-dropdowns-v1', '{"a":["b"]}');
-    const NOT_RESTORED = ['app-settings-v1', 'rcd-dropdowns-v6', 'iel-dropdowns-v1', 'gsd-dropdowns-v1', 'tat-freqs-v1', 'tat-names-v1', 'tat-defaults-v1', 'tat-settings-v1', 'rcd-mode-v6', 'iel-cat-v2'];
-    for (const k of NOT_RESTORED) expect(localStorage.getItem(k), k).not.toBeNull();                                      // they ARE on the phone before the delete
-    const before = lsSnapshot(), beforeIdb = await idbSnapshot(); expect(beforeIdb['sparkcheck-app-settings'].logo).toBeTruthy();   // the company logo is there too
-    const { blob } = await backupBuild({ now: NOW, storage: S }); const fileText = new TextDecoder().decode(new Uint8Array(await blob.arrayBuffer())); for (const k of NOT_RESTORED) expect(fileText, k + " is inside the backup file").toContain('"' + k + '"');      // so the point is that a RESTORE does not apply them, not that the file lacks them
-    marker(0); await eraseStartup({ storage: S });
-    expect(OWNED_LEFT()).toEqual([]); expect(await idbCount()).toBe(0);                                                  // everything is gone
+  it('every storage key the app can hold is classified here (a new list or setting fails until it is), and the delete list covers all of them', () => {
+    const keys = candidateKeys(); expect(keys.length).toBeGreaterThan(70);
+    expect(keys.filter(k => KEY_CLASS(k) === null), 'a key nobody has decided on: add it to KEY_CLASS and, if a person can see it, to the Delete words').toEqual([]);
+    expect(keys.filter(k => !(backupKeyAllowed(k) || backupKeyExcluded(k))), 'a key Delete would not remove').toEqual([]);
+    expect(keys.filter(k => KEY_CLASS(k) === 'business')).toEqual(['app-settings-v1']);
+    expect(keys.filter(k => KEY_CLASS(k) === 'lists-settings')).toEqual(expect.arrayContaining(['rcd-dropdowns-v1', 'tat-dropdowns-v1', 'tat-settings-v1', 'tat-freqs-v1', 'tat-names-v1', 'tat-defaults-v1', 'rcd-mode-v1', 'iel-cat-v1', ...BACKUP_MODULES.map(m => m + '-dropdowns-v1')]));
+  });
+  it('real engines: the file holds the Business tab record and the logo, Delete removes everything, and a restore brings back exactly the keys classified "restored" (photos and site logos too), nothing else', async () => {
+    await seedSourceFull();
+    const SEEDABLE = candidateKeys().filter(k => KEY_CLASS(k) !== 'restored' && k !== ERASE_KEY && k !== LEFTOVER_KEY), VALUE = { 'app-settings-v1': JSON.stringify({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' }), [RESTORE_KEY]: JSON.stringify({ v: 1, undo: null }), [BACKUP_LAST_KEY]: JSON.stringify({ v: 1, at: '2026-10-01T00:00:00.000Z' }) };
+    for (const k of SEEDABLE) rawSetItem(k, VALUE[k] || '{"a":["b"]}');
+    const before = lsSnapshot(), beforeIdb = await idbSnapshot(); expect(beforeIdb['sparkcheck-app-settings'].logo).toBeTruthy();
+    for (const k of SEEDABLE) expect(k in before, k + ' is on the phone before the delete').toBe(true);
+    // 1. the FILE: everything but the app's own bookkeeping is inside it, including the Business tab record (name, ABN, licence) and the company logo
+    const { blob } = await backupBuild({ now: NOW, storage: S }); const z = await zipOpen(blob), data = JSON.parse(new TextDecoder().decode(await z.bytes('data.json')));
+    for (const k of Object.keys(before)) expect(k in data, k + (NOT_IN_FILE(k) ? ' (bookkeeping) is not in the file' : ' is in the file')).toBe(!NOT_IN_FILE(k));
+    expect(JSON.parse(data['app-settings-v1'])).toEqual({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo'}); expect(z.names()).toContain('files/app-logo/0.bin');
+    // 2. Delete removes every one of them
+    marker(0); await eraseStartup({ storage: S }); expect(OWNED_LEFT()).toEqual([]); expect(await idbCount()).toBe(0);
+    // 3. the restore
     const r = await backupRestore(new File([blob], 'b.zip', { type: 'application/zip' }), { storage: S, now: NOW }); expect(r.ok).toBe(true);
     const after = lsSnapshot(), afterIdb = await idbSnapshot();
-    for (const k of NOT_RESTORED) expect(after[k], k + ' must not come back').toBeUndefined();                           // what the question says a backup does NOT include: business details (app-settings), dropdown lists, TAT lists (and the two modes, which the screen does not name)
-    expect(afterIdb['sparkcheck-app-settings']).toEqual({});                                                              // the company logo does not come back
+    for (const k of Object.keys(before)) { if (k === RESTORE_KEY) continue; expect(k in after, k + ' (' + KEY_CLASS(k) + ')').toBe(KEY_CLASS(k) === 'restored'); }       // restored <=> classified restored
+    const left = new Set(Object.keys(before).filter(k => k !== RESTORE_KEY && !(k in after)).map(KEY_CLASS)); if (Object.keys(beforeIdb['sparkcheck-app-settings']).length && !Object.keys(afterIdb['sparkcheck-app-settings']).length) left.add('logo');
+    expect([...left].filter(c => c !== 'internal').sort()).toEqual([...NOT_RESTORED_CLASSES].sort());                                          // the classes the words must name: nothing more, nothing less
+    expect(afterIdb['sparkcheck-app-settings']).toEqual({});
     for (const k of ['rcd-projects-v6', 'rcd-results-v6', 'rcd-history-v6', 'swb-projects-v1', 'gsd-projects-v1', 'cal-events-v1']) expect(after[k], k + ' must come back').toBe(before[k]);   // what the screen says IS brought back (identical text)
     expect(Object.keys(afterIdb['sparkcheck-site-photos']).sort()).toEqual(Object.keys(beforeIdb['sparkcheck-site-photos']).filter(k => k !== 'unused').sort());   // photos (the unreferenced one is not backed up)
-    expect(Object.keys(afterIdb['sparkcheck-site-logos'])).toEqual(Object.keys(beforeIdb['sparkcheck-site-logos']));                                            // the site logo comes back
+    expect(Object.keys(afterIdb['sparkcheck-gsd-photos']).sort()).toEqual(Object.keys(beforeIdb['sparkcheck-gsd-photos']).sort());
+    expect(Object.keys(afterIdb['sparkcheck-site-logos'])).toEqual(Object.keys(beforeIdb['sparkcheck-site-logos']));                              // the site logo comes back
+  });
+  it('the caption and the question name every class the restore leaves out, in the same words, and name no module', async () => {
+    const { user } = mountSettings(); await dataTab(user); const caption = screen.getByTestId('erase-caption').textContent; await user.click(screen.getByTestId('erase-open')); const question = screen.getByTestId('erase-confirm').textContent;
+    for (const c of NOT_RESTORED_CLASSES) { expect(WORDS[c], c).toBeTruthy(); expect(caption, c + ' in the caption').toContain(WORDS[c]); expect(question, c + ' in the question').toContain(WORDS[c]); }
+    expect(caption + ' ' + question).not.toMatch(/TAT|Test & Tag|RCD|IEL|Thermo|Switchboard|Emergency|Welder|Insulation|Site Defects/); expect(caption + ' ' + question).not.toMatch(/dropdown|business details|your ABN/i);   // no single module named, no other term for the same thing
+    expect(question).toContain('A restore does not bring back '); expect(question).not.toContain('A backup does not include');                            // the file DOES hold these; only the restore skips them
+  });
+  it('the Restore caption and the Nothing-to-add card name only what a restore adds: a file whose sites, results, History and events are all here is "nothing to add" even when its lists and Business tab record differ, and those stay as they are', async () => {
+    await seedSourceFull(); rawSetItem('app-settings-v1', JSON.stringify({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' })); rawSetItem('tat-names-v1', '{"from":"file"}');
+    const { blob } = await backupBuild({ now: NOW, storage: S });
+    rawSetItem('app-settings-v1', JSON.stringify({ businessName: 'Changed On This Phone' })); rawSetItem('tat-names-v1', '{"from":"phone"}'); const before = lsSnapshot();     // the same sites; a different Business tab record and list
+    const r = await backupRestore(new File([blob], 'b.zip', { type: 'application/zip' }), { storage: S, now: NOW }); expect(r.ok).toBe(false); expect(r.code).toBe('nothing'); expect(r.message).toBe('The sites, History and calendar events in this backup are already on this phone, so there is nothing to add.'); expect(lsSnapshot()).toEqual(before);
+    expect(backupMessageText('nothing').body).toBe('The sites, History and calendar events in this backup are already on this phone.');
+    const { user } = mountSettings(); await dataTab(user); const text = sec().textContent; expect(text).toContain('Adds the sites, results, History, calendar events, photos and site logos in a backup file that are not already on this phone.'); expect(text).not.toMatch(/Adds anything|Everything in this backup/);
+    expect('Adds the sites, results, History, calendar events, photos and site logos in a backup file that are not already on this phone.' + 'The sites, History and calendar events in this backup are already on this phone.').not.toMatch(/Business|logo and|company|lists|settings|dropdown/);                                                                         // neither sentence claims what a restore leaves out (site logos are the per-site ones)
   });
 });
