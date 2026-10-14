@@ -10314,7 +10314,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
         , React.createElement('div', { style: { fontFamily: "'Barlow Condensed',sans-serif", fontSize: 22, fontWeight: 600, letterSpacing: 0.5, color: "#18181b", lineHeight: 1.1, marginTop: 6 } }, "Global Settings")
         , React.createElement('div', { style: { fontSize: 12, color: "#52525b", marginTop: 2 } }, "Defaults for new sites and exports"))
       , React.createElement('div', { style: { height: 2, marginTop: 12, background: `linear-gradient(90deg, ${GS_COLOR}, transparent 70%)`, opacity: 0.5 } }))
-    , React.createElement('div', { ref: scrollRef, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 0", paddingBottom: NAV_CLEARANCE } }
+    , React.createElement('div', { ref: scrollRef, "data-gs-scroll": true, style: { flex: 1, overflowY: "auto", overflowX: "hidden", WebkitOverflowScrolling: "touch", minHeight: 0, padding: "18px 16px 0", paddingBottom: NAV_CLEARANCE } }
       , React.createElement('div', pane("company")
       , React.createElement('div', { style: { fontSize: 13, fontWeight: 700, color: "#18181b", marginBottom: 10 } }, "Business Identity")
       , field("BUSINESS NAME", businessName, setBusinessName, "Company name")
@@ -10374,9 +10374,36 @@ Object.assign(BACKUP_ICONS, {
   lock: [["rect", { x: 4, y: 11, width: 16, height: 10, rx: 2 }], ["path", { d: "M8 11V7a4 4 0 0 1 8 0v4" }]],
 });
 const bsIcon = (name, size = 16) => React.createElement("svg", { viewBox: "0 0 24 24", width: size, height: size, fill: "none", stroke: "currentColor", strokeWidth: 2.2, strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": true, style: { flexShrink: 0, marginTop: 1 } }, ...BACKUP_ICONS[name].map(([tag, props], i) => React.createElement(tag, { key: i, ...props })));
+// A message that appears or expands in Global Settings (a card, a two-step question, a progress row) is scrolled into view when it is hidden, and clear of the floating bottom pill. Same pattern as the Switchboard / GSD
+// reveal (scrollIntoView after two animation frames, guarded by typeof). Only a message that was NOT on screen at the last render counts, so nothing scrolls on first render, on a tab switch, on a re-render or when a message closes.
+const GS_REVEAL_GAP = 16;       // breathing room above the pill (the same 16 px NAV_CLEARANCE ends with)
+const GS_MSG_MARGIN = { scrollMarginTop: 12, scrollMarginBottom: NAV_CLEARANCE };      // what scrollIntoView keeps clear: the top edge, and the pill
+function gsRevealEls(els) {
+  const shown = els.filter(e => e.isConnected && e.getClientRects().length); if (!shown.length) return;      // display:none (the other tab) or gone: nothing to show
+  const first = shown[0], last = shown[shown.length - 1], sc = first.closest("[data-gs-scroll]"); if (!sc) return;
+  const c = sc.getBoundingClientRect(); if (!c.height) return;
+  const nav = sc.parentElement && sc.parentElement.querySelector("nav"), top = c.top + 12, bottom = Math.min(c.bottom, nav ? nav.getBoundingClientRect().top : c.bottom) - GS_REVEAL_GAP;
+  const a = first.getBoundingClientRect(), b = last.getBoundingClientRect();
+  if (a.top >= top && b.bottom <= bottom) return;                                  // already fully visible: no scroll
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches, behavior = reduce ? "auto" : "smooth";
+  if (b.bottom - a.top > bottom - top) first.scrollIntoView({ block: "start", behavior });     // taller than the room: start at its top
+  else if (b.bottom > bottom) last.scrollIntoView({ block: "nearest", behavior });             // hidden below (or under the pill): just far enough
+  else first.scrollIntoView({ block: "nearest", behavior });                                    // hidden above
+}
+function useGsReveal(sectionRef) {
+  const seen = React.useRef(null);
+  React.useEffect(() => {
+    const root = sectionRef.current; if (!root) return;
+    const els = Array.from(root.querySelectorAll("[data-gs-msg]")), keys = els.map(e => e.getAttribute("data-gs-msg")), prev = seen.current; seen.current = keys;
+    if (prev === null) return;                                                       // first render: nothing scrolls
+    const fresh = []; els.forEach((e, i) => { if (prev.indexOf(keys[i]) < 0) fresh.push([e, keys[i]]); }); if (!fresh.length || typeof fresh[0][0].scrollIntoView !== "function") return;
+    // React reuses a node (the progress row becomes the result card): only a node still showing the message it was scheduled for is revealed
+    const go = () => gsRevealEls(fresh.filter(([e, k]) => e.getAttribute("data-gs-msg") === k).map(([e]) => e));       if (typeof requestAnimationFrame === "function") requestAnimationFrame(() => requestAnimationFrame(go)); else go();
+  });
+}
 const bsHeading = t => React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: BACKUP_UI.ink, marginBottom: 10 } }, t);
 const bsHelp = (t, mb = 0, mt = 0) => React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, margin: `${mt}px 0 ${mb}px`, lineHeight: 1.45 } }, t);
-const bsCard = (kind, title, body, testId) => { const c = BACKUP_UI.card[kind]; return React.createElement("div", { role: kind === "err" ? "alert" : "status", "data-testid": testId || "backup-card-" + kind, style: { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: 12, margin: "12px 0" } },
+const bsCard = (kind, title, body, testId) => { const c = BACKUP_UI.card[kind]; return React.createElement("div", { role: kind === "err" ? "alert" : "status", "data-testid": testId || "backup-card-" + kind, "data-gs-msg": (testId || "backup-card-" + kind) + "|" + String(title), style: { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: 12, margin: "12px 0", ...GS_MSG_MARGIN } },
   React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "flex-start", color: c.title } }, bsIcon(c.icon), React.createElement("div", { style: { fontSize: 13, fontWeight: 800, lineHeight: 1.3 } }, title)),
   body ? React.createElement("div", { style: { fontSize: 12, color: c.body, lineHeight: 1.5, marginTop: 6 } }, body) : null); };
 const bsBtn = (label, onClick, o = {}) => {
@@ -10387,9 +10414,9 @@ const bsBtn = (label, onClick, o = {}) => {
 };
 const bsLink = (label, onClick, id, disabled) => React.createElement("button", { type: "button", onClick: disabled ? undefined : onClick, disabled: !!disabled, "data-testid": id, style: { minHeight: 44, background: "transparent", border: "none", color: disabled ? BACKUP_UI.disabledFg : BACKUP_UI.slateText, fontSize: 13, fontWeight: 700, textDecoration: "underline", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", width: "100%" } }, label);
 const bsSpinner = () => React.createElement("div", { "aria-hidden": true, style: { width: 18, height: 18, border: "3px solid #d4d4d8", borderTop: `3px solid ${BACKUP_UI.slate}`, borderRadius: "50%", flexShrink: 0, animation: "spin 0.8s linear infinite" } });
-const bsBusyRow = (text, sub) => React.createElement("div", { role: "status", style: { display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: BACKUP_UI.ink, margin: "4px 0 12px" } }, bsSpinner(), React.createElement("div", null, text, sub ? React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, marginTop: 2 } }, sub) : null));
+const bsBusyRow = (text, sub) => React.createElement("div", { role: "status", "data-gs-msg": "busy", style: { display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: BACKUP_UI.ink, margin: "4px 0 12px", ...GS_MSG_MARGIN } }, bsSpinner(), React.createElement("div", null, text, sub ? React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, marginTop: 2 } }, sub) : null));
 const bsDivider = () => React.createElement("div", { style: { borderTop: `1px solid ${BACKUP_UI.line}`, margin: "20px 0 16px" } });
-const bsTwoStep = (boxRef, question, yes, no, onYes, onNo, o = {}) => React.createElement("div", { ref: boxRef, "data-testid": o.id, style: { background: BACKUP_UI.twoStepBg, border: `1px solid ${BACKUP_UI.line}`, borderRadius: 10, padding: 12, marginTop: 8 } },
+const bsTwoStep = (boxRef, question, yes, no, onYes, onNo, o = {}) => React.createElement("div", { ref: boxRef, "data-testid": o.id, "data-gs-msg": o.id, style: { background: BACKUP_UI.twoStepBg, border: `1px solid ${BACKUP_UI.line}`, borderRadius: 10, padding: 12, marginTop: 8, ...GS_MSG_MARGIN } },
   React.createElement("div", { style: { fontSize: 12, color: BACKUP_UI.ink, marginBottom: 10, fontWeight: 600, lineHeight: 1.5 } }, question),
   React.createElement("div", { style: { display: "flex", gap: 8 } }, bsBtn(yes, onYes, { kind: o.danger ? "danger" : "primary", flex: true, id: o.id + "-yes" }),
     React.createElement("button", { type: "button", onClick: onNo, "data-testid": o.id + "-no", style: { flex: 1, minHeight: 44, background: "transparent", color: BACKUP_UI.label, border: `1px solid ${BACKUP_UI.line}`, borderRadius: 10, fontSize: 13, cursor: "pointer", fontFamily: "inherit" } }, no)));
@@ -10419,6 +10446,7 @@ function BackupRestoreSection({ gate, deps }) {
   const delBox = React.useRef(null);
   const held = React.useRef({ blob: null, filename: "", includesPhotos: true }), heldRestore = React.useRef({ file: null, insp: null, plan: null });
   const alive = React.useRef(true), fileInput = React.useRef(null), sectionRef = React.useRef(null), rsBox = React.useRef(null), unBox = React.useRef(null);
+  useGsReveal(sectionRef);
   React.useEffect(() => {
     alive.current = true; gate.current.reload = d.reload; gate.current.drop = () => { if (!held.current.blob) return; held.current = { blob: null, filename: "", includesPhotos: true }; setNotes([]); setBk({ phase: "idle" }); }; gate.current.reveal = () => { const el = sectionRef.current; if (el && typeof el.scrollIntoView === "function") el.scrollIntoView({ block: "start" }); };
     return () => { alive.current = false; held.current = { blob: null, filename: "", includesPhotos: true }; heldRestore.current = { file: null, insp: null, plan: null }; gate.current.busy = false; gate.current.reveal = null; gate.current.reload = null; gate.current.drop = null; };   // leaving Settings drops everything
