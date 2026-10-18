@@ -88,7 +88,7 @@ describe('Global Settings: the Business tab and the Backup & Data screens', () =
   it('Undo: the question says what else it takes out; the result says so; the Business tab and the logo are empty again without a reload', async () => {
     const blob = await source(); const { user } = mount(); await restoreFile(user, blob); await user.click(T('backup-restore')); await user.click(T('backup-restore-confirm-yes')); await screen.findByTestId('backup-result-ok'); await user.click(T('backup-done'));
     await user.click(T('backup-undo-open')); expect(T('backup-undo-confirm').textContent).toContain('It also takes out the business details, logo, lists and settings it filled in, unless you have changed them since; then they are left as they are.'); await user.click(T('backup-undo-confirm-yes'));
-    const ok = await screen.findByTestId('backup-undo-result-ok'); expect(ok.textContent).toContain('The business details and lists and settings it filled in were taken out.');
+    const ok = await screen.findByTestId('backup-undo-result-ok'); expect(ok.textContent).toContain('The business details, lists and settings it filled in were taken out.');
     await toBiz(user); await waitFor(() => expect(fields().name).toHaveValue('')); expect(fields().abn).toHaveValue(''); expect(screen.queryByAltText('Logo')).toBeNull(); expect(localStorage.getItem('app-settings-v1')).toBeNull();
   });
 });

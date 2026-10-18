@@ -90,7 +90,7 @@ describe('a restore into an empty phone', () => {
   it('the undo question counts what was filled; with nothing filled it is the old question word for word', async () => {
     const file = await backupOf(full); await backupRestore(file, { storage: S, now: NOW }); const info = backupUndoInfo(S, NOW);
     expect(info.counts.settings).toEqual({ biz: 3, logo: 1, lists: 13, modules: 9 }); expect(backupUndoConfirmText(info)).toBe('Undo the last restore? This removes the 11 sites, 11 History snapshots and 2 calendar events it added, with their photos, and any work you have done in them since. It also takes out the business details, logo, lists and settings it filled in, unless you have changed them since; then they are left as they are. Everything else is left as it is.');
-    expect(backupUndoConfirmText({ counts: { sites: 1, snapshots: 0, events: 0 } })).toBe('Undo the last restore? This removes the 1 site, 0 History snapshots and 0 calendar events it added, with their photos, and any work you have done in them since. Everything else is left as it is.');
+    expect(backupUndoConfirmText({ counts: { sites: 1, snapshots: 0, events: 0 } })).toBe('Undo the last restore? This removes the 1 site it added, with their photos, and any work you have done in them since. Everything else is left as it is.');
   });
 });
 

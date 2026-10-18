@@ -179,7 +179,7 @@ describe('undo', () => {
     await restored(); const info = backupUndoInfo(S, NOW); const before = { ls: lsSnapshot(), idb: await idbSnapshot() }; const { user } = mount(); await user.click(T('backup-undo-open')); const box = T('backup-undo-confirm');
     expect(box.firstElementChild.textContent).toBe(backupUndoConfirmText(info)); expect(box.textContent).toContain('and any work you have done in them since'); expect(within(box).getByText('No, keep them')).toBeTruthy();
     await user.click(T('backup-undo-confirm-no')); expect(screen.queryByTestId('backup-undo-confirm')).toBeNull(); expect({ ls: lsSnapshot(), idb: await idbSnapshot() }).toEqual(before);
-    await user.click(T('backup-undo-open')); await user.click(T('backup-undo-confirm-yes')); const ok = await screen.findByTestId('backup-undo-result-ok'); expect(ok.textContent).toBe('Restore undone11 sites, 11 History snapshots and 2 calendar events were removed, with 3 photos. The business details and lists and settings it filled in were taken out.');
+    await user.click(T('backup-undo-open')); await user.click(T('backup-undo-confirm-yes')); const ok = await screen.findByTestId('backup-undo-result-ok'); expect(ok.textContent).toBe('Restore undone11 sites, 11 History snapshots and 2 calendar events were removed, with 3 photos. The business details, lists and settings it filled in were taken out.');
     expect(JSON.parse(localStorage.getItem('swb-projects-v1')).map(p => p.id)).toEqual(['local']);
   });
   it('Done after an undo reloads; an undo that cannot run says so plainly', async () => {

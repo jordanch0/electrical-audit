@@ -19,7 +19,7 @@ describe('what the callback receives', () => {
     expect((await backupRestore(file, { storage: S, now: NOW, onProgress: e => events.push(e) })).ok).toBe(true);
     for (const e of events) { expect(Object.keys(e)).toEqual(['phase', 'done', 'total']); expect(['photos', 'verifying', 'saving']).toContain(e.phase); expect(e.done).toBeLessThanOrEqual(e.total); }
     const last = ph => events.filter(e => e.phase === ph).pop();
-    expect(last('photos')).toEqual({ phase: 'photos', done: 6, total: 6 }); expect(last('verifying')).toEqual({ phase: 'verifying', done: 6, total: 6 }); expect(last('saving').done).toBe(last('saving').total); expect(last('saving').total).toBeGreaterThan(30);
+    expect(last('photos')).toEqual({ phase: 'photos', done: 3, total: 3 }); expect(last('verifying')).toEqual({ phase: 'verifying', done: 6, total: 6 }); expect(last('saving').done).toBe(last('saving').total); expect(last('saving').total).toBeGreaterThan(30);
     for (const ph of ['photos', 'verifying', 'saving']) { const d = events.filter(e => e.phase === ph).map(e => e.done); expect(d).toEqual([...d].sort((a, b) => a - b)); }
     const text = JSON.stringify(events); for (const name of ['Site One', 'Second SWB', 'Second GSD', 'p1', 'g1', 'swb', 'rcd', 'Example']) expect(text, name).not.toContain(name);
   });
