@@ -25,13 +25,15 @@ beforeEach(wipe);
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('a restore into an empty phone', () => {
-  it('adds every site, History snapshot, event, photo, thumbnail and logo, byte for byte; settings, dropdown lists and the global logo are NOT restored', async () => {
+  it('adds every site, History snapshot, event, photo, thumbnail and logo, byte for byte; into an empty phone the Business tab record, the dropdown list and the TAT frequencies are filled too (the global logo only when the backup says it has one)', async () => {
     await wipe(); await seedSourceFull(); const src = await snap(); const { blob } = await backupBuild(); await wipe();
     const r = await backupRestore(blob, { storage: S, now: new Date(2026, 9, 5, 12, 0) });
     expect(r.ok).toBe(true); expect(r.summary).toMatchObject({ sitesAdded: 11, snapshotsAdded: 11, eventsAdded: 2, photosWritten: 6, alreadyOnPhone: 0, notRestored: 0, undoUntil: '2026-10-19' });
     const after = await snap();
     for (const k of OWNED) expect(JSON.parse(after.ls[k]), k).toEqual(JSON.parse(src.ls[k]));
-    expect(Object.keys(after.ls).sort()).toEqual([...OWNED, RESTORE_KEY].sort());                                                  // no settings, no dropdown, no TAT list, nothing else
+    expect(Object.keys(after.ls).sort()).toEqual([...OWNED, 'app-settings-v1', 'rcd-dropdowns-v6', 'tat-freqs-v1', RESTORE_KEY].sort());                  // the three settings keys of the source phone are filled; nothing else
+    expect(JSON.parse(after.ls['app-settings-v1'])).toEqual({ businessName: 'Example Electrical Pty Ltd', abn: '', licence: '', logoId: null }); expect(JSON.parse(after.ls['tat-freqs-v1'])).toEqual(['1']);
+    expect(JSON.parse(after.ls['rcd-dropdowns-v6']).responsibility).toEqual(['A']); expect(Object.keys(JSON.parse(after.ls['rcd-dropdowns-v6'])).sort()).toEqual(['ampRating', 'cbType', 'rectified', 'responsibility']);   // a created key is complete
     const sp = src.idb['sparkcheck-site-photos'];
     expect(after.idb['sparkcheck-site-photos']).toEqual({ p1: sp.p1, 'p1~t': sp['p1~t'], p2: sp.p2 });                              // 'unused' (no site uses it) is not restored
     expect(after.idb['sparkcheck-gsd-photos']).toEqual(src.idb['sparkcheck-gsd-photos']); expect(after.idb['sparkcheck-site-logos']).toEqual(src.idb['sparkcheck-site-logos']); expect(after.idb['sparkcheck-app-settings']).toEqual({});
@@ -148,7 +150,7 @@ describe('THE GUARANTEES, each proved: write order, the single commit write, onl
     const st = adapter({ setItem: (k, v) => { if (k !== RESTORE_KEY && journalSeenAtFirstInsert === null) journalSeenAtFirstInsert = !!(JSON.parse(localStorage.getItem(RESTORE_KEY) || 'null') || {}).journal; rawSetItem(k, v); } });
     expect((await backupRestore(file, { storage: st })).ok).toBe(true); expect(journalSeenAtFirstPut).toBe(true); expect(journalSeenAtFirstInsert).toBe(true);
   });
-  it('restore and undo write ONLY owned module keys, the calendar events and the record; only the photo / site-logo stores; the settings, dropdown lists, TAT lists, rcd-mode, iel-cat, migration flags, preMigration copies, legacy keys, other apps\' keys and the global logo are never touched', async () => {
+  it('restore and undo write ONLY owned module keys, the calendar events and the record; only the photo / site-logo stores; the values the phone already has (settings, dropdown lists, TAT lists, the global logo) and rcd-mode, iel-cat, migration flags, preMigration copies, legacy keys and other apps\' keys are never touched', async () => {
     const file = await sourceFile(); await seedTarget(); for (const k of Object.keys(PROTECTED)) rawSetItem(k, PROTECTED[k]); await appLogoStore.put(rec(99));
     const before = await snap(); const { st, calls } = recording(); const idb = recordIdb();
     expect((await backupRestore(file, { storage: st })).ok).toBe(true); expect((await backupUndo({ storage: st })).ok).toBe(true);

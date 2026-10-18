@@ -7,7 +7,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor, within, configure, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppRoot, { GlobalSettingsView, BACKUP_UI, BACKUP_MODULES, zipOpen, backupBuild, backupRestore, backupMessageText, backupKeyAllowed, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS, RESTORE_KEY, BACKUP_LAST_KEY } from './App.jsx';
+import AppRoot, { GlobalSettingsView, BACKUP_UI, BACKUP_MODULES, zipOpen, backupBuild, backupRestore, backupMessageText, BACKUP_LIST_SPECS, backupPlan, backupKeyAllowed, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS, RESTORE_KEY, BACKUP_LAST_KEY } from './App.jsx';
 import { idbSnapshot, lsSnapshot, seedPhone, wipe, seedSourceFull, withDb } from './test/backup-fixtures.js';
 
 vi.setConfig({ testTimeout: 30000 });
@@ -163,7 +163,7 @@ describe('the Delete all data block on the Data tab', () => {
   });
   it('tapping it asks first (the module-style two-step, with what goes, the last backup and what happens next); No keeps everything and writes nothing', async () => {
     const { user, reload } = mountSettings(); await dataTab(user); await user.click(screen.getByTestId('erase-open')); const box = screen.getByTestId('erase-confirm');
-    expect(box.textContent).toContain("Delete everything on this phone? This erases all your data and cannot be undone. A restore does not bring back what is saved in the Business tab (name, ABN and licence), the company logo, or the lists and settings in each module, so note them down first. Last backup: never. The app restarts when it is done.");
+    expect(box.textContent).toContain("Delete everything on this phone? This erases all your data and cannot be undone. Last backup: never. The app restarts when it is done.");
     expect(within(box).getByText('Yes, delete everything')).toBeInTheDocument(); expect(localStorage.getItem(ERASE_KEY)).toBeNull();
     await user.click(screen.getByTestId('erase-confirm-no')); expect(screen.queryByTestId('erase-confirm')).toBeNull(); expect(localStorage.getItem(ERASE_KEY)).toBeNull(); expect(reload).not.toHaveBeenCalled(); expect(screen.getByTestId('erase-open')).toBeInTheDocument();
   });
@@ -223,24 +223,30 @@ describe('the Settings-only screen (an erase is unfinished)', () => {
   });
 });
 
-// WHAT DELETE ALL DATA REMOVES THAT A RESTORE DOES NOT BRING BACK (2026-10, release m). The Delete caption and the Delete question name it in three phrases that cover every module without naming one: what is saved in the Business tab
-// (name, ABN, licence), the company logo, and the lists and settings in each module. The backup FILE holds all of it (data.json and files/app-logo); only a RESTORE leaves it out. This proves the words against the real engines, and it
-// FAILS when a storage key (or class of key) is added that is not classified here, so a new list cannot be added without the words and this test being brought into line.
-//   restored        = the restore adds it back (sites, results, audit details, History, audit in progress, calendar events; photos and site logos live in IndexedDB)
+// WHAT DELETE ALL DATA REMOVES, AND WHAT A RESTORE BRINGS BACK (release n). The Delete caption names what goes in three phrases that cover every module without naming one: what is saved in the Business tab (name, ABN, licence), the
+// company logo, and the lists and settings in each module. The backup FILE holds all of it, and since release n a restore into an empty phone (right after a Delete) brings it back, a field / a list / the logo at a time, wherever the
+// phone has none of its own (backup-fill.test.jsx). It still leaves out the old keys rcd-mode and iel-cat (no longer written by the app; a restored one would be read by the one-time audit migration) and the app's own notes.
+// This proves it against the real engines, and it FAILS when a storage key (or class of key) is added that is not classified here, so a new list cannot be added without a decision.
+//   restored        = sites, results, audit details, History, audit in progress, calendar events (photos and site logos live in IndexedDB)
 //   business        = app-settings-v1 (the Business tab record); with the company logo (IndexedDB 'sparkcheck-app-settings') it is what the words call "what is saved in the Business tab" and "the company logo"
-//   lists-settings  = every module's dropdown lists, the Test & Tag lists and defaults, rcd-mode, iel-cat: "the lists and settings in each module"
-//   internal        = the app's own notes (photo-migration markers, copies kept before an update, the restore record, the last-backup note, the erase notes): nothing a person typed, so the words do not name them
+//   lists-settings  = the 13 list keys in BACKUP_LIST_SPECS: every module's dropdown lists and the Test & Tag lists and defaults: "the lists and settings in each module"
+//   legacy          = rcd-mode, iel-cat and a list key of another version: in the file, never restored
+//   internal        = the app's own notes (photo-migration markers, copies kept before an update, the restore record, the last-backup note, the erase notes)
 const KEY_CLASS = k => {
-  const mods = BACKUP_MODULES.join('|');
+  const mods = BACKUP_MODULES.join('|'), specs = BACKUP_LIST_SPECS();
   if (new RegExp('^(?:' + mods + ')-(?:projects|results|meta|history|items|audit-active)-v\\d+$').test(k) || /^cal-events-v\d+$/.test(k)) return 'restored';
-  if (/^app-settings-v\d+$/.test(k)) return 'business';
-  if (new RegExp('^(?:' + mods + ')-dropdowns-v\\d+$').test(k) || /^tat-(?:settings|freqs|names|defaults)-v\d+$/.test(k) || /^(?:rcd-mode|iel-cat)-v\d+$/.test(k)) return 'lists-settings';
+  if (k === 'app-settings-v1') return 'business';
+  if (specs.some(s => s.key === k)) return 'lists-settings';
+  if (new RegExp('^(' + mods + ')-dropdowns-v\\d+$').test(k)) return specs.some(s => s.key.startsWith(k.split('-')[0] + '-dropdowns-')) ? 'legacy' : null;
+  if (/^(?:rcd-mode|iel-cat)-v\d+$/.test(k)) return 'legacy';
   if (new RegExp('^(?:' + mods + ')-photos-migrated-v\\d+$').test(k) || /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY].includes(k)) return 'internal';
   return null;
 };
 const NOT_IN_FILE = k => /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY].includes(k);       // the app's own bookkeeping is deliberately not written into a backup
-const NOT_RESTORED_CLASSES = ['business', 'logo', 'lists-settings'];                                                                       // what a restore leaves out that a person typed or chose ('logo' = the IndexedDB company logo)
+const CAME_BACK = ['restored', 'business', 'lists-settings'];                                                                          // the classes a restore into an empty phone brings back
+const NOT_RESTORED_CLASSES = ['legacy'];                                                                                                // what it leaves out that is not an app note
 const WORDS = { business: 'what is saved in the Business tab (name, ABN and licence)', logo: 'the company logo', 'lists-settings': 'the lists and settings in each module' };
+const customOf = spec => Array.isArray(spec.defaults) ? ['Custom ' + spec.key] : Object.fromEntries(Object.keys(spec.defaults).map(f => [f, Array.isArray(spec.defaults[f]) ? ['Custom ' + spec.key + ' ' + f] : 'Custom ' + f]));
 // every key the app source can name, the module x role names the key pattern accepts, and the copies kept before an update
 const candidateKeys = () => {
   const src = fs.readFileSync(process.cwd() + '/src/App.jsx', 'utf8'), found = new Set();
@@ -258,45 +264,45 @@ describe('what a restore brings back after Delete all data (the wording is true)
     expect(keys.filter(k => KEY_CLASS(k) === null), 'a key nobody has decided on: add it to KEY_CLASS and, if a person can see it, to the Delete words').toEqual([]);
     expect(keys.filter(k => !(backupKeyAllowed(k) || backupKeyExcluded(k))), 'a key Delete would not remove').toEqual([]);
     expect(keys.filter(k => KEY_CLASS(k) === 'business')).toEqual(['app-settings-v1']);
-    expect(keys.filter(k => KEY_CLASS(k) === 'lists-settings')).toEqual(expect.arrayContaining(['rcd-dropdowns-v1', 'tat-dropdowns-v1', 'tat-settings-v1', 'tat-freqs-v1', 'tat-names-v1', 'tat-defaults-v1', 'rcd-mode-v1', 'iel-cat-v1', ...BACKUP_MODULES.map(m => m + '-dropdowns-v1')]));
+    expect(keys.filter(k => KEY_CLASS(k) === 'lists-settings').sort()).toEqual(BACKUP_LIST_SPECS().map(s => s.key).sort());              // every list key the engine fills is a key the app really names, and the other way round
   });
-  it('real engines: the file holds the Business tab record and the logo, Delete removes everything, and a restore brings back exactly the keys classified "restored" (photos and site logos too), nothing else', async () => {
+  it('real engines: the file holds everything, Delete removes everything, and a restore into the empty phone brings back exactly the classes that fill (and the logo), nothing else', async () => {
     await seedSourceFull();
-    const SEEDABLE = candidateKeys().filter(k => KEY_CLASS(k) !== 'restored' && k !== ERASE_KEY && k !== LEFTOVER_KEY), VALUE = { 'app-settings-v1': JSON.stringify({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' }), [RESTORE_KEY]: JSON.stringify({ v: 1, undo: null }), [BACKUP_LAST_KEY]: JSON.stringify({ v: 1, at: '2026-10-01T00:00:00.000Z' }) };
-    for (const k of SEEDABLE) rawSetItem(k, VALUE[k] || '{"a":["b"]}');
+    const SEEDABLE = candidateKeys().filter(k => KEY_CLASS(k) !== 'restored' && k !== ERASE_KEY && k !== LEFTOVER_KEY), SPEC = Object.fromEntries(BACKUP_LIST_SPECS().map(s => [s.key, s]));
+    const VALUE = { 'app-settings-v1': JSON.stringify({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' }), [RESTORE_KEY]: JSON.stringify({ v: 1, undo: null }), [BACKUP_LAST_KEY]: JSON.stringify({ v: 1, at: '2026-10-01T00:00:00.000Z' }) };
+    for (const k of SEEDABLE) rawSetItem(k, VALUE[k] || (SPEC[k] ? JSON.stringify(customOf(SPEC[k])) : '{"a":["b"]}'));
     const before = lsSnapshot(), beforeIdb = await idbSnapshot(); expect(beforeIdb['sparkcheck-app-settings'].logo).toBeTruthy();
     for (const k of SEEDABLE) expect(k in before, k + ' is on the phone before the delete').toBe(true);
     // 1. the FILE: everything but the app's own bookkeeping is inside it, including the Business tab record (name, ABN, licence) and the company logo
     const { blob } = await backupBuild({ now: NOW, storage: S }); const z = await zipOpen(blob), data = JSON.parse(new TextDecoder().decode(await z.bytes('data.json')));
     for (const k of Object.keys(before)) expect(k in data, k + (NOT_IN_FILE(k) ? ' (bookkeeping) is not in the file' : ' is in the file')).toBe(!NOT_IN_FILE(k));
-    expect(JSON.parse(data['app-settings-v1'])).toEqual({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo'}); expect(z.names()).toContain('files/app-logo/0.bin');
+    expect(JSON.parse(data['app-settings-v1'])).toEqual({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' }); expect(z.names()).toContain('files/app-logo/0.bin');
     // 2. Delete removes every one of them
     marker(0); await eraseStartup({ storage: S }); expect(OWNED_LEFT()).toEqual([]); expect(await idbCount()).toBe(0);
     // 3. the restore
     const r = await backupRestore(new File([blob], 'b.zip', { type: 'application/zip' }), { storage: S, now: NOW }); expect(r.ok).toBe(true);
     const after = lsSnapshot(), afterIdb = await idbSnapshot();
-    for (const k of Object.keys(before)) { if (k === RESTORE_KEY) continue; expect(k in after, k + ' (' + KEY_CLASS(k) + ')').toBe(KEY_CLASS(k) === 'restored'); }       // restored <=> classified restored
-    const left = new Set(Object.keys(before).filter(k => k !== RESTORE_KEY && !(k in after)).map(KEY_CLASS)); if (Object.keys(beforeIdb['sparkcheck-app-settings']).length && !Object.keys(afterIdb['sparkcheck-app-settings']).length) left.add('logo');
-    expect([...left].filter(c => c !== 'internal').sort()).toEqual([...NOT_RESTORED_CLASSES].sort());                                          // the classes the words must name: nothing more, nothing less
-    expect(afterIdb['sparkcheck-app-settings']).toEqual({});
-    for (const k of ['rcd-projects-v6', 'rcd-results-v6', 'rcd-history-v6', 'swb-projects-v1', 'gsd-projects-v1', 'cal-events-v1']) expect(after[k], k + ' must come back').toBe(before[k]);   // what the screen says IS brought back (identical text)
+    for (const k of Object.keys(before)) { if (k === RESTORE_KEY) continue; expect(k in after, k + ' (' + KEY_CLASS(k) + ')').toBe(CAME_BACK.includes(KEY_CLASS(k))); }       // came back <=> its class fills
+    const left = new Set(Object.keys(before).filter(k => k !== RESTORE_KEY && !(k in after)).map(KEY_CLASS)); expect([...left].filter(c => c !== 'internal').sort()).toEqual([...NOT_RESTORED_CLASSES].sort());
+    expect(JSON.parse(after['app-settings-v1'])).toEqual(JSON.parse(before['app-settings-v1'])); for (const s of BACKUP_LIST_SPECS()) expect(JSON.parse(after[s.key]), s.key).toEqual(JSON.parse(before[s.key]));        // the same values
+    expect(afterIdb['sparkcheck-app-settings']).toEqual(beforeIdb['sparkcheck-app-settings']);                                                              // the company logo, byte for byte
+    for (const k of ['rcd-projects-v6', 'rcd-results-v6', 'rcd-history-v6', 'swb-projects-v1', 'gsd-projects-v1', 'cal-events-v1']) expect(after[k], k + ' must come back').toBe(before[k]);   // identical text
     expect(Object.keys(afterIdb['sparkcheck-site-photos']).sort()).toEqual(Object.keys(beforeIdb['sparkcheck-site-photos']).filter(k => k !== 'unused').sort());   // photos (the unreferenced one is not backed up)
     expect(Object.keys(afterIdb['sparkcheck-gsd-photos']).sort()).toEqual(Object.keys(beforeIdb['sparkcheck-gsd-photos']).sort());
-    expect(Object.keys(afterIdb['sparkcheck-site-logos'])).toEqual(Object.keys(beforeIdb['sparkcheck-site-logos']));                              // the site logo comes back
+    expect(Object.keys(afterIdb['sparkcheck-site-logos'])).toEqual(Object.keys(beforeIdb['sparkcheck-site-logos']));
   });
-  it('the caption and the question name every class the restore leaves out, in the same words, and name no module', async () => {
+  it('the Delete caption names what goes (all three phrases, no module); the question says each thing only once, so it names none of them and no longer says a restore leaves them out', async () => {
     const { user } = mountSettings(); await dataTab(user); const caption = screen.getByTestId('erase-caption').textContent; await user.click(screen.getByTestId('erase-open')); const question = screen.getByTestId('erase-confirm').textContent;
-    for (const c of NOT_RESTORED_CLASSES) { expect(WORDS[c], c).toBeTruthy(); expect(caption, c + ' in the caption').toContain(WORDS[c]); expect(question, c + ' in the question').toContain(WORDS[c]); }
-    expect(caption + ' ' + question).not.toMatch(/TAT|Test & Tag|RCD|IEL|Thermo|Switchboard|Emergency|Welder|Insulation|Site Defects/); expect(caption + ' ' + question).not.toMatch(/dropdown|business details|your ABN/i);   // no single module named, no other term for the same thing
-    expect(question).toContain('A restore does not bring back '); expect(question).not.toContain('A backup does not include');                            // the file DOES hold these; only the restore skips them
+    for (const c of Object.keys(WORDS)) { expect(caption, c + ' in the caption').toContain(WORDS[c]); expect(question, c + ' is not repeated in the question').not.toContain(WORDS[c]); }
+    expect(caption + ' ' + question).not.toMatch(/TAT|Test & Tag|RCD|IEL|Thermo|Switchboard|Emergency|Welder|Insulation|Site Defects/); expect(caption + ' ' + question).not.toMatch(/dropdown|business details|your ABN/i);
+    expect(question).not.toMatch(/A restore does not bring back|A backup does not include/);                                                              // a restore now brings them back where they are empty
   });
-  it('the Restore caption and the Nothing-to-add card name only what a restore adds: a file whose sites, results, History and events are all here is "nothing to add" even when its lists and Business tab record differ, and those stay as they are', async () => {
-    await seedSourceFull(); rawSetItem('app-settings-v1', JSON.stringify({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' })); rawSetItem('tat-names-v1', '{"from":"file"}');
-    const { blob } = await backupBuild({ now: NOW, storage: S });
-    rawSetItem('app-settings-v1', JSON.stringify({ businessName: 'Changed On This Phone' })); rawSetItem('tat-names-v1', '{"from":"phone"}'); const before = lsSnapshot();     // the same sites; a different Business tab record and list
-    const r = await backupRestore(new File([blob], 'b.zip', { type: 'application/zip' }), { storage: S, now: NOW }); expect(r.ok).toBe(false); expect(r.code).toBe('nothing'); expect(r.message).toBe('The sites, History and calendar events in this backup are already on this phone, so there is nothing to add.'); expect(lsSnapshot()).toEqual(before);
-    expect(backupMessageText('nothing').body).toBe('The sites, History and calendar events in this backup are already on this phone.');
-    const { user } = mountSettings(); await dataTab(user); const text = sec().textContent; expect(text).toContain('Adds the sites, results, History, calendar events, photos and site logos in a backup file that are not already on this phone.'); expect(text).not.toMatch(/Adds anything|Everything in this backup/);
-    expect('Adds the sites, results, History, calendar events, photos and site logos in a backup file that are not already on this phone.' + 'The sites, History and calendar events in this backup are already on this phone.').not.toMatch(/Business|logo and|company|lists|settings|dropdown/);                                                                         // neither sentence claims what a restore leaves out (site logos are the per-site ones)
+  it('the Restore caption and the Nothing-to-add card say what a restore does now: it adds what is missing and keeps what is set; a file whose sites, events and items are all here is "nothing to add", one missing item is not', async () => {
+    const seed = async () => { await seedSourceFull(); rawSetItem('app-settings-v1', JSON.stringify({ businessName: 'Example Electrical Pty Ltd', abn: '12 345 678 901', licence: '123456C', logoId: 'logo' })); rawSetItem('tat-names-v1', '["From file"]'); };
+    await seed(); const { blob } = await backupBuild({ now: NOW, storage: S }); await wipe(); await seed(); const before = lsSnapshot();
+    const r = await backupRestore(new File([blob], 'b.zip', { type: 'application/zip' }), { storage: S, now: NOW }); expect(r.ok).toBe(false); expect(r.code).toBe('nothing'); expect(r.message).toBe('Everything in this backup is already on this phone or already set here, so there is nothing to add.'); expect(lsSnapshot()).toEqual(before);
+    expect(backupMessageText('nothing').body).toBe('Everything in this backup is already on this phone or already set here.');
+    localStorage.removeItem('tat-names-v1'); localStorage.removeItem('tat-freqs-v1'); const plan = await backupPlan(blob, { storage: S }); expect(plan.nothingToAdd).toBe(false); expect(plan.counts).toMatchObject({ sitesAdd: 0, eventsAdd: 0, settingsAdd: 1 });
+    const { user } = mountSettings(); await dataTab(user); const text = sec().textContent; expect(text).toContain('Adds what is in a backup file and is not already on this phone.'); expect(text).not.toMatch(/Adds anything|Everything in this backup is already on this phone\./);
   });
 });

@@ -3,7 +3,7 @@
 // logo are never read, and the headroom checks (the app's 5 MB saved-data assumption, navigator.storage.estimate) refuse with a message and change nothing.
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { backupBuild, backupPlan, BACKUP_MODULE_INFO, BACKUP_MODULES, sitePhotoStore, gsdPhotoStore, appLogoStore, siteLogoStore, STORAGE_QUOTA_ASSUMED_BYTES } from './App.jsx';
+import { backupBuild, backupPlan, BACKUP_LIST_SPECS, BACKUP_MODULE_INFO, BACKUP_MODULES, sitePhotoStore, gsdPhotoStore, appLogoStore, siteLogoStore, STORAGE_QUOTA_ASSUMED_BYTES } from './App.jsx';
 import { MODULES, liveStore, metaStore, histStore } from './test/item-dates-fixtures.js';
 import { DBS, withDb, clearIdb, idbSnapshot, lsSnapshot, bytes, rec, FM, keyOf, seedModule, seedPhone, wipe, backupOf, PHOTO_REFS, seedSourceFull } from './test/backup-fixtures.js';
 
@@ -26,11 +26,12 @@ describe('planning an empty phone', () => {
     expect(plan.events.status).toBe('add'); expect(plan.events.add.map(e => e.id)).toEqual(['e1', 'e2']); expect(plan.events.add[0].label).toBe('RCD · Site One · 2026-11-01'); expect(plan.work.events.map(e => e.id)).toEqual(['e1', 'e2']);
     expect(plan.counts).toMatchObject({ sitesAdd: 11, sitesPresent: 0, sitesConflict: 0, snapshotsAdd: 11, eventsAdd: 2, eventsPresent: 0, modulesSkipped: 0 });
   });
-  it('only the photos and the logo a restored site actually uses are written (an unused photo, the global logo and the settings are not)', async () => {
+  it('only the photos and the logo a restored site actually uses are written (an unused photo is not; the global logo only when the backup\'s Business tab says it has one); the Business tab record and the lists are planned as fills, not as site work', async () => {
     const plan = await backupPlan(await backupOf(seedSourceFull));
     expect(plan.work.writes.map(w => w.store + ':' + w.key).sort()).toEqual(['gsd-photos:g1', 'gsd-photos:g1~t', 'site-logos:swb:s2', 'site-photos:p1', 'site-photos:p1~t', 'site-photos:p2']);
     expect(plan.bytes.photosToWrite).toBe(4 + 2 + 1 + 3 + 1 + 2); expect(plan.counts.photosWrite).toBe(6);
-    const text = JSON.stringify(plan.work); expect(text).not.toContain('Example Electrical'); expect(text).not.toContain('"responsibility":["A"]'); expect(text).not.toContain('["1"]');   // the dropdown list and the TAT frequencies are not in the work
+    const text = JSON.stringify(plan.work.modules) + JSON.stringify(plan.work.events); expect(text).not.toContain('Example Electrical'); expect(text).not.toContain('"responsibility":["A"]'); expect(text).not.toContain('["1"]');   // the settings are not part of the SITES' work
+    expect(plan.work.settings.biz.businessName).toBe('Example Electrical Pty Ltd'); expect(plan.work.settings.lists.map(l => l.key).sort()).toEqual(['rcd-dropdowns-v6', 'tat-freqs-v1']); expect(plan.counts.settingsAdd).toBe(3);   // they are planned as fills: the name, the RCD lists, the TAT frequencies
   });
   it('a backup made without photos adds the sites with no photo records (and says so)', async () => {
     const plan = await backupPlan(await backupOf(seedSourceFull, { includePhotos: false }));
@@ -143,13 +144,13 @@ describe('modules that are skipped on purpose, and unreadable data', () => {
 });
 
 describe('read-only', () => {
-  it('writes nothing to localStorage or IndexedDB, creates no database, and reads (parses) only the keys of the modules and the calendar', async () => {
+  it('writes nothing to localStorage or IndexedDB, creates no database, and reads (parses) only the keys of the modules, the calendar, the Business tab record and the 13 list keys', async () => {
     const file = await backupOf(seedSourceFull); seedPhone({ id: 'local', name: 'Local' }); await sitePhotoStore.put('p1', rec(1, 2, 3)); rawSetItem('app-settings-v1', '{"businessName":"Mine"}'); rawSetItem('rcd-dropdowns-v6', '{"x":1}'); rawSetItem('some-other-app', 'x');
     const ls = lsSnapshot(), idb = await idbSnapshot(), dbs = (await indexedDB.databases()).map(d => d.name).sort();
     const sp = spyStorage(); const plan = await backupPlan(file, { storage: sp });
     expect(plan.ok).toBe(true); expect(lsSnapshot()).toEqual(ls); expect(await idbSnapshot()).toEqual(idb); expect((await indexedDB.databases()).map(d => d.name).sort()).toEqual(dbs);
-    const allowed = new Set([...BACKUP_MODULES.flatMap(m => Object.values(BACKUP_MODULE_INFO[m].keys)), 'cal-events-v1']);
-    expect([...sp.reads].filter(k => !allowed.has(k))).toEqual([]);                               // never the settings, a dropdown list, the TAT lists, rcd-mode, iel-cat or another app's key (only their LENGTH is counted, for the 5 MB check)
+    const allowed = new Set([...BACKUP_MODULES.flatMap(m => Object.values(BACKUP_MODULE_INFO[m].keys)), 'cal-events-v1', 'app-settings-v1', ...BACKUP_LIST_SPECS().map(s => s.key)]);
+    expect([...sp.reads].filter(k => !allowed.has(k))).toEqual([]);                               // never rcd-mode, iel-cat, a photo-migration marker or another app's key (only their LENGTH is counted, for the 5 MB check)
   });
   it('does not create a missing photo database just to look', async () => {
     const file = await backupOf(seedSourceFull); const dbsFn = indexedDB.databases; const open = vi.spyOn(indexedDB, 'open');

@@ -1,5 +1,5 @@
-// DATA THAT REFERS TO SETTINGS THIS PHONE DOES NOT HAVE (all nine modules). FICTIONAL data. A restore never touches the settings (dropdown lists, TAT equipment types / frequencies / names / defaults,
-// rcd-mode, iel-cat), so a restored site can hold values that are in none of this phone's lists. Every screen that shows such a value must show the STORED value, never a blank, a crash or an error,
+// DATA THAT REFERS TO SETTINGS THIS PHONE DOES NOT HAVE (all nine modules). FICTIONAL data. A restore fills a list only where the phone has none of its own (and never rcd-mode or iel-cat), so a restored site can hold values that are in none of this phone's lists.
+// (The tests below seed no setting at all.) Every screen that shows such a value must show the STORED value, never a blank, a crash or an error,
 // and every Excel export (the app's only export: there is no PDF export) must still write it. Nothing below seeds ANY setting.
 import 'fake-indexeddb/auto';
 import React from 'react';

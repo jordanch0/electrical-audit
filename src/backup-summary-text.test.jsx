@@ -23,7 +23,8 @@ describe('the summary of a real plan', () => {
   it('an empty phone and the full source: exact totals in words, the added list capped at 10 with "and 1 more", names with their module, three groups at most, no key names', async () => {
     const file = await backupOf(seedSourceFull); const plan = await backupPlan(file, { estimate: async () => ({ quota: 1e9, usage: 0 }) }); const t = backupSummaryText(plan);
     expect(t.title).toMatch(/^This backup, made \d{2}\/\d{2}\/\d{4} \(under 1 MB\)$/); expect(t.canRestore).toBe(true);
-    expect(t.groups.map(g => g.id)).toEqual(['added']); const g = group(t, 'added');
+    expect(t.groups.map(g => g.id)).toEqual(['added', 'filled']); const g = group(t, 'added');
+    expect(group(t, 'filled')).toMatchObject({ mark: '✓', heading: 'Will be filled in (empty on this phone)', lines: ['Business details (name, ABN, licence, logo)', 'Lists and settings in 2 modules'], more: 0 });
     expect(g).toMatchObject({ mark: '✓', heading: 'Will be added', summary: '11 sites, 11 History snapshots, 2 calendar events, 3 photos and 1 logo', more: 1 }); expect(g.lines.length).toBe(10);
     expect(g.lines[0]).toBe('Site One (RCD Testing)'); expect(g.lines[4]).toBe('Site One (Switchboard)'); expect(g.lines.length + g.more).toBe(11);
     expect(t.notes).toEqual(['There is enough free space.']);
@@ -91,7 +92,7 @@ describe('notes and the title', () => {
 describe('refusals and failures: short plain sentences', () => {
   const E = { 'not-a-backup': ['This file cannot be restored', 'This is not a SparkCheck backup file, or it is incomplete.'], 'wrong-format': ['This file cannot be restored', 'This is not a SparkCheck backup file, or it is incomplete.'], damaged: ['This file cannot be restored', 'This backup file is damaged.'],
     invalid: ['This file cannot be restored', 'This backup file is not complete.'], 'newer-version': ['This file cannot be restored', 'This backup was made by a newer version of SparkCheck. Update the app, then try again.'],
-    nothing: ['Nothing to add', 'The sites, History and calendar events in this backup are already on this phone.'], unfinished: ['A restore is still being put right', 'A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.'],
+    nothing: ['Nothing to add', 'Everything in this backup is already on this phone or already set here.'], unfinished: ['A restore is still being put right', 'A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.'],
     shape: ['The restore did not start', 'Something on this phone is not in the form the restore expects, so nothing was added. Nothing was changed.'], journal: ['Not enough room to start', 'There is not enough room on this phone to start the restore. Free up some space, then try again. Nothing was changed.'],
     failed: ['The restore did not finish', 'Everything was put back exactly as it was.'], rollback: ['The restore did not finish', "One part of this phone's saved data could not be read, so it was left as it was. The note at the top of this screen says what to do next."],
     none: ['Nothing to undo', 'There is no restore to undo.'], expired: ['Undo is no longer available', 'The undo period for the last restore has ended.'], 'undo-failed': ['The undo did not finish', 'The undo could not be completed. Nothing was changed.'] };
