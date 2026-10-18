@@ -10248,7 +10248,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
   const [lockedNow, setLocked] = React.useState(false), locked = lockedNow || settingsOnly;       // a restore, undo, backup build or file check is running (or an erase is unfinished): the tabs hold still
   const [problemFlag, setProblemFlag] = React.useState(() => !!backupRestoreProblem());
   const scrollRef = React.useRef(null), tabRefs = React.useRef({});
-  const gate = React.useRef({ busy: false, reloadPending: false, reveal: null, setLocked, setProblem: setProblemFlag, drop: null });      // shared with the Backup and restore section (see below)
+  const gate = React.useRef({ busy: false, reloadPending: false, reveal: null, setLocked, setProblem: setProblemFlag, drop: null, refreshSettings: null });      // shared with the Backup and restore section (see below)
   const goTab = next => { if (locked || next === tab) return; if (tab === "data" && gate.current.drop) gate.current.drop(); setTab(next); if (scrollRef.current) scrollRef.current.scrollTop = 0; };   // leaving Data drops a made-but-not-shared backup
 
   React.useEffect(() => {
@@ -10264,6 +10264,14 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
     return () => { alive = false; if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
   }, []);
 
+  // After a restore or an undo changed the Business tab record or the logo: show it. Text you typed and have not saved is never replaced; an undo only clears a field that still shows exactly what the restore wrote.
+  gate.current.refreshSettings = ev => {
+    const st = loadAppSettings(), w = (ev && ev.business) || {};
+    if (ev.kind === "restore") { setBusinessName(v => v.trim() ? v : st.businessName); setAbn(v => v.trim() ? v : st.abn); setLicence(v => v.trim() ? v : st.licence); }
+    else { setBusinessName(v => w.businessName !== undefined && v.trim() === w.businessName ? st.businessName : v); setAbn(v => w.abn !== undefined && v.trim() === w.abn ? st.abn : v); setLicence(v => w.licence !== undefined && v.trim() === w.licence ? st.licence : v); }
+    if (ev.kind === "restore" && ev.logo) appLogoStore.get().then(rec => { if (!rec) return; const u = URL.createObjectURL(new Blob([rec.buf], { type: rec.type })); if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = u; setLogoUrl(u); setHasLogo(true); }).catch(() => {});
+    if (ev.kind === "undo" && ev.logo) { if (urlRef.current) URL.revokeObjectURL(urlRef.current); urlRef.current = ""; setLogoUrl(""); setHasLogo(false); }
+  };
   const onUpload = async file => {
     setError("");
     try {
@@ -10512,7 +10520,7 @@ function BackupRestoreSection({ gate, deps }) {
     gate.current.busy = false; heldRestore.current = { file: null, insp: null, plan: null };        // the file and the parsed plan are dropped either way
     if (!alive.current) return;
     setProblem(d.problem());
-    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "idle", info: d.undoInfo() }); setRs({ phase: "result", kind: "ok", added: added.summary, summary: r.summary }); }
+    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "idle", info: d.undoInfo() }); setRs({ phase: "result", kind: "ok", added: added.summary, summary: r.summary }); if (gate.current.refreshSettings) gate.current.refreshSettings({ kind: "restore", logo: !!(r.summary.filled && r.summary.filled.logo) }); }
     else { backupLog(r.code, r.message); setRs({ phase: "result", kind: "err", ...backupMessageText(r.code, r.plan) }); }
   };
   // ── undoing
@@ -10520,7 +10528,7 @@ function BackupRestoreSection({ gate, deps }) {
     gate.current.busy = true; setUn(s => ({ ...s, phase: "undoing" })); let r;
     try { r = await d.undo(); } catch (e) { r = { ok: false, code: "undo-failed", message: e && e.name }; }
     gate.current.busy = false; if (!alive.current) return;
-    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "result", kind: "ok", removed: r.removed, photosRemoved: r.photosRemoved, info: null }); }
+    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "result", kind: "ok", removed: r.removed, photosRemoved: r.photosRemoved, unfilled: r.unfilled, info: null }); if (gate.current.refreshSettings) gate.current.refreshSettings({ kind: "undo", business: r.unfilled && r.unfilled.business, logo: !!(r.unfilled && r.unfilled.logo) }); }
     else { backupLog(r.code, r.message); setUn({ phase: "result", kind: "err", ...backupMessageText(r.code === "none" || r.code === "expired" || r.code === "unfinished" ? r.code : "undo-failed"), info: d.undoInfo() }); }
   };
 
@@ -10540,7 +10548,7 @@ function BackupRestoreSection({ gate, deps }) {
       : leftover ? [bsCard("warn", "Some photo storage could not be cleared.", "All your sites and results are gone. Some old photos are still taking up space and the app cannot see them. Tap Delete all data to try again, or leave it: nothing else is affected.", "erase-leftover")]
       : [bsHelp(S1_PARAS.erase, 10)];
     const fail = del.phase === "failed" ? [bsCard("err", "The delete could not be started", "Nothing was deleted. Please try again.", "erase-failed")] : [];
-    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases all your data and cannot be undone. A restore does not bring back what is saved in the Business tab (name, ABN and licence), the company logo, or the lists and settings in each module, so note them down first. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
+    if (del.phase === "confirming") return [...first, ...lead, bsTwoStep(delBox, "Delete everything on this phone? This erases all your data and cannot be undone. Last backup: " + last + ". The app restarts when it is done.", "Yes, delete everything", "No, keep my data", startErase, () => setDel({ phase: "idle" }), { id: "erase-confirm", danger: true })];
     return [...first, ...lead, ...fail, bsBtn("Delete all data…", () => setDel({ phase: "confirming" }), { kind: "secondary", id: "erase-open", disabled: busy })];
   };
 
@@ -10560,19 +10568,19 @@ function BackupRestoreSection({ gate, deps }) {
       make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Creates one file. Then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it. The file includes client names, ABNs, licence numbers, logos and photos, so store it somewhere safe."], 0, 8)];
   };
   const noteCards = () => notes.map((n, i) => React.createElement(React.Fragment, { key: "note" + i }, bsCard(n.kind, n.title, n.body, "backup-note-" + n.kind)));
-  const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : "Nothing was added.", r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null,
+  const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : (r.summary.filled ? null : "Nothing was added."), r.summary.filled ? React.createElement("div", { key: "f" }, "Filled in (it was empty here): " + backupFilledText(r.summary.filled) + ".") : null, r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null,
       r.summary.notRestored ? React.createElement("div", { key: "n" }, r.summary.notRestored + " not restored.") : null, React.createElement("div", { key: "u", style: { marginTop: 6 } }, "You can undo this until ", React.createElement("b", { key: "d" }, backupDmy(r.summary.undoUntil)), ".")], "backup-result-ok")
     : bsCard(r.kind === "info" ? "info" : "err", r.title, r.body, "backup-result-" + (r.kind === "info" ? "info" : "err"));
   const restoreBlock = () => {
     const out = [bsHeading("Restore")];
     const choose = (label, disabled) => bsBtn(label, () => fileInput.current && fileInput.current.click(), { kind: "secondary", id: "backup-choose", disabled: disabled || busy });
     const input = React.createElement("input", { key: "fi", ref: fileInput, type: "file", accept: ".zip,application/zip,application/x-zip-compressed", "data-testid": "backup-file-input", "aria-label": "Choose backup file", style: { display: "none" }, onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pick(f); } });
-    if (rs.phase === "idle") out.push(bsHelp("Adds the sites, results, History, calendar events, photos and site logos in a backup file that are not already on this phone.", 10), choose("Choose backup file…"));
+    if (rs.phase === "idle") out.push(bsHelp("Adds what is in a backup file and is not already on this phone.", 10), choose("Choose backup file…"));
     else if (rs.phase === "checking") out.push(bsBusyRow("Checking the file…"), choose("Choose backup file…", true));
     else if (rs.phase === "summary" || rs.phase === "confirming") {
       out.push(bsSummaryCard(rs.text));
       if (rs.phase === "summary") out.push(bsBtn("Restore…", () => setRs(s => ({ ...s, phase: "confirming" })), { id: "backup-restore", disabled: busy }), React.createElement("div", { key: "sp", style: { height: 8 } }), bsLink("Choose a different file", () => { heldRestore.current = { file: null, insp: null, plan: null }; setRs({ phase: "idle" }); }, "backup-different"));
-      else out.push(bsTwoStep(rsBox, "Add these to this phone? No existing data on this phone is changed or removed. Keep this screen open while it works.", "Yes, add them", "Cancel", run, () => setRs(s => ({ ...s, phase: "summary" })), { id: "backup-restore-confirm" }));
+      else out.push(bsTwoStep(rsBox, "Add these to this phone? Nothing you have already set here is changed or removed. Keep this screen open while it works.", "Yes, add them", "Cancel", run, () => setRs(s => ({ ...s, phase: "summary" })), { id: "backup-restore-confirm" }));
     } else if (rs.phase === "restoring") {
       const p = rs.progress; const text = !p ? "Restoring…" : p.phase === "photos" ? "Restoring… photos " + p.done + " of " + p.total + "." : p.phase === "verifying" ? "Checking what was added… " + p.done + " of " + p.total + "." : "Saving…";
       out.push(bsBusyRow(text, "Keep this screen open. If the app closes, everything is put back the next time you open it."), bsBtn("Restore…", null, { id: "backup-restore", disabled: true }));
@@ -10580,7 +10588,7 @@ function BackupRestoreSection({ gate, deps }) {
     return [...out, input];
   };
   const undoBlock = () => {
-    if (un.phase === "result") return [bsHeading("Undo"), un.kind === "ok" ? bsCard("ok", "Restore undone", [nw(un.removed.sites, "site"), ", ", nw(un.removed.snapshots, "History snapshot"), " and ", nw(un.removed.events, "calendar event"), " were removed, with ", nw(un.photosRemoved || 0, "photo"), "."], "backup-undo-result-ok") : bsCard("err", un.title, un.body, "backup-undo-result-err"),
+    if (un.phase === "result") return [bsHeading("Undo"), un.kind === "ok" ? bsCard("ok", "Restore undone", [nw(un.removed.sites, "site"), ", ", nw(un.removed.snapshots, "History snapshot"), " and ", nw(un.removed.events, "calendar event"), " were removed, with ", nw(un.photosRemoved || 0, "photo"), ".", un.unfilled && (un.unfilled.fields.length || un.unfilled.logo || un.unfilled.lists) ? " The " + backupJoinWords([un.unfilled.fields.length || un.unfilled.logo ? "business details" : null, un.unfilled.lists ? "lists and settings" : null].filter(Boolean)) + " it filled in " + "were taken out." : "", un.unfilled && un.unfilled.keptBiz ? " The business details you changed since were left as they are." : "", un.unfilled && un.unfilled.keptModules ? " The lists and settings in " + nw(un.unfilled.keptModules, "module") + " you changed since were left as they are." : ""], "backup-undo-result-ok") : bsCard("err", un.title, un.body, "backup-undo-result-err"),
       un.kind === "ok" ? bsBtn("Done", () => d.reload(), { id: "backup-undo-done" }) : bsBtn("OK", () => setUn({ phase: "idle", info: d.undoInfo() }), { kind: "secondary", id: "backup-undo-ok" })];
     if (!un.info) return [];
     if (un.phase === "confirming") return [bsHeading("Undo"), bsTwoStep(unBox, d.undoText(un.info), "Yes, undo", "No, keep them", doUndo, () => setUn(s => ({ ...s, phase: "idle" })), { id: "backup-undo-confirm", danger: true })];
@@ -10593,7 +10601,7 @@ function BackupRestoreSection({ gate, deps }) {
     bsHeading("Backup and restore"),
     problem && problem.keys && problem.keys.length ? bsCard("err", "A restore could not be fully put back", [`One part of this phone's saved data could not be read, so it was left exactly as it was: `, React.createElement("b", { key: "k" }, backupKeysLabel(problem.keys)), ". The photos were kept and everything else was put back. Other modules are not affected.",
       React.createElement("div", { key: "n", style: { marginTop: 8 } }, React.createElement("b", null, "Next step:"), " Make a backup now and contact support, quoting this message."), React.createElement("div", { key: "g", style: { marginTop: 8 } }, "This message goes away after the next successful restore.")], "backup-problem") : null,
-    bsHelp("Save a copy of your sites, results, History, calendar events, photos and site logos."),
+    bsHelp("Save a copy of your sites, results, History, calendar events, photos, logos, business details, lists and settings."),
     React.createElement("div", { "data-testid": "backup-last", style: { fontSize: 12, color: BACKUP_UI.muted, margin: "10px 0 18px" } }, "Last backup: ", React.createElement("b", { style: { color: BACKUP_UI.ink } }, last)),
     bsHeading("Back up"), ...noteCards(), ...backUp(), bsDivider(), ...restoreBlock(), ...(undo.length ? [bsDivider(), ...undo] : []), bsDivider(), ...deleteBlock());
 }
@@ -16438,8 +16446,8 @@ async function backupInspect(file) {
 // BACKUP / RESTORE — planner (Stage 2: READ-ONLY. Compares a backup file with THIS phone and says what a restore WOULD add. Nothing here writes to localStorage or IndexedDB.)
 // ═════════════════════════════════════════════════════════════════════════
 // Restore is ADD-ONLY: nothing already on this phone is modified or deleted. A site is "already on this phone" if its ID exists in that module's project list (ID only: renaming a site keeps its ID,
-// so names are never compared); the same rule applies to calendar events (by event ID) and History snapshots (by snapshot ID). Never read or planned: app settings, every dropdown list, the TAT
-// settings / frequencies / names / defaults, rcd-mode, iel-cat, the global logo, the photo-migration flags and the legacy keys. A photo, thumbnail or per-site logo that already exists is NEVER
+// so names are never compared); the same rule applies to calendar events (by event ID) and History snapshots (by snapshot ID). Release n: the Business tab record, the company logo, every module's lists and the Test & Tag lists are FILLED where this phone has none of its own (see
+// "fill only what is empty" below). Never read or planned: rcd-mode, iel-cat, the photo-migration flags and the legacy keys. A photo, thumbnail or per-site logo that already exists is NEVER
 // overwritten: identical bytes are reused; different bytes make the WHOLE site "not restored: conflicting photos" (nothing is added for it).
 const BACKUP_MODULE_INFO = {
   rcd:    { label: "RCD Testing",                   keys: { projects: K_PROJECTS,        results: K_RESULTS,        meta: K_META,        history: K_HISTORY,        active: K_RCD_ACTIVE },    photos: null },
@@ -16503,7 +16511,7 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
     verdict.set(id, v); return v;
   };
   const storeById = Object.fromEntries(BACKUP_STORES.map(s => [s.id, s]));
-  const out = { modules: [], work: { modules: {}, events: [], writes: [] } }; const writeSet = new Map(); let insertChars = 0, journalIds = 0;
+  const out = { modules: [], work: { modules: {}, events: [], writes: [], settings: null } }; const writeSet = new Map(); let insertChars = 0, journalIds = 0;
   try {
     for (const m of BACKUP_MODULES) {
       const info = BACKUP_MODULE_INFO[m]; const mod = { id: m, label: info.label, status: "nothing", note: "", sites: { add: [], present: [], conflict: [] }, snapshots: { add: 0 }, photos: { write: 0, reuse: 0 } };
@@ -16571,9 +16579,10 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
       }
     }
     out.events = ev;
+    const sp = await backupPlanSettings({ data, listed, storeById, openDb, storage, writeSet, z }); out.work.settings = sp.work; insertChars += sp.chars; journalIds += sp.ids;      // business details, company logo, lists and settings: fill only what is empty
     out.work.writes = [...writeSet.values()]; journalIds += out.work.writes.length;
     const writeBytes = out.work.writes.reduce((n, w) => n + w.size, 0);
-    const counts = { sitesAdd: 0, sitesPresent: 0, sitesConflict: 0, snapshotsAdd: 0, eventsAdd: ev.add.length, eventsPresent: ev.present.length, photosWrite: out.work.writes.length, photosReuse: 0, modulesSkipped: 0 };
+    const counts = { sitesAdd: 0, sitesPresent: 0, sitesConflict: 0, snapshotsAdd: 0, eventsAdd: ev.add.length, eventsPresent: ev.present.length, photosWrite: out.work.writes.filter(w => w.store !== "app-logo").length, photosReuse: 0, modulesSkipped: 0 };
     for (const mod of out.modules) { counts.sitesAdd += mod.sites.add.length; counts.sitesPresent += mod.sites.present.length; counts.sitesConflict += mod.sites.conflict.length; counts.snapshotsAdd += mod.snapshots.add; counts.photosReuse += mod.photos.reuse; if (/^(skipped|unreadable)/.test(mod.status)) counts.modulesSkipped++; }
     // headroom: (1) the app's own 5 MB saved-data assumption (localStorage), (2) the browser's storage estimate for the photos. Either one failing refuses with a message and changes nothing.
     const localUsed = backupLocalBytes(storage), localAdd = (insertChars + journalIds * 40 + 2048) * 2, localLimit = STORAGE_QUOTA_ASSUMED_BYTES;
@@ -16585,8 +16594,9 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
     if (!hr.local.ok) hr.message = "Not enough room in this phone's saved-data space: this restore needs about " + backupMb(localAdd) + " more, but only " + backupMb(Math.max(0, localLimit - localUsed)) + " of " + backupMb(localLimit) + " is free. Free up space by deleting sites, History snapshots or calendar events you no longer need, then try again. Nothing was changed.";
     else if (!hr.storage.ok) hr.message = "Not enough free space on this device for the photos: about " + backupMb(hr.storage.needBytes) + " is needed (including a safety margin) but only " + backupMb(Math.max(0, hr.storage.quota - hr.storage.usage)) + " is available. Free up space (delete photos or other apps' data), then try again. Nothing was changed.";
     else if (!hr.storage.known && writeBytes > 0) hr.message = "This device can't report free space, so it could not be checked in advance. If space runs out the restore stops and puts everything back exactly as it was.";
-    const anyAdd = counts.sitesAdd > 0 || counts.eventsAdd > 0;
-    return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, modules: out.modules, events: ev, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
+    counts.settingsAdd = (sp.ui.biz.length || sp.ui.logo ? 1 : 0) + new Set(sp.ui.lists.map(l => l.mod)).size;                      // sets, not fields: the business details are one, each module's lists and settings are one
+    const anyAdd = counts.sitesAdd > 0 || counts.eventsAdd > 0 || counts.settingsAdd > 0;
+    return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, modules: out.modules, events: ev, settings: sp.ui, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
   } finally { for (const id of Object.keys(dbs)) { try { if (dbs[id]) dbs[id].close(); } catch (_) {} } }
 }
 // ═════════════════════════════════════════════════════════════════════════
@@ -16639,6 +16649,7 @@ function backupBuildInserts(plan, storage) {
     else if (w.activeMode === "create" && Object.keys(w.active).length) out.push({ key: k.active, kind: "absent", text: JSON.stringify({ v: AUDIT_ACTIVE_VERSION, sites: w.active }) });
   }
   if (plan.work.events.length) put(K_CAL_EVENTS, "projects", plan.work.events, null);
+  if (plan.work.settings) out.push(...backupSettingsInserts(plan.work.settings, storage));
   for (const e of out) { let v; try { v = JSON.parse(e.text); } catch (_) { throw new Error("internal error: the new text for " + e.key + " is not valid JSON"); } if (v === null || typeof v !== "object") throw new Error("internal error: the new text for " + e.key + " has the wrong shape"); }   // nothing written yet
   return out;
 }
@@ -16778,7 +16789,7 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
   const hook = (stage, i) => crashAt ? crashAt(stage, i) : undefined;      // the test seam; with none, the localStorage writes below never yield
   const progress = backupProgressNotifier(onProgress);
   const plan = await backupPlan(file, { storage, inspected, estimate }); if (!plan.ok) return plan;
-  if (plan.nothingToAdd) return { ok: false, code: "nothing", message: "The sites, History and calendar events in this backup are already on this phone, so there is nothing to add.", plan };
+  if (plan.nothingToAdd) return { ok: false, code: "nothing", message: "Everything in this backup is already on this phone or already set here, so there is nothing to add.", plan };
   if (!plan.canRestore) return { ok: false, code: "headroom", message: plan.headroom.message, plan };
   let prev = backupReadRecord(storage);
   if (prev && prev.journal) { backupRecoverAtStart(storage); try { await backupFinishRecovery(storage); } catch (_) {} prev = backupReadRecord(storage); }      // an earlier interrupted restore is finished first
@@ -16812,11 +16823,12 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
     backupVerifyApplied(inserts, storage);
     await hook("verified");
     const undo = { restoredAt: now.toISOString(), expiresOn: localISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + RESTORE_UNDO_DAYS)), put: journal.put, created: inserts.filter(e => e.kind === "absent").map(e => e.key),
-      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.length, photoFiles: writes.filter(w => w.store !== "site-logos" && !w.key.endsWith("~t")).length, logoFiles: writes.filter(w => w.store === "site-logos").length } };
+      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.filter(w => w.store !== "app-logo").length, photoFiles: writes.filter(w => w.store !== "app-logo" && w.store !== "site-logos" && !w.key.endsWith("~t")).length, logoFiles: writes.filter(w => w.store === "site-logos").length } };
+    const filled = backupFilledRecord(inserts, writes); if (filled) { undo.filled = filled; undo.counts.settings = filled.counts; }
     for (const m of Object.keys(plan.work.modules)) { const w = plan.work.modules[m]; undo.sites[m] = w.projects.map(p => p.id); undo.snaps[m] = w.history.map(s => s.id); undo.active[m] = Object.keys(w.active); }
     storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo }));          // THE COMMIT: one write replaces the journal by the undo record (and is the ONLY write that drops a recorded problem)
     await hook("committed");
-    return { ok: true, summary: { sitesAdded: plan.counts.sitesAdd, snapshotsAdded: plan.counts.snapshotsAdd, eventsAdded: plan.counts.eventsAdd, photosWritten: writes.length, alreadyOnPhone: plan.counts.sitesPresent + plan.counts.eventsPresent, notRestored: plan.counts.sitesConflict, modulesSkipped: plan.counts.modulesSkipped, undoUntil: undo.expiresOn }, plan };
+    return { ok: true, summary: { sitesAdded: plan.counts.sitesAdd, snapshotsAdded: plan.counts.snapshotsAdd, eventsAdded: plan.counts.eventsAdd, photosWritten: undo.counts.photos, filled: filled ? { business: filled.biz ? Object.keys(filled.biz.fields).filter(x => x !== "logoId") : [], logo: !!filled.logo, modules: filled.counts.modules } : null, alreadyOnPhone: plan.counts.sitesPresent + plan.counts.eventsPresent, notRestored: plan.counts.sitesConflict, modulesSkipped: plan.counts.modulesSkipped, undoUntil: undo.expiresOn }, plan };
   } catch (e) {
     if (e instanceof BackupCrash) throw e;                                               // a simulated kill: nothing runs after it
     for (const id of Object.keys(dbs)) { try { dbs[id].close(); } catch (_) {} } for (const id of Object.keys(dbs)) delete dbs[id];
@@ -16826,13 +16838,156 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
     return { ok: false, code: "failed", message: "The restore could not be completed (" + e.message + "). Everything was put back exactly as it was." + (fin.ok ? "" : " Some leftover photo records will be cleaned up the next time SparkCheck starts."), plan };
   } finally { for (const id of Object.keys(dbs)) { try { dbs[id].close(); } catch (_) {} } }
 }
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP / RESTORE — business details, company logo, lists and settings (release n): FILL ONLY WHAT IS EMPTY
+// ═════════════════════════════════════════════════════════════════════════
+// The backup FILE already holds these (data.json: the Business tab record, every module's dropdown lists, the Test & Tag lists; files/app-logo: the company logo). A restore fills a SET ONLY where this phone has
+// nothing of its own in that set, all of it or none of it, and never replaces, merges into or removes what is there. There are no mixed sets:
+//   Business details  ONE set: business name, ABN, licence and the company logo. Filled from the backup only when ALL FOUR are empty on this phone (blank or spaces only is empty; the logo counts as there when the phone has a
+//                     logo record). If any one is set, none of the four is touched.
+//   Lists and settings  ONE set per module (Test & Tag: its dropdowns, equipment types, test frequencies, appliance names and default settings together). A module's set is filled only when every list in it equals the
+//                     built-in defaults (or the key is absent); then each key the backup holds with its own values is written whole. If any list in that module differs, the whole module is left alone.
+//   NOT restored      rcd-mode and iel-cat (old keys the app no longer writes: a restored one would be read by the one-time audit migration and make every site look mid-audit) and the photo-migration markers.
+// Every filled item is journalled with what was there before, so a failed restore puts it back exactly. Undo takes a set out only if it still holds exactly what the restore wrote; if you changed it since, that set is left alone.
+const BACKUP_BIZ_FIELDS = ["businessName", "abn", "licence"], BACKUP_BIZ_WORDS = { businessName: "business name", abn: "ABN", licence: "licence" };
+const backupEmptyText = v => typeof v !== "string" || v.trim() === "";
+function backupDeepEqual(a, b) {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null || Array.isArray(a) !== Array.isArray(b)) return false;
+  const ka = Object.keys(a), kb = Object.keys(b); if (ka.length !== kb.length) return false;
+  return ka.every(k => Object.prototype.hasOwnProperty.call(b, k) && backupDeepEqual(a[k], b[k]));
+}
+// The built-in defaults of every list key (read when used, so the constants of each module are found wherever they are declared). `defaults` an array = one list; an object = named lists / values, filled per field.
+// `alt`: other values a field holds when it was never customised (the old Emergency Lighting defaults, which a module swaps for the new ones when it opens).
+const BACKUP_LIST_SPECS = () => [
+  { mod: "rcd", key: K_DROPDOWNS, defaults: { responsibility: DEFAULT_RESPONSIBILITY, rectified: DEFAULT_RECTIFIED, ampRating: DEFAULT_AMP_RATING, cbType: DEFAULT_CB_TYPE } },
+  { mod: "iel", key: K_IEL_DROPDOWNS, defaults: { responsibility: IEL_DEFAULT_RESPONSIBILITY, rectified: IEL_DEFAULT_RECTIFIED } },
+  { mod: "tat", key: K_TAT_DROPDOWNS, defaults: TAT_DEFAULT_DROPDOWNS },
+  { mod: "tat", key: K_TAT_SETTINGS, defaults: TAT_DEFAULT_EQUIP_TYPES },
+  { mod: "tat", key: K_TAT_FREQS, defaults: TAT_DEFAULT_FREQS },
+  { mod: "tat", key: K_TAT_NAMES, defaults: TAT_DEFAULT_NAMES },
+  { mod: "tat", key: K_TAT_DEFAULTS, defaults: TAT_FACTORY_DEFAULTS },
+  { mod: "thermo", key: K_THERMO_DROPDOWNS, defaults: { responsibility: RESPONSIBILITY_OPTIONS, rectified: RECTIFIED_OPTIONS } },
+  { mod: "swb", key: K_SWB_DROPDOWNS, defaults: { responsibility: SWB_DEFAULT_RESPONSIBILITY, rectified: SWB_DEFAULT_RECTIFIED } },
+  { mod: "irt", key: K_IRT_DROPDOWNS, defaults: { responsibility: IRT_DEFAULT_RESPONSIBILITY, rectified: IRT_DEFAULT_RECTIFIED } },
+  { mod: "elt", key: K_ELT_DROPDOWNS, defaults: ELT_DEFAULT_DROPDOWNS, alt: { types: [ELT_LEGACY_DEFAULT_TYPES] } },
+  { mod: "welder", key: K_WELDER_DROPDOWNS, defaults: WELDER_DEFAULT_DROPDOWNS },
+  { mod: "gsd", key: K_GSD_DROPDOWNS, defaults: GSD_DEFAULT_DROPDOWNS, alt: { categories: [GSD_LEGACY_CATEGORIES], common: [GSD_LEGACY_COMMON] } },
+];
+const backupIsDefault = (spec, field, v) => { const d = field === null ? spec.defaults : spec.defaults[field]; return backupDeepEqual(v, d) || (field !== null && ((spec.alt && spec.alt[field]) || []).some(a => backupDeepEqual(v, a))); };
+const backupSameKind = (a, b) => Array.isArray(a) ? Array.isArray(b) : typeof a === "object" && a !== null ? backupIsObj(b) : typeof a === typeof b && (typeof b !== "string" || b.trim() !== "");
+// BUSINESS DETAILS are ONE set: business name, ABN, licence and the company logo. cur: { state: "absent" } | { state: "ok", v }; bk: the backup's record (an object); logoHere: this phone has a logo record.
+// -> { empty: false, fields: {} } when any one of the four is set here (none of them is touched), else { empty: true, fields: { name: { had, was, wrote } } } = the backup's non-blank texts (the logo is written by the caller).
+function backupBizFill(cur, bk, logoHere) {
+  const base = cur.state === "ok" ? cur.v : {}, fields = {};
+  if (logoHere || !BACKUP_BIZ_FIELDS.every(f => backupEmptyText(base[f]))) return { empty: false, fields };
+  for (const f of BACKUP_BIZ_FIELDS) { const bv = typeof bk[f] === "string" ? bk[f].trim() : ""; if (bv) fields[f] = { had: f in base, was: base[f], wrote: bv }; }
+  return { empty: true, fields };
+}
+const backupBizAny = (bk, logo) => !!logo || BACKUP_BIZ_FIELDS.some(f => typeof bk[f] === "string" && bk[f].trim() !== "");
+// LISTS AND SETTINGS are ONE set per module: all the module's list keys together. The role a key is read with: a list = "projects", named lists / values = "meta".
+const backupSpecRole = spec => Array.isArray(spec.defaults) ? "projects" : "meta";
+// One list key on this phone is "empty" when it is absent or equals the built-in default (an object: no field the app does not know, every known field missing or the default).
+function backupKeyIsEmpty(spec, cur) {
+  if (cur.state === "absent") return true; if (cur.state !== "ok") return false;
+  if (Array.isArray(spec.defaults)) return Array.isArray(cur.v) && backupIsDefault(spec, null, cur.v);
+  return backupIsObj(cur.v) && Object.keys(cur.v).every(f => Object.prototype.hasOwnProperty.call(spec.defaults, f)) && Object.keys(spec.defaults).every(f => cur.v[f] === undefined || backupIsDefault(spec, f, cur.v[f]));
+}
+// What one list key would be written as, given the backup's value; null when the backup brings nothing of its own (its lists are the defaults, or are not lists). The key is written WHOLE; a field the backup does not hold stays the default.
+function backupKeyFill(spec, cur, bk) {
+  const created = cur.state !== "ok", was = created ? undefined : cur.v;
+  if (Array.isArray(spec.defaults)) { if (!Array.isArray(bk) || backupIsDefault(spec, null, bk)) return null; return { created, whole: true, was, wrote: bk }; }
+  if (!backupIsObj(bk)) return null;
+  const next = created ? JSON.parse(JSON.stringify(spec.defaults)) : { ...cur.v }; let changed = false;
+  for (const f of Object.keys(spec.defaults)) { const bv = bk[f]; if (bv === undefined || !backupSameKind(spec.defaults[f], bv) || backupIsDefault(spec, f, bv)) continue; next[f] = bv; changed = true; }
+  return changed ? { created, whole: false, was, wrote: next } : null;
+}
+// Plans the fills against THIS phone (reads only). -> { work, ui, chars, ids } ; work: what the apply step needs, ui: what the screens say.
+async function backupPlanSettings({ data, listed, storeById, openDb, storage, writeSet, z }) {
+  const ui = { biz: [], bizKept: false, logo: false, lists: [], listsKept: [], skipped: [] }, work = { biz: null, logo: false, lists: [] }; let chars = 0, ids = 0;
+  let bb = null;
+  if (data[APP_SETTINGS_KEY] !== undefined) { try { const v = JSON.parse(data[APP_SETTINGS_KEY]); if (backupIsObj(v)) bb = v; } catch (_) {} if (!bb) ui.skipped.push("Business tab: the data in the file could not be read, so it was not added"); }
+  const hereBiz = backupReadRaw(storage, APP_SETTINGS_KEY, "meta");
+  if (bb && hereBiz.state === "bad") { ui.skipped.push("Business tab: this phone's saved details could not be read, so nothing was added"); bb = null; }
+  const rec = listed["app-logo"].get(APP_LOGO_ID), st = storeById["app-logo"];
+  if (bb) {
+    const bkLogo = !!(bb.logoId && rec);
+    if (backupBizAny(bb, bkLogo)) {
+      let logoHere = false; const db = st ? await openDb(st) : null; if (db) { const r = await backupIdbGet(db, st.store, APP_LOGO_ID); logoHere = !!(r && r.buf); }
+      const f = backupBizFill(hereBiz, bb, logoHere);
+      if (!f.empty) ui.bizKept = true;
+      else {
+        ui.biz = Object.keys(f.fields); work.biz = bb; chars += 200; ids++;
+        if (bkLogo) { work.logo = true; ui.logo = true; writeSet.set(st.id + "\u0000" + rec.key, { store: st.id, key: rec.key, file: rec.file, type: rec.type, size: rec.size, sha256: rec.sha256 }); chars += 200; ids++; }
+      }
+    }
+  }
+  const specsAll = BACKUP_LIST_SPECS();
+  for (const mod of [...new Set(specsAll.map(s => s.mod))]) {
+    const specs = specsAll.filter(s => s.mod === mod), bks = {};
+    for (const s of specs) if (data[s.key] !== undefined) { try { bks[s.key] = JSON.parse(data[s.key]); } catch (_) {} }
+    if (!specs.some(s => s.key in bks && backupKeyFill(s, { state: "absent" }, bks[s.key]))) continue;                  // the backup brings nothing of its own for this module
+    const curs = specs.map(s => backupReadRaw(storage, s.key, backupSpecRole(s)));
+    if (curs.some(c => c.state === "bad")) { ui.skipped.push(BACKUP_MODULE_INFO[mod].label + ": this phone's saved lists could not be read, so nothing was added"); continue; }
+    if (!specs.every((s, i) => backupKeyIsEmpty(s, curs[i]))) { ui.listsKept.push({ mod }); continue; }                // any list differs: the whole module is left alone
+    specs.forEach((s, i) => { if (!(s.key in bks)) return; const f = backupKeyFill(s, curs[i], bks[s.key]); if (!f) return; work.lists.push({ key: s.key, mod, bk: bks[s.key] }); ui.lists.push({ key: s.key, mod }); chars += JSON.stringify(f.wrote).length * 2; ids++; });
+  }
+  return { work, ui, chars, ids };
+}
+// The localStorage changes the fills need, computed from the phone's CURRENT text; a set that is no longer empty stops the restore before anything is written (nothing is half filled). Each entry carries `fill` for the undo record.
+function backupSettingsInserts(ws, storage) {
+  const out = [];
+  if (ws.biz) {
+    const cur = backupReadRaw(storage, APP_SETTINGS_KEY, "meta"); if (cur.state === "bad") throw new Error("this phone's " + APP_SETTINGS_KEY + " can't be read");
+    const f = backupBizFill(cur, ws.biz, false); if (!f.empty) throw new Error("the Business tab changed while the restore was starting");
+    const base = cur.state === "ok" ? cur.v : {};
+    if (ws.logo && !base.logoId) f.fields.logoId = { had: "logoId" in base, was: base.logoId, wrote: APP_LOGO_ID };
+    if (Object.keys(f.fields).length) {
+      const next = cur.state === "ok" ? { ...cur.v } : { businessName: "", abn: "", licence: "", logoId: null };
+      for (const k of Object.keys(f.fields)) next[k] = f.fields[k].wrote;
+      out.push({ key: APP_SETTINGS_KEY, kind: cur.state === "ok" ? "text" : "absent", orig: cur.state === "ok" ? cur.raw : undefined, text: JSON.stringify(next), fill: { id: "biz", fields: f.fields, after: { businessName: next.businessName, abn: next.abn, licence: next.licence, logoId: next.logoId } } });
+    }
+  }
+  const specsAll = BACKUP_LIST_SPECS();
+  for (const mod of [...new Set(ws.lists.map(l => l.mod))]) {
+    const specs = specsAll.filter(s => s.mod === mod), curs = specs.map(s => backupReadRaw(storage, s.key, backupSpecRole(s)));
+    if (curs.some(c => c.state === "bad")) throw new Error("this phone's lists for " + mod + " can't be read");
+    if (!specs.every((s, i) => backupKeyIsEmpty(s, curs[i]))) throw new Error("the lists for " + mod + " changed while the restore was starting");
+    const others = [], mine = [];
+    specs.forEach((s, i) => {
+      const L = ws.lists.find(l => l.key === s.key), cur = curs[i];
+      if (!L) { others.push(cur.state === "ok" ? { key: s.key, v: cur.v } : { key: s.key }); return; }                // a key of the module the restore leaves as it is: Undo checks it too
+      const f = backupKeyFill(s, cur, L.bk); if (!f) throw new Error("internal error: nothing to fill for " + s.key);
+      mine.push({ key: s.key, kind: cur.state === "ok" ? "text" : "absent", orig: cur.state === "ok" ? cur.raw : undefined, text: JSON.stringify(f.wrote), fill: { id: "list", mod, created: f.created, whole: f.whole, was: f.was, wrote: f.wrote } });
+    });
+    if (mine.length) mine[0].fill.others = others;
+    out.push(...mine);
+  }
+  return out;
+}
+// What a restore filled, in a few plain words (the result card): "the business details (business name, ABN, licence and company logo) and lists and settings in 2 modules".
+function backupFilledText(f) {
+  if (!f) return "";
+  const biz = [...(f.business || []).map(x => BACKUP_BIZ_WORDS[x]), ...(f.logo ? ["company logo"] : [])];
+  return backupJoinWords([biz.length ? "the business details (" + backupJoinWords(biz) + ")" : null, f.modules ? "lists and settings in " + nw(f.modules, "module") : null].filter(Boolean));
+}
+function backupFilledRecord(inserts, writes) {
+  const biz = inserts.find(e => e.fill && e.fill.id === "biz"), lists = inserts.filter(e => e.fill && e.fill.id === "list"), lw = writes.find(w => w.store === "app-logo");
+  if (!biz && !lists.length && !lw) return null;
+  const names = biz ? Object.keys(biz.fill.fields).filter(x => x !== "logoId") : [], mods = [...new Set(lists.map(e => e.fill.mod))];
+  return { biz: biz ? { created: biz.kind === "absent", fields: biz.fill.fields, after: biz.fill.after } : null, logo: lw ? { sha256: lw.sha256, size: lw.size } : null,
+    lists: mods.map(mod => { const mine = lists.filter(e => e.fill.mod === mod), first = mine.find(e => e.fill.others); return { mod, keys: mine.map(e => ({ key: e.key, created: e.fill.created, whole: e.fill.whole, was: e.fill.was, wrote: e.fill.wrote })), others: first ? first.fill.others : [] }; }),
+    counts: { biz: names.length, logo: lw ? 1 : 0, lists: lists.length, modules: mods.length } };
+}
 // ── UNDO: removes exactly the sites / History snapshots / events the last restore added (by ID), by PARSING the current data (you may have worked in the restored sites since, so text offsets no longer line up).
 // Work done inside the restored sites since is removed with them. Photos and logos go with the sites they belonged to; a photo still used by a remaining site stays.
 const backupDmy = iso => String(iso || "").split("-").reverse().join("/");
 // The text the Undo confirmation shows. It says plainly that work done INSIDE the restored sites since the restore goes too.
 function backupUndoConfirmText(info) {
   const c = (info && info.counts) || {};
+  const st = c.settings, filledAny = st && (st.biz || st.logo || st.lists);
   return "Undo the last restore? This removes the " + nw(c.sites || 0, "site") + ", " + nw(c.snapshots || 0, "History snapshot") + " and " + nw(c.events || 0, "calendar event") + " it added, with their photos, and any work you have done in them since. "
+    + (filledAny ? "It also takes out the business details, logo, lists and settings it filled in, unless you have changed them since; then they are left as they are. " : "")
     + "Everything else is left as it is.";
 }
 function backupUndoInfo(storage = localStorage, now = new Date()) {
@@ -16846,7 +17001,7 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   if (!rec || !rec.undo) return { ok: false, code: "none", message: "There is no restore to undo." };
   if (localISODate(now) > rec.undo.expiresOn) { try { backupWriteRecord(storage, { journal: null, undo: null, problem: rec.problem }); } catch (_) {} return { ok: false, code: "expired", message: "The undo period for the last restore has ended." }; }
   const u = rec.undo; const removed = { sites: 0, snapshots: 0, events: 0 }; const photoRemoved = { "site-photos": new Set(), "gsd-photos": new Set() }; const logoKeys = new Set(u.put.filter(p => p.s === "site-logos").map(p => p.k));
-  const newVals = {};                                                                    // key -> the value AFTER the undo (also used to find the photos still in use)
+  const newVals = {}, removeKeys = new Set(), unfilled = { fields: [], business: {}, logo: false, lists: 0, kept: 0, keptBiz: false, keptModules: 0 }; let logoDelete = false;      // newVals: key -> the value AFTER the undo (also used to find the photos still in use); removeKeys: keys the restore created that are empty again
   const read = (key, role) => { const c = backupReadRaw(storage, key, role); if (c.state === "bad") throw new Error(key + " can't be read"); return c.state === "ok" ? c.v : null; };
   const removedPieces = { "site-photos": [], "gsd-photos": [] };
   try {
@@ -16858,6 +17013,30 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
       const hv = read(k.history, "history"); if (hv) { const gone = hv.filter(s => s && (snapIds.has(s.id) || ids.has(s.projectId))); if (gone.length) { gone.forEach(s => { removed.snapshots++; track(s); }); newVals[k.history] = hv.filter(s => !gone.includes(s)); } }
       const av = read(k.active, "active"); if (av) { let ch = false; const sites = { ...av.sites }; for (const id of ids) if (id in sites) { delete sites[id]; ch = true; } if (ch) newVals[k.active] = { ...av, sites }; }
       for (const id of ids) logoKeys.add(siteLogoKey(m, id));
+    }
+    const fl = u.filled;                                                                  // what the restore FILLED IN (release n): a SET is taken out only if it still holds exactly what the restore wrote; if you changed it since, that whole set is left alone
+    if (fl && (fl.biz || fl.logo)) {                                                      // the business details: name, ABN, licence and the company logo are one set
+      const cur = read(APP_SETTINGS_KEY, "meta"), lst = BACKUP_STORES.find(x => x.id === "app-logo"); let logoNow = null;
+      const db = await backupIdbOpenExisting(lst.db, lst.store);
+      if (db) { try { const r = await backupIdbGet(db, lst.store, APP_LOGO_ID); if (r && r.buf) logoNow = { size: r.buf.byteLength, sha: await backupSha256(new Uint8Array(r.buf)) }; } finally { db.close(); } }
+      const logoSame = fl.logo ? !!logoNow && logoNow.size === fl.logo.size && logoNow.sha === fl.logo.sha256 : !logoNow;
+      const textSame = !fl.biz || (!!cur && [...BACKUP_BIZ_FIELDS, "logoId"].every(f => cur[f] === fl.biz.after[f]));
+      if (logoSame && textSame) {
+        if (fl.biz) {
+          const n = { ...cur }; for (const f of Object.keys(fl.biz.fields)) { const x = fl.biz.fields[f]; if (x.had) n[f] = x.was; else delete n[f]; if (f !== "logoId") { unfilled.fields.push(f); unfilled.business[f] = x.wrote; } }
+          if (fl.biz.created && BACKUP_BIZ_FIELDS.every(f => backupEmptyText(n[f])) && !n.logoId) removeKeys.add(APP_SETTINGS_KEY); else newVals[APP_SETTINGS_KEY] = n;
+        }
+        if (fl.logo) { logoDelete = true; unfilled.logo = true; }
+      } else { unfilled.keptBiz = true; unfilled.kept++; }
+    }
+    if (fl) for (const M of fl.lists || []) {                                             // one module's lists and settings: every key of the module must still be what the restore left
+      const specs = BACKUP_LIST_SPECS(); let same = true;
+      const holds = (key, want, has) => { const sp = specs.find(x => x.key === key); if (!sp) return false; let c; try { c = read(key, backupSpecRole(sp)); } catch (_) { return false; } return has ? !!c && backupDeepEqual(c, want) : c === null; };
+      for (const k of M.keys) if (!holds(k.key, k.wrote, true)) same = false;
+      for (const o of M.others || []) if (!holds(o.key, o.v, "v" in o)) same = false;
+      if (!same) { unfilled.keptModules++; unfilled.kept++; continue; }
+      unfilled.lists++;
+      for (const k of M.keys) { if (k.created) removeKeys.add(k.key); else newVals[k.key] = k.was; }
     }
     const ev = read(K_CAL_EVENTS, "projects"); if (ev && u.events.length) { const ids = new Set(u.events); const keep = ev.filter(e => !(e && ids.has(e.id))); removed.events = ev.length - keep.length; if (keep.length !== ev.length) newVals[K_CAL_EVENTS] = keep; }
     // photos: those the restore wrote + any referenced by the removed data, minus any still referenced by data that REMAINS
@@ -16874,6 +17053,7 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   } catch (e) { return { ok: false, code: "failed", message: "The undo could not be completed (" + e.message + "). Nothing was changed." }; }
   const done = [];                                                                       // apply: on any failure put back what was already changed
   try {
+    for (const key of removeKeys) { const orig = storage.getItem(key); storage.removeItem(key); done.push([key, orig]); }
     for (const key of Object.keys(newVals)) {
       const orig = storage.getItem(key), v = newVals[key];
       if (u.created.includes(key) && (Array.isArray(v) ? v.length === 0 : (v.sites ? Object.keys(v.sites).length === 0 : Object.keys(v).length === 0))) storage.removeItem(key); else storage.setItem(key, JSON.stringify(v));
@@ -16883,8 +17063,9 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   let leftover = 0;                                                                      // the photo / logo records: best effort (a record left behind is invisible: nothing refers to it)
   for (const stId of Object.keys(photoRemoved)) for (const key of photoRemoved[stId]) { try { await backupIdbDelete(stId, key); } catch (_) { leftover++; } }
   for (const key of logoKeys) { try { await backupIdbDelete("site-logos", key); } catch (_) { leftover++; } }
+  if (logoDelete) { try { await backupIdbDelete("app-logo", APP_LOGO_ID); } catch (_) { leftover++; } }
   try { backupWriteRecord(storage, { journal: null, undo: null, problem: rec.problem }); } catch (_) {}
-  return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover };
+  return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover, unfilled };
 }
 // ═════════════════════════════════════════════════════════════════════════
 // BACKUP / RESTORE — delivery (Stage 4: measure before building, warn when large, hand the file to the share sheet with a download fallback, remember the "Last backup")
@@ -16994,14 +17175,24 @@ function backupSummaryText(plan) {
   if (!plan || !plan.ok) return null;
   const mods = plan.modules || [], c = plan.counts || {}, writes = (plan.work && plan.work.writes) || [], ev = plan.events || { add: [], present: [] };
   const groups = [];
-  const photos = writes.filter(w => w.store !== "site-logos" && !String(w.key).endsWith("~t")).length, logos = writes.filter(w => w.store === "site-logos").length;
+  const photos = writes.filter(w => w.store !== "site-logos" && w.store !== "app-logo" && !String(w.key).endsWith("~t")).length, logos = writes.filter(w => w.store === "site-logos").length;
   const addedLines = []; mods.forEach(m => m.sites.add.forEach(x => addedLines.push(x.name + " (" + m.label + ")")));
   const addParts = [c.sitesAdd ? nw(c.sitesAdd, "site") : null, c.snapshotsAdd ? nw(c.snapshotsAdd, "History snapshot") : null, c.eventsAdd ? nw(c.eventsAdd, "calendar event") : null, photos ? nw(photos, "photo") : null, logos ? nw(logos, "logo") : null].filter(Boolean);
   if (addParts.length) groups.push({ id: "added", mark: "\u2713", heading: "Will be added", summary: backupJoinWords(addParts), ...backupCap(addedLines) });
   const presentLines = []; mods.forEach(m => m.sites.present.forEach(x => presentLines.push(x.name + " (" + m.label + ")" + (x.nameHere && x.nameHere !== x.name ? ", called \"" + x.nameHere + "\" here" : ""))));
   const presParts = [c.sitesPresent ? nw(c.sitesPresent, "site") : null, c.eventsPresent ? nw(c.eventsPresent, "calendar event") : null].filter(Boolean);
   if (presParts.length) groups.push({ id: "present", mark: "\u25cb", heading: "Already on this phone (left exactly as they are)", summary: backupJoinWords(presParts), ...backupCap(presentLines) });
+  const stg = plan.settings || null;
+  if (stg) {
+    const modLine = list => { const n = new Set(list.map(l => l.mod)).size; return n ? ["Lists and settings in " + nw(n, "module")] : []; };
+    const BIZ_LINE = "Business details (name, ABN, licence, logo)";
+    const fillItems = [].concat(stg.biz.length || stg.logo ? [BIZ_LINE] : [], modLine(stg.lists));
+    if (fillItems.length) groups.push({ id: "filled", mark: "\u2713", heading: "Will be filled in (empty on this phone)", summary: "", ...backupCap(fillItems) });
+    const keptItems = [].concat(stg.bizKept ? [BIZ_LINE] : [], modLine(stg.listsKept));
+    if (keptItems.length) groups.push({ id: "kept", mark: "\u25cb", heading: "Already set on this phone (left exactly as they are)", summary: "", ...backupCap(keptItems) });
+  }
   const skipped = [];
+  if (stg) stg.skipped.forEach(x => skipped.push(x));
   mods.forEach(m => {
     m.sites.conflict.forEach(x => skipped.push(x.name + " (" + m.label + "): " + (x.reason === "conflicting photos" ? "its photos differ from photos already on this phone" : "this phone already holds leftover data for it")));
     if (m.status === "skipped-version") skipped.push(m.label + ": made by a different version of SparkCheck, so it was not added");
@@ -17026,7 +17217,7 @@ function backupMessageText(code, plan) {
     case "damaged": return { title: bad, body: "This backup file is damaged." };
     case "invalid": return { title: bad, body: "This backup file is not complete." };
     case "newer-version": return { title: bad, body: "This backup was made by a newer version of SparkCheck. Update the app, then try again." };
-    case "nothing": return { title: "Nothing to add", body: "The sites, History and calendar events in this backup are already on this phone." };
+    case "nothing": return { title: "Nothing to add", body: "Everything in this backup is already on this phone or already set here." };
     case "headroom": { const h = plan && plan.headroom; if (h && h.storage && h.storage.known && !h.storage.ok) return { title: "Not enough room", body: "There is not enough free space for the photos. About " + backupMbText(h.storage.needBytes) + " is needed and " + backupMbText(Math.max(0, h.storage.quota - h.storage.usage)) + " is free. Free up some space, then try again. Nothing was changed." };
       return { title: "Not enough room", body: "There is not enough room in this phone's saved data for this restore. Free up some space by deleting sites, History or calendar events you no longer need, then try again. Nothing was changed." }; }
     case "unfinished": return { title: "A restore is still being put right", body: unfinished };
@@ -17055,5 +17246,5 @@ async function requestPersistentStorage(nav = typeof navigator !== "undefined" ?
 }
 export { requestPersistentStorage };
 export { GS_TAB_LABELS };
-export { backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
+export { BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export default AppRoot;
