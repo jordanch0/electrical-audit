@@ -680,7 +680,7 @@ const load = async (key, fallback) => { try { const r=localStorage.getItem(key);
 // the 5MB ceiling is far less likely to be hit day-to-day than when photos were inline — but a save can still fail (many sites,
 // long history, a very large hierarchy), and when it does the user must not be left thinking their work was saved.
 const STORAGE_QUOTA_ASSUMED_BYTES = 5 * 1024 * 1024;
-function localStorageUsageBytes() {
+function localStorageUsageBytes(strict = false) {       // strict: a failed read throws instead of returning what was counted so far (the Storage line then keeps its old value)
   let total = 0;
   try {
     for (let i = 0; i < localStorage.length; i++) {
@@ -688,7 +688,7 @@ function localStorageUsageBytes() {
       const v = localStorage.getItem(k) || "";
       total += (k.length + v.length) * 2; // UTF-16: JS strings are 2 bytes/code unit — a safe (over-, never under-) estimate
     }
-  } catch (_) {}
+  } catch (e) { if (strict) throw e; }
   return total;
 }
 function fmtBytes(n) {
@@ -10263,6 +10263,9 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
     setLoaded(true);
     return () => { alive = false; if (urlRef.current) URL.revokeObjectURL(urlRef.current); };
   }, []);
+  // The Storage line follows every save, restore, undo and delete. A failed measurement keeps the value on screen. Only the text and the bar change, so nothing moves and nothing scrolls.
+  const refreshStorage = () => { try { setStorageBytes(localStorageUsageBytes(true)); } catch (_) {} };
+  gate.current.refreshStorage = refreshStorage;
 
   // After a restore or an undo changed the Business tab record or the logo: show it. Text you typed and have not saved is never replaced; an undo only clears a field that still shows exactly what the restore wrote.
   gate.current.refreshSettings = ev => {
@@ -10290,7 +10293,7 @@ function GlobalSettingsView({ onGoHome, backupDeps, initialTab }) {      // back
   };
   const onSave = () => {
     saveAppSettings({ businessName: businessName.trim(), abn: abn.trim(), licence: licence.trim(), logoId: hasLogo ? "logo" : null });
-    setSaved(true);
+    setSaved(true); refreshStorage();
   };
 
   const label = { fontSize: 10, color: "#5f5b57", letterSpacing: 0.8, fontWeight: 700 };
@@ -10519,7 +10522,7 @@ function BackupRestoreSection({ gate, deps }) {
     try { r = await d.restore(hr.file, { inspected: hr.insp, onProgress: e => { if (alive.current) setRs(s => s.phase === "restoring" ? { ...s, progress: e } : s); } }); } catch (e) { r = { ok: false, code: "failed", message: e && e.name }; }
     gate.current.busy = false; heldRestore.current = { file: null, insp: null, plan: null };        // the file and the parsed plan are dropped either way
     if (!alive.current) return;
-    setProblem(d.problem());
+    setProblem(d.problem()); if (gate.current.refreshStorage) gate.current.refreshStorage();
     if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "idle", info: d.undoInfo() }); setRs({ phase: "result", kind: "ok", added: added.summary, summary: r.summary }); if (gate.current.refreshSettings) gate.current.refreshSettings({ kind: "restore", logo: !!(r.summary.filled && r.summary.filled.logo) }); }
     else { backupLog(r.code, r.message); setRs({ phase: "result", kind: "err", ...backupMessageText(r.code, r.plan) }); }
   };
@@ -10528,6 +10531,7 @@ function BackupRestoreSection({ gate, deps }) {
     gate.current.busy = true; setUn(s => ({ ...s, phase: "undoing" })); let r;
     try { r = await d.undo(); } catch (e) { r = { ok: false, code: "undo-failed", message: e && e.name }; }
     gate.current.busy = false; if (!alive.current) return;
+    if (gate.current.refreshStorage) gate.current.refreshStorage();
     if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "result", kind: "ok", removed: r.removed, photosRemoved: r.photosRemoved, unfilled: r.unfilled, info: null }); if (gate.current.refreshSettings) gate.current.refreshSettings({ kind: "undo", business: r.unfilled && r.unfilled.business, logo: !!(r.unfilled && r.unfilled.logo) }); }
     else { backupLog(r.code, r.message); setUn({ phase: "result", kind: "err", ...backupMessageText(r.code === "none" || r.code === "expired" || r.code === "unfinished" ? r.code : "undo-failed"), info: d.undoInfo() }); }
   };
@@ -10536,6 +10540,7 @@ function BackupRestoreSection({ gate, deps }) {
   const startErase = () => {
     if (gate.current.drop) gate.current.drop();
     try { (d.eraseBegin || eraseBegin)(); } catch (e) { backupLog("erase-failed", e && e.name); setDel({ phase: "failed" }); return; }
+    if (gate.current.refreshStorage) gate.current.refreshStorage();         // the marker is a few bytes; the erase itself runs at the next start, which measures again
     gate.current.busy = true; setDel({ phase: "starting" }); d.reload();
   };
   const leftover = er.mode === "none" ? (d.leftover ? d.leftover() : eraseLeftover()) : null;
@@ -10588,7 +10593,7 @@ function BackupRestoreSection({ gate, deps }) {
     return [...out, input];
   };
   const undoBlock = () => {
-    if (un.phase === "result") return [bsHeading("Undo"), un.kind === "ok" ? bsCard("ok", "Restore undone", [nw(un.removed.sites, "site"), ", ", nw(un.removed.snapshots, "History snapshot"), " and ", nw(un.removed.events, "calendar event"), " were removed, with ", nw(un.photosRemoved || 0, "photo"), ".", un.unfilled && (un.unfilled.fields.length || un.unfilled.logo || un.unfilled.lists) ? " The " + backupJoinWords([un.unfilled.fields.length || un.unfilled.logo ? "business details" : null, un.unfilled.lists ? "lists and settings" : null].filter(Boolean)) + " it filled in " + "were taken out." : "", un.unfilled && un.unfilled.keptBiz ? " The business details you changed since were left as they are." : "", un.unfilled && un.unfilled.keptModules ? " The lists and settings in " + nw(un.unfilled.keptModules, "module") + " you changed since were left as they are." : ""], "backup-undo-result-ok") : bsCard("err", un.title, un.body, "backup-undo-result-err"),
+    if (un.phase === "result") return [bsHeading("Undo"), un.kind === "ok" ? bsCard("ok", "Restore undone", [backupUndoResultText(un)], "backup-undo-result-ok") : bsCard("err", un.title, un.body, "backup-undo-result-err"),
       un.kind === "ok" ? bsBtn("Done", () => d.reload(), { id: "backup-undo-done" }) : bsBtn("OK", () => setUn({ phase: "idle", info: d.undoInfo() }), { kind: "secondary", id: "backup-undo-ok" })];
     if (!un.info) return [];
     if (un.phase === "confirming") return [bsHeading("Undo"), bsTwoStep(unBox, d.undoText(un.info), "Yes, undo", "No, keep them", doUndo, () => setUn(s => ({ ...s, phase: "idle" })), { id: "backup-undo-confirm", danger: true })];
@@ -16800,6 +16805,8 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
   try { storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal, undo: prev ? prev.undo : null, ...(prev && prev.problem ? { problem: prev.problem } : {}) })); }
   catch (e) { return { ok: false, code: "journal", message: "There is not enough room in this phone's saved-data space to start the restore. Free up space by deleting sites, History snapshots or calendar events you no longer need, then try again. Nothing was changed.", plan }; }
   const dbs = {};
+  const isPhoto = w => w.store !== "site-logos" && w.store !== "app-logo" && !String(w.key).endsWith("~t");      // the progress line counts PHOTOS only (the same number as the summary), never thumbnails or logos
+  const photosTotal = writes.filter(isPhoto).length; let photosDone = 0;
   try {
     await hook("journal");
     for (let i = 0; i < writes.length; i++) {                                           // photos / logos: one at a time, each released before the next
@@ -16807,7 +16814,7 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
       if (u8.length !== w.size || await backupSha256(u8) !== w.sha256) throw new Error("a photo or logo in the file does not match its checksum");
       if (!dbs[st.id]) dbs[st.id] = await backupIdbOpen(st.db, st.store);
       await backupIdbReq(dbs[st.id], st.store, "readwrite", s => s.put({ buf: u8.buffer, type: w.type }, w.key));
-      progress("photos", i + 1, writes.length); await hook("put", i);
+      if (isPhoto(w)) progress("photos", ++photosDone, photosTotal); await hook("put", i);
     }
     let checked = 0;
     for (const w of writes) {                                                           // verify counts + sizes + checksums of what was written
@@ -16983,11 +16990,24 @@ function backupFilledRecord(inserts, writes) {
 // Work done inside the restored sites since is removed with them. Photos and logos go with the sites they belonged to; a photo still used by a remaining site stays.
 const backupDmy = iso => String(iso || "").split("-").reverse().join("/");
 // The text the Undo confirmation shows. It says plainly that work done INSIDE the restored sites since the restore goes too.
+// A count of zero is left out with its words, and the verb agrees: "1 site and 2 calendar events", "2 sites, 3 History snapshots and 1 calendar event".
+const backupCountWords = c => backupJoinWords([["site", c.sites], ["History snapshot", c.snapshots], ["calendar event", c.events]].filter(x => x[1] > 0).map(x => nw(x[1], x[0])));
+// The text of the "Restore undone" card: what was removed (zero counts left out, "was" for exactly one thing, "were" otherwise, ", with N photos" only when there are photos), then what was taken out or left as it is.
+function backupUndoResultText(un) {
+  const u = un.unfilled, r = un.removed || {}, photos = un.photosRemoved || 0;
+  const items = [["site", r.sites], ["History snapshot", r.snapshots], ["calendar event", r.events]].filter(x => x[1] > 0);
+  const removedText = items.length ? backupJoinWords(items.map(x => nw(x[1], x[0]))) + (items.length === 1 && items[0][1] === 1 ? " was" : " were") + " removed" + (photos > 0 ? ", with " + nw(photos, "photo") : "") + "." : "";
+  const bizOut = !!(u && (u.fields.length || u.logo)), listsOut = !!(u && u.lists);
+  const filledText = bizOut && listsOut ? "The business details, lists and settings it filled in were taken out." : bizOut ? "The business details it filled in were taken out." : listsOut ? "The lists and settings it filled in were taken out." : "";      // both: the same phrase the Undo question uses
+  const keptBizText = u && u.keptBiz ? "The business details you changed since were left as they are." : "";
+  const keptModText = u && u.keptModules ? "The lists and settings in " + nw(u.keptModules, "module") + " you changed since were left as they are." : "";
+  return [removedText, filledText, keptBizText, keptModText].filter(Boolean).join(" ") || "Nothing was removed.";
+}
 function backupUndoConfirmText(info) {
   const c = (info && info.counts) || {};
-  const st = c.settings, filledAny = st && (st.biz || st.logo || st.lists);
-  return "Undo the last restore? This removes the " + nw(c.sites || 0, "site") + ", " + nw(c.snapshots || 0, "History snapshot") + " and " + nw(c.events || 0, "calendar event") + " it added, with their photos, and any work you have done in them since. "
-    + (filledAny ? "It also takes out the business details, logo, lists and settings it filled in, unless you have changed them since; then they are left as they are. " : "")
+  const st = c.settings, filledAny = st && (st.biz || st.logo || st.lists), words = backupCountWords(c);
+  const filledText = "takes out the business details, logo, lists and settings it filled in, unless you have changed them since; then they are left as they are. ";
+  return "Undo the last restore? " + (words ? "This removes the " + words + " it added, with their photos, and any work you have done in them since. " + (filledAny ? "It also " + filledText : "") : (filledAny ? "This " + filledText : ""))
     + "Everything else is left as it is.";
 }
 function backupUndoInfo(storage = localStorage, now = new Date()) {
@@ -17233,7 +17253,7 @@ function backupMessageText(code, plan) {
 }
 export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrollMemory, StyledSelect, useCollapsible, DeleteButton, ConfirmReset, EditableDropdown, IELEditableDropdown, SWBEditableDropdown, ThermoEditableDropdown, IRTEditableDropdown, gsdUpgradeDropdowns, GSD_LEGACY_CATEGORIES, GSD_LEGACY_COMMON, GSDApp, exportGSDExcel, gsdPhotoIO, gsdPhotoStore, gsdNumbered, gsdLayout, gsdFit, gsdReportSections, gsdTitle, gsdAreaTaken, GSD_DEFAULT_CATEGORIES, GSD_DEFAULT_COMMON, GSD_DEFAULT_RESPONSIBILITY, SWB_CHECKLIST, SWB_REGISTER_COLUMNS, swbRegisterRows, swbBoardOverall, swbSheetName, checklistScore, scoreLabel, eltFittingSummary, swbBoardSummary, moduleIcon, ICON_DEFS, CAL_TYPES, CompleteAuditBtn, upgradeEltDropdowns, ELT_DEFAULT_TYPES, ELT_LEGACY_DEFAULT_TYPES, welderGetRes, uniqueAreaId, areaNameTaken, removeAssetResults, AreaManager, areaKey, groupAssetsIntoAreas, migrateProjectToAreas, migrateHistoryToAreas, migrateProjectList, migrateHistoryList, loadVersioned, areaAssets, parseWelderExcel, addTATMonths, swbAddYear, irtAddYear, exportWelderExcel, addMonthsISO, addYearsISO, WELDER_CHECKLIST, WELDER_COLUMNS, welderSummary, welderOverall, welderScoreLabel, welderRegisterRows, welderSiteSummary,
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
-  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BackupRestoreSection, BACKUP_UI, backupLog, backupLogReason, backupReloadApp, backupLastRestoreLine, backupKeyLabel, backupKeysLabel, BACKUP_LIST_CAP, backupMbText, backupSummaryText, backupMessageText, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
+  localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BackupRestoreSection, BACKUP_UI, backupLog, backupLogReason, backupReloadApp, backupLastRestoreLine, backupKeyLabel, backupKeysLabel, BACKUP_LIST_CAP, backupMbText, backupSummaryText, backupMessageText, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupUndoResultText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
   localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
