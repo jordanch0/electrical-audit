@@ -10439,7 +10439,7 @@ const bsSummaryCard = t => bsCard("info", t.title, React.createElement("div", nu
 const backupLogReason = m => String(m == null ? "" : m).replace(/\([^()]*\)/g, "(detail withheld)").replace(/["`\u201c\u201d][^"`\u201c\u201d]{0,200}["`\u201c\u201d]/g, "[removed]").replace(/\bfor \S+?(?= that is not text|\.$)/g, "for a key").slice(0, 300);
 function backupLog(code, technical) { try { console.warn("[SparkCheck backup]", String(code || "error"), backupLogReason(technical)); } catch (_) {} }
 const backupReloadApp = () => window.location.reload();
-const backupLastRestoreLine = info => { const c = (info && info.counts) || {}; const parts = [c.sites ? nw(c.sites, "site") : null, c.snapshots ? nw(c.snapshots, "History snapshot") : null, c.events ? nw(c.events, "calendar event") : null, c.photoFiles ? nw(c.photoFiles, "photo") : null].filter(Boolean);
+const backupLastRestoreLine = info => { const c = (info && info.counts) || {}; const parts = [...backupCountParts(c), c.photoFiles ? nw(c.photoFiles, "photo") : null].filter(Boolean);       // the same list as the Undo question: copies read as "site copies"
   return "Last restore: " + (backupJoinWords(parts) || "nothing") + " added on " + backupDmy(localISODate(new Date(info.restoredAt))) + ". Undo is available until " + backupDmy(info.until) + "."; };
 
 function BackupRestoreSection({ gate, deps }) {
@@ -10532,7 +10532,7 @@ function BackupRestoreSection({ gate, deps }) {
     try { r = await d.undo(); } catch (e) { r = { ok: false, code: "undo-failed", message: e && e.name }; }
     gate.current.busy = false; if (!alive.current) return;
     if (gate.current.refreshStorage) gate.current.refreshStorage();
-    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "result", kind: "ok", removed: r.removed, photosRemoved: r.photosRemoved, unfilled: r.unfilled, info: null }); if (gate.current.refreshSettings) gate.current.refreshSettings({ kind: "undo", business: r.unfilled && r.unfilled.business, logo: !!(r.unfilled && r.unfilled.logo) }); }
+    if (r.ok) { gate.current.reloadPending = true; setUn({ phase: "result", kind: "ok", removed: r.removed, photosRemoved: r.photosRemoved, unfilled: r.unfilled, keptCopies: r.keptCopies || 0, copiesRemoved: r.copiesRemoved || 0, info: null }); if (gate.current.refreshSettings) gate.current.refreshSettings({ kind: "undo", business: r.unfilled && r.unfilled.business, logo: !!(r.unfilled && r.unfilled.logo) }); }
     else { backupLog(r.code, r.message); setUn({ phase: "result", kind: "err", ...backupMessageText(r.code === "none" || r.code === "expired" || r.code === "unfinished" ? r.code : "undo-failed"), info: d.undoInfo() }); }
   };
 
@@ -10573,14 +10573,14 @@ function BackupRestoreSection({ gate, deps }) {
       make1(notes.length ? "Make another backup" : "Make backup", { kind: notes.length ? "secondary" : undefined }), notes.length ? null : bsHelp(["Creates one file. Then tap ", React.createElement("b", { key: "s" }, "Share backup"), " to save it. The file includes client names, ABNs, licence numbers, logos and photos, so store it somewhere safe."], 0, 8)];
   };
   const noteCards = () => notes.map((n, i) => React.createElement(React.Fragment, { key: "note" + i }, bsCard(n.kind, n.title, n.body, "backup-note-" + n.kind)));
-  const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : (r.summary.filled ? null : "Nothing was added."), r.summary.filled ? React.createElement("div", { key: "f" }, "Filled in (it was empty here): " + backupFilledText(r.summary.filled) + ".") : null, r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null,
+  const resultCard = r => r.kind === "ok" ? bsCard("ok", "Restore complete", [r.added ? "Added: " + r.added + "." : (r.summary.filled || r.summary.copiesAdded ? null : "Nothing was added."), r.summary.copiesAdded ? React.createElement("div", { key: "cp" }, "Added as copies (the site here was different):", ...r.summary.copyLines.slice(0, BACKUP_LIST_CAP).map((n, i) => React.createElement("div", { key: "cn" + i }, "\u2022 " + n)), r.summary.copyLines.length > BACKUP_LIST_CAP ? React.createElement("div", { key: "cm" }, "\u2022 and " + (r.summary.copyLines.length - BACKUP_LIST_CAP) + " more") : null) : null, r.summary.filled ? React.createElement("div", { key: "f" }, "Filled in (it was empty here): " + backupFilledText(r.summary.filled) + ".") : null, r.summary.alreadyOnPhone ? React.createElement("div", { key: "a" }, r.summary.alreadyOnPhone + " already on this phone, left as they are.") : null, r.summary.alreadyCopied ? React.createElement("div", { key: "ac" }, nw(r.summary.alreadyCopied, "site") + " already on this phone as " + (r.summary.alreadyCopied === 1 ? "a copy." : "copies.")) : null,
       r.summary.notRestored ? React.createElement("div", { key: "n" }, r.summary.notRestored + " not restored.") : null, React.createElement("div", { key: "u", style: { marginTop: 6 } }, "You can undo this until ", React.createElement("b", { key: "d" }, backupDmy(r.summary.undoUntil)), ".")], "backup-result-ok")
     : bsCard(r.kind === "info" ? "info" : "err", r.title, r.body, "backup-result-" + (r.kind === "info" ? "info" : "err"));
   const restoreBlock = () => {
     const out = [bsHeading("Restore")];
     const choose = (label, disabled) => bsBtn(label, () => fileInput.current && fileInput.current.click(), { kind: "secondary", id: "backup-choose", disabled: disabled || busy });
     const input = React.createElement("input", { key: "fi", ref: fileInput, type: "file", accept: ".zip,application/zip,application/x-zip-compressed", "data-testid": "backup-file-input", "aria-label": "Choose backup file", style: { display: "none" }, onChange: e => { const f = e.target.files && e.target.files[0]; e.target.value = ""; pick(f); } });
-    if (rs.phase === "idle") out.push(bsHelp("Adds what is in a backup file and is not already on this phone.", 10), choose("Choose backup file…"));
+    if (rs.phase === "idle") out.push(bsHelp("Adds what is in a backup file and is not already on this phone. If a site here differs from the backup's version, the backup's version is added as a separate copy and the site on this phone is not changed.", 10), choose("Choose backup file…"));
     else if (rs.phase === "checking") out.push(bsBusyRow("Checking the file…"), choose("Choose backup file…", true));
     else if (rs.phase === "summary" || rs.phase === "confirming") {
       out.push(bsSummaryCard(rs.text));
@@ -16351,7 +16351,7 @@ const backupFilename = (d = new Date()) => `SparkCheck-backup-${localISODate(d)}
 const BACKUP_MODULES = ["rcd", "iel", "tat", "thermo", "swb", "irt", "elt", "welder", "gsd"];
 const BACKUP_KEY_RE = new RegExp("^(?:(?:" + BACKUP_MODULES.join("|") + ")-(?:projects|results|meta|history|dropdowns|audit-active|items|photos-migrated)-v\\d+|rcd-mode-v\\d+|iel-cat-v\\d+|tat-(?:settings|freqs|names|defaults)-v\\d+|cal-events-v\\d+|app-settings-v\\d+)$");
 const backupKeyAllowed = k => typeof k === "string" && BACKUP_KEY_RE.test(k);
-const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-last-backup-v1" || k === "sparkcheck-erase-pending-v1" || k === "sparkcheck-leftover-v1");
+const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-copies-v1" || k === "sparkcheck-last-backup-v1" || k === "sparkcheck-erase-pending-v1" || k === "sparkcheck-leftover-v1");
 function backupCollectLocalStorage(storage = localStorage) {
   const entries = {}, unknown = [], excluded = [];
   for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; if (backupKeyExcluded(k)) excluded.push(k); else if (backupKeyAllowed(k)) entries[k] = storage.getItem(k) || ""; else unknown.push(k); }
@@ -16370,7 +16370,7 @@ function backupIdbOpen(name, store) {
     const rq = indexedDB.open(name, 1); rq.onupgradeneeded = () => rq.result.createObjectStore(store); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
   });
 }
-const backupIdbReq = (db, store, mode, fn) => new Promise((res, rej) => { const tx = db.transaction(store, mode); const r = fn(tx.objectStore(store)); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error); });
+const backupIdbReq = (db, store, mode, fn) => new Promise((res, rej) => { const tx = db.transaction(store, mode); const r = fn(tx.objectStore(store)); tx.oncomplete = () => res(r && r.result); tx.onerror = () => rej(tx.error || (r && r.error) || new Error("IndexedDB request failed")); tx.onabort = () => rej(tx.error || (r && r.error) || new Error("IndexedDB transaction aborted")); });
 const backupIdbKeys = (db, store) => backupIdbReq(db, store, "readonly", s => s.getAllKeys());
 const backupIdbGet = (db, store, key) => backupIdbReq(db, store, "readonly", s => s.get(key));
 const backupToHex = u8 => Array.from(u8, b => b.toString(16).padStart(2, "0")).join("");
@@ -16517,9 +16517,14 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
   };
   const storeById = Object.fromEntries(BACKUP_STORES.map(s => [s.id, s]));
   const out = { modules: [], work: { modules: {}, events: [], writes: [], settings: null } }; const writeSet = new Map(); let insertChars = 0, journalIds = 0;
+  const ctxs = {}, today = localISODate(), phoneShaCache = new Map(), own = (o, k) => (o && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined);
+  const copiesHere = backupReadKey(storage, BACKUP_COPIES_KEY, "meta");
+  const cenv = { today, withPhotos: insp.summary.includesPhotos !== false, copiesRec: copiesHere.state === "ok" ? copiesHere.v : {}, have: null,
+    backupSha: async (sid, key) => (listed[sid].get(key) || {}).sha256 || "-",
+    phoneSha: async (sid, key) => { const ck = sid + "\u0000" + key; if (phoneShaCache.has(ck)) return phoneShaCache.get(ck); const st = storeById[sid], db = await openDb(st); let v = "-"; if (db) { const r = await backupIdbGet(db, st.store, key); if (r && r.buf) v = await backupSha256(new Uint8Array(r.buf)); } phoneShaCache.set(ck, v); return v; } };
   try {
     for (const m of BACKUP_MODULES) {
-      const info = BACKUP_MODULE_INFO[m]; const mod = { id: m, label: info.label, status: "nothing", note: "", sites: { add: [], present: [], conflict: [] }, snapshots: { add: 0 }, photos: { write: 0, reuse: 0 } };
+      const info = BACKUP_MODULE_INFO[m]; const mod = { id: m, label: info.label, status: "nothing", note: "", sites: { add: [], present: [], conflict: [], copy: [], copied: [] }, snapshots: { add: 0, copy: 0 }, photos: { write: 0, reuse: 0 } };
       out.modules.push(mod);
       const mismatch = backupVersionMismatch(m, info, data);
       if (mismatch.length) { mod.status = "skipped-version"; mod.note = "This backup stores " + info.label + " in a different format version (" + mismatch.map(x => x.found.join(", ") + " instead of " + x.expected).join("; ") + "), so it was not restored."; continue; }
@@ -16537,11 +16542,20 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
       if (hereBad) { mod.status = "unreadable-here"; mod.note = "This phone's " + info.label + " data can't be read, so nothing was added to it."; continue; }
       const have = new Map(here.projects.state === "ok" ? here.projects.v.filter(p => p && typeof p.id === "string").map(p => [p.id, typeof p.name === "string" ? p.name : p.id]) : []);
       const haveSnap = new Set(here.history.state === "ok" ? here.history.v.map(s => s && s.id) : []);
-      const seen = new Set(), cand = [];
+      const seen = new Set(), cand = [], copyList = []; cenv.have = have;
       for (const p of bk.projects) {
         if (!p || typeof p.id !== "string" || seen.has(p.id)) continue; seen.add(p.id);
         const nm = typeof p.name === "string" ? p.name : p.id;
-        if (have.has(p.id)) mod.sites.present.push({ id: p.id, name: nm, nameHere: have.get(p.id) }); else cand.push(p);   // listed by name in the confirmation
+        if (have.has(p.id)) {                                // release o: the same ID on this phone. Identical content = nothing to add; different content = the backup's version is added as a COPY (planned below)
+          try {
+            const hp = { project: here.projects.v.find(x => x && x.id === p.id), results: here.results.state === "ok" ? own(here.results.v, p.id) : undefined, meta: here.meta.state === "ok" ? own(here.meta.v, p.id) : undefined, snaps: here.history.state === "ok" ? here.history.v.filter(x => x && x.projectId === p.id) : [] };
+            const bkp = { project: p, results: own(bk.results, p.id), meta: own(bk.meta, p.id), snaps: bk.history.filter(x => x && x.projectId === p.id && typeof x.id === "string") };
+            const cls = await backupClassifyExisting(m, p, bkp, hp, cenv);
+            if (cls.kind === "same") mod.sites.present.push({ id: p.id, name: nm, nameHere: have.get(p.id) });
+            else if (cls.kind === "copied") mod.sites.copied.push({ id: p.id, name: nm, copyId: cls.id, copyName: have.get(cls.id) });
+            else copyList.push({ p, nm, digest: cls.digest, pieces: bkp });
+          } catch (_) { mod.sites.conflict.push({ id: p.id, name: nm, reason: "could not be compared", keys: 0 }); }
+        } else cand.push(p);   // listed by name in the confirmation
       }
       const orphan = (role, id) => here[role].state === "ok" && Object.prototype.hasOwnProperty.call(role === "active" ? here.active.v.sites : here[role].v, id);   // an entry already stored under that ID is never overwritten
       const st = info.photos ? storeById[info.photos] : null; const baseIds = new Set(st ? [...listed[st.id].keys()].filter(k => !k.endsWith("~t")) : []);
@@ -16568,8 +16582,11 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
         keys.forEach((k, i) => { if (verdicts[i] === "write") writeSet.set(k.st.id + "\u0000" + k.r.key, { store: k.st.id, key: k.r.key, file: k.r.file, type: k.r.type, size: k.r.size, sha256: k.r.sha256 }); });
         insertChars += JSON.stringify(pieces).length + 40; journalIds += 1 + snaps.length;
       }
-      if (mod.sites.add.length) { mod.status = "add"; out.work.modules[m] = wk; }   // History of a site already on this phone is skipped with that site
+      ctxs[m] = { mod, bk, have, haveSnapAll: new Set(here.history.state === "ok" ? here.history.v.map(x => x && x.id) : []), names: new Set([...have.values()].map(n => String(n).trim().toLowerCase())), activeMode, activeOk, copyList, wk: mod.sites.add.length ? wk : null };
+      if (mod.sites.add.length) { mod.status = "add"; out.work.modules[m] = wk; }   // History of a site already on this phone is skipped with that site; a site already there with different content is copied (backupPlanCopies)
     }
+    const cp = await backupPlanCopies({ ctxs, listed, storeById, openDb, writeSet, z, dayText: backupDayText(insp.summary.deviceLocalDate), today, out }); insertChars += cp.chars; journalIds += cp.ids;
+    Object.assign(out.work, { copies: cp.copies, copyInfo: cp.copyInfo, copyRecs: cp.recs || {}, idMap: cp.idMap, originals: cp.originals, listed });
     // calendar events: by event ID only; an event never depends on a site (it carries the site NAME as text)
     const ev = { status: "nothing", note: "", add: [], present: [] };
     const bev = data[K_CAL_EVENTS]; let bevArr = null; if (bev !== undefined) { try { const v = JSON.parse(bev); if (Array.isArray(v)) bevArr = v; } catch (_) {} }
@@ -16587,8 +16604,8 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
     const sp = await backupPlanSettings({ data, listed, storeById, openDb, storage, writeSet, z }); out.work.settings = sp.work; insertChars += sp.chars; journalIds += sp.ids;      // business details, company logo, lists and settings: fill only what is empty
     out.work.writes = [...writeSet.values()]; journalIds += out.work.writes.length;
     const writeBytes = out.work.writes.reduce((n, w) => n + w.size, 0);
-    const counts = { sitesAdd: 0, sitesPresent: 0, sitesConflict: 0, snapshotsAdd: 0, eventsAdd: ev.add.length, eventsPresent: ev.present.length, photosWrite: out.work.writes.filter(w => w.store !== "app-logo").length, photosReuse: 0, modulesSkipped: 0 };
-    for (const mod of out.modules) { counts.sitesAdd += mod.sites.add.length; counts.sitesPresent += mod.sites.present.length; counts.sitesConflict += mod.sites.conflict.length; counts.snapshotsAdd += mod.snapshots.add; counts.photosReuse += mod.photos.reuse; if (/^(skipped|unreadable)/.test(mod.status)) counts.modulesSkipped++; }
+    const counts = { sitesAdd: 0, sitesPresent: 0, sitesConflict: 0, snapshotsAdd: 0, sitesCopy: 0, sitesCopied: 0, snapshotsCopy: 0, eventsAdd: ev.add.length, eventsPresent: ev.present.length, photosWrite: out.work.writes.filter(w => w.store !== "app-logo").length, photosReuse: 0, modulesSkipped: 0 };
+    for (const mod of out.modules) { counts.sitesAdd += mod.sites.add.length; counts.sitesPresent += mod.sites.present.length; counts.sitesCopy += mod.sites.copy.length; counts.sitesCopied += mod.sites.copied.length; counts.snapshotsCopy += mod.snapshots.copy; counts.sitesConflict += mod.sites.conflict.length; counts.snapshotsAdd += mod.snapshots.add; counts.photosReuse += mod.photos.reuse; if (/^(skipped|unreadable)/.test(mod.status)) counts.modulesSkipped++; }
     // headroom: (1) the app's own 5 MB saved-data assumption (localStorage), (2) the browser's storage estimate for the photos. Either one failing refuses with a message and changes nothing.
     const localUsed = backupLocalBytes(storage), localAdd = (insertChars + journalIds * 40 + 2048) * 2, localLimit = STORAGE_QUOTA_ASSUMED_BYTES;
     const hr = { local: { usedBytes: localUsed, addBytes: localAdd, limitBytes: localLimit, ok: localUsed + localAdd <= localLimit }, storage: { known: false, quota: 0, usage: 0, needBytes: writeBytes, ok: true }, ok: true, message: "" };
@@ -16600,8 +16617,8 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
     else if (!hr.storage.ok) hr.message = "Not enough free space on this device for the photos: about " + backupMb(hr.storage.needBytes) + " is needed (including a safety margin) but only " + backupMb(Math.max(0, hr.storage.quota - hr.storage.usage)) + " is available. Free up space (delete photos or other apps' data), then try again. Nothing was changed.";
     else if (!hr.storage.known && writeBytes > 0) hr.message = "This device can't report free space, so it could not be checked in advance. If space runs out the restore stops and puts everything back exactly as it was.";
     counts.settingsAdd = (sp.ui.biz.length || sp.ui.logo ? 1 : 0) + new Set(sp.ui.lists.map(l => l.mod)).size;                      // sets, not fields: the business details are one, each module's lists and settings are one
-    const anyAdd = counts.sitesAdd > 0 || counts.eventsAdd > 0 || counts.settingsAdd > 0;
-    return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, modules: out.modules, events: ev, settings: sp.ui, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
+    const anyAdd = counts.sitesAdd > 0 || counts.sitesCopy > 0 || counts.eventsAdd > 0 || counts.settingsAdd > 0;
+    return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, copies: cp.list, modules: out.modules, events: ev, settings: sp.ui, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
   } finally { for (const id of Object.keys(dbs)) { try { if (dbs[id]) dbs[id].close(); } catch (_) {} } }
 }
 // ═════════════════════════════════════════════════════════════════════════
@@ -16654,6 +16671,7 @@ function backupBuildInserts(plan, storage) {
     else if (w.activeMode === "create" && Object.keys(w.active).length) out.push({ key: k.active, kind: "absent", text: JSON.stringify({ v: AUDIT_ACTIVE_VERSION, sites: w.active }) });
   }
   if (plan.work.events.length) put(K_CAL_EVENTS, "projects", plan.work.events, null);
+  if (Object.keys(plan.work.copyRecs || {}).length) put(BACKUP_COPIES_KEY, "meta", null, plan.work.copyRecs);      // release o: the note of which backup version is already on this phone as a copy
   if (plan.work.settings) out.push(...backupSettingsInserts(plan.work.settings, storage));
   for (const e of out) { let v; try { v = JSON.parse(e.text); } catch (_) { throw new Error("internal error: the new text for " + e.key + " is not valid JSON"); } if (v === null || typeof v !== "object") throw new Error("internal error: the new text for " + e.key + " has the wrong shape"); }   // nothing written yet
   return out;
@@ -16813,7 +16831,10 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
       const w = writes[i], st = BACKUP_STORES.find(s => s.id === w.store); const u8 = await z.bytes(w.file);
       if (u8.length !== w.size || await backupSha256(u8) !== w.sha256) throw new Error("a photo or logo in the file does not match its checksum");
       if (!dbs[st.id]) dbs[st.id] = await backupIdbOpen(st.db, st.store);
-      await backupIdbReq(dbs[st.id], st.store, "readwrite", s => s.put({ buf: u8.buffer, type: w.type }, w.key));
+      if (w.fresh) {                                                                      // a copy's photo is NEW: add() refuses to write over a record that is already there, and that record is then not ours to remove again
+        try { await backupIdbReq(dbs[st.id], st.store, "readwrite", s => s.add({ buf: u8.buffer, type: w.type }, w.key)); }
+        catch (err) { if (err && err.name === "ConstraintError") { journal.put = journal.put.filter(p => !(p.s === w.store && p.k === w.key)); try { storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal, undo: prev ? prev.undo : null, ...(prev && prev.problem ? { problem: prev.problem } : {}) })); } catch (_) {} } throw err; }
+      } else await backupIdbReq(dbs[st.id], st.store, "readwrite", s => s.put({ buf: u8.buffer, type: w.type }, w.key));
       if (isPhoto(w)) progress("photos", ++photosDone, photosTotal); await hook("put", i);
     }
     let checked = 0;
@@ -16828,14 +16849,16 @@ async function backupRestore(file, { storage = localStorage, now = new Date(), i
     progress("saving", inserts.length, inserts.length);
     await hook("keys-done");
     backupVerifyApplied(inserts, storage);
+    await backupVerifyCopies(plan, storage, z);
     await hook("verified");
     const undo = { restoredAt: now.toISOString(), expiresOn: localISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() + RESTORE_UNDO_DAYS)), put: journal.put, created: inserts.filter(e => e.kind === "absent").map(e => e.key),
-      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd, snapshots: plan.counts.snapshotsAdd, events: plan.counts.eventsAdd, photos: writes.filter(w => w.store !== "app-logo").length, photoFiles: writes.filter(w => w.store !== "app-logo" && w.store !== "site-logos" && !w.key.endsWith("~t")).length, logoFiles: writes.filter(w => w.store === "site-logos").length } };
+      sites: {}, snaps: {}, active: {}, events: plan.work.events.map(e => e.id), counts: { sites: plan.counts.sitesAdd + plan.counts.sitesCopy, copies: plan.counts.sitesCopy, snapshots: plan.counts.snapshotsAdd + plan.counts.snapshotsCopy, events: plan.counts.eventsAdd, photos: writes.filter(w => w.store !== "app-logo").length, photoFiles: writes.filter(w => w.store !== "app-logo" && w.store !== "site-logos" && !w.key.endsWith("~t")).length, logoFiles: writes.filter(w => w.store === "site-logos").length } };
     const filled = backupFilledRecord(inserts, writes); if (filled) { undo.filled = filled; undo.counts.settings = filled.counts; }
+    if (Object.keys(plan.work.copyInfo || {}).length) undo.copies = plan.work.copyInfo;
     for (const m of Object.keys(plan.work.modules)) { const w = plan.work.modules[m]; undo.sites[m] = w.projects.map(p => p.id); undo.snaps[m] = w.history.map(s => s.id); undo.active[m] = Object.keys(w.active); }
     storage.setItem(RESTORE_KEY, JSON.stringify({ v: 1, journal: null, undo }));          // THE COMMIT: one write replaces the journal by the undo record (and is the ONLY write that drops a recorded problem)
     await hook("committed");
-    return { ok: true, summary: { sitesAdded: plan.counts.sitesAdd, snapshotsAdded: plan.counts.snapshotsAdd, eventsAdded: plan.counts.eventsAdd, photosWritten: undo.counts.photos, filled: filled ? { business: filled.biz ? Object.keys(filled.biz.fields).filter(x => x !== "logoId") : [], logo: !!filled.logo, modules: filled.counts.modules } : null, alreadyOnPhone: plan.counts.sitesPresent + plan.counts.eventsPresent, notRestored: plan.counts.sitesConflict, modulesSkipped: plan.counts.modulesSkipped, undoUntil: undo.expiresOn }, plan };
+    return { ok: true, summary: { sitesAdded: plan.counts.sitesAdd, copiesAdded: plan.counts.sitesCopy, copyNames: (plan.copies || []).map(x => x.copyName), copyLines: (plan.copies || []).map(x => x.copyName + " in " + x.label), alreadyCopied: plan.counts.sitesCopied, snapshotsAdded: plan.counts.snapshotsAdd, eventsAdded: plan.counts.eventsAdd, photosWritten: undo.counts.photos, filled: filled ? { business: filled.biz ? Object.keys(filled.biz.fields).filter(x => x !== "logoId") : [], logo: !!filled.logo, modules: filled.counts.modules } : null, alreadyOnPhone: plan.counts.sitesPresent + plan.counts.eventsPresent, notRestored: plan.counts.sitesConflict, modulesSkipped: plan.counts.modulesSkipped, undoUntil: undo.expiresOn }, plan };
   } catch (e) {
     if (e instanceof BackupCrash) throw e;                                               // a simulated kill: nothing runs after it
     for (const id of Object.keys(dbs)) { try { dbs[id].close(); } catch (_) {} } for (const id of Object.keys(dbs)) delete dbs[id];
@@ -16986,28 +17009,198 @@ function backupFilledRecord(inserts, writes) {
     lists: mods.map(mod => { const mine = lists.filter(e => e.fill.mod === mod), first = mine.find(e => e.fill.others); return { mod, keys: mine.map(e => ({ key: e.key, created: e.fill.created, whole: e.fill.whole, was: e.fill.was, wrote: e.fill.wrote })), others: first ? first.fill.others : [] }; }),
     counts: { biz: names.length, logo: lw ? 1 : 0, lists: lists.length, modules: mods.length } };
 }
+// ═════════════════════════════════════════════════════════════════════════
+// BACKUP / RESTORE — release o: a backup site whose ID is already on this phone but whose CONTENT DIFFERS is added as a separate COPY
+// ═════════════════════════════════════════════════════════════════════════
+// Same ID and identical content: nothing to add. Same ID and different content (a changed name, more results, anything that is not volatile): the backup's version is added as a NEW site with a NEW ID and the name
+// "<name> (backup 12 Oct 2026)" (" 2", " 3" ... when that name is taken). The site on this phone is never written to. ONE id map (backupBuildIdMap: each copy's site id, its History snapshot ids and its photo ids) is built once
+// per restore and ONE function (backupRemapIds) re-points every attached item with it: the site record, results, meta, audit flag, History snapshots, photo pointers (live and in History), thumbnails and the site logo.
+// Ids are replaced only at the places the app keeps them, and a string equal to an old id anywhere else makes the copy refuse itself (nothing is guessed). After the writes backupVerifyCopies checks the result, and any
+// mismatch rolls the whole restore back with the existing journal. A small note, sparkcheck-copies-v1, remembers which backup version is already on this phone as a copy, so the same version is never copied twice.
+const BACKUP_COPIES_KEY = "sparkcheck-copies-v1";
+const backupCanon = v => Array.isArray(v) ? "[" + v.map(backupCanon).join(",") + "]" : v && typeof v === "object" ? "{" + Object.keys(v).sort().map(k => JSON.stringify(k) + ":" + backupCanon(v[k])).join(",") + "}" : JSON.stringify(v === undefined ? null : v);
+const backupNodeCount = v => { let n = 0; const stack = [v]; while (stack.length) { const x = stack.pop(); if (Array.isArray(x)) { n++; for (let i = 0; i < x.length; i++) stack.push(x[i]); } else if (x && typeof x === "object") { n++; for (const k of Object.keys(x)) stack.push(x[k]); } } return n; };
+// Where each module keeps its photo pointers ({ id, w, h } arrays): the app's own extractors, the ones its delete and Continue code walks. A site's live results (GSD: its defect list) and its History snapshots.
+// They return the real arrays, so a clone can be re-pointed in place.
+const BACKUP_PHOTO_ARRAYS = { swb: s => swbExtractPhotos(s), elt: s => assetResultsExtractPhotos(s), welder: s => assetResultsExtractPhotos(s), gsd: items => (Array.isArray(items) ? items : []).map(i => i && i.photos).filter(Array.isArray) };
+const backupSnapSite = (m, s) => (m === "gsd" ? s.items : s.results);
+function backupPointerArrays(m, pieces) {
+  const ex = BACKUP_PHOTO_ARRAYS[m]; if (!ex) return [];
+  return [...(pieces.results === undefined ? [] : ex(pieces.results)), ...pieces.snaps.flatMap(s => ex(backupSnapSite(m, s)))];
+}
+const backupPointerIds = (m, pieces) => backupPointerArrays(m, pieces).flat().map(p => p && p.id).filter(x => typeof x === "string");
+// What is NOT compared: the Home date follow rewrites each site's meta every new day (dateDay, the test date(s) and their default next-due date(s)), so those fields would make every site look changed.
+const backupMetaStable = (m, meta) => { if (!backupIsObj(meta)) return meta; const o = { ...meta }; delete o.dateDay; for (const f of HOME_DATE_SPECS[m] || []) { delete o[f.test]; if (f.next) delete o[f.next]; } return o; };
+// Data saved before item dates existed is stamped at load (in memory); both sides are brought to the form the phone stores before they are compared.
+function backupNormalise(m, pieces, today) {
+  if (pieces.meta && pieces.meta.dateDay) return pieces;
+  const mig = itemDatesMigrate(m, pieces.results === undefined ? {} : { s: pieces.results }, pieces.meta === undefined ? {} : { s: pieces.meta }, pieces.snaps, today);
+  return { ...pieces, results: pieces.results === undefined ? undefined : mig.results.s, snaps: mig.history };
+}
+function backupSiteCanon(m, pieces, today) {
+  const n = backupNormalise(m, pieces, today);
+  return backupCanon({ p: n.project, r: n.results === undefined ? null : n.results, m: n.meta === undefined ? null : backupMetaStable(m, n.meta), h: n.snaps.map(backupCanon).sort() });
+}
+// the bytes half of "the same": one line per photo (full + thumbnail checksum) and the site logo's, from a getSha(storeId, key) of either side. Photos are left out when the backup was made without them.
+async function backupBytesPart(m, ids, logoKey, getSha, withPhotos) {
+  const st = BACKUP_MODULE_INFO[m].photos, lines = [];
+  if (st && withPhotos) for (const id of [...new Set(ids)].sort()) lines.push(id + "|" + await getSha(st, id) + "|" + await getSha(st, id + "~t"));
+  lines.push("logo|" + await getSha("site-logos", logoKey));
+  return lines.join("\n");
+}
+// Same ID on both sides. -> { kind: "same" } | { kind: "copied", id } (this version is already on the phone as a copy) | { kind: "copy", digest }
+async function backupClassifyExisting(m, p, bkp, hp, env) {
+  const cjB = backupSiteCanon(m, bkp, env.today), cjH = backupSiteCanon(m, hp, env.today), logoKey = siteLogoKey(m, p.id);
+  const bytesB = await backupBytesPart(m, backupPointerIds(m, bkp), logoKey, env.backupSha, env.withPhotos);
+  if (cjB === cjH && bytesB === await backupBytesPart(m, backupPointerIds(m, hp), logoKey, env.phoneSha, env.withPhotos)) return { kind: "same" };
+  const digest = await backupSha256(new TextEncoder().encode(cjB + "\n" + bytesB));
+  for (const k of Object.keys(env.copiesRec)) { const v = env.copiesRec[k]; if (k.startsWith(m + ":") && v && v.from === p.id && v.digest === digest && env.have.has(k.slice(m.length + 1))) return { kind: "copied", id: k.slice(m.length + 1), digest }; }
+  return { kind: "copy", digest };
+}
+// ONE id map for the whole restore. Key "module\0oldSiteId" -> { oldSite, site (the new id), snaps: Map(old -> new), photos: Map(old -> new) }. Every new id is checked against this phone's ids, the backup's own ids and the ids
+// already given out in this restore. A photo gets its OWN new id for each copy (two copies never share a photo record, so deleting one can never take a photo from the other).
+function backupBuildIdMap(cands, taken) {
+  const idMap = new Map();
+  const give = (set, make) => { for (let i = 0; i < 1000; i++) { const id = make(); if (id && !set.has(id)) { set.add(id); return id; } } throw new Error("could not find a free id"); };
+  for (const c of cands) {
+    const st = BACKUP_MODULE_INFO[c.m].photos, e = { oldSite: c.p.id, site: give(taken.site[c.m], () => slugify(c.copyName)), snaps: new Map(), photos: new Map() };
+    for (const s of c.pieces.snaps) e.snaps.set(s.id, give(taken.snap[c.m], () => uid()));
+    if (st) for (const id of c.ptrIds) e.photos.set(id, give(taken.photo[st], () => uid()));
+    idMap.set(c.m + "\u0000" + c.p.id, e); c.newId = e.site;
+  }
+  return idMap;
+}
+const backupInverseEntry = e => ({ oldSite: e.site, site: e.oldSite, snaps: new Map([...e.snaps].map(([a, b]) => [b, a])), photos: new Map([...e.photos].map(([a, b]) => [b, a])) });
+// The ONE re-pointing function. pieces = { project, results, meta, snaps } of one site; returns a deep clone in which the site id, the History snapshot ids (and their projectId) and the photo pointers (live and in History) are
+// the entry's. Nothing else changes. A reference without a new id throws.
+function backupRemapIds(pieces, m, e) {
+  const cl = v => (v === undefined ? undefined : JSON.parse(JSON.stringify(v)));
+  const c = { project: cl(pieces.project), results: cl(pieces.results), meta: cl(pieces.meta), snaps: pieces.snaps.map(cl) };
+  const fix = arr => { for (const p of arr) if (p && typeof p.id === "string") { const n = e.photos.get(p.id); if (n === undefined) throw new Error("a photo reference has no new id"); p.id = n; } };
+  backupPointerArrays(m, c).forEach(fix);
+  if (c.project.id !== e.oldSite) throw new Error("the site does not have the id it was mapped from"); c.project.id = e.site;
+  for (const s of c.snaps) { const n = e.snaps.get(s.id); if (n === undefined || s.projectId !== e.oldSite) throw new Error("a History snapshot does not belong to the site it was mapped from"); s.id = n; s.projectId = e.site; }
+  return c;
+}
+// "<name> (backup 12 Oct 2026)", then " 2", " 3" ... until neither this phone's list nor the earlier copies of this restore use it
+function backupCopyName(name, dayText, names) {
+  const base = name + " (backup " + dayText + ")"; let n = 1, out = base; const key = s => s.trim().toLowerCase();
+  while (names.has(key(out))) { n++; out = base + " " + n; }
+  names.add(key(out)); return out;
+}
+// PLAN the copies of every module in ONE pass (after the per-module loop has sorted every backup site into add / same / copied / copy). Mutates `out` (work + display) and `writeSet`.
+async function backupPlanCopies({ ctxs, listed, storeById, openDb, writeSet, z, dayText, today, out }) {
+  const cands = []; let chars = 0, ids = 0;
+  for (const m of BACKUP_MODULES) { const c = ctxs[m]; if (c) for (const x of c.copyList) cands.push({ m, ...x, copyName: backupCopyName(x.nm, dayText, c.names), ctx: c }); }
+  if (!cands.length) return { chars, ids, copies: {}, copyInfo: {}, recs: {}, list: [], idMap: null, originals: {} };
+  const taken = { site: {}, snap: {}, photo: {} };
+  for (const m of BACKUP_MODULES) { const c = ctxs[m]; if (!c) continue; taken.site[m] = new Set([...c.have.keys(), ...c.bk.projects.map(p => p && p.id)]); taken.snap[m] = new Set([...c.haveSnapAll, ...c.bk.history.map(s => s && s.id)]); }
+  for (const st of BACKUP_STORES) {
+    if (!st.photos) continue; const base = new Set([...listed[st.id].keys()].map(k => k.replace(/~t$/, "")));
+    const db = await openDb(st); if (db) for (const k of await backupIdbKeys(db, st.store)) base.add(String(k).replace(/~t$/, ""));
+    taken.photo[st.id] = base;
+  }
+  for (const c of cands) {                                                // the independent detectors must agree BEFORE anything is given an id
+    const st = BACKUP_MODULE_INFO[c.m].photos;
+    try {
+      c.ptrIds = [...new Set(backupPointerIds(c.m, c.pieces))];
+      if (st) { const generic = backupCollectStrings([c.p, c.pieces.results, c.pieces.meta, c.pieces.snaps], new Set([...listed[st].keys()].filter(k => !k.endsWith("~t")))); for (const id of generic) if (!c.ptrIds.includes(id)) throw new Error("a photo reference outside the places the module keeps them"); }
+      const snapIds = c.pieces.snaps.map(s => s.id); if (new Set(snapIds).size !== snapIds.length) throw new Error("two History snapshots share an id");
+    } catch (e) { c.refused = e.message; }
+  }
+  let idMap = new Map(); try { idMap = backupBuildIdMap(cands.filter(c => !c.refused), taken); } catch (e) { for (const c of cands) c.refused = c.refused || e.message; }                   // no free id: every copy is refused, none is guessed
+  const copies = {}, copyInfo = {}, list = [], recs = {}, originals = {};
+  for (const c of cands) {
+    const mod = out.modules.find(x => x.id === c.m), w = ctxs[c.m], m = c.m, info = BACKUP_MODULE_INFO[m], st = info.photos;
+    let made = null;
+    if (!c.refused) {
+      try {
+        const e = idMap.get(m + "\u0000" + c.p.id); made = backupRemapIds(c.pieces, m, e); made.project.name = c.copyName; made.e = e;
+        const olds = new Set([c.p.id, ...c.pieces.snaps.map(s => s.id), ...c.ptrIds]);
+        if (backupCollectStrings([made.project, made.results, made.meta, made.snaps], olds).size) throw new Error("an old id is used somewhere the app does not keep ids");
+      } catch (err) { c.refused = err.message; made = null; }
+    }
+    if (!made) { mod.sites.conflict.push({ id: c.p.id, name: c.nm, reason: "could not be copied safely", keys: 0 }); continue; }
+    const nid = made.e.site, results = made.results, meta = made.meta, snaps = made.snaps, proj = made.project;
+    const active = c.ctx.activeOk && c.ctx.bk.active && c.ctx.bk.active[c.p.id] !== undefined ? JSON.parse(JSON.stringify(c.ctx.bk.active[c.p.id])) : undefined;
+    const writes = [];
+    if (st) for (const [oldId, newId] of made.e.photos) for (const suf of ["", "~t"]) { const r = listed[st].get(oldId + suf); if (r) writes.push({ store: st, key: newId + suf, file: r.file, type: r.type, size: r.size, sha256: r.sha256, fresh: true, copy: true }); }
+    const lr = listed["site-logos"].get(siteLogoKey(m, c.p.id)); if (lr) writes.push({ store: "site-logos", key: siteLogoKey(m, nid), file: lr.file, type: lr.type, size: lr.size, sha256: lr.sha256, fresh: true, copy: true });
+    if (!w.wk) w.wk = { projects: [], results: {}, meta: {}, active: {}, history: [], activeMode: w.activeMode };
+    const wk = w.wk; wk.projects.push(proj); if (results !== undefined) wk.results[nid] = results; if (meta !== undefined) wk.meta[nid] = meta; if (active !== undefined) wk.active[nid] = active; for (const s of snaps) wk.history.push(s);
+    for (const x of writes) writeSet.set(x.store + "\u0000" + x.key, x);
+    const expect = { snaps: snaps.length, photos: c.ptrIds.length, nodes: backupNodeCount([c.p, c.pieces.results === undefined ? null : c.pieces.results, c.pieces.meta === undefined ? null : c.pieces.meta, c.pieces.snaps]), logo: !!lr };
+    copies[m + ":" + nid] = { m, oldId: c.p.id, newId: nid, name: c.copyName, from: c.nm, snaps: snaps.map(s => s.id), expect };
+    originals[m + ":" + nid] = { project: c.p, results: c.pieces.results, meta: c.pieces.meta, snaps: c.pieces.snaps };
+    copyInfo[m] = copyInfo[m] || {}; copyInfo[m][nid] = { digest: backupSiteCanon(m, { project: proj, results, meta, snaps }, today), snaps: snaps.map(s => s.id) };
+    recs[m + ":" + nid] = { from: c.p.id, digest: c.digest, backupDate: dayText, name: c.copyName };
+    mod.sites.copy.push({ id: nid, from: c.p.id, name: c.nm, copyName: c.copyName, photos: st ? c.ptrIds.length : 0, snapshots: snaps.length, hasPhotos: !!st });
+    mod.snapshots.copy += snaps.length; list.push({ module: m, label: info.label, copyName: c.copyName, photos: st ? c.ptrIds.length : 0, snapshots: snaps.length, hasPhotos: !!st });
+    chars += JSON.stringify([proj, results, meta, snaps]).length + 120; ids += 1 + snaps.length;
+  }
+  for (const m of BACKUP_MODULES) { const c = ctxs[m]; if (c && c.wk && c.mod.sites.copy.length) { c.mod.status = "add"; out.work.modules[m] = c.wk; } }
+  return { chars, ids, copies, copyInfo, recs, list, idMap, originals };
+}
+// AFTER the writes, BEFORE the commit: every copy exists once, holds exactly its own History and photos, nothing points at the site it was copied from, and each photo's bytes are the backup's photo for that site.
+// Any mismatch throws, and the restore is rolled back by the existing journal.
+async function backupVerifyCopies(plan, storage, z) {
+  const copies = plan.work.copies || {}, ks = Object.keys(copies); if (!ks.length) return;
+  const read = (key, d) => { const raw = storage.getItem(key); return raw === null ? d : JSON.parse(raw); };
+  const dbs = {}; const getRec = async (storeId, key) => { const st = BACKUP_STORES.find(s => s.id === storeId); if (!(storeId in dbs)) dbs[storeId] = await backupIdbOpen(st.db, st.store); return backupIdbGet(dbs[storeId], st.store, key); };
+  const claimed = new Map();
+  try {
+    for (const k of ks) {
+      const c = copies[k], m = c.m, info = BACKUP_MODULE_INFO[m], key = info.keys, st = info.photos, fail = msg => { throw new Error("verify: " + msg); };
+      const e = plan.work.idMap.get(m + "\u0000" + c.oldId);
+      const P = read(key.projects, []), mine = P.filter(x => x && x.id === c.newId); if (mine.length !== 1) fail("a copy is missing or listed twice"); if (mine[0].name !== c.name) fail("a copy has the wrong name");
+      if (P.filter(x => x && x.id === c.oldId).length !== 1) fail("the site it was copied from is not on the phone exactly once");
+      const R = read(key.results, {}), M = read(key.meta, {}), allH = read(key.history, []), H = allH.filter(s => s && s.projectId === c.newId);
+      if (H.length !== c.snaps.length || !c.snaps.every(id => H.some(s => s.id === id))) fail("a copy's History is not exactly its own");
+      if (allH.filter(s => s && c.snaps.includes(s.id)).length !== c.snaps.length) fail("a History id is used twice");
+      const own = (o, id) => (Object.prototype.hasOwnProperty.call(o, id) ? o[id] : undefined);
+      const pieces = { project: mine[0], results: own(R, c.newId), meta: own(M, c.newId), snaps: H };
+      const olds = new Set([c.oldId, ...e.snaps.keys(), ...e.photos.keys()]); if (backupCollectStrings([mine[0], pieces.results, pieces.meta, H], olds).size) fail("a copy still points at the site it was copied from");
+      if (backupNodeCount([mine[0], pieces.results === undefined ? null : pieces.results, pieces.meta === undefined ? null : pieces.meta, H]) !== c.expect.nodes) fail("a copy does not hold as many records as the backup's site");
+      if (H.length !== c.expect.snaps) fail("a copy does not hold as many History snapshots as the backup's site");
+      const ptrs = [...new Set(backupPointerIds(m, pieces))];
+      if (st) { if (ptrs.length !== c.expect.photos) fail("a copy does not hold as many photos as the backup's site"); const mine2 = new Set(e.photos.values()); if (!ptrs.every(id => mine2.has(id)) || ![...mine2].every(id => ptrs.includes(id))) fail("a copy's photos are not exactly its own"); for (const id of ptrs) { if (claimed.has(st + id)) fail("a photo is used by two copies"); claimed.set(st + id, k); } }
+      const back = backupRemapIds(pieces, m, backupInverseEntry(e));                              // undo the mapping: what comes out must be the backup's own site, record for record
+      const orig = plan.work.originals[k]; if (backupCanon({ ...back, project: { ...back.project, name: "" } }) !== backupCanon({ ...orig, project: { ...orig.project, name: "" } })) fail("a copy differs from the backup's site in more than its ids and name");
+      if (st) for (const [oldId, newId] of e.photos) for (const suf of ["", "~t"]) {
+        const r = plan.work.listed[st].get(oldId + suf); if (!r) continue; const rec = await getRec(st, newId + suf); if (!rec || !rec.buf) fail("a photo is missing"); const got = new Uint8Array(rec.buf);
+        if (got.length !== r.size || await backupSha256(got) !== r.sha256 || !backupSameBytes(got, await z.bytes(r.file))) fail("a photo's bytes are not the backup's photo for that site");
+      }
+      const lr = plan.work.listed["site-logos"].get(siteLogoKey(m, c.oldId)); if (lr) { const rec = await getRec("site-logos", siteLogoKey(m, c.newId)); if (!rec || !rec.buf || await backupSha256(new Uint8Array(rec.buf)) !== lr.sha256) fail("a site logo is not the backup's logo for that site"); }
+    }
+  } finally { for (const id of Object.keys(dbs)) { try { dbs[id].close(); } catch (_) {} } }
+}
 // ── UNDO: removes exactly the sites / History snapshots / events the last restore added (by ID), by PARSING the current data (you may have worked in the restored sites since, so text offsets no longer line up).
 // Work done inside the restored sites since is removed with them. Photos and logos go with the sites they belonged to; a photo still used by a remaining site stays.
 const backupDmy = iso => String(iso || "").split("-").reverse().join("/");
+// "2026-10-12" -> "12 Oct 2026": day (no leading zero), short English month name, year; no slash, so the text is safe inside a file name
+const BACKUP_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const backupDayText = iso => { const p = String(iso || "").split("-"), m = +p[1], d = +p[2]; return p.length === 3 && m >= 1 && m <= 12 && d >= 1 && d <= 31 ? d + " " + BACKUP_MONTHS[m - 1] + " " + p[0] : String(iso || ""); };
 // The text the Undo confirmation shows. It says plainly that work done INSIDE the restored sites since the restore goes too.
 // A count of zero is left out with its words, and the verb agrees: "1 site and 2 calendar events", "2 sites, 3 History snapshots and 1 calendar event".
-const backupCountWords = c => backupJoinWords([["site", c.sites], ["History snapshot", c.snapshots], ["calendar event", c.events]].filter(x => x[1] > 0).map(x => nw(x[1], x[0])));
+const backupCountParts = c => { const copies = c.copies || 0; return [["site", (c.sites || 0) - copies], ["site copy", copies, "site copies"], ["History snapshot", c.snapshots], ["calendar event", c.events]].filter(x => x[1] > 0).map(x => nw(x[1], x[0], x[2])); };
+const backupCountWords = c => backupJoinWords(backupCountParts(c));
 // The text of the "Restore undone" card: what was removed (zero counts left out, "was" for exactly one thing, "were" otherwise, ", with N photos" only when there are photos), then what was taken out or left as it is.
 function backupUndoResultText(un) {
   const u = un.unfilled, r = un.removed || {}, photos = un.photosRemoved || 0;
-  const items = [["site", r.sites], ["History snapshot", r.snapshots], ["calendar event", r.events]].filter(x => x[1] > 0);
-  const removedText = items.length ? backupJoinWords(items.map(x => nw(x[1], x[0]))) + (items.length === 1 && items[0][1] === 1 ? " was" : " were") + " removed" + (photos > 0 ? ", with " + nw(photos, "photo") : "") + "." : "";
+  const copies = un.copiesRemoved || 0, items = [["site", (r.sites || 0) - copies], ["site copy", copies, "site copies"], ["History snapshot", r.snapshots], ["calendar event", r.events]].filter(x => x[1] > 0);
+  const removedText = items.length ? backupJoinWords(items.map(x => nw(x[1], x[0], x[2]))) + (items.length === 1 && items[0][1] === 1 ? " was" : " were") + " removed" + (photos > 0 ? ", with " + nw(photos, "photo") : "") + "." : "";
   const bizOut = !!(u && (u.fields.length || u.logo)), listsOut = !!(u && u.lists);
   const filledText = bizOut && listsOut ? "The business details, lists and settings it filled in were taken out." : bizOut ? "The business details it filled in were taken out." : listsOut ? "The lists and settings it filled in were taken out." : "";      // both: the same phrase the Undo question uses
   const keptBizText = u && u.keptBiz ? "The business details you changed since were left as they are." : "";
   const keptModText = u && u.keptModules ? "The lists and settings in " + nw(u.keptModules, "module") + " you changed since were left as they are." : "";
-  return [removedText, filledText, keptBizText, keptModText].filter(Boolean).join(" ") || "Nothing was removed.";
+  const keptCopyText = un.keptCopies ? nw(un.keptCopies, "copy", "copies") + " you changed since " + (un.keptCopies === 1 ? "was" : "were") + " kept." : "";
+  return [removedText, filledText, keptBizText, keptModText, keptCopyText].filter(Boolean).join(" ") || "Nothing was removed.";
 }
 function backupUndoConfirmText(info) {
   const c = (info && info.counts) || {};
   const st = c.settings, filledAny = st && (st.biz || st.logo || st.lists), words = backupCountWords(c);
   const filledText = "takes out the business details, logo, lists and settings it filled in, unless you have changed them since; then they are left as they are. ";
-  return "Undo the last restore? " + (words ? "This removes the " + words + " it added, with their photos, and any work you have done in them since. " + (filledAny ? "It also " + filledText : "") : (filledAny ? "This " + filledText : ""))
+  return "Undo the last restore? " + (words ? "This removes the " + words + " it added, with their photos, and any work you have done in them since. " + (c.copies ? "A copy you have changed since is kept, with your changes. " : "") + (filledAny ? "It also " + filledText : "") : (filledAny ? "This " + filledText : ""))
     + "Everything else is left as it is.";
 }
 function backupUndoInfo(storage = localStorage, now = new Date()) {
@@ -17023,17 +17216,28 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   const u = rec.undo; const removed = { sites: 0, snapshots: 0, events: 0 }; const photoRemoved = { "site-photos": new Set(), "gsd-photos": new Set() }; const logoKeys = new Set(u.put.filter(p => p.s === "site-logos").map(p => p.k));
   const newVals = {}, removeKeys = new Set(), unfilled = { fields: [], business: {}, logo: false, lists: 0, kept: 0, keptBiz: false, keptModules: 0 }; let logoDelete = false;      // newVals: key -> the value AFTER the undo (also used to find the photos still in use); removeKeys: keys the restore created that are empty again
   const read = (key, role) => { const c = backupReadRaw(storage, key, role); if (c.state === "bad") throw new Error(key + " can't be read"); return c.state === "ok" ? c.v : null; };
-  const removedPieces = { "site-photos": [], "gsd-photos": [] };
+  const removedPieces = { "site-photos": [], "gsd-photos": [] }; const removedCopyKeys = []; let keptCopies = 0, copiesGone = 0;
   try {
     for (const m of Object.keys(u.sites)) {
       const ids = new Set(u.sites[m]), snapIds = new Set(u.snaps[m] || []), k = BACKUP_MODULE_INFO[m].keys, store = BACKUP_MODULE_INFO[m].photos;
       const track = (piece) => { if (store) removedPieces[store].push(piece); };
+      const cpm = u.copies && u.copies[m];                  // release o: a copy that still holds exactly what the restore wrote is removed; one you changed since is KEPT (and counted)
+      if (cpm) {
+        const pv0 = read(k.projects, "projects") || [], rv0 = read(k.results, "results") || {}, mv0 = read(k.meta, "meta") || {}, hv0 = read(k.history, "history") || [];
+        for (const nid of Object.keys(cpm)) {
+          if (!ids.has(nid)) continue; const pr = pv0.find(x => x && x.id === nid);
+          if (!pr) { removedCopyKeys.push(m + ":" + nid); continue; }
+          const cur = { project: pr, results: Object.prototype.hasOwnProperty.call(rv0, nid) ? rv0[nid] : undefined, meta: Object.prototype.hasOwnProperty.call(mv0, nid) ? mv0[nid] : undefined, snaps: hv0.filter(x => x && x.projectId === nid) };
+          if (backupSiteCanon(m, cur, localISODate(now)) !== cpm[nid].digest) { ids.delete(nid); for (const sid of cpm[nid].snaps) snapIds.delete(sid); logoKeys.delete(siteLogoKey(m, nid)); keptCopies++; } else { removedCopyKeys.push(m + ":" + nid); copiesGone++; }
+        }
+      }
       const pv = read(k.projects, "projects"); if (pv) { const keep = pv.filter(p => !(p && ids.has(p.id))); pv.filter(p => p && ids.has(p.id)).forEach(p => { removed.sites++; track(p); }); if (keep.length !== pv.length) newVals[k.projects] = keep; }
       for (const role of ["results", "meta"]) { const v = read(k[role], role); if (!v) continue; let ch = false; const n = { ...v }; for (const id of ids) if (id in n) { track(n[id]); delete n[id]; ch = true; } if (ch) newVals[k[role]] = n; }
       const hv = read(k.history, "history"); if (hv) { const gone = hv.filter(s => s && (snapIds.has(s.id) || ids.has(s.projectId))); if (gone.length) { gone.forEach(s => { removed.snapshots++; track(s); }); newVals[k.history] = hv.filter(s => !gone.includes(s)); } }
       const av = read(k.active, "active"); if (av) { let ch = false; const sites = { ...av.sites }; for (const id of ids) if (id in sites) { delete sites[id]; ch = true; } if (ch) newVals[k.active] = { ...av, sites }; }
       for (const id of ids) logoKeys.add(siteLogoKey(m, id));
     }
+    if (removedCopyKeys.length) { const cr = read(BACKUP_COPIES_KEY, "meta"); if (cr) { const n = { ...cr }; let ch = false; for (const ck of removedCopyKeys) if (ck in n) { delete n[ck]; ch = true; } if (ch) newVals[BACKUP_COPIES_KEY] = n; } }
     const fl = u.filled;                                                                  // what the restore FILLED IN (release n): a SET is taken out only if it still holds exactly what the restore wrote; if you changed it since, that whole set is left alone
     if (fl && (fl.biz || fl.logo)) {                                                      // the business details: name, ABN, licence and the company logo are one set
       const cur = read(APP_SETTINGS_KEY, "meta"), lst = BACKUP_STORES.find(x => x.id === "app-logo"); let logoNow = null;
@@ -17085,7 +17289,7 @@ async function backupUndo({ storage = localStorage, now = new Date() } = {}) {
   for (const key of logoKeys) { try { await backupIdbDelete("site-logos", key); } catch (_) { leftover++; } }
   if (logoDelete) { try { await backupIdbDelete("app-logo", APP_LOGO_ID); } catch (_) { leftover++; } }
   try { backupWriteRecord(storage, { journal: null, undo: null, problem: rec.problem }); } catch (_) {}
-  return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover, unfilled };
+  return { ok: true, removed, photosRemoved: Math.floor((photoRemoved["site-photos"].size + photoRemoved["gsd-photos"].size) / 2), leftover, unfilled, copies: removedCopyKeys.length, copiesRemoved: copiesGone, keptCopies };
 }
 // ═════════════════════════════════════════════════════════════════════════
 // BACKUP / RESTORE — delivery (Stage 4: measure before building, warn when large, hand the file to the share sheet with a download fallback, remember the "Last backup")
@@ -17150,7 +17354,7 @@ function backupLastBackupText(storage = localStorage, now = new Date()) {
 // ── Plain words for the saved-data keys, for messages a person reads ("RCD Testing, list of sites"), never the key itself. Covers every key the app can name: the module keys (any version), the calendar, the settings, the
 // copies kept before an update, and the app's own records. A key the app does not know (another app's, or anything else) is never echoed: it reads "other saved data".
 const BACKUP_ROLE_WORDS = { projects: "list of sites", results: "test results", items: "list of defects", meta: "audit details", history: "History", dropdowns: "dropdown lists", "audit-active": "audit in progress", "photos-migrated": "photo storage note" };
-const BACKUP_KEY_WORDS = { "sparkcheck-restore-v1": "Restore record", "sparkcheck-last-backup-v1": "Last backup note", "sparkcheck-leftover-v1": "Erase leftover note", "sparkcheck-erase-pending-v1": "Erase in progress note" };
+const BACKUP_KEY_WORDS = { "sparkcheck-restore-v1": "Restore record", "sparkcheck-copies-v1": "Restored copies note", "sparkcheck-last-backup-v1": "Last backup note", "sparkcheck-leftover-v1": "Erase leftover note", "sparkcheck-erase-pending-v1": "Erase in progress note" };
 function backupKeyLabel(key) {
   const k = typeof key === "string" ? key : "";
   if (BACKUP_KEY_WORDS[k]) return BACKUP_KEY_WORDS[k];
@@ -17195,13 +17399,17 @@ function backupSummaryText(plan) {
   if (!plan || !plan.ok) return null;
   const mods = plan.modules || [], c = plan.counts || {}, writes = (plan.work && plan.work.writes) || [], ev = plan.events || { add: [], present: [] };
   const groups = [];
-  const photos = writes.filter(w => w.store !== "site-logos" && w.store !== "app-logo" && !String(w.key).endsWith("~t")).length, logos = writes.filter(w => w.store === "site-logos").length;
+  const photos = writes.filter(w => !w.copy && w.store !== "site-logos" && w.store !== "app-logo" && !String(w.key).endsWith("~t")).length, logos = writes.filter(w => !w.copy && w.store === "site-logos").length;
   const addedLines = []; mods.forEach(m => m.sites.add.forEach(x => addedLines.push(x.name + " (" + m.label + ")")));
   const addParts = [c.sitesAdd ? nw(c.sitesAdd, "site") : null, c.snapshotsAdd ? nw(c.snapshotsAdd, "History snapshot") : null, c.eventsAdd ? nw(c.eventsAdd, "calendar event") : null, photos ? nw(photos, "photo") : null, logos ? nw(logos, "logo") : null].filter(Boolean);
   if (addParts.length) groups.push({ id: "added", mark: "\u2713", heading: "Will be added", summary: backupJoinWords(addParts), ...backupCap(addedLines) });
+  const copyLines = (plan.copies || []).map(x => x.copyName + " in " + x.label + ": " + [x.hasPhotos ? nw(x.photos, "photo") : null, nw(x.snapshots, "History snapshot")].filter(Boolean).join(", "));
+  if (copyLines.length) groups.push({ id: "copies", mark: "\u2713", heading: "Will be added as copies (the site on this phone is not changed)", summary: nw(copyLines.length, "site"), ...backupCap(copyLines) });
   const presentLines = []; mods.forEach(m => m.sites.present.forEach(x => presentLines.push(x.name + " (" + m.label + ")" + (x.nameHere && x.nameHere !== x.name ? ", called \"" + x.nameHere + "\" here" : ""))));
   const presParts = [c.sitesPresent ? nw(c.sitesPresent, "site") : null, c.eventsPresent ? nw(c.eventsPresent, "calendar event") : null].filter(Boolean);
   if (presParts.length) groups.push({ id: "present", mark: "\u25cb", heading: "Already on this phone (left exactly as they are)", summary: backupJoinWords(presParts), ...backupCap(presentLines) });
+  const copiedLines = []; mods.forEach(m => (m.sites.copied || []).forEach(x => copiedLines.push(x.name + " (" + m.label + "), already here as \"" + x.copyName + "\"")));
+  if (copiedLines.length) groups.push({ id: "copied", mark: "\u25cb", heading: "Already on this phone as a copy (nothing more to add)", summary: nw(copiedLines.length, "site"), ...backupCap(copiedLines) });
   const stg = plan.settings || null;
   if (stg) {
     const modLine = list => { const n = new Set(list.map(l => l.mod)).size; return n ? ["Lists and settings in " + nw(n, "module")] : []; };
@@ -17214,7 +17422,7 @@ function backupSummaryText(plan) {
   const skipped = [];
   if (stg) stg.skipped.forEach(x => skipped.push(x));
   mods.forEach(m => {
-    m.sites.conflict.forEach(x => skipped.push(x.name + " (" + m.label + "): " + (x.reason === "conflicting photos" ? "its photos differ from photos already on this phone" : "this phone already holds leftover data for it")));
+    m.sites.conflict.forEach(x => skipped.push(x.name + " (" + m.label + "): " + (x.reason === "conflicting photos" ? "its photos differ from photos already on this phone" : x.reason === "could not be copied safely" ? "it differs from the site on this phone, but it could not be copied safely, so it was left out" : x.reason === "could not be compared" ? "it could not be compared with the site on this phone, so it was left out" : "this phone already holds leftover data for it")));
     if (m.status === "skipped-version") skipped.push(m.label + ": made by a different version of SparkCheck, so it was not added");
     if (m.status === "unreadable-here") skipped.push(m.label + ": this phone's saved data for it could not be read, so nothing was added");
     if (m.status === "unreadable-backup") skipped.push(m.label + ": the data in the file could not be read, so it was not added");
@@ -17266,5 +17474,5 @@ async function requestPersistentStorage(nav = typeof navigator !== "undefined" ?
 }
 export { requestPersistentStorage };
 export { GS_TAB_LABELS };
-export { BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
+export { backupDayText, BACKUP_COPIES_KEY, backupCanon, backupSiteCanon, backupRemapIds, backupBuildIdMap, backupInverseEntry, backupCopyName, backupVerifyCopies, backupNodeCount, backupPointerIds, backupMetaStable, BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export default AppRoot;
