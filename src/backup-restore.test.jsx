@@ -64,11 +64,17 @@ describe('PURE INSERTION into a phone that already has data', () => {
     expect(after.idb['sparkcheck-site-photos'].mine1).toEqual(before.idb['sparkcheck-site-photos'].mine1); expect(after.idb['sparkcheck-site-logos']['swb:local']).toEqual(before.idb['sparkcheck-site-logos']['swb:local']);
     for (const m of BACKUP_MODULES) { const ps = JSON.parse(after.ls[BACKUP_MODULE_INFO[m].keys.projects]); expect(ps.map(p => p.id), m).toContain('local'); expect(ps.map(p => p.id), m).toContain('s1'); }
   });
-  it('a site that is already on the phone (by ID, even renamed) is skipped and its data is untouched; the rest is added', async () => {
-    const file = await sourceFile(); seedPhone({ name: 'Renamed Locally' }); const before = await snap();         // s1 exists everywhere under another name
+  it('a site that is already on the phone (by ID, with the same content) is skipped and its data is untouched; the rest is added', async () => {
+    const file = await sourceFile(); seedPhone(); const before = await snap();         // s1 exists everywhere, the same
     const r = await backupRestore(file, { storage: S }); expect(r.ok).toBe(true); expect(r.summary).toMatchObject({ sitesAdded: 2, eventsAdded: 2, alreadyOnPhone: 9 });          // only the two extra sites (swb s2, gsd s2)
-    const after = await snap(); for (const m of BACKUP_MODULES) { const ps = JSON.parse(after.ls[BACKUP_MODULE_INFO[m].keys.projects]); expect(ps.find(p => p.id === 's1').name, m).toBe('Renamed Locally'); }
+    const after = await snap(); for (const m of BACKUP_MODULES) { const ps = JSON.parse(after.ls[BACKUP_MODULE_INFO[m].keys.projects]); expect(ps.find(p => p.id === 's1').name, m).toBe('Site One'); }
     expect(after.ls['rcd-projects-v6']).toBe(before.ls['rcd-projects-v6']);                                              // nothing to add in RCD: byte-identical
+  });
+  it('release o: a site that is already on the phone (by ID) under another name is never written to: the backup\'s version is added beside it as a copy; the rest is added', async () => {
+    const file = await sourceFile(); seedPhone({ name: 'Renamed Locally' }); const before = await snap();         // s1 exists everywhere under another name
+    const r = await backupRestore(file, { storage: S }); expect(r.ok).toBe(true); expect(r.summary).toMatchObject({ sitesAdded: 2, eventsAdded: 2, copiesAdded: 9, alreadyOnPhone: 0 });
+    const after = await snap(); for (const m of BACKUP_MODULES) { const ps = JSON.parse(after.ls[BACKUP_MODULE_INFO[m].keys.projects]); expect(ps.find(p => p.id === 's1').name, m).toBe('Renamed Locally'); expect(ps.filter(p => /^Site One \(backup /.test(p.name)).length, m).toBe(1); }
+    const b = before.ls['rcd-projects-v6'], a = after.ls['rcd-projects-v6']; expect(a.startsWith(b.slice(0, -1)) && a.endsWith(b.slice(-1)), 'the phone\'s own text is untouched, the copy only added').toBe(true);
   });
   it('a site whose photo already exists with DIFFERENT bytes is not restored (conflicting photos); everything else is; the existing photo is untouched', async () => {
     const file = await sourceFile(); await sitePhotoStore.put('p2', rec(5, 4)); const before = await snap();

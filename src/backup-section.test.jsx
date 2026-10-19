@@ -32,7 +32,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe('idle', () => {
   it('the intro, the client names / ABN / photos warning under Make backup, Last backup: never, the photos box ticked, Make backup, Choose backup file; no cards, no Undo', () => {
     mount();
-    expect(text()).toContain('Save a copy of your sites, results, History, calendar events, photos, logos, business details, lists and settings.'); expect(text()).toContain('Adds what is in a backup file and is not already on this phone.'); expect(text()).toContain('Creates one file. Then tap Share backup to save it. The file includes client names, ABNs, licence numbers, logos and photos, so store it somewhere safe.');
+    expect(text()).toContain('Save a copy of your sites, results, History, calendar events, photos, logos, business details, lists and settings.'); expect(text()).toContain('Adds what is in a backup file and is not already on this phone. If a site here differs from the backup\x27s version, the backup\x27s version is added as a separate copy and the site on this phone is not changed.'); expect(text()).toContain('Creates one file. Then tap Share backup to save it. The file includes client names, ABNs, licence numbers, logos and photos, so store it somewhere safe.');
     expect(T('backup-last').textContent).toBe('Last backup: never'); expect(screen.getByLabelText(/Include photos/)).toBeChecked(); expect(T('backup-make').textContent).toBe('Make backup'); expect(T('backup-choose').textContent).toBe('Choose backup file…');
     expect(screen.queryAllByRole('alert')).toEqual([]); expect(screen.queryAllByRole('status')).toEqual([]); expect(screen.queryByText('Undo')).toBeNull(); expect(screen.queryByTestId('backup-problem')).toBeNull();
   });

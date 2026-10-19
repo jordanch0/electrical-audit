@@ -30,11 +30,18 @@ describe('the summary of a real plan', () => {
     expect(t.notes).toEqual(['There is enough free space.']);
     expect(allText(t)).not.toMatch(/-v\d|projects|results|\.json|rcd-|swb-|iel-/);
   });
-  it('a phone that already has some of it: "Already on this phone" with the name it has here, and a calendar event', async () => {
+  it('a phone that already has some of it: "Already on this phone", and a calendar event', async () => {
+    const file = await backupOf(() => { seedPhone(); rawSetItem('cal-events-v1', JSON.stringify([{ id: 'e1', type: 'RCD', site: 'A', dueDate: '2026-11-01' }])); });
+    seedPhone(); rawSetItem('cal-events-v1', JSON.stringify([{ id: 'e1', type: 'RCD', site: 'A', dueDate: '2026-11-01' }]));
+    const t = backupSummaryText(await backupPlan(file)); expect(t.groups.map(g => g.id)).toEqual(['present']); const g = group(t, 'present');
+    expect(g).toMatchObject({ mark: '○', heading: 'Already on this phone (left exactly as they are)', summary: '9 sites and 1 calendar event', more: 0 }); expect(g.lines[0]).toBe('Site One (RCD Testing)');
+  });
+  it('release o: a site here under another name is planned as a copy, with what the copy brings; the calendar event is still "already on this phone"', async () => {
     const file = await backupOf(() => { seedPhone(); rawSetItem('cal-events-v1', JSON.stringify([{ id: 'e1', type: 'RCD', site: 'A', dueDate: '2026-11-01' }])); });
     seedPhone({ name: 'Renamed Here' }); rawSetItem('cal-events-v1', JSON.stringify([{ id: 'e1', type: 'RCD', site: 'A', dueDate: '2026-11-01' }]));
-    const t = backupSummaryText(await backupPlan(file)); expect(t.groups.map(g => g.id)).toEqual(['present']); const g = group(t, 'present');
-    expect(g).toMatchObject({ mark: '○', heading: 'Already on this phone (left exactly as they are)', summary: '9 sites and 1 calendar event', more: 0 }); expect(g.lines[0]).toBe('Site One (RCD Testing), called "Renamed Here" here');
+    const t = backupSummaryText(await backupPlan(file)); expect(t.groups.map(g => g.id)).toEqual(['copies', 'present']); const g = group(t, 'copies');
+    expect(g).toMatchObject({ mark: '✓', heading: 'Will be added as copies (the site on this phone is not changed)', summary: '9 sites', more: 0 }); expect(g.lines[0]).toMatch(/^Site One \(backup \d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{4}\) in RCD Testing: 1 History snapshot$/);
+    expect(group(t, 'present')).toMatchObject({ summary: '1 calendar event' });
   });
   it('returns nothing for a plan that failed', () => { expect(backupSummaryText({ ok: false, code: 'damaged' })).toBeNull(); expect(backupSummaryText(null)).toBeNull(); expect(backupSummaryText(undefined)).toBeNull(); });
 });

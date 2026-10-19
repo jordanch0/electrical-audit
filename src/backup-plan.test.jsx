@@ -3,7 +3,7 @@
 // logo are never read, and the headroom checks (the app's 5 MB saved-data assumption, navigator.storage.estimate) refuse with a message and change nothing.
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { backupBuild, backupPlan, BACKUP_LIST_SPECS, BACKUP_MODULE_INFO, BACKUP_MODULES, sitePhotoStore, gsdPhotoStore, appLogoStore, siteLogoStore, STORAGE_QUOTA_ASSUMED_BYTES } from './App.jsx';
+import { backupBuild, backupPlan, BACKUP_LIST_SPECS, BACKUP_MODULE_INFO, BACKUP_MODULES, sitePhotoStore, gsdPhotoStore, appLogoStore, siteLogoStore, STORAGE_QUOTA_ASSUMED_BYTES, backupDayText } from './App.jsx';
 import { MODULES, liveStore, metaStore, histStore } from './test/item-dates-fixtures.js';
 import { DBS, withDb, clearIdb, idbSnapshot, lsSnapshot, bytes, rec, FM, keyOf, seedModule, seedPhone, wipe, backupOf, PHOTO_REFS, seedSourceFull } from './test/backup-fixtures.js';
 
@@ -40,12 +40,19 @@ describe('planning an empty phone', () => {
 });
 
 describe('the skip rule is by ID only', () => {
-  it('a site whose ID is on the phone is "already on this phone" even if renamed since the backup; everything of it (History too) is skipped and it is listed by name', async () => {
+  it('a site whose ID is on the phone and whose content is the same is "already on this phone"; everything of it (History too) is skipped and it is listed by name', async () => {
+    const file = await backupOf(() => { seedPhone(); });
+    seedPhone();
+    const plan = await backupPlan(file);
+    for (const m of BACKUP_MODULES) { const p = mod(plan, m); expect(p.status, m).toBe('nothing'); expect(p.sites.add, m).toEqual([]); expect(p.sites.present, m).toEqual([{ id: 's1', name: 'Site One', nameHere: 'Site One' }]); expect(p.snapshots.add, m).toBe(0); expect(plan.work.modules[m], m).toBeUndefined(); }
+    expect(plan.nothingToAdd).toBe(true); expect(plan.canRestore).toBe(false); expect(plan.counts.sitesPresent).toBe(9);
+  });
+  it('release o: the same ID with DIFFERENT content (renamed since the backup) is not skipped: the backup\'s version is planned as a separate copy, the phone\'s site stays', async () => {
     const file = await backupOf(() => { seedPhone(); });
     seedPhone({ name: 'Renamed Since The Backup' });
     const plan = await backupPlan(file);
-    for (const m of BACKUP_MODULES) { const p = mod(plan, m); expect(p.status, m).toBe('nothing'); expect(p.sites.add, m).toEqual([]); expect(p.sites.present, m).toEqual([{ id: 's1', name: 'Site One', nameHere: 'Renamed Since The Backup' }]); expect(p.snapshots.add, m).toBe(0); expect(plan.work.modules[m], m).toBeUndefined(); }
-    expect(plan.nothingToAdd).toBe(true); expect(plan.canRestore).toBe(false); expect(plan.counts.sitesPresent).toBe(9);
+    for (const m of BACKUP_MODULES) { const p = mod(plan, m); expect(p.status, m).toBe('add'); expect(p.sites.add, m).toEqual([]); expect(p.sites.present, m).toEqual([]); expect(p.sites.copy.map(c => c.copyName), m).toEqual(['Site One (backup ' + backupDayText(plan.summary.deviceLocalDate) + ')']); expect(plan.work.modules[m].projects[0].id, m).not.toBe('s1'); }
+    expect(plan.nothingToAdd).toBe(false); expect(plan.canRestore).toBe(true); expect(plan.counts.sitesCopy).toBe(9); expect(plan.counts.sitesPresent).toBe(0);
   });
   it('a DIFFERENT ID with the very same name is added: both sites are kept (names are never compared)', async () => {
     const file = await backupOf(() => { seedPhone(); });
@@ -144,12 +151,12 @@ describe('modules that are skipped on purpose, and unreadable data', () => {
 });
 
 describe('read-only', () => {
-  it('writes nothing to localStorage or IndexedDB, creates no database, and reads (parses) only the keys of the modules, the calendar, the Business tab record and the 13 list keys', async () => {
+  it('writes nothing to localStorage or IndexedDB, creates no database, and reads (parses) only the keys of the modules, the calendar, the Business tab record, the 13 list keys and the note of restored copies', async () => {
     const file = await backupOf(seedSourceFull); seedPhone({ id: 'local', name: 'Local' }); await sitePhotoStore.put('p1', rec(1, 2, 3)); rawSetItem('app-settings-v1', '{"businessName":"Mine"}'); rawSetItem('rcd-dropdowns-v6', '{"x":1}'); rawSetItem('some-other-app', 'x');
     const ls = lsSnapshot(), idb = await idbSnapshot(), dbs = (await indexedDB.databases()).map(d => d.name).sort();
     const sp = spyStorage(); const plan = await backupPlan(file, { storage: sp });
     expect(plan.ok).toBe(true); expect(lsSnapshot()).toEqual(ls); expect(await idbSnapshot()).toEqual(idb); expect((await indexedDB.databases()).map(d => d.name).sort()).toEqual(dbs);
-    const allowed = new Set([...BACKUP_MODULES.flatMap(m => Object.values(BACKUP_MODULE_INFO[m].keys)), 'cal-events-v1', 'app-settings-v1', ...BACKUP_LIST_SPECS().map(s => s.key)]);
+    const allowed = new Set([...BACKUP_MODULES.flatMap(m => Object.values(BACKUP_MODULE_INFO[m].keys)), 'cal-events-v1', 'app-settings-v1', 'sparkcheck-copies-v1', ...BACKUP_LIST_SPECS().map(s => s.key)]);
     expect([...sp.reads].filter(k => !allowed.has(k))).toEqual([]);                               // never rcd-mode, iel-cat, a photo-migration marker or another app's key (only their LENGTH is counted, for the 5 MB check)
   });
   it('does not create a missing photo database just to look', async () => {
