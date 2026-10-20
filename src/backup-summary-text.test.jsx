@@ -97,7 +97,8 @@ describe('notes and the title', () => {
 });
 
 describe('refusals and failures: short plain sentences', () => {
-  const E = { 'not-a-backup': ['This file cannot be restored', 'This is not a SparkCheck backup file, or it is incomplete.'], 'wrong-format': ['This file cannot be restored', 'This is not a SparkCheck backup file, or it is incomplete.'], damaged: ['This file cannot be restored', 'This backup file is damaged.'],
+  const E = { 'not-a-backup': ['This file cannot be restored', 'This is not a SparkCheck backup file.'], 'wrong-format': ['This file cannot be restored', 'This is not a SparkCheck backup file.'],
+    incomplete: ['This file cannot be restored', 'This backup file is incomplete. It may not have finished saving or downloading. Make the backup again, or copy it to this phone again, then try again.'], damaged: ['This file cannot be restored', 'This backup file is damaged.'],
     invalid: ['This file cannot be restored', 'This backup file is not complete.'], 'newer-version': ['This file cannot be restored', 'This backup was made by a newer version of SparkCheck. Update the app, then try again.'],
     nothing: ['Nothing to add', 'Everything in this backup is already on this phone or already set here.'], unfinished: ['A restore is still being put right', 'A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.'],
     shape: ['The restore did not start', 'Something on this phone is not in the form the restore expects, so nothing was added. Nothing was changed.'], journal: ['Not enough room to start', 'There is not enough room on this phone to start the restore. Free up some space, then try again. Nothing was changed.'],

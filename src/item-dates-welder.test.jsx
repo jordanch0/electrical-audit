@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import * as XLSX from 'xlsx';
 import AppRoot, { exportWelderExcel, welderHasResult, WELDER_CHECKLIST } from './App.jsx';
 import { ls, day, HOME, TODAY, at, site, setDate, homeTab, completeAudit, resetAudit } from './test/item-dates-ui.js';
+vi.setConfig({ testTimeout: 15000 });                       // observed 3.3-4.5 s in the full suite (2.4-3.0 s alone) against the old 5 s default: three times the slowest, so a loaded or slower machine cannot time it out
 
 const areas = [{ id: 'ar', name: 'Workshop', assets: [{ id: 'a1', assetId: 'WLD-1', brand: 'Kemppi', model: 'Mig 300', serial: '1234' }, { id: 'a2', assetId: 'WLD-2', brand: 'Lincoln', model: 'Pro', serial: '5678' }] }];
 const META = { auditor: 'Jane', testDate: HOME, nextTestDate: '2027-01-05', dateDay: TODAY };

@@ -50,6 +50,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.js'],
     globals: false,
+    testTimeout: 15000,   // the vitest default is 5 s; the slowest tests take 4-6 s in a full run, so every test gets 15 s unless its file sets its own
   },
   build: {
     outDir: 'dist',

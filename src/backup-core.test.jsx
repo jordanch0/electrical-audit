@@ -104,10 +104,10 @@ describe('rejection: every bad file is refused with a clear message and storage 
   };
   beforeEach(async () => { snap = null; });
   const refused = async (blob, code, re) => { const before = [lsSnapshot(), await idbSnapshot()]; const r = await backupInspect(blob); expect(r.ok).toBe(false); expect(r.code).toBe(code); expect(r.message).toMatch(re); expect(typeof r.message).toBe('string'); expect([lsSnapshot(), await idbSnapshot()]).toEqual(before); };
-  it('not a backup: random bytes, an empty file, a text file, a zip with no manifest, a truncated backup', async () => {
+  it('not a backup: random bytes, an empty file, a text file, a zip with no manifest; a truncated backup is INCOMPLETE (a file that starts as a zip and runs out)', async () => {
     await refused(new Blob([new Uint8Array(500).fill(65)]), 'not-a-backup', /not a SparkCheck backup/); await refused(new Blob([]), 'not-a-backup', /not a SparkCheck backup/); await refused(new Blob(['{"hello":1}']), 'not-a-backup', /not a SparkCheck backup/);
     await refused(await new JSZip().file('x.txt', 'hi').generateAsync({ type: 'blob', compression: 'STORE' }), 'not-a-backup', /no manifest/);
-    await seedAll(); const { blob } = await backupBuild(); await refused(blob.slice(0, blob.size - 40), 'not-a-backup', /not a SparkCheck backup/);
+    await seedAll(); const { blob } = await backupBuild(); await refused(blob.slice(0, blob.size - 40), 'incomplete', /incomplete/);
   });
   it('wrong format name, a newer format (says to update the app), a missing / invalid version, an incomplete manifest', async () => {
     await refused(await rebuild(({ manifest, files }) => ({ manifest: { ...manifest, format: 'other-app-backup' }, files })), 'wrong-format', /not a SparkCheck backup/);

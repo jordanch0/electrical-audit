@@ -1,8 +1,9 @@
 // ELT Dropdowns tab: user-editable option lists behind the plain select + literal "Other" (+ text box).
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, waitFor, cleanup, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import AppRoot from './App.jsx';
+vi.setConfig({ testTimeout: 15000 });                       // observed 3.3-4.5 s in the full suite (2.4-3.0 s alone) against the old 5 s default: three times the slowest, so a loaded or slower machine cannot time it out
 
 const project = { id:'p1', name:'Site A', company:'', abn:'', licence:'', assets:[
   { id:'a1', location:'Site A', assetLocation:'SE Door', assetId:'', type:'Emergency Exit Sign', maintained:'Maintained', fitting:'X' },
