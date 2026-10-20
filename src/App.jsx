@@ -114,6 +114,23 @@ function deliverExportFile(base64, filename, mimeType=XLSX_MIME) {
     alert(`Export failed: ${(err && err.message) || 'unknown error'}. Please try again.`);
   }
 }
+// The part of an export file name that comes from a typed name (a site name, a date). Safe on Windows, iOS and every browser: no control characters; backslash / : * ? " < > | become "-" (a run is one "-");
+// whitespace runs become one "_" (repeated "_" too); no leading or trailing space . _ - (no hidden file, no trailing dot); at most `max` characters, counted by code point so an emoji is never cut; empty gives `fallback`.
+// Kept: & ( ) ' and a "-" or "_" the name already had.
+function exportSafeName(name, fallback = "Site", max = 50) {
+  let s = String(name == null ? "" : name).normalize("NFC");
+  s = s.replace(/[\u0000-\u001f\u007f]/g, " ");
+  s = s.replace(/[\\/:*?"<>|]+/g, "-");
+  s = s.replace(/\s+/g, "_").replace(/_{2,}/g, "_");
+  s = s.replace(/^[\s._-]+|[\s._-]+$/g, "");
+  s = Array.from(s).slice(0, max).join("").replace(/[\s._-]+$/g, "");
+  return s || fallback;
+}
+// The ONE builder of an export's file name, so the order and the date part are the same in all nine exports: [head]_[site name]_[tail]_[date].xlsx, a part that is empty is left out and a missing date is "export".
+// IEL: exportFileName("IEL", name, "", date) -> IEL_Plant_Rooms_2026-10-20.xlsx; RCD: exportFileName("", name, "RCD_Push", date) -> Plant_Rooms_RCD_Push_2026-10-20.xlsx. Never build an export file name any other way (src/export-file-names.test.jsx scans for it).
+function exportFileName(head, siteName, tail, dateIso) {
+  return [head, exportSafeName(siteName), tail, exportSafeName(dateIso, "export")].filter(Boolean).join("_") + ".xlsx";
+}
 const XJ_DEFECT_TAIL = ["Defect ID", "Priority", "Rectified / Scheduled", "Date Rectified / Scheduled", "Responsibility", "Notes / Recommendations"];
 // ── ExcelJS split-export foundation ────────────────────────────────────────────────────────────────────────────────
 // The print-friendly split exports (narrow main table + Defects sheet) on ExcelJS: real borders, coloured results, zebra rows, wrapped
@@ -1049,7 +1066,7 @@ async function exportExcel(results, project, meta, mode) {
     if (i >= 2 && r[0] !== "") swbApplyXlStyle(cell, (r[0] === "Fail" && ci === 1 && sum.fail > 0) ? xjStatusStyle("FAIL") : (r[0] === "Pass" && ci === 1 && sum.pass > 0) ? xjStatusStyle("PASS") : boxed);
   }));
   xjPageSetup(ss, false, null);
-  const filename = `${project.name.replace(/s+/g, "_")}_RCD_${isInject ? "Injection" : "Push"}_${testDate || "export"}.xlsx`;
+  const filename = exportFileName("", project.name, `RCD_${isInject ? "Injection" : "Push"}`, testDate);
   xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
@@ -3183,7 +3200,7 @@ async function exportIELExcel(project, results, meta) {
     idHeaders: ["Location", "Machine"], idWidths: [16, 22],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  const filename = `IEL_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  const filename = exportFileName("IEL", sName, "", testDate);
   xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
@@ -5339,7 +5356,7 @@ async function exportTATExcel(project, results, meta) {
     // "Test Machine" is report-level (meta.machine, typed once on Home) and no longer lives in the header: footer line directly above Notes
     rows, footer: [[""], [`Test Machine: ${(meta && meta.machine) || ""}`], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  const filename = `TAT_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  const filename = exportFileName("TAT", sName, "", testDate);
   xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
@@ -6865,7 +6882,7 @@ async function exportThermoExcel(project, results, meta) {
     idHeaders: ["Location", "Board", "Circuit"], idWidths: [16, 18, 18],
     rows, footer: [[""], [`Notes: ${(meta && meta.notes) || ""}`]],
   });
-  const filename = `Thermo_${sName.replace(/s+/g, "_")}_${testDate || "export"}.xlsx`;
+  const filename = exportFileName("Thermo", sName, "", testDate);
   xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
@@ -11105,7 +11122,7 @@ async function exportSWBExcel(project, allResults, meta) {
 
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
-  deliverExportFile(swbArrayBufferToBase64(buf), `SWB_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("SWB", sName, "", testDate));
   if (anyPhotoEmbedded) confirmPhotoMigrationVerified("swb");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
@@ -12572,7 +12589,7 @@ async function exportELTExcel(project, allResults, meta) {
   }
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
-  deliverExportFile(swbArrayBufferToBase64(buf), `ELT_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("ELT", sName, "", testDate));
   if (anyPhotoEmbedded) confirmPhotoMigrationVerified("elt");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
@@ -13486,7 +13503,7 @@ async function exportIRTExcel(project, results, meta) {
     between: w => xjSheet(w, "Readings", { hdr,
       headers: ["#", ...readingHeaders], widths: [5, 16, 14, 22, 13, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 10], rows: readingRows.map((r, i) => [i + 1, ...r]) }),
   });
-  const fname = `IR_Test_${sName.replace(/s+/g, "_")}_${meta.testDate || "export"}.xlsx`;
+  const fname = exportFileName("IR_Test", sName, "", meta.testDate);
   xjFitRows(wb);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
 }
@@ -15508,7 +15525,7 @@ async function exportWelderExcel(project, allResults, meta) {
   });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
-  deliverExportFile(swbArrayBufferToBase64(buf), `Welder_${sName.replace(/\s+/g,"_")}_${testDate||"export"}.xlsx`);
+  deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("Welder", sName, "", testDate));
   if (anyPhotoEmbedded) confirmPhotoMigrationVerified("welder");   // a real export that actually embedded a migrated photo is proof the round trip works
 }
 
@@ -15849,7 +15866,7 @@ async function exportGSDExcel(project, items, meta) {
     emptyText: "No defects recorded", landscape: true });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
-  deliverExportFile(swbArrayBufferToBase64(buf), `Site_Defects_${sName.replace(/\s+/g, "_")}_${testDate || "export"}.xlsx`);
+  deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("Site_Defects", sName, "", testDate));
 }
 
 // ── UI ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -16406,14 +16423,18 @@ async function backupBuild({ includePhotos = true, now = new Date(), storage = l
   return { blob: w.finish(), filename: backupFilename(now), manifest };
 }
 // Inspects a backup file (a Blob / File) WITHOUT touching storage: structure, versions, every entry's checksum (one entry at a time), the key allow-list. Returns { ok: true, manifest, summary } or
-// { ok: false, code, message } with a message fit to show the user. Codes: not-a-backup, damaged, wrong-format, newer-version, invalid.
+// { ok: false, code, message } with a message fit to show the user. Codes: not-a-backup, incomplete, damaged, wrong-format, newer-version, invalid.
 const BACKUP_SITES_KEYS = { rcd: ["rcd-projects-v6"], iel: ["iel-projects-v2"], tat: ["tat-projects-v1"], thermo: ["thermo-projects-v1"], swb: ["swb-projects-v1"], irt: ["irt-projects-v1"], elt: ["elt-projects-v2", "elt-projects-v1"], welder: ["welder-projects-v2", "welder-projects-v1"], gsd: ["gsd-projects-v1"] };
 async function backupInspect(file) {
   const bad = (code, message) => ({ ok: false, code, message });
-  let z; try { z = await zipOpen(file); } catch (e) { return bad("not-a-backup", "This is not a SparkCheck backup file (it is not a readable zip)."); }
+  // A file that starts like a zip (PK 03 04) and then runs out is INCOMPLETE (it did not finish saving or downloading), not "not a backup": no end record, a directory outside the file, an entry cut short.
+  const startsLikeZip = async () => { try { const h = new Uint8Array(await file.slice(0, 4).arrayBuffer()); return h.length === 4 && h[0] === 0x50 && h[1] === 0x4b && h[2] === 3 && h[3] === 4; } catch (_) { return false; } };
+  const cutShort = e => !!e && e.code === "zip" && /^not a zip file( \(no end record\))?$|directory is outside the file|entry is truncated/.test(e.message || "");
+  const incomplete = e => bad("incomplete", "This backup file is incomplete (" + e.message + ").");
+  let z; try { z = await zipOpen(file); } catch (e) { if (cutShort(e) && await startsLikeZip()) return incomplete(e); return bad("not-a-backup", "This is not a SparkCheck backup file (it is not a readable zip)."); }
   let manifest;
   try { if (!z.has("manifest.json")) return bad("not-a-backup", "This is not a SparkCheck backup file (no manifest)."); manifest = JSON.parse(new TextDecoder().decode(await z.bytes("manifest.json"))); }
-  catch (e) { return bad(e && e.code === "zip" ? "damaged" : "not-a-backup", e && e.code === "zip" ? "This backup file is damaged (" + e.message + ")." : "This is not a SparkCheck backup file (the manifest is unreadable)."); }
+  catch (e) { if (cutShort(e)) return incomplete(e); return bad(e && e.code === "zip" ? "damaged" : "not-a-backup", e && e.code === "zip" ? "This backup file is damaged (" + e.message + ")." : "This is not a SparkCheck backup file (the manifest is unreadable)."); }
   if (!manifest || typeof manifest !== "object" || manifest.format !== BACKUP_FORMAT) return bad("wrong-format", "This is not a SparkCheck backup file.");
   if (!Number.isInteger(manifest.formatVersion) || manifest.formatVersion < 1) return bad("invalid", "This backup file has no valid format version.");
   if (manifest.formatVersion > BACKUP_FORMAT_VERSION) return bad("newer-version", "This backup was made by a newer version of SparkCheck (backup format " + manifest.formatVersion + "). Update the app, then try again.");
@@ -16424,7 +16445,7 @@ async function backupInspect(file) {
     if (!z.has(ls.file)) return bad("damaged", "This backup file is damaged (the data entry is missing).");
     const dataBytes = await z.bytes(ls.file); if (dataBytes.length !== ls.size || await backupSha256(dataBytes) !== ls.sha256) return bad("damaged", "This backup file is damaged (the data does not match its checksum).");
     data = JSON.parse(new TextDecoder().decode(dataBytes));
-  } catch (e) { const zipErr = e && e.code === "zip"; return bad(zipErr ? "damaged" : "invalid", "This backup file's data could not be read" + (zipErr ? " (" + e.message + ")" : " (it is not valid data)") + "."); }
+  } catch (e) { if (cutShort(e)) return incomplete(e); const zipErr = e && e.code === "zip"; return bad(zipErr ? "damaged" : "invalid", "This backup file's data could not be read" + (zipErr ? " (" + e.message + ")" : " (it is not valid data)") + "."); }
   if (!data || typeof data !== "object" || Array.isArray(data)) return bad("invalid", "This backup file's data is not in the expected shape.");
   for (const k of Object.keys(data)) {
     if (typeof data[k] !== "string") return bad("invalid", "This backup file holds a value for " + k + " that is not text.");
@@ -16440,7 +16461,7 @@ async function backupInspect(file) {
       if (seen.has(st.id + "\u0000" + r.key) || seen.has(r.file)) return bad("invalid", "This backup file lists the same " + st.id + " entry twice."); seen.add(st.id + "\u0000" + r.key); seen.add(r.file);
       if (!z.has(r.file)) return bad("damaged", "This backup file is damaged (a photo or logo entry is missing).");
       try { const b = await z.bytes(r.file); if (b.length !== r.size || await backupSha256(b) !== r.sha256) return bad("damaged", "This backup file is damaged (a photo or logo does not match its checksum)."); }
-      catch (e) { return bad("damaged", "This backup file is damaged (" + (e && e.message) + ")."); }
+      catch (e) { if (cutShort(e)) return incomplete(e); return bad("damaged", "This backup file is damaged (" + (e && e.message) + ")."); }
       records++; if (st.photos) { if (!r.key.endsWith("~t")) photos++; } else logos++;
     }
   }
@@ -17403,7 +17424,7 @@ function backupSummaryText(plan) {
   const addedLines = []; mods.forEach(m => m.sites.add.forEach(x => addedLines.push(x.name + " (" + m.label + ")")));
   const addParts = [c.sitesAdd ? nw(c.sitesAdd, "site") : null, c.snapshotsAdd ? nw(c.snapshotsAdd, "History snapshot") : null, c.eventsAdd ? nw(c.eventsAdd, "calendar event") : null, photos ? nw(photos, "photo") : null, logos ? nw(logos, "logo") : null].filter(Boolean);
   if (addParts.length) groups.push({ id: "added", mark: "\u2713", heading: "Will be added", summary: backupJoinWords(addParts), ...backupCap(addedLines) });
-  const copyLines = (plan.copies || []).map(x => x.copyName + " in " + x.label + ": " + [x.hasPhotos ? nw(x.photos, "photo") : null, nw(x.snapshots, "History snapshot")].filter(Boolean).join(", "));
+  const copyLines = (plan.copies || []).map(x => { const what = [x.hasPhotos && x.photos > 0 ? nw(x.photos, "photo") : null, x.snapshots > 0 ? nw(x.snapshots, "History snapshot") : null].filter(Boolean).join(", "); return x.copyName + " in " + x.label + (what ? ": " + what : ""); });      // a zero is left out, like the Undo texts; a copy with nothing to count is just its name and module
   if (copyLines.length) groups.push({ id: "copies", mark: "\u2713", heading: "Will be added as copies (the site on this phone is not changed)", summary: nw(copyLines.length, "site"), ...backupCap(copyLines) });
   const presentLines = []; mods.forEach(m => m.sites.present.forEach(x => presentLines.push(x.name + " (" + m.label + ")" + (x.nameHere && x.nameHere !== x.name ? ", called \"" + x.nameHere + "\" here" : ""))));
   const presParts = [c.sitesPresent ? nw(c.sitesPresent, "site") : null, c.eventsPresent ? nw(c.eventsPresent, "calendar event") : null].filter(Boolean);
@@ -17441,7 +17462,8 @@ function backupSummaryText(plan) {
 function backupMessageText(code, plan) {
   const bad = "This file cannot be restored", unfinished = "A previous restore was interrupted and is still being put right. Close and reopen SparkCheck, then try again.";
   switch (code) {
-    case "not-a-backup": case "wrong-format": return { title: bad, body: "This is not a SparkCheck backup file, or it is incomplete." };
+    case "not-a-backup": case "wrong-format": return { title: bad, body: "This is not a SparkCheck backup file." };
+    case "incomplete": return { title: bad, body: "This backup file is incomplete. It may not have finished saving or downloading. Make the backup again, or copy it to this phone again, then try again." };
     case "damaged": return { title: bad, body: "This backup file is damaged." };
     case "invalid": return { title: bad, body: "This backup file is not complete." };
     case "newer-version": return { title: bad, body: "This backup was made by a newer version of SparkCheck. Update the app, then try again." };
@@ -17463,7 +17485,7 @@ export { xjFitRows, xjWrapLines, xjImageSize, xjPhotoBox, xjPhotoRowPt, useScrol
   parseSWBExcel, exportSWBExcel, exportELTExcel, ddRowStyle, ddListStyle, DD_LIST_GAP, tatCleanEquipTypes, TAT_DEFAULT_EQUIP_TYPES, dropdownAdd, tatDefaultFreq, tatCanPass, tatElectricalPatch, tatVisualPatch, tatNormaliseVisual, tatGetItem, parseIELExcel, parseTATExcel, parseThermoExcel, parseIRTExcel, parseExcelToProject, exportExcel, exportIELExcel, exportTATExcel, exportThermoExcel, exportIRTExcel, parseELTExcel, downloadELTTemplate, eltOverall, eltNormaliseRes, eltGetRes, eltSummary, eltRegisterRows, ELT_COLUMNS, ELT_DEFECT_COLUMNS,
   localISODate, isoFromDateText, DateBox, ItemDateField, itemDateApply, itemHasStatus, earliestIso, BackupRestoreSection, BACKUP_UI, backupLog, backupLogReason, backupReloadApp, backupLastRestoreLine, backupKeyLabel, backupKeysLabel, BACKUP_LIST_CAP, backupMbText, backupSummaryText, backupMessageText, BACKUP_LAST_KEY, BACKUP_LARGE_BYTES, backupMeasure, backupLargeWarning, backupDeliver, backupLastBackup, backupLastBackupText, RESTORE_KEY, BackupCrash, backupRestoreProblem, backupUndoConfirmText, backupUndoResultText, backupBuildInserts, backupRestore, backupRecoverAtStart, backupFinishRecovery, backupUndoInfo, backupUndo, BACKUP_MODULE_INFO, BACKUP_MODULES, BACKUP_HEADROOM_MARGIN_BYTES, backupVersionMismatch, backupPlan, BACKUP_FORMAT, BACKUP_FORMAT_VERSION, BACKUP_APP_VERSION, BACKUP_STORES, backupFilename, backupKeyAllowed, backupCollectLocalStorage, backupBuild, backupInspect, zipWriter, zipOpen, zipCrc32, swbGetBoardPhotos, swbExtractPhotos, swbPhotoList, swbBoardHasResult, swbBoardTested, swbBoardDateApply, homeDateRelease, welderHasResult, eltHasResult, irtHasResult, itemNextDue, itemDue, ItemDueBanner, ITEM_DATES_READY, itemDatesMigrate, itemDatesLoadStep, homeDateFollow, homeDateFollowAll, msToLocalMidnight, HOME_DATE_SPECS,
   loadAppSettings, saveAppSettings, appLogoStore, siteLogoStore, xjGetLogoDataUrl, xjExtractLogo, xjSheet, xjSplit, xjHdr, xjHeaderRows, xjHeader, StatusPill, StatusPills, RESULT_COLORS, RESULT_BG, PRIORITY_BG, PRIORITY_FG, PRIORITY_COLORS, SWB_RISK_COLORS, TAT_SM, SM, XJ_COLOURS, xjStatusStyle, xjPriorityStyle, xjSiteFromTitle, ielItemDue, ielChosenNextDue, XJ_REPORT_TITLES, XJ_HEADER_H, XJ_TABLE_START, XJ_HEADING_H, XJ_PRIORITY_LEGEND, GlobalSettingsView, LogoField,
-  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save,
+  localStorageUsageBytes, fmtBytes, STORAGE_QUOTA_ASSUMED_BYTES, save, exportSafeName, exportFileName,
   sitePhotoStore, sitePhotoIO, siteStorePhotos, useSitePhotoUrl, SitePhoto, migrateSitePhotos, confirmPhotoMigrationVerified, expirePhotoMigrationBackupIfStale, SITE_PHOTO_BACKUP_MAX_AGE_DAYS,
   assetPhotoList, assetResultsExtractPhotos, copySitePhotosForContinue, xjPhotoBoxWH };
 export { eltHasProgress, welderHasProgress, gsdHasProgress, AuditGatePage, migrateAuditActive, auditEntryIsActive, auditGateOn, auditGateOff, AUDITOR_REQUIRED_MSG };
