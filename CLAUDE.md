@@ -453,7 +453,7 @@ Global Settings has two sections, **Business | Backup & Data** (labels in the on
 
 ### Local Development
 ```bash
-cd "C:\Users\jorda\OneDrive\Documents\SparkCheck\sparkcheck"
+cd "C:\dev\SparkCheck\sparkcheck"
 npm run dev           # starts Vite dev server at http://localhost:5173
 ```
 Hot reload is active — changes to `src/App.jsx` reflect instantly in the browser.
