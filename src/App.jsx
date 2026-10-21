@@ -1132,6 +1132,36 @@ function useCollapsible(open, close, ref) {
     return () => { document.removeEventListener("click", onDocClick, true); if (activeExpander === me) activeExpander = null; };
   }, [open]);
 }
+// useRevealOnOpen(boxRef, open): a confirm card that GROWS in place (Complete, Continue, Reset, the dropdown notice, the Calendar delete) is scrolled into view when it opens low on a short screen, clear of the
+// floating bottom pill. Same measuring numbers as Global Settings (12 px at the top, GS_REVEAL_GAP above the pill, "nearest" unless taller than the room, "smooth" or "auto" under reduced motion) but the
+// container and the pill are FOUND, not named: the nearest [data-gs-scroll], else the nearest ancestor that scrolls; the pill is the <nav> that is a direct child of the container's parent (none on a sites list).
+// Runs only when `open` turns true: never on the first render, on close or while it stays open; two animation frames before measuring, and nothing if the card closed or unmounted meanwhile (which also keeps it
+// clear of useScrollMemory: a view change unmounts the card and the cleanup cancels the frames). The card carries ...GS_MSG_MARGIN so "nearest" stops 16 px above the pill. Call it BEFORE any early return.
+function revealCard(el) {
+  if (!el.isConnected || !el.getClientRects().length) return;                      // gone, or in a pane that is not showing (display:none)
+  let sc = el.closest("[data-gs-scroll]");
+  for (let p = sc ? null : el.parentElement; p; p = p.parentElement) { const oy = getComputedStyle(p).overflowY; if (oy === "auto" || oy === "scroll") { sc = p; break; } }
+  if (!sc) return;
+  const c = sc.getBoundingClientRect(); if (!c.height) return;
+  const nav = sc.parentElement && Array.from(sc.parentElement.children).find(n => n.tagName === "NAV"), top = c.top + 12, bottom = Math.min(c.bottom, nav ? nav.getBoundingClientRect().top : c.bottom) - GS_REVEAL_GAP;
+  const a = el.getBoundingClientRect();
+  if (a.top >= top && a.bottom <= bottom) return;                                  // already fully visible: no scroll
+  const reduce = typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches, behavior = reduce ? "auto" : "smooth";
+  el.scrollIntoView({ block: a.bottom - a.top > bottom - top ? "start" : "nearest", behavior });
+}
+function useRevealOnOpen(boxRef, open) {
+  const was = React.useRef(open);
+  React.useEffect(() => {
+    const before = was.current; was.current = open;
+    if (!open || before) return undefined;                                         // first render, close, or still open: nothing scrolls
+    const el = boxRef.current; if (!el || typeof el.scrollIntoView !== "function") return undefined;
+    let live = true, f1 = 0, f2 = 0;
+    const go = () => { if (live && boxRef.current === el) revealCard(el); };
+    if (typeof requestAnimationFrame !== "function") { go(); return () => { live = false; }; }
+    f1 = requestAnimationFrame(() => { f2 = requestAnimationFrame(go); });
+    return () => { live = false; if (typeof cancelAnimationFrame === "function") { cancelAnimationFrame(f1); cancelAnimationFrame(f2); } };
+  }, [open]);
+}
 // DateBox — the app's ONE date field on a form page: a styled box that shows the date as DD/MM/YYYY, over a transparent native date input that catches the tap.
 // A raw native <input type="date"> ignores width / max-width on iOS Safari and overflows its container (the 2026-06-07 fix notes); the overlay cannot, because the box you see is an
 // ordinary div. The Home pages carry the same pattern inline. The box shows a focus outline while the hidden input has focus (keyboard / assistive tech users see where they are).
@@ -1276,16 +1306,20 @@ function dropdownAdd(items, raw, reserved) {
 const DD_ROW_BG = "#e8e6e2", DD_ROW_BORDER = "#f7f6f3", DD_STAR_BORDER = "#fcd34d", DD_LIST_GAP = 5;
 const ddRowStyle = isDefault => ({ display: "flex", alignItems: "center", gap: 8, background: DD_ROW_BG, border: `1px solid ${isDefault ? DD_STAR_BORDER : DD_ROW_BORDER}`, borderRadius: 7, padding: "7px 10px" });
 const ddListStyle = extra => ({ display: "flex", flexDirection: "column", gap: DD_LIST_GAP, ...(extra || {}) });
-function DropdownNotice({ text }) { return text ? React.createElement('div', { "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#b91c1c" } }, text) : null; }
+function DropdownNotice({ text }) {
+  const boxRef = React.useRef(null); useRevealOnOpen(boxRef, !!text);
+  return text ? React.createElement('div', { ref: boxRef, "data-testid": "dropdown-notice", style: { flexBasis: "100%", fontSize: 11, color: "#b91c1c", ...GS_MSG_MARGIN } }, text) : null;
+}
 function ConfirmReset({ onConfirm, renderIdle, prompt = 'Reset list to defaults?' }) {
   const [confirming, setConfirming] = React.useState(false);
   const boxRef = React.useRef(null);
   useCollapsible(confirming, () => setConfirming(false), boxRef);
+  useRevealOnOpen(boxRef, confirming);
   const open = () => setConfirming(true);
   const cancel = () => setConfirming(false);
   const confirm = () => { setConfirming(false); onConfirm(); };
   if (!confirming) return renderIdle(open);
-  return React.createElement('div', { ref: boxRef, style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end' } },
+  return React.createElement('div', { ref: boxRef, style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', justifyContent: 'flex-end', ...GS_MSG_MARGIN } },
     React.createElement('span', { style: { color: '#991b1b', fontSize: '12px' } }, prompt),
     React.createElement('button', { onClick: confirm, style: { background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.5)', color: '#991b1b', borderRadius: '999px', padding: '3px 12px', fontSize: '12px', cursor: 'pointer' } }, 'Reset'),
     React.createElement('button', { onClick: cancel, style: { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(0,0,0,0.15)', color: '#52525b', borderRadius: '999px', padding: '3px 12px', fontSize: '12px', cursor: 'pointer' } }, 'Keep')
@@ -1856,9 +1890,9 @@ function ContinueConfirmBtn({onConfirm,styleObj,color}){
   const accentBorder = color ? color+"55" : "#d8b4fe";
   const accentText  = color ? (color==="7c3aed"?"#6b21a8":"#6b21a8") : "#6b21a8";
   const[confirming,setConfirming]=React.useState(false);
-  const boxRef=React.useRef(null); useCollapsible(confirming,()=>setConfirming(false),boxRef);
+  const boxRef=React.useRef(null); useCollapsible(confirming,()=>setConfirming(false),boxRef); useRevealOnOpen(boxRef,confirming);
   if(confirming){
-    return React.createElement('div',{ref:boxRef,style:{width:"100%",background:accentLight,border:`1px solid ${accentBorder}`,borderRadius:8,padding:"10px 12px",marginTop:4}}
+    return React.createElement('div',{ref:boxRef,style:{width:"100%",background:accentLight,border:`1px solid ${accentBorder}`,borderRadius:8,padding:"10px 12px",marginTop:4,...GS_MSG_MARGIN}}
       ,React.createElement('div',{style:{fontSize:12,color:"#6b21a8",fontWeight:600,marginBottom:8}},"This will replace your current audit with the archived snapshot. Continue?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
         ,React.createElement('button',{style:{flex:1,padding:"9px",background:accentColor,color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onConfirm();setConfirming(false);}},"▶ Yes, Continue")
@@ -4549,6 +4583,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
   // Same rule as DeleteButton (shared useCollapsible): one prompt open at a time, and a click outside collapses it.
   const delRef = React.useRef(null);
   useCollapsible(del, () => setDel(false), delRef);
+  useRevealOnOpen(delRef, del);
   const openDel = () => setDel(true);
   const closeDel = () => setDel(false);
   const days = daysUntil(ev.dueDate);
@@ -4583,7 +4618,7 @@ function EventCard({ev, compact=false, onToggleComplete, onDelete, onDeleteSerie
       ,!compact&&!ev.completed&&React.createElement('div',{style:{display:"flex",gap:6,marginLeft:8,alignItems:"flex-start"}}
         ,React.createElement('button',{style:{...SI.smallBtn,color:"#4338ca",borderColor:"#a5b4fc"},onClick:()=>onStartEdit&&onStartEdit(ev)},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('path',{d:"M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"}),React.createElement('path',{d:"M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"})), " Edit")
         ,del
-          ?React.createElement('div',{ref:delRef,style:{display:"flex",flexDirection:"column",gap:4}}
+          ?React.createElement('div',{ref:delRef,style:{display:"flex",flexDirection:"column",gap:4,...GS_MSG_MARGIN}}
             ,React.createElement('span',{style:{fontSize:10,color:"#991b1b",fontWeight:700,textAlign:"center",whiteSpace:"nowrap"}},"Delete?")
             ,React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",padding:"7px 10px",fontSize:11},onClick:()=>{onDelete&&onDelete(ev.id);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " Delete")
             ,ev.seriesId&&React.createElement('button',{style:{...SI.smallBtn,color:"#991b1b",borderColor:"#fca5a5",fontSize:11},onClick:()=>{onDeleteSeries&&onDeleteSeries(ev.seriesId);closeDel();}},React.createElement('svg',{xmlns:"http://www.w3.org/2000/svg",viewBox:"0 0 24 24",fill:"none",stroke:"currentColor",strokeWidth:2,strokeLinecap:"round",strokeLinejoin:"round",width:"1em",height:"1em",style:{display:"inline",verticalAlign:"middle"}},React.createElement('polyline',{points:"3 6 5 6 21 6"}),React.createElement('path',{d:"M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"}),React.createElement('path',{d:"M10 11v6"}),React.createElement('path',{d:"M14 11v6"}),React.createElement('path',{d:"M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"})), " All ",ev.seriesTotal," in series")
@@ -5054,13 +5089,14 @@ function CompleteAuditBtn({ color, label, onComplete, disabled }) {
   const [confirm, setConfirm] = React.useState(false);
   const boxRef = React.useRef(null);
   useCollapsible(confirm, () => setConfirm(false), boxRef);
+  useRevealOnOpen(boxRef, confirm);     // before the early return below (Rules of Hooks); the disabled branch never opens a card, so it is a no-op there
   if (disabled) {                       // blank auditor: visibly disabled, exposed as disabled, and the reason is TEXT under it
     return React.createElement('div', { style: { width: '100%' } }
       , React.createElement('button', { type: 'button', disabled: true, 'aria-disabled': true, style: { width: '100%', padding: '10px', background: '#e4e4e7', color: '#52525b', border: `1px solid ${AUDIT_GATE_LINE}`, borderRadius: 10, fontSize: 13, fontWeight: 800, cursor: 'not-allowed' } }, label)
       , React.createElement(AuditorRequiredNote, { style: { marginTop: 8 } }));
   }
   if (confirm) {
-    return React.createElement('div', {ref:boxRef,style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4}}
+    return React.createElement('div', {ref:boxRef,style:{background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:10,padding:"12px",marginTop:4,...GS_MSG_MARGIN}}
       ,React.createElement('div',{style:{fontSize:12,color:"#18181b",marginBottom:10,fontWeight:600}},"Archive this audit and reset for next run?")
       ,React.createElement('div',{style:{display:"flex",gap:8}}
         ,React.createElement('button',{style:{flex:1,padding:"11px",background:"#0f766e",color:"#FFFFFF",border:"none",borderRadius:10,fontSize:13,fontWeight:800,cursor:"pointer"},onClick:()=>{onComplete();setConfirm(false);}},"Yes, Complete")
@@ -12072,7 +12108,7 @@ function SWBDropdownsView({dropdowns, setDropdowns, onBack, lists, hint, showDef
         ,React.createElement('div',{style:{display:"flex",gap:8,flexWrap:"wrap"}}
           ,React.createElement('input',{style:{...SS.smallInput,flex:1},placeholder:`Add new ${label.toLowerCase()} option…`,value:newVal,onChange:e=>{setNewVals(v=>({...v,[key]:e.target.value}));setNotice(n=>({...n,[key]:""}));},onKeyDown:e=>{if(e.key==="Enter")addItem(key,newVal);}})
           ,React.createElement('button',{style:{background:"#166534",color:"#fff",border:"none",borderRadius:"8px",padding:"8px 14px",fontSize:"13px",fontWeight:700,cursor:"pointer"},onClick:()=>addItem(key,newVal)},"+ Add")
-          ,notice[key]&&React.createElement('div',{style:{flexBasis:"100%",fontSize:11,color:"#b91c1c"},ref:el=>{if(el&&el.scrollIntoView) el.scrollIntoView({block:"nearest"});}},notice[key])
+          ,React.createElement(DropdownNotice,{text:notice[key]})
         )
       );
     })
@@ -17496,5 +17532,6 @@ async function requestPersistentStorage(nav = typeof navigator !== "undefined" ?
 }
 export { requestPersistentStorage };
 export { GS_TAB_LABELS };
+export { useRevealOnOpen, DropdownNotice, ContinueConfirmBtn };
 export { backupDayText, BACKUP_COPIES_KEY, backupCanon, backupSiteCanon, backupRemapIds, backupBuildIdMap, backupInverseEntry, backupCopyName, backupVerifyCopies, backupNodeCount, backupPointerIds, backupMetaStable, BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export default AppRoot;
