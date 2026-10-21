@@ -31,10 +31,11 @@ const SITE = {
 };
 const STRUCT = {
   rcd: p => { expect(names(p.areas, a => a.name)).toEqual(['Wash Plant', 'Crusher']); const pn = p.areas[0].panels[0]; expect(pn.name).toBe('MSB 1'); expect(pn.circuits).toEqual(['CB1', 'CB2']); expect(pn.circuitMeta.CB1).toMatchObject({ cbType: 'MCB Type B', ampRating: '16A' }); },
-  iel: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(Object.values(p.areas[0].panels[0].machineNames)).toEqual(['Conv 1', 'Conv 2']); },
-  tat: p => { expect(names(p.areas, a => a.name)).toEqual(['Workshop']); expect(Object.values(p.areas[0].itemNames)).toEqual(['Grinder', 'Drill']); expect(Object.values(p.areas[0].itemTags)).toEqual(['T1', 'T2']); },
-  thermo: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(p.areas[0].boards[0].name).toBe('MSB'); expect(Object.values(p.areas[0].boards[0].circuitNames)).toEqual(['One', 'Two']); },
-  irt: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(p.areas[0].panels[0].name).toBe('MCC1'); expect(Object.values(p.areas[0].panels[0].itemNames)).toEqual(['Motor 1', 'Motor 2']); },
+  // names are read through the container's own id list (panel.circuits / area.items / board.circuits / panel.items): the importers make random ids and an all-digit one sorts first in Object.values
+  iel: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); const pn = p.areas[0].panels[0]; expect(pn.circuits.map(id => pn.machineNames[id])).toEqual(['Conv 1', 'Conv 2']); },
+  tat: p => { expect(names(p.areas, a => a.name)).toEqual(['Workshop']); const ar = p.areas[0]; expect(ar.items.map(id => ar.itemNames[id])).toEqual(['Grinder', 'Drill']); expect(ar.items.map(id => ar.itemTags[id])).toEqual(['T1', 'T2']); },
+  thermo: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(p.areas[0].boards[0].name).toBe('MSB'); const bd = p.areas[0].boards[0]; expect(bd.circuits.map(id => bd.circuitNames[id])).toEqual(['One', 'Two']); },
+  irt: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(p.areas[0].panels[0].name).toBe('MCC1'); const pn = p.areas[0].panels[0]; expect(pn.items.map(id => pn.itemNames[id])).toEqual(['Motor 1', 'Motor 2']); },
   swb: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(names(p.areas[0].boards, b => b.name)).toEqual(['MSB', 'DB1']); },
   elt: p => { expect(p.ok).toBe(true); expect(p.assets).toHaveLength(1); expect(p.assets[0]).toMatchObject({ assetId: 'EL-001', assetLocation: 'North Door', fitting: 'Acme Exit 24m' }); },   // the old register listed only the TESTED fitting
   welder: p => {

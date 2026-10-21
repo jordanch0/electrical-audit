@@ -7,7 +7,6 @@ import userEvent from '@testing-library/user-event';
 import AppRoot, { WELDER_CHECKLIST, migrateProjectToAreas as toAreas, eltRegisterRows, welderRegisterRows, exportELTExcel, exportWelderExcel, sitePhotoIO } from './App.jsx';
 import ExcelJS from 'exceljs';
 import 'fake-indexeddb/auto'; // ELT's and Welder's inline-photo seeds here now go through migrateSitePhotos on load (Stages 2-3, 2026-09-29)
-vi.setConfig({ testTimeout: 15000 });                       // observed 3.3-4.5 s in the full suite (2.4-3.0 s alone) against the old 5 s default: three times the slowest, so a loaded or slower machine cannot time it out
 
 // jsdom has no real image decoder — a data: URL Image never fires onload/onerror, which would otherwise hang the photo
 // migration this file's ELT/Welder seeds now trigger on every render. Stubbed the same way GSD's own tests stub gsdPhotoIO.

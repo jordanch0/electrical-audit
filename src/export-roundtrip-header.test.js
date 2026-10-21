@@ -24,19 +24,19 @@ const JOBS = {
   iel: { run: async pid => { const p = { id: pid, name: 'Example Quarry', ...co, areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'p1', name: 'estops', circuits: ['x', 'y'], machineNames: { x: 'Conv 1', y: 'Conv 2' } }] }] };
       await exportIELExcel(p, { a: { estops: { x: { ...fail, lastTested: '2026-09-30' } } } }, meta); },
     parse: parseIELExcel, site: 'Example Quarry',
-    struct: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); expect(Object.values(p.areas[0].panels[0].machineNames)).toEqual(['Conv 1', 'Conv 2']); } },
+    struct: p => { expect(names(p.areas, a => a.name)).toEqual(['Plant']); const pn = p.areas[0].panels[0]; expect(pn.circuits.map(id => pn.machineNames[id])).toEqual(['Conv 1', 'Conv 2']); } },        // via the panel's own id list (random ids: an all-digit one sorts first in Object.values)
   tat: { run: async pid => { const p = { id: pid, name: 'Example Quarry', ...co, areas: [{ id: 'a', name: 'Workshop', defaultFreq: '3', items: ['x', 'y'], itemNames: { x: 'Grinder', y: 'Drill' }, itemTags: { x: 'T1', y: 'T2' }, itemEquipTypes: {}, itemFreqs: {} }] };
       await exportTATExcel(p, { a: { x: { ...fail, lastTested: '2026-09-30' } } }, meta); },
     parse: parseTATExcel, site: 'Example Quarry',
-    struct: p => { expect(Object.values(p.areas[0].itemNames)).toEqual(['Grinder', 'Drill']); expect(Object.values(p.areas[0].itemTags)).toEqual(['T1', 'T2']); } },
+    struct: p => { const ar = p.areas[0]; expect(ar.items.map(id => ar.itemNames[id])).toEqual(['Grinder', 'Drill']); expect(ar.items.map(id => ar.itemTags[id])).toEqual(['T1', 'T2']); } },
   thermo: { run: async pid => { const p = { id: pid, name: 'Example Quarry', ...co, areas: [{ id: 'a', name: 'Plant', boards: [{ id: 'b', name: 'MSB', circuits: ['c1', 'c2'], circuitNames: { c1: 'One', c2: 'Two' } }] }] };
       await exportThermoExcel(p, {}, meta); },
     parse: d => parseThermoExcel(d, '', XLSX), site: 'Example Quarry',
-    struct: p => { expect(p.areas[0].boards[0].name).toBe('MSB'); expect(Object.values(p.areas[0].boards[0].circuitNames)).toEqual(['One', 'Two']); } },
+    struct: p => { expect(p.areas[0].boards[0].name).toBe('MSB'); const bd = p.areas[0].boards[0]; expect(bd.circuits.map(id => bd.circuitNames[id])).toEqual(['One', 'Two']); } },
   irt: { run: async pid => { const p = { id: pid, name: 'Example Quarry', ...co, areas: [{ id: 'a', name: 'Plant', panels: [{ id: 'pn', name: 'MCC1', items: ['x', 'y'], itemNames: { x: 'Motor 1', y: 'Motor 2' } }] }] };
       await exportIRTExcel(p, {}, meta); },
     parse: parseIRTExcel, site: 'Example Quarry',
-    struct: p => { expect(p.areas[0].panels[0].name).toBe('MCC1'); expect(Object.values(p.areas[0].panels[0].itemNames)).toEqual(['Motor 1', 'Motor 2']); } },
+    struct: p => { expect(p.areas[0].panels[0].name).toBe('MCC1'); const pn = p.areas[0].panels[0]; expect(pn.items.map(id => pn.itemNames[id])).toEqual(['Motor 1', 'Motor 2']); } },
   swb: { run: async pid => { const p = { id: pid, name: 'Example Quarry - North', ...co, areas: [{ id: 'ar1', name: 'Plant', boards: [{ id: 'b1', name: 'MSB' }, { id: 'b2', name: 'DB1' }] }] };
       await exportSWBExcel(p, {}, meta); },
     parse: parseSWBExcel, site: 'Example Quarry - North',

@@ -186,7 +186,7 @@ describe('a re-import of each export still reads the structure (importers find c
     await exportIRTExcel(irtProject, irtResults, meta); const p = parseIRTExcel(asData());
     expect(p.areas.map(a => a.name)).toEqual(['Plant']);
     expect(p.areas[0].panels.map(x => x.name)).toEqual(['MCC1']);
-    expect(Object.values(p.areas[0].panels[0].itemNames)).toEqual(['Motor 1', 'Motor 2', 'Motor 3']);
+    const pn = p.areas[0].panels[0]; expect(pn.items.map(id => pn.itemNames[id])).toEqual(['Motor 1', 'Motor 2', 'Motor 3']);       // read through the panel's own id list: an all-digit random id sorts first in Object.values
   });
   it('RCD', async () => { await exportExcel(rcdResults, rcdProject, meta, 'push', null); const p = parseExcelToProject(asData(), 'X', '', '', ''); expect(JSON.stringify(p)).toMatch(/Plant/); expect(JSON.stringify(p)).toMatch(/C3/); });
 });
