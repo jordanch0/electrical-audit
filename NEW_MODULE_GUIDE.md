@@ -148,6 +148,7 @@ Reference: `DeleteButton`, `ConfirmReset`; tests `src/reset-confirm.test.jsx`, `
 - [ ] **One prompt open at a time.** `DeleteButton`, `ConfirmReset` and the Calendar event card all share the module-level
   `useCollapsible` (the shared hook that replaced `activeDeleteSetter`): opening one closes any other, AND a click outside the expanded element collapses it. It listens for `click` in the capture phase (never `pointerdown` — a layout shift between finger-down and finger-up can lose the tap).
   Anything custom must register the same way.
+- [ ] **A confirm card that can grow scrolls itself clear of the pill (release q).** `ConfirmReset`, `CompleteAuditBtn`, `ContinueConfirmBtn`, `DropdownNotice` and the Calendar event delete call `useRevealOnOpen(boxRef, open)` (before any early return) and carry `...GS_MSG_MARGIN` on the card; a new in-place card that calls `useCollapsible` must do the same, or go on the allow-list WITH a reason in `src/reveal-scan.test.jsx`, which fails otherwise (`DeleteButton` and the popover lists are on it on purpose). Add the card to the matrix in `src/reveal-modules.test.jsx`.
 - [ ] Completing an audit uses `CompleteAuditBtn` (its own "Archive this audit and reset for next run?" prompt). Continuing from a
   history snapshot confirms before replacing the current audit (see `ELTHistoryView`).
 - [ ] Non-destructive "reset" buttons (e.g. a grid's "set all → untested") are status changes, not deletes — but if data is
