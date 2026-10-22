@@ -130,16 +130,32 @@ const exportErrName = e => { try { const n = e && e.name; return typeof n === "s
 function exportLog(code, scope, e) { try { console.warn("[SparkCheck export]", code, String(scope).split(":")[0], exportErrName(e)); } catch (_) {} }
 async function runExport(scope, fn) {
   if (exportRunning.has(scope)) return;
-  const timer = setTimeout(() => { if (exportRunning.get(scope) === timer) exportRunning.delete(scope); }, EXPORT_RUN_RELEASE_MS);
+  const timer = setTimeout(() => { if (exportRunning.get(scope) === timer) { exportRunning.delete(scope); exportEmit(); } }, EXPORT_RUN_RELEASE_MS);      // the release tells the button too, so its label comes back
   exportRunning.set(scope, timer);
-  if (exportFailures.delete(scope)) exportEmit();
+  exportFailures.delete(scope); exportEmit();                          // one update: the old card goes and the button shows that it is working
   try { await fn(); }
   catch (e) {
     const kind = e instanceof ExportDeliveryError ? "deliver" : e instanceof ExportLibraryError ? "library" : "build";
     exportLog(kind === "deliver" ? "deliver-failed" : kind === "library" ? "library-missing" : "build-failed", scope, e);
     exportFailures.set(scope, { kind, template: /:template$/.test(scope) }); exportEmit();
   }
-  finally { clearTimeout(timer); if (exportRunning.get(scope) === timer) exportRunning.delete(scope); }
+  finally { clearTimeout(timer); if (exportRunning.get(scope) === timer) { exportRunning.delete(scope); exportEmit(); } }
+}
+// The export button (release s). EVERY export and template button is an ExportBtn: while its scope is running it says so in words ("Making…", "Making the template…"), keeps its size (both labels share one grid cell, so the button is as wide as the
+// longer one and never wraps), stays focusable (aria-busy and aria-disabled, never the disabled attribute) and a polite live region says "Making the Excel file. Please wait." The click handler is still runExport, which ignores a repeat tap.
+// Colours are the module's own button style: the busy label has the same text colour as the idle one. The label returns when the run ends, fails (the card appears) or is released after 60 s. src/export-guard-scan.test.jsx enforces it.
+const EXPORT_SR_ONLY = { position: "absolute", width: 1, height: 1, margin: -1, padding: 0, overflow: "hidden", clip: "rect(0 0 0 0)", whiteSpace: "nowrap", border: 0 };
+function useExportBusy(scope) { return React.useSyncExternalStore(exportSubscribe, () => exportRunning.has(scope), () => false); }
+function ExportBtn({ scope, run, style, template, children }) {
+  const busy = useExportBusy(scope);
+  const word = template ? "Making the template…" : "Making…";
+  const layer = (shown, extra) => ({ gridArea: "1 / 1", visibility: shown ? "visible" : "hidden", ...extra });
+  return React.createElement(React.Fragment, null,
+    React.createElement("button", { style, onClick: run, "aria-busy": busy ? "true" : undefined, "aria-disabled": busy ? "true" : undefined },
+      React.createElement("span", { style: { display: "grid", alignItems: "center", justifyItems: "center" } },
+        React.createElement("span", { "aria-hidden": busy ? "true" : undefined, style: layer(!busy) }, children),
+        React.createElement("span", { "aria-hidden": busy ? undefined : "true", "data-testid": "export-busy-label", style: layer(busy, { whiteSpace: "nowrap" }) }, word))),
+    React.createElement("span", { role: "status", "aria-live": "polite", "data-testid": "export-live", style: EXPORT_SR_ONLY }, busy ? (template ? "Making the blank template. Please wait." : "Making the Excel file. Please wait.") : ""));
 }
 function ExportFailureCard({ scope, inset }) {
   const failure = React.useSyncExternalStore(exportSubscribe, () => exportFailures.get(scope) || null);
@@ -751,7 +767,7 @@ function fmtBytes(n) {
 }
 let _storageFullBannerEl = null; // tracks the live blocking banner so a second failed save never stacks a duplicate
 const save = async (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch(e) {
-  console.error('Storage save failed:', e);
+  appLog("storage-save-failed", e, key);
   try {
     if (_storageFullBannerEl && document.body.contains(_storageFullBannerEl)) return; // already showing
     const el = document.createElement('div');
@@ -1522,7 +1538,7 @@ load(K_HISTORY,[]),
 load(K_DROPDOWNS,{responsibility:DEFAULT_RESPONSIBILITY,rectified:DEFAULT_RECTIFIED,ampRating:DEFAULT_AMP_RATING,cbType:DEFAULT_CB_TYPE}),
 ]);
 const _dm=itemDatesLoadStep("rcd", r,m,h);clearTimeout(safetyTimer);setProjects(p);setAllResults(_dm.results);setAllMeta(m);setHistory(_dm.history);setDropdowns(d);setLoaded(true);
-} catch(loadErr) { console.error('Load error:',loadErr); clearTimeout(safetyTimer); setLoaded(true); }
+} catch(loadErr) { appLog("load-failed", loadErr, "rcd"); clearTimeout(safetyTimer); setLoaded(true); }
 })();
 },[]);
 React.useEffect(()=>{ if(loaded){save(K_PROJECTS,projects);} },[projects,loaded]);
@@ -1646,8 +1662,6 @@ onStartInject: ()=>{setMode("inject");setView("audit");setGateArmed(false);},
 onReport: ()=>setView("report"), onManage: ()=>setView("manage"),
 onHistory: ()=>setView("history"), onSettings: ()=>setView("settings"),
 onReset: ()=>{setMode(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("rcd",prev[activeProject]),nextPushDate:"",nextInjectDate:""}}));},
-onExportPush: ()=>runExport("rcd:home:push",()=>exportExcel(allResults,project,meta,"push")),
-onExportInject: ()=>runExport("rcd:home:inject",()=>exportExcel(allResults,project,meta,"inject")),
 activeMode: mode,
 auditActive: auditActive,
 onCompleteAudit: ()=>{archiveAudit(mode);setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};Object.keys(proj[aid]).forEach(panid=>{cleared[aid][panid]={};Object.keys(proj[aid][panid]).forEach(circuit=>{const old=proj[aid][panid][circuit]||{};cleared[aid][panid][circuit]=mode==="push"?{...old,push:{status:STATUS.UNTESTED,comment:""}}:{...old,inject:{resultPos:"",resultNeg:"",status:STATUS.UNTESTED,comment:"",rectified:"",scheduledDate:"",defectId:"",responsibility:"Site Electrician",priority:""}};});});});return {...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("rcd",prev[activeProject]),nextPushDate:"",nextInjectDate:"",notes:""}}));setMode(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);},})
@@ -1815,7 +1829,7 @@ React.createElement('div', { style: S.addCard,}
 , React.createElement('button', { style: {...S.ctaPrimary,width:"100%",marginBottom:8}, onClick: ()=>_optionalChain([fileRef, 'access', _63 => _63.current, 'optionalAccess', _64 => _64.click, 'call', _65 => _65()]),}
 , importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel / CSV File")
 )
-, React.createElement('button', { style: {...S.ctaSecondary,width:"100%",fontSize:12}, onClick: ()=>runExport("rcd:template",downloadTemplate),}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template"   )
+, React.createElement(ExportBtn, { scope: "rcd:template", template: true, style: {...S.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("rcd:template",downloadTemplate) }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template"   )
             ,React.createElement(ExportFailureCard,{scope:"rcd:template"})
 , importError&&React.createElement('div', { style: {color:"#991b1b",fontSize:12,marginTop:8},}, importError)
 )
@@ -1848,7 +1862,7 @@ React.createElement('button', { style: {...S.ctaPrimary,width:"100%",marginTop:8
 // ─────────────────────────────────────────────────────────────────────────
 // PROJECT HOME
 // ─────────────────────────────────────────────────────────────────────────
-function ProjectHomeView({ project, meta, setMeta, results, onStartPush, onStartInject, onReport, onManage, onHistory, onSettings, onReset, onExportPush, onExportInject, onCompleteAudit, activeMode, auditActive }) {
+function ProjectHomeView({ project, meta, setMeta, results, onStartPush, onStartInject, onReport, onManage, onHistory, onSettings, onReset, onCompleteAudit, activeMode, auditActive }) {
 const pushSum=summariseProject(results,project,"push");
 const injectSum=summariseProject(results,project,"inject");
 const pushPct=pushSum.total>0?Math.round(((pushSum.pass+pushSum.fail+pushSum.na)/pushSum.total)*100):0;
@@ -2099,7 +2113,7 @@ React.createElement('div', { style: {padding:"0 16px 14px",borderTop:"1px solid 
 , React.createElement('div', { style: {display:"flex",gap:8,marginTop:10,flexWrap:"wrap"},}
 , React.createElement('button', { style: {...S.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b",fontWeight:700}, onClick: ()=>{ setViewSnap(snap); setViewArea(null); },}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"
 )
-, React.createElement('button', { style: {...S.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"}, onClick: ()=>onExportSnap(snap),}, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export" )
+, React.createElement(ExportBtn, { scope: exportSnapScope("rcd", snap), style: {...S.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"}, run: () => onExportSnap(snap) }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export" )
 , React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...S.smallBtn}})
 , React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
 )
@@ -3539,7 +3553,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // ── Main
     ,React.createElement('main',{style:SI.main,ref:mainElRef}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setGateArmed(false);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},onExport:()=>runExport("iel:home",()=>exportIELExcel(project,allResults[activeProject]||{},meta)),activeCatKey:activeCat,auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setGateArmed(false);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},activeCatKey:activeCat,auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
       ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
@@ -3761,7 +3775,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
           ,!importPreview&&React.createElement(React.Fragment,null
             ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile})
             ,React.createElement('button',{style:{...SI.ctaPrimary,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel / CSV File"))
-            ,React.createElement('button',{style:{...SI.ctaSecondary,width:"100%",fontSize:12},onClick:()=>runExport("iel:template",downloadIELTemplate)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
+            ,React.createElement(ExportBtn, { scope: "iel:template", template: true, style: {...SI.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("iel:template",downloadIELTemplate) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
             ,React.createElement(ExportFailureCard,{scope:"iel:template"})
             ,importError&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
           )
@@ -3805,7 +3819,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
-function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onExport,onCompleteAudit,activeCatKey,auditActive,lastArchivedAt}){
+function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onCompleteAudit,activeCatKey,auditActive,lastArchivedAt}){
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
@@ -4420,7 +4434,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#047857"}},"IEL Audit Snapshot")
           ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
-        ,React.createElement('button',{style:{...SI.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+        ,React.createElement(ExportBtn, { scope: exportSnapScope("iel", snap), style: {...SI.smallBtn,color:"#14532d",borderColor:"#86efac"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       ,React.createElement(ExportFailureCard,{scope:exportSnapScope("iel",snap)})
       // Summary pills
@@ -4483,7 +4497,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,React.createElement('button',{style:{...SI.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
-            ,React.createElement('button',{style:{...SI.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+            ,React.createElement(ExportBtn, { scope: exportSnapScope("iel", snap), style: {...SI.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SI.smallBtn}})
             ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -5677,7 +5691,6 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
         onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setView("audit");},
         onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onSettings:()=>setView("settings"),
         onReset:()=>{setActiveMap(prev=>auditActiveClear(prev,activeProject));setGateArmed(false);setActiveAreaId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>prev[activeProject]?{...prev,[activeProject]:homeDateRelease("tat",prev[activeProject])}:prev);},
-        onExport:()=>runExport("tat:home",()=>exportTATExcel(project,allResults[activeProject]||{},meta)),
         auditActive,
         onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setDetailItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("tat",prev[activeProject]),notes:""}}));setGateArmed(false);},
       })
@@ -5699,7 +5712,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       })
       ,detailItemId&&area&&!(isAudit&&showGate)&&React.createElement(TATItemModal,{dropdowns:tatDropdowns,equipTypes,freqOptions,itemId:detailItemId,area,project,results:allResults,meta,onPatch:patch=>patchItem(activeProject,activeAreaId,detailItemId,patch),onClose:()=>setDetailItemId(null)})
       ,!detailItemId&&view==="report"&&project&&React.createElement(TATReportView,{project,results:allResults,meta,
-        onExport:()=>runExport("tat:home",()=>exportTATExcel(project,allResults[activeProject]||{},meta)),onBack:()=>setView("home")})
+        onBack:()=>setView("home")})
       ,!detailItemId&&view==="manage"&&project&&React.createElement(TATManageView,{project,equipTypes,freqOptions,tatDefaults,applianceNames,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,!detailItemId&&view==="settings"&&React.createElement(TATSettingsView,{dropdowns:tatDropdowns,setDropdowns:setTatDropdowns,equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults,onBack:()=>setView("home")})
       ,!detailItemId&&view==="history"&&React.createElement(TATHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,
@@ -5831,7 +5844,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
           ,!importPreview&&React.createElement(React.Fragment,null
             ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile})
             ,React.createElement('button',{style:{...ST.ctaPrimary,background:TAT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel / CSV File"))
-            ,React.createElement('button',{style:{...ST.ctaSecondary,width:"100%",fontSize:12},onClick:()=>runExport("tat:template",downloadTATTemplate)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
+            ,React.createElement(ExportBtn, { scope: "tat:template", template: true, style: {...ST.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("tat:template",downloadTATTemplate) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
             ,React.createElement(ExportFailureCard,{scope:"tat:template"})
             ,importError&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
           )
@@ -5865,7 +5878,7 @@ function TATProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // T&T HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,onExport,auditActive,onCompleteAudit}){
+function TATHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onSettings,onReset,auditActive,onCompleteAudit}){
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
   return React.createElement('div',{style:ST.homeWrap}
@@ -6565,7 +6578,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:TAT_COLOR}},"Test & Tag Snapshot")
           ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
-        ,React.createElement('button',{style:{...ST.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+        ,React.createElement(ExportBtn, { scope: exportSnapScope("tat", snap), style: {...ST.smallBtn,color:"#14532d",borderColor:"#86efac"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       ,React.createElement(ExportFailureCard,{scope:exportSnapScope("tat",snap)})
       ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},style:{marginBottom:16}})
@@ -6617,7 +6630,7 @@ function TATHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,React.createElement('button',{style:{...ST.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
-            ,React.createElement('button',{style:{...ST.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+            ,React.createElement(ExportBtn, { scope: exportSnapScope("tat", snap), style: {...ST.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
             ,React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...ST.smallBtn}})
             ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -7921,14 +7934,11 @@ function ThermoProjectListView({
       marginBottom: 8
     },
     onClick: () => fileRef.current && fileRef.current.click()
-  }, importing ? "Parsing..." : "Choose Excel / CSV File"), /*#__PURE__*/React.createElement("button", {
-    style: {
+  }, importing ? "Parsing..." : "Choose Excel / CSV File"), /*#__PURE__*/React.createElement(ExportBtn, { scope: "thermo:template", template: true, style: {
       ...STH.ctaSecondary,
       width: "100%",
       fontSize: 12
-    },
-    onClick: () => runExport("thermo:template", downloadThermoTemplate)
-  }, "Download Import Template"), React.createElement(ExportFailureCard, { scope: "thermo:template" }), importError && /*#__PURE__*/React.createElement("div", {
+    }, run: () => runExport("thermo:template", downloadThermoTemplate) }, "Download Import Template"), React.createElement(ExportFailureCard, { scope: "thermo:template" }), importError && /*#__PURE__*/React.createElement("div", {
     style: {
       color: "#991b1b",
       fontSize: 12,
@@ -8031,7 +8041,6 @@ function ThermoHomeView({
   onManage,
   onHistory,
   onReset,
-  onExport,
   auditActive,
   onCompleteAudit
 }) {
@@ -9647,15 +9656,12 @@ function ThermoHistoryView({
         fontSize: 11,
         color: "#52525b"
       }
-    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor", " \xB7 Read-only")), /*#__PURE__*/React.createElement("button", {
-      style: {
+    }, fmtDate(snap.testDate), " \xB7 ", snap.auditor || "No auditor", " \xB7 Read-only")), /*#__PURE__*/React.createElement(ExportBtn, { scope: exportSnapScope("thermo", snap), style: {
         ...STH.smallBtn,
         color: "#14532d",
         borderColor: "#86efac",
         fontWeight: 700
-      },
-      onClick: () => onExportSnap(snap)
-    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), React.createElement(ExportFailureCard,{scope:exportSnapScope("thermo",snap)}), React.createElement(StatusSet,{model:"thermo",s:siteCounts(snapResults, project || { areas: [] }),style:{marginBottom:16}}), /*#__PURE__*/React.createElement("div", {
+      }, run: () => onExportSnap(snap) }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")), React.createElement(ExportFailureCard,{scope:exportSnapScope("thermo",snap)}), React.createElement(StatusSet,{model:"thermo",s:siteCounts(snapResults, project || { areas: [] }),style:{marginBottom:16}}), /*#__PURE__*/React.createElement("div", {
       style: {
         fontSize: 11,
         color: "#52525b",
@@ -9809,16 +9815,13 @@ function ThermoHistoryView({
         setViewBoard(null);
         setViewCirc(null);
       }
-    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View"), /*#__PURE__*/React.createElement("button", {
-      style: {
+    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View"), /*#__PURE__*/React.createElement(ExportBtn, { scope: exportSnapScope("thermo", snap), style: {
         ...STH.smallBtn,
         flex: 1,
         background: "#f0eeea",
         border: "1px solid #d4d4d8",
         color: "#52525b"
-      },
-      onClick: () => onExportSnap(snap)
-    }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"), /*#__PURE__*/React.createElement(ContinueSnapBtn, {
+      }, run: () => onExportSnap(snap) }, React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"), /*#__PURE__*/React.createElement(ContinueSnapBtn, {
       onConfirm: () => onContinueFromSnap(snap)
     }), React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) }))), React.createElement(ExportFailureCard,{scope:exportSnapScope("thermo",snap),inset:true}))
   }));
@@ -10147,7 +10150,6 @@ function ThermoApp({
         }
       }));
     },
-    onExport: () => runExport("thermo:home", () => exportThermoExcel(project, allResults[activeProject] || {}, meta)),
     onCompleteAudit: completeAudit
   }), isAudit && project && showGate && /*#__PURE__*/React.createElement(AuditGatePage, {
     accent: THERMO_COLOR,
@@ -10905,7 +10907,8 @@ function AppRoot() {
 // (guarded by window.__sparkcheckBooted). The log carries a code and the error NAME only: never a message, a stack, an id or a site name.
 // ─────────────────────────────────────────────────────────────────────────
 let appCrashShown = false;          // true while the error screen is up: the notice stays quiet (React in development also fires window "error" for an error a boundary caught)
-function appLog(code, e) { try { console.warn("[SparkCheck]", code, exportErrName(e)); } catch (_) {} }
+// The log line is a code, the module key (the first word of a fixed storage key such as "rcd-projects-v6": never a site name) and the error NAME; the older Storage save failed / Load error lines now use it too.
+function appLog(code, e, moduleKey) { try { if (moduleKey === undefined) console.warn("[SparkCheck]", code, exportErrName(e)); else console.warn("[SparkCheck]", code, String(moduleKey).split("-")[0], exportErrName(e)); } catch (_) {} }
 const CRASH_UI = { ink: "#18181b", muted: "#52525b", page: "#e8e6e2", line: "#d4d4d8", orange: "#a3530f", white: "#ffffff", errBg: "#fbe6e6", errBorder: "#d28a8a", errText: "#5f1616", okBg: "#e3f1e7", okBorder: "#7fb392", okText: "#1b3a27" };
 // The error screen. Plain div / button / text only, no app component, nothing read from storage: if it threw too, React would unmount everything and leave a blank page. Every handler is wrapped.
 function CrashScreen({ name, deps }) {
@@ -10936,7 +10939,6 @@ function CrashScreen({ name, deps }) {
     }).catch(fail);
   };
   const btn = (primary, disabled) => ({ minHeight: 44, width: "100%", borderRadius: 10, fontSize: 15, fontWeight: 700, fontFamily: "inherit", cursor: disabled ? "default" : "pointer", marginTop: 10, border: primary ? "none" : `1px solid ${CRASH_UI.line}`, background: primary ? (disabled ? "#e4e4e7" : CRASH_UI.orange) : "transparent", color: primary ? (disabled ? "#52525b" : CRASH_UI.white) : CRASH_UI.ink });
-  const mb = n => (n / (1024 * 1024)).toFixed(1) + " MB";
   const note = (bg, border, text, children, testid) => React.createElement("div", { role: "status", "data-testid": testid, style: { background: bg, border: `1px solid ${border}`, color: text, borderRadius: 10, padding: 12, marginTop: 14, fontSize: 13, lineHeight: 1.45 } }, ...children);
   const canBackup = (() => { try { return !!d.canBackup(); } catch (_) { return false; } })();
   const busy = bk.phase === "making";
@@ -10949,7 +10951,7 @@ function CrashScreen({ name, deps }) {
   if (canBackup) kids.push(React.createElement("button", { key: "m", type: "button", "data-testid": "crash-backup", disabled: busy, "aria-disabled": busy, onClick: safe(make), style: btn(false, busy) }, bk.phase === "making" ? "Making the backup…" : "Make a backup"));
   if (bk.phase === "making") kids.push(note("#f7f6f3", CRASH_UI.line, CRASH_UI.ink, ["Keep this screen open while the backup is made."], "crash-backup-making"));
   if (bk.phase === "ready") {
-    kids.push(note("#f7f6f3", CRASH_UI.line, CRASH_UI.ink, [React.createElement("b", { key: "a" }, "Backup ready, " + mb(bk.bytes)), React.createElement("div", { key: "b" }, bk.closed ? "The share sheet was closed, so no backup was saved. Your backup is still ready." : "It is not saved yet. Tap Share backup to save it."),
+    kids.push(note("#f7f6f3", CRASH_UI.line, CRASH_UI.ink, [React.createElement("b", { key: "a" }, "Backup ready, " + backupMbText(bk.bytes)), React.createElement("div", { key: "b" }, bk.closed ? "The share sheet was closed, so no backup was saved. Your backup is still ready." : "It is not saved yet. Tap Share backup to save it."),
       !bk.withPhotos ? React.createElement("div", { key: "c" }, "Photos are not in this backup. They are still on this phone.") : null], "crash-backup-ready"));
     kids.push(React.createElement("button", { key: "s", type: "button", "data-testid": "crash-share", onClick: safe(share), style: btn(false, false) }, "Share backup"));
   }
@@ -11606,7 +11608,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     )
     ,React.createElement('div',{style:SS.main,ref:swbMainRef}
       ,view==="projects"&&React.createElement(SWBProjectListView,{projects,allResults,onSelect:pid=>{setActiveProject(pid);setView("home");},onAddProject:p=>setProjects(prev=>[...prev,p]),onDeleteProject:pid=>{siteLogoStore.del("swb",pid).catch(()=>{});sitePhotoStore.delPhotoList(swbPhotoList(allResults[pid]));history.filter(h=>h.projectId===pid).forEach(h=>sitePhotoStore.delPhotoList(swbPhotoList(h.results)));setProjects(prev=>prev.filter(p=>p.id!==pid));setAllResults(prev=>{const n={...prev};delete n[pid];return n;});setAllMeta(prev=>{const n={...prev};delete n[pid];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==pid));setActiveMap(prev=>auditActiveClear(prev,pid));if(activeProject===pid)goProjects();}})
-      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>runExport("swb:home",()=>exportSWBExcel(project,allResults,meta)),onCompleteAudit:()=>{archiveAudit();clearSiteResults();setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setGateArmed(false);},onReset:discardSiteResults,auditActive})
+      ,view==="home"&&project&&React.createElement(SWBHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onCompleteAudit:()=>{archiveAudit();clearSiteResults();setActiveAreaId(null);setActiveBoardId(null);setActiveItemKey(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setGateArmed(false);},onReset:discardSiteResults,auditActive})
       ,["audit","board","item"].includes(view)&&project&&showGate&&React.createElement(AuditGatePage,{accent:SWB_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActiveBoardId(null);}})
       ,view==="audit"&&!project&&React.createElement('div',{style:{padding:"40px 24px",textAlign:"center",color:"#52525b",fontSize:14}},"Select a site from the Project Select screen.")
       ,view==="audit"&&project&&!showGate&&!activeAreaId&&React.createElement(SWBAreaListView,{project,results:allResults,onSelectArea:aid=>{setActiveAreaId(aid);}})
@@ -11731,7 +11733,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
           ,!importPreview&&React.createElement(React.Fragment,null
             ,React.createElement('input',{ref:fileRef,type:"file",accept:".xlsx,.xls",style:{display:"none"},onChange:handleFile})
             ,React.createElement('button',{style:{...SS.ctaPrimary,background:"#7e22ce",width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel File"))
-            ,React.createElement('button',{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:()=>runExport("swb:template",downloadSWBTemplate)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
+            ,React.createElement(ExportBtn, { scope: "swb:template", template: true, style: {...SS.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("swb:template",downloadSWBTemplate) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template")
             ,React.createElement(ExportFailureCard,{scope:"swb:template"})
             ,importError&&React.createElement('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
           )
@@ -11765,7 +11767,7 @@ function SWBProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // HOME VIEW
 // ─────────────────────────────────────────────────────────────────────────
-function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditActive}) {
+function SWBHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onCompleteAudit,onReset,auditActive}) {
   const SS=swbStyles();
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round((summary.pass+summary.fail+summary.na)/summary.total*100):0;
@@ -12156,7 +12158,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           ,React.createElement('div',{style:{fontSize:15,fontWeight:800,color:"#7e22ce"}},"Switchboard Audit Snapshot")
           ,React.createElement('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
-        ,React.createElement('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+        ,React.createElement(ExportBtn, { scope: exportSnapScope("swb", snap), style: {...SS.smallBtn,color:"#14532d",borderColor:"#86efac"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       )
       ,React.createElement(ExportFailureCard,{scope:exportSnapScope("swb",snap)})
       ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested:unt},style:{marginBottom:16}})
@@ -12210,7 +12212,7 @@ function SWBHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,expanded===snap.id&&React.createElement('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
           ,React.createElement('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,React.createElement('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results")
-            ,React.createElement('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+            ,React.createElement(ExportBtn, { scope: exportSnapScope("swb", snap), style: {...SS.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
             ,React.createElement(SWBContinueBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn})
             ,React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -13170,7 +13172,7 @@ function ELTProjectListView({projects, allResults, typeOptions, onSelect, onAddP
           ,!importPreview&&eltEl(React.Fragment,null
             ,eltEl('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile,"data-testid":"elt-import-file"})
             ,eltEl('button',{style:{...SS.ctaPrimary,background:ELT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"Choose Excel / CSV File")
-            ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:()=>runExport("elt:template",downloadELTTemplate)},download," Download Import Template")
+            ,eltEl(ExportBtn, { scope: "elt:template", template: true, style: {...SS.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("elt:template",downloadELTTemplate) },download," Download Import Template")
             ,React.createElement(ExportFailureCard,{scope:"elt:template"})
             ,importError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
             ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",marginTop:8},onClick:closeAdd},"Cancel")
@@ -13487,7 +13489,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
           ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:ELT_COLOR}},"Emergency Lighting Snapshot")
           ,eltEl('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
-        ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
+        ,eltEl(ExportBtn, { scope: exportSnapScope("elt", snap), style: {...SS.smallBtn,color:"#14532d",borderColor:"#86efac"}, run: () => onExportSnap(snap) },"Export")
       )
       ,React.createElement(ExportFailureCard,{scope:exportSnapScope("elt",snap)})
       ,eltEl('div',{style:{marginBottom:14}},eltEl(ELTSummaryPills,{total:s.total,pass:s.pass,fail:s.fail,assets:s.assets}))
@@ -13527,7 +13529,7 @@ function ELTHistoryView({history, project, viewSnap, setViewSnap, onDelete, onEx
         ,expanded===snap.id&&eltEl('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},"View Results")
-            ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b"},onClick:()=>onExportSnap(snap)},"Export")
+            ,eltEl(ExportBtn, { scope: exportSnapScope("elt", snap), style: {...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b"}, run: () => onExportSnap(snap) },"Export")
             ,eltEl(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn,color:ELT_COLOR})
             ,eltEl(DeleteButton,{onDelete:()=>onDelete(snap.id)})
           )
@@ -13954,7 +13956,7 @@ function IRTAreaListView({project,results,onSelect}){
 }
 
 // ─── Home view — mirrors SWBHomeView exactly ──────────────────────────────
-function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onExport,onCompleteAudit,onReset,auditActive}){
+function IRTHomeView({project,meta,setMeta,results,summary,onStartAudit,onReport,onManage,onHistory,onCompleteAudit,onReset,auditActive}){
   const SS=irtStyles();
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   const pct=summary.total>0?Math.round(((summary.pass+summary.fail+summary.na)/summary.total)*100):0;
@@ -14037,7 +14039,7 @@ function IRTProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
         !importPreview&&React.createElement(React.Fragment,null,
           React.createElement("input",{ref:fileRef,type:"file",accept:".xlsx,.xls",style:{display:"none"},onChange:handleFile}),
           React.createElement("button",{style:{...SS.ctaPrimary,background:IRT_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing\u2026":React.createElement(React.Fragment,null,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z'}))," Choose Excel File")),
-          React.createElement("button",{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:()=>runExport("irt:template",downloadIRTTemplate)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template"),
+          React.createElement(ExportBtn, { scope: "irt:template", template: true, style: {...SS.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("irt:template",downloadIRTTemplate) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Download Import Template"),
           React.createElement(ExportFailureCard,{scope:"irt:template"}),
           importError&&React.createElement("div",{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
         ),
@@ -14340,7 +14342,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
           React.createElement("div",{style:{fontSize:15,fontWeight:800,color:IRT_COLOR}},"IR Test Snapshot"),
           React.createElement("div",{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," \u00b7 ",snap.auditor||"No auditor"," \u00b7 Read-only")
         ),
-        React.createElement("button",{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
+        React.createElement(ExportBtn, { scope: exportSnapScope("irt", snap), style: {...SS.smallBtn,color:"#14532d",borderColor:"#86efac"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export")
       ),
       React.createElement(ExportFailureCard,{scope:exportSnapScope("irt",snap)}),
       React.createElement(StatusSet,{model:"full",s:sum,style:{marginBottom:16}}),
@@ -14384,7 +14386,7 @@ function IRTHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         expanded===snap.id&&React.createElement("div",{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}},
           React.createElement("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
             React.createElement("button",{style:{...SS.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b",fontWeight:700},onClick:()=>{setViewSnap(snap);setViewArea(null);setViewPanel(null);}},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z'}),React.createElement('circle',{cx:12,cy:12,r:3}))," View Results"),
-            React.createElement("button",{style:{...SS.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"},onClick:()=>onExportSnap(snap)},React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"),
+            React.createElement(ExportBtn, { scope: exportSnapScope("irt", snap), style: {...SS.smallBtn,flex:1,background:"#f0eeea",border:"1px solid #d4d4d8",color:"#52525b"}, run: () => onExportSnap(snap) },React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('path',{d:'M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4'}),React.createElement('polyline',{points:'7 10 12 15 17 10'}),React.createElement('line',{x1:12,y1:15,x2:12,y2:3}))," Export"),
             React.createElement(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:{...SS.smallBtn}}),
             React.createElement(DeleteButton, { onDelete: ()=>onDelete(snap.id) })
           )
@@ -14477,7 +14479,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // Main
     React.createElement("div",{style:SS.main,ref:irtMainRef},
       view==="projects"&&React.createElement(IRTProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:p=>{setProjects(prev=>[...prev,p]);},onDeleteProject:id=>{siteLogoStore.del("irt",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}}),
-      view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onExport:()=>runExport("irt:home",()=>exportIRTExcel(project,allResults,meta)),onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>prev[activeProject]?{...prev,[activeProject]:homeDateRelease("irt",prev[activeProject])}:prev);setGateArmed(false);},onReset:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("irt",prev[activeProject]),nextTestDate:""}}));setGateArmed(false);},auditActive}),
+      view==="home"&&project&&React.createElement(IRTHomeView,{project,meta,setMeta,results:allResults,summary,onStartAudit:()=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onCompleteAudit:()=>{archiveAudit();setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>prev[activeProject]?{...prev,[activeProject]:homeDateRelease("irt",prev[activeProject])}:prev);setGateArmed(false);},onReset:()=>{setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setActiveMap(prev=>auditActiveClear(prev,activeProject));setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("irt",prev[activeProject]),nextTestDate:""}}));setGateArmed(false);},auditActive}),
       isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:IRT_COLOR,hasActiveAudit:auditActive,hasAuditor:!!(meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>{setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}}),
       view==="audit"&&project&&!showGate&&React.createElement(IRTAreaListView,{project,results:allResults,onSelect:id=>{setActiveAreaId(id);setView("area");}}),
       !showGate&&view==="area"&&area&&React.createElement(IRTPanelListView,{area,project,results:allResults,onSelect:id=>{setActivePanelId(id);setView("panel");},onBack:()=>{setActiveAreaId(null);setView("audit");}}),
@@ -14590,7 +14592,6 @@ FIXED:
   - SWB Excel export builder: local fmtD replaced with shared fmtDate
 
 REVIEWED — no change needed:
-  - ThermoReportView export button: already present and wired to onExport prop — no change needed
   - IRTReportView: uses SS=irtStyles() (not SS=swbStyles()) — intentional, each module has its own styles object; shared summaryMeta properties are now consistent
   - IRT date pill border style: updated to use IRT_COLOR+"55" (matching IEL/TAT/Thermo pattern) rather than IRT_COLOR_BORDER (which was "44")
   - Thermo stats row uses Pass/Fail/Monitor (no N/A bucket) — intentional, thermographic results have no N/A concept
@@ -15261,7 +15262,7 @@ function WelderProjectListView({projects, allResults, onSelect, onAddProject, on
           ,!importPreview&&eltEl(React.Fragment,null
             ,eltEl('input',{ref:fileRef,type:"file",accept:".xlsx,.xls,.csv",style:{display:"none"},onChange:handleFile,"data-testid":"welder-import-file"})
             ,eltEl('button',{style:{...SS.ctaPrimary,background:WELDER_COLOR,width:"100%",marginBottom:8},onClick:()=>fileRef.current&&fileRef.current.click()},importing?"Parsing…":"Choose Excel / CSV File")
-            ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",fontSize:12},onClick:()=>runExport("welder:template",downloadWelderTemplate)},download," Download Import Template")
+            ,eltEl(ExportBtn, { scope: "welder:template", template: true, style: {...SS.ctaSecondary,width:"100%",fontSize:12}, run: () => runExport("welder:template",downloadWelderTemplate) },download," Download Import Template")
             ,React.createElement(ExportFailureCard,{scope:"welder:template"})
             ,importError&&eltEl('div',{style:{color:"#991b1b",fontSize:12,marginTop:8}},importError)
             ,eltEl('button',{style:{...SS.ctaSecondary,width:"100%",marginTop:8},onClick:closeAdd},"Cancel")
@@ -15582,7 +15583,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
           ,eltEl('div',{style:{fontSize:15,fontWeight:800,color:WELDER_COLOR}},"Welder Snapshot")
           ,eltEl('div',{style:{fontSize:11,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · Read-only")
         )
-        ,eltEl('button',{style:{...SS.smallBtn,color:"#14532d",borderColor:"#86efac"},onClick:()=>onExportSnap(snap)},"Export")
+        ,eltEl(ExportBtn, { scope: exportSnapScope("welder", snap), style: {...SS.smallBtn,color:"#14532d",borderColor:"#86efac"}, run: () => onExportSnap(snap) },"Export")
       )
       ,React.createElement(ExportFailureCard,{scope:exportSnapScope("welder",snap)})
       ,React.createElement(StatusSet,{model:"noNA",s:s,style:{marginBottom:14}})
@@ -15622,7 +15623,7 @@ function WelderHistoryView({history, project, viewSnap, setViewSnap, onDelete, o
         ,expanded===snap.id&&eltEl('div',{style:{padding:"0 16px 14px",borderTop:"1px solid #e4e4e7"}}
           ,eltEl('div',{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}}
             ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b",fontWeight:700},onClick:()=>setViewSnap(snap)},"View Results")
-            ,eltEl('button',{style:{...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b"},onClick:()=>onExportSnap(snap)},"Export")
+            ,eltEl(ExportBtn, { scope: exportSnapScope("welder", snap), style: {...SS.smallBtn,flex:1,background:"#f0eeea",color:"#52525b"}, run: () => onExportSnap(snap) },"Export")
             ,eltEl(ContinueConfirmBtn,{onConfirm:()=>onContinueFromSnap(snap),styleObj:SS.smallBtn,color:WELDER_COLOR})
             ,eltEl(DeleteButton,{onDelete:()=>onDelete(snap.id)})
           )
@@ -16480,7 +16481,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
     return gsdEl("div", { style: SS.listWrap }
       , gsdEl("div", { style: { display: "flex", alignItems: "center", gap: 12, marginBottom: 10 } }
         , gsdEl("div", { style: { flex: 1 } }, gsdEl("div", { style: { fontSize: 15, fontWeight: 800, color: GSD_COLOR } }, "Site Defects Snapshot"), gsdEl("div", { style: { fontSize: 11, color: "#52525b" } }, fmtDate(snap.testDate), " · ", snap.auditor || "No auditor", " · Read-only"))
-        , gsdEl("button", { style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac" }, onClick: () => onExportSnap(snap) }, "Export")), gsdEl(ExportFailureCard, { scope: exportSnapScope("gsd", snap) })
+        , gsdEl(ExportBtn, { scope: exportSnapScope("gsd", snap), style: { ...SS.smallBtn, color: "#14532d", borderColor: "#86efac" }, run: () => onExportSnap(snap) }, "Export")), gsdEl(ExportFailureCard, { scope: exportSnapScope("gsd", snap) })
       , React.createElement(GSDCounts, { defects: (snap.items || []).length, areas: sections.length, photos: gsdPhotoCount(snap.items), urgent: gsdHighUrgent(snap.items), mb: 14 })
       , sections.length === 0 && gsdEl("div", { style: { color: "#52525b", fontSize: 13 } }, "No defects in this snapshot.")
       , sections.map(sec => gsdEl("div", { key: sec.area.id, "data-area": sec.area.name }, gsdEl("div", { style: AREA_HDR_STYLE }, sec.area.name)
@@ -16513,7 +16514,7 @@ function GSDHistoryView({ history, project, viewSnap, setViewSnap, onDelete, onE
         , open && gsdEl("div", { style: { padding: "0 16px 14px", borderTop: "1px solid #e4e4e7" } }
           , gsdEl("div", { style: { display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" } }
             , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b", fontWeight: 700 }, onClick: () => setViewSnap(snap) }, "View Results")
-            , gsdEl("button", { style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b" }, onClick: () => onExportSnap(snap) }, "Export")
+            , gsdEl(ExportBtn, { scope: exportSnapScope("gsd", snap), style: { ...SS.smallBtn, flex: 1, background: "#f0eeea", color: "#52525b" }, run: () => onExportSnap(snap) }, "Export")
             , gsdEl(ContinueConfirmBtn, { onConfirm: () => onContinueFromSnap(snap), styleObj: SS.smallBtn, color: GSD_COLOR })
             , gsdEl(DeleteButton, { onDelete: () => onDelete(snap.id) })))
         , gsdEl(ExportFailureCard, { scope: exportSnapScope("gsd", snap), inset: true }));
@@ -16856,8 +16857,8 @@ async function backupPlan(file, { storage = localStorage, inspected = null, esti
     } catch (_) {}
     hr.ok = hr.local.ok && hr.storage.ok;
     if (!hr.local.ok) hr.message = "Not enough room in this phone's saved-data space: this restore needs about " + backupMb(localAdd) + " more, but only " + backupMb(Math.max(0, localLimit - localUsed)) + " of " + backupMb(localLimit) + " is free. Free up space by deleting sites, History snapshots or calendar events you no longer need, then try again. Nothing was changed.";
-    else if (!hr.storage.ok) hr.message = "Not enough free space on this device for the photos: about " + backupMb(hr.storage.needBytes) + " is needed (including a safety margin) but only " + backupMb(Math.max(0, hr.storage.quota - hr.storage.usage)) + " is available. Free up space (delete photos or other apps' data), then try again. Nothing was changed.";
-    else if (!hr.storage.known && writeBytes > 0) hr.message = "This device can't report free space, so it could not be checked in advance. If space runs out the restore stops and puts everything back exactly as it was.";
+    else if (!hr.storage.ok) hr.message = "Not enough free space on this phone for the photos: about " + backupMb(hr.storage.needBytes) + " is needed (including a safety margin) but only " + backupMb(Math.max(0, hr.storage.quota - hr.storage.usage)) + " is available. Free up space (delete photos or other apps' data), then try again. Nothing was changed.";
+    else if (!hr.storage.known && writeBytes > 0) hr.message = "This phone can't report free space, so it could not be checked in advance. If space runs out the restore stops and puts everything back exactly as it was.";
     counts.settingsAdd = (sp.ui.biz.length || sp.ui.logo ? 1 : 0) + new Set(sp.ui.lists.map(l => l.mod)).size;                      // sets, not fields: the business details are one, each module's lists and settings are one
     const anyAdd = counts.sitesAdd > 0 || counts.sitesCopy > 0 || counts.eventsAdd > 0 || counts.settingsAdd > 0;
     return { ok: true, canRestore: anyAdd && hr.ok, nothingToAdd: !anyAdd, copies: cp.list, modules: out.modules, events: ev, settings: sp.ui, counts, bytes: { photosToWrite: writeBytes }, headroom: hr, unknownKeys: insp.summary.unknownKeys, includesPhotos: insp.summary.includesPhotos, summary: insp.summary, work: out.work };
@@ -17719,5 +17720,5 @@ export { requestPersistentStorage };
 export { GS_TAB_LABELS };
 export { useRevealOnOpen, DropdownNotice, ContinueConfirmBtn };
 export { backupDayText, BACKUP_COPIES_KEY, backupCanon, backupSiteCanon, backupRemapIds, backupBuildIdMap, backupInverseEntry, backupCopyName, backupVerifyCopies, backupNodeCount, backupPointerIds, backupMetaStable, BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
-export { runExport, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
+export { runExport, ExportBtn, useExportBusy, appLog, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
 export default AppRoot;
