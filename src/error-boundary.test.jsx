@@ -68,7 +68,7 @@ describe('Make a backup from the crash screen (fake engine for every branch)', (
   it('measure -> build WITH photos -> inspect -> "Backup ready", then a SECOND tap shares it and nothing is recorded before that', async () => {
     const d = eng(), user = userEvent.setup(); render(<CrashScreen name="Error" deps={d} />);
     await user.click(screen.getByTestId('crash-backup')); const ready = await screen.findByTestId('crash-backup-ready');
-    expect(ready.textContent).toContain('Backup ready, 0.0 MB'); expect(ready.textContent).toContain('It is not saved yet. Tap Share backup to save it.'); expect(ready.textContent).not.toContain('Photos are not in this backup');
+    expect(ready.textContent).toContain('Backup ready, under 1 MB'); expect(ready.textContent).toContain('It is not saved yet. Tap Share backup to save it.'); expect(ready.textContent).not.toContain('Photos are not in this backup');
     expect(d.build).toHaveBeenCalledWith({ includePhotos: true, now: expect.any(Date) }); expect(d.inspect).toHaveBeenCalledTimes(1); expect(d.deliver).not.toHaveBeenCalled();
     await user.click(screen.getByTestId('crash-share')); const done = await screen.findByTestId('crash-backup-shared');
     expect(done.textContent).toBe('Backup sharedIf you chose Save to Files, it is in the folder you picked.'); expect(d.deliver).toHaveBeenCalledWith(expect.any(Blob), 'SparkCheck-backup-2026-10-21.zip', { includesPhotos: true, now: expect.any(Date) });

@@ -20,9 +20,13 @@ describe('no browser dialog and no unwrapped export', () => {
     const bad = LINES.map((l, i) => [i + 1, l]).filter(([, l]) => !isComment(l) && /\bexport\w*Excel\(/.test(l) && !/^\s*(async\s+)?function\s/.test(l)).filter(([, l]) => !/runExport\(/.test(l)).map(([n, l]) => n + ': ' + l.trim().slice(0, 100));
     expect(bad).toEqual([]);
   });
-  it('there are calls to scan: 9 modules, snapshot handlers and the dead Home handlers', () => {
+  it('there are calls to scan: one snapshot handler in each of the 9 modules', () => {
     expect(count(/runExport\(exportSnapScope\(/g)).toBe(9);
-    expect(count(/runExport\("[a-z]+:home/g)).toBeGreaterThanOrEqual(8);
+  });
+  it('no Home export call remains (release s removed the dead ones): no runExport scope with :home, no onExport / onExportPush / onExportInject prop anywhere', () => {
+    expect(count(/runExport\(\s*"[a-z]+:home/g)).toBe(0);
+    const bad = LINES.map((l, i) => [i + 1, l]).filter(([, l]) => !isComment(l) && /\bonExport(Push|Inject)?\b/.test(l)).map(([n, l]) => n + ': ' + l.trim().slice(0, 100));
+    expect(bad).toEqual([]);
   });
   it('a download...Template function is only ever used inside runExport( (never as a bare onClick or a direct call)', () => {
     const uses = LINES.map((l, i) => [i + 1, l]).filter(([, l]) => !isComment(l) && /\bdownload[A-Za-z]*Template\b/.test(l) && !/^\s*(async\s+)?function\s/.test(l) && !/^export\s*\{|^\s*(parseSWBExcel|exportSWBExcel|parse)/.test(l) && !/^\s+[A-Za-z, ]*download[A-Za-z]*Template,/.test(l));
@@ -39,6 +43,32 @@ describe('no browser dialog and no unwrapped export', () => {
       if (!/^(export\w*Excel|download\w*Template)$/.test(name)) bad.push((i + 1) + ': inside ' + name);
     });
     expect(bad).toEqual([]);
+  });
+});
+
+// Release s: EVERY live export control (History list, snapshot page header, blank template) is an ExportBtn, which says "Making…" while its scope runs. Each one calls runExport (a template directly, a snapshot button through
+// the module's onExportSnap, which is wired to runExport(exportSnapScope(...))) and has an ExportFailureCard with the SAME scope. 17 snapshot buttons (RCD has no header button) + 8 template buttons = 25.
+describe('every live export control is an ExportBtn that reaches runExport and has its card', () => {
+  const BTN = /(?:React\.createElement|eltEl|gsdEl)\(ExportBtn,/g;
+  it('there are exactly 25 ExportBtn controls: 17 snapshot (History list and snapshot page) and 8 template', () => {
+    expect(count(BTN)).toBe(25); expect(count(/ExportBtn,\s*\{\s*scope:\s*exportSnapScope\(/g)).toBe(17); expect(count(/ExportBtn,\s*\{\s*scope:\s*"[a-z]+:template",\s*template:\s*true,/g)).toBe(8);
+  });
+  it('no export button is built bare: no onClick that calls onExportSnap( or runExport( directly (it must go through ExportBtn run:)', () => {
+    expect(count(/onClick:\s*\(\)\s*=>\s*(onExportSnap|runExport)\b/g)).toBe(0); expect(count(/run:\s*\(\)\s*=>\s*onExportSnap\(snap\)/g)).toBe(17); expect(count(/run:\s*\(\)\s*=>\s*runExport\("[a-z]+:template"/g)).toBe(8);
+  });
+  it.each(MODS)('%s: every snapshot ExportBtn has an ExportFailureCard with the same module key (list' + ' + snapshot page, but RCD has no page button)', mod => {
+    const btns = count(new RegExp('ExportBtn,\\s*\\{\\s*scope:\\s*exportSnapScope\\(\\s*"' + mod + '"\\s*,\\s*snap\\s*\\)', 'g'));
+    const cards = count(new RegExp('ExportFailureCard\\s*,\\s*\\{\\s*scope:\\s*exportSnapScope\\(\\s*"' + mod + '"\\s*,\\s*snap\\s*\\)', 'g'));
+    expect(btns, mod + ' buttons').toBe(mod === 'rcd' ? 1 : 2); expect(cards, mod + ' cards').toBe(btns);
+  });
+  it.each(TEMPLATE_MODS)('%s: the template ExportBtn calls runExport with its own scope and has a card with that scope', mod => {
+    const re = new RegExp('ExportBtn,\\s*\\{\\s*scope:\\s*"' + mod + ':template",\\s*template:\\s*true,\\s*style:\\s*\\{[^{}]*\\},\\s*run:\\s*\\(\\)\\s*=>\\s*runExport\\("' + mod + ':template"', 'g');
+    expect(count(re), mod + ' template button').toBe(1); expect(count(new RegExp('ExportFailureCard\\s*,\\s*\\{\\s*scope:\\s*"' + mod + ':template"', 'g')), mod + ' template card').toBe(1);
+  });
+  it('the busy state is wired to the run: runExport tells the buttons when a run starts, ends and is released after 60 s', () => {
+    const fn = /async function runExport\([\s\S]*?\n}\n/.exec(SRC)[0];
+    expect((fn.match(/exportEmit\(\)/g) || []).length).toBeGreaterThanOrEqual(4);              // start, the release timer, finish, failure
+    expect(fn).toMatch(/exportRunning\.delete\(scope\); exportEmit\(\); \} \}, EXPORT_RUN_RELEASE_MS/); expect(fn).toMatch(/finally \{ clearTimeout\(timer\); if \(exportRunning\.get\(scope\) === timer\) \{ exportRunning\.delete\(scope\); exportEmit\(\); \} \}/);
   });
 });
 

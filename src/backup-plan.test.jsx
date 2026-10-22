@@ -173,7 +173,7 @@ describe('headroom: refuse with a clear message and change nothing', () => {
   });
   it('the browser\'s storage estimate is too low for the photos (plus a margin): refused, says what to free up', async () => {
     const plan = await planWith(async () => ({ quota: 30 * 1024 * 1024, usage: 29 * 1024 * 1024 }));
-    expect(plan.headroom.storage.ok).toBe(false); expect(plan.canRestore).toBe(false); expect(plan.headroom.message).toMatch(/^Not enough free space on this device for the photos: about [\d.]+ MB is needed .* Free up space .* Nothing was changed\.$/);
+    expect(plan.headroom.storage.ok).toBe(false); expect(plan.canRestore).toBe(false); expect(plan.headroom.message).toMatch(/^Not enough free space on this phone for the photos: about [\d.]+ MB is needed .* Free up space .* Nothing was changed\.$/);
   });
   it('the app\'s 5 MB saved-data assumption would be exceeded: refused, says what to free up', async () => {
     const plan = await planWith(async () => ({ quota: 1e9, usage: 0 }), async () => { rawSetItem('filler', 'x'.repeat(Math.floor(STORAGE_QUOTA_ASSUMED_BYTES / 2) - 600)); });
