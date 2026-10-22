@@ -31,7 +31,7 @@ describe('what it shows', () => {
     expect(app).toMatch(/top:calc\(env\(safe-area-inset-top, 0px\) \+ 8px\);max-width:480px/); expect(app).not.toMatch(/data-testid", "app-error-notice"[\s\S]{0,400}bottom:/);
     expect(app).toMatch(/position:fixed;left:16px;right:16px;bottom:16px;[^'"]*z-index:99999/); expect(main).toMatch(/bottom: 12[\s\S]{0,40}zIndex: 99999/);
   });
-  it('no auto-hide: it is still there a long time later', async () => { vi.useFakeTimers(); err(); await vi.advanceTimersByTimeAsync(10 * 60 * 1000); expect(notice()).toBeTruthy(); });
+  it('no auto-hide: it is still there a long time later', async () => { vi.useRealTimers(); vi.useFakeTimers(); err(); await vi.advanceTimersByTimeAsync(10 * 60 * 1000); expect(notice()).toBeTruthy(); });
 });
 
 describe('one at a time, Dismiss, cooldown', () => {

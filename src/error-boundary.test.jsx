@@ -28,6 +28,14 @@ describe('the crash screen', () => {
     expect(snapshot()).toBe(before); expect(setItemSpy).not.toHaveBeenCalled();
     expect(warn.mock.calls).toEqual([['[SparkCheck]', 'render-crash', 'TypeError']]);
   });
+  it('a storage that throws on every read and write cannot stop the screen: it shows, the crash screen reads nothing and writes nothing', () => {
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage blocked'); }); setItemSpy.mockImplementation(() => { throw new Error('storage blocked'); });
+    try {
+      render(<AppErrorBoundary deps={{ reload: vi.fn() }}><Bomb /></AppErrorBoundary>);      // the real canBackup: it must not read storage either
+      expect(screen.getByTestId('crash-screen')).toBeTruthy(); expect(screen.getByTestId('crash-reload')).toBeTruthy();
+      expect(get).not.toHaveBeenCalled(); expect(setItemSpy).not.toHaveBeenCalled();
+    } finally { get.mockRestore(); setItemSpy.mockRestore(); }
+  });
   it('Reload calls the reload function; both buttons are 44 px or more and white-on-orange is the primary', async () => {
     const d = deps(); render(<AppErrorBoundary deps={d}><Bomb /></AppErrorBoundary>);
     const r = screen.getByTestId('crash-reload'), m = screen.getByTestId('crash-backup'); expect(r.textContent).toBe('Reload SparkCheck'); expect(m.textContent).toBe('Make a backup');

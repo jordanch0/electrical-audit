@@ -11,6 +11,8 @@ let warn, winErrors;
 const onWinError = e => winErrors.push('error:' + e.message), onWinRej = e => winErrors.push('rejection');
 beforeEach(() => { warn = vi.spyOn(console, 'warn').mockImplementation(() => {}); winErrors = []; window.addEventListener('error', onWinError); window.addEventListener('unhandledrejection', onWinRej); delete window.webkit; });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.useRealTimers(); window.removeEventListener('error', onWinError); window.removeEventListener('unhandledrejection', onWinRej); delete window.webkit; });
+// Fake only the named timers. The clock runs (CLOCK_AT) already fake Date in a global beforeEach, where a plain vi.useFakeTimers() installs nothing: reset first, keep Date faked at CLOCK_AT when it is set.
+const fakeTimers = toFake => { vi.useRealTimers(); vi.useFakeTimers({ toFake: [...toFake, ...(process.env.CLOCK_AT ? ['Date'] : [])] }); if (process.env.CLOCK_AT) vi.setSystemTime(new Date(process.env.CLOCK_AT)); };
 const Harness = ({ scope, fn, template }) => <div><button onClick={() => runExport(scope, fn)}>Export</button><ExportFailureCard scope={scope} /></div>;
 const card = () => screen.queryByTestId('export-failed');
 
@@ -59,7 +61,7 @@ describe('runExport and the card', () => {
     await act(async () => { release(); }); await user.click(screen.getByText('Export')); expect(fn).toHaveBeenCalledTimes(2);
   });
   it('a build that never settles does not block the button for ever (released after 60 s)', async () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }); const fn = vi.fn(() => new Promise(() => {}));
+    fakeTimers(['setTimeout', 'clearTimeout']); const fn = vi.fn(() => new Promise(() => {}));
     runExport('welder:snap:a', fn); runExport('welder:snap:a', fn); expect(fn).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60001); runExport('welder:snap:a', fn); expect(fn).toHaveBeenCalledTimes(2);
   });
@@ -98,7 +100,7 @@ describe('deliverExportFile: never alerts, always cleans up', () => {
     let caught; try { deliverExportFile('QUJD', 'f.xlsx'); } catch (e) { caught = e; } expect(caught).toBeInstanceOf(ExportDeliveryError); expect(caught.message).not.toContain('ZQSITE'); expect(alertSpy).not.toHaveBeenCalled();
   });
   it('the download path: the link is added, clicked, removed, and the URL revoked after 30 s', () => {
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] }); const u = stubUrl(); const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { expect(document.body.contains(this)).toBe(true); expect(this.download).toBe('f.xlsx'); });
+    fakeTimers(['setTimeout', 'clearTimeout']); const u = stubUrl(); const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { expect(document.body.contains(this)).toBe(true); expect(this.download).toBe('f.xlsx'); });
     deliverExportFile('QUJD', 'f.xlsx'); expect(click).toHaveBeenCalledTimes(1); expect(document.querySelector('a[download]')).toBeNull(); expect(u.revoked).toEqual([]);
     vi.advanceTimersByTime(30001); expect(u.revoked).toEqual(['blob:zq1']);
   });
