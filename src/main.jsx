@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import App, { backupRecoverAtStart, backupFinishRecovery, eraseStartup, eraseRuntime, requestPersistentStorage } from './App.jsx'
+import App, { backupRecoverAtStart, backupFinishRecovery, eraseStartup, eraseRuntime, requestPersistentStorage, AppErrorBoundary, installGlobalErrorNotice } from './App.jsx'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 
 // A build lands as a new service worker in the background but does not take over
@@ -52,11 +52,15 @@ try { if (backupRecoverAtStart().recovered) backupFinishRecovery().catch(() => {
 
 try {
   const root = ReactDOM.createRoot(document.getElementById('root'))
+  // The error screen wraps the app only: the update toast stays OUTSIDE it, so Refresh still works on the error screen (a new build may fix the crash).
   root.render(React.createElement(React.Fragment, null,
-    React.createElement(App),
+    React.createElement(AppErrorBoundary, null, React.createElement(App)),
     React.createElement(UpdateToast)
   ))
   if (window.__hideLoading) window.__hideLoading()
+  // From here the app owns uncaught errors: index.html's inline handlers (a start-up net that replaces the page) go quiet, and one small notice replaces them. Never throws.
+  window.__sparkcheckBooted = true
+  try { installGlobalErrorNotice() } catch (_) {}
   // Ask the browser to keep this app's data (navigator.storage.persist; silent, no prompt). Only AFTER the first render has been handed to React, a tick later, and never while an unfinished erase has the app on the
   // Settings-only screen. It comes after the erase and the recovery above, never inside them. Never throws.
   setTimeout(() => { try { if (!eraseRuntime.state.settingsOnly) requestPersistentStorage() } catch (_) {} }, 0)

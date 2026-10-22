@@ -164,11 +164,15 @@
     function showErr(t, m) {
       document.body.innerHTML = '<div style="position:fixed;top:0;left:0;right:0;bottom:0;padding:30px;font-family:sans-serif;background:#e8e6e2;color:#18181b;overflow:auto"><h2 style="color:#a3530f">' + t + '</h2><pre style="color:#991b1b;white-space:pre-wrap;font-size:13px">' + m + '</pre></div>';
     }
+    // START-UP NET ONLY: until src/main.jsx has handed the first render to React (it sets window.__sparkcheckBooted), a script that fails to load still shows the plain error page. After that the app's own
+    // error screen and one small notice take over (installGlobalErrorNotice in App.jsx); these handlers then do nothing, so a stray error can no longer replace the whole page.
     window.onerror = function(msg, src, line, col, err) {
+      if (window.__sparkcheckBooted) return false;
       showErr('Error line ' + line, msg + (err ? '\n\n' + err.stack : ''));
       return true;
     };
     window.addEventListener('unhandledrejection', function(e) {
+      if (window.__sparkcheckBooted) return;
       showErr('Promise Error', String(e.reason));
     });
     window.__hideLoading = function() {
