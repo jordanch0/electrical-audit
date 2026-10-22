@@ -15,7 +15,7 @@ function ownerOf(re) {
 const bodyOf = name => { const at = SRC.indexOf('function ' + name + '('); expect(at, name + ' exists').toBeGreaterThan(-1); const rest = SRC.slice(at + 10), m = /\n(?:async )?function\s|\nconst\s[A-Za-z0-9_$]+\s*=\s/.exec(rest); return SRC.slice(at, at + 10 + (m ? m.index : rest.length)); };
 
 const EXPECTED = ['ConfirmReset', 'ContinueConfirmBtn', 'CompleteAuditBtn', 'EventCard'];      // call useCollapsible AND useRevealOnOpen; (DropdownNotice calls the hook only: it does not collapse)
-const HOOK_ONLY = ['DropdownNotice'];
+const HOOK_ONLY = ['DropdownNotice', 'ExportFailureCard'];   // ExportFailureCard: a failure card that opens in place calls the hook (release r)
 const ALLOW = {
   DeleteButton: 'a row that grows by ~13 px; measured at most 7 px under the pill; GSD keeps its own revealBottom (pinned by gsd.test.jsx), so two scrolls would race. Decision: out of release q.',
   StyledSelect: 'a popover list opens BELOW its field; a different open / close from a confirm card. Candidate for a later release; not measured.',
