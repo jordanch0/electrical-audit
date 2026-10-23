@@ -235,7 +235,7 @@ function ExportBtn({ scope, run, style, template, children }) {
   const word = template ? "Making the template…" : "Making…";
   const layer = (shown, extra) => ({ gridArea: "1 / 1", visibility: shown ? "visible" : "hidden", ...extra });
   return React.createElement(React.Fragment, null,
-    React.createElement("button", { style, onClick: run, "aria-busy": busy ? "true" : undefined, "aria-disabled": busy ? "true" : undefined },
+    React.createElement("button", { style: template ? style : { ...style, minHeight: 44 }, onClick: run, "aria-busy": busy ? "true" : undefined, "aria-disabled": busy ? "true" : undefined },
       React.createElement("span", { style: { display: "grid", alignItems: "center", justifyItems: "center" } },
         React.createElement("span", { "aria-hidden": busy ? "true" : undefined, style: layer(!busy) }, children),
         React.createElement("span", { "aria-hidden": busy ? undefined : "true", "data-testid": "export-busy-label", style: layer(busy, { whiteSpace: "nowrap" }) }, word))),
@@ -11176,7 +11176,7 @@ const SWB_RISK_LABELS = { L:"Low", M:"Medium", H:"High", U:"Urgent" };
 
 function swbUid()  { return Math.random().toString(36).slice(2,9); }
 function swbSlug(s){ return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,20)+"-"+swbUid(); }
-function swbAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
+function swbAddYear(d){try{return backupDmy(addYearsISO(d,1));}catch(_){return "";}}      // UTC date maths + a string formatter: the same day in every time zone (fmtDate formats in local time, a day early west of UTC)
 
 // ─── Data helpers ─────────────────────────────────────────────────────────
 function swbGetItem(results, projectId, areaId, boardId, itemKey) {
@@ -13659,7 +13659,7 @@ const IRT_PHASE_PHASE  = [{key:"L1L2",label:"L1\u2013L2"},{key:"L1L3",label:"L1\
 const IRT_SM={untested:{label:"\u2014",bg:"#e4e4e7",fg:"#5f5b57",border:"#d4d4d8"},pass:{label:"PASS",bg:"#dcfce7",fg:"#14532d",border:"#16a34a"},fail:{label:"FAIL",bg:"#fee2e2",fg:"#991b1b",border:"#dc2626"},na:{label:"N/A",bg:"#f1f5f9",fg:"#334155",border:"#94a3b8"}};
 function irtUid(){return Math.random().toString(36).slice(2,9);}
 function irtSlug(s){return s.toLowerCase().replace(/[^a-z0-9]/g,"-").replace(/-+/g,"-").slice(0,22)+"-"+irtUid();}
-function irtAddYear(d){try{const x=new Date(d);x.setFullYear(x.getFullYear()+1);return x.toLocaleDateString("en-AU",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(_){return "";}}
+function irtAddYear(d){try{return backupDmy(addYearsISO(d,1));}catch(_){return "";}}      // as swbAddYear
 function irtGetItem(results,siteId,areaId,panelId,itemId){try{const v=results[siteId][areaId][panelId][itemId];if(v)return v;}catch(_){}return{status:"untested",testVoltage:"500V",readings:{},notes:"",priority:"",rectified:"",scheduledDate:"",defectId:"",responsibility:""};}
 function irtAutoStatus(readings){const vals=Object.values(readings||{}).filter(v=>v&&String(v).trim());if(!vals.length)return"untested";return vals.some(v=>{const s=String(v).trim();if(s.startsWith(">"))return false;if(s.startsWith("<"))return true;const n=parseFloat(s);return!isNaN(n)&&n<1;})?"fail":"pass";}
 function irtSiteSummary(results,project){let total=0,pass=0,fail=0,na=0,untested=0;(project.areas||[]).forEach(a=>(a.panels||[]).forEach(p=>(p.items||[]).forEach(id=>{total++;const d=irtGetItem(results,project.id,a.id,p.id,id);const s=d.status==="untested"?irtAutoStatus(d.readings||{}):d.status;if(s==="pass")pass++;else if(s==="fail")fail++;else if(s==="na")na++;else untested++;})));return{total,pass,fail,na,untested};}
