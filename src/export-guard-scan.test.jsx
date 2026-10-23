@@ -34,15 +34,28 @@ describe('no browser dialog and no unwrapped export', () => {
     expect(bad).toEqual([]);
     expect(uses.length).toBeGreaterThanOrEqual(8);
   });
-  it('deliverExportFile( is called only from inside an export... or download... function', () => {
+  // Release t (F2): the only callers of deliverExportFile are the export / template functions (their sinks) AND exportHandOver, the one hand-over that runExport's per-scope handler reaches: it calls deliverExportFile for the
+  // native bridge, a desktop, jsdom and any computer without a share sheet (the one-tap download). A call from a button, a screen or any other function still fails; the synthetic cases below prove it.
+  const ALLOWED_CALLER = /^(export\w*Excel|download\w*Template|exportHandOver)$/;
+  const badCallers = lines => {
     const bad = [];
-    LINES.forEach((l, i) => {
+    lines.forEach((l, i) => {
       if (isComment(l) || !/\bdeliverExportFile\(/.test(l) || /^\s*function\s+deliverExportFile/.test(l)) return;
-      let j = i; while (j >= 0 && !/^(async\s+)?function\s+\w+/.test(LINES[j])) j--;
-      const name = j >= 0 ? /^(?:async\s+)?function\s+(\w+)/.exec(LINES[j])[1] : '(top level)';
-      if (!/^(export\w*Excel|download\w*Template)$/.test(name)) bad.push((i + 1) + ': inside ' + name);
+      let j = i; while (j >= 0 && !/^(async\s+)?function\s+\w+/.test(lines[j])) j--;
+      const name = j >= 0 ? /^(?:async\s+)?function\s+(\w+)/.exec(lines[j])[1] : '(top level)';
+      if (!ALLOWED_CALLER.test(name)) bad.push((i + 1) + ': inside ' + name);
     });
-    expect(bad).toEqual([]);
+    return bad;
+  };
+  it('deliverExportFile( is called only from inside an export... or download... function, or from the hand-over (exportHandOver)', () => {
+    expect(badCallers(LINES)).toEqual([]);
+  });
+  it('the scan is not blind: a call from a button, a screen, a hook or another function is reported', () => {
+    expect(badCallers(['function SettingsScreen() {', '  return <button onClick={() => deliverExportFile(b, "x.xlsx")} />;', '}'])).toEqual(['2: inside SettingsScreen']);
+    expect(badCallers(['async function exportIELExcel(a) {', '  deliverExportFile(b, "x.xlsx");', '}', 'function helper() {', '  deliverExportFile(b, "y.xlsx");', '}'])).toEqual(['5: inside helper']);
+    expect(badCallers(['const x = () => deliverExportFile(b, "x.xlsx");'])).toEqual(['1: inside (top level)']);
+    expect(badCallers(['function exportHandOverLater() {', '  deliverExportFile(b, "x.xlsx");', '}'])).toEqual(['2: inside exportHandOverLater']);
+    expect(badCallers(['function exportHandOver(scope, file, done) {', '  deliverExportFile(file.base64, file.filename, file.mimeType);', '}'])).toEqual([]);
   });
 });
 

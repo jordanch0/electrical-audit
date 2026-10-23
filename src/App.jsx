@@ -17825,5 +17825,5 @@ export { requestPersistentStorage };
 export { GS_TAB_LABELS };
 export { useRevealOnOpen, DropdownNotice, ContinueConfirmBtn };
 export { backupDayText, BACKUP_COPIES_KEY, backupCanon, backupSiteCanon, backupRemapIds, backupBuildIdMap, backupInverseEntry, backupCopyName, backupVerifyCopies, backupNodeCount, backupPointerIds, backupMetaStable, BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
-export { runExport, ExportBtn, useExportBusy, appLog, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
+export { runExport, exportShareWanted, ExportBtn, useExportBusy, appLog, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
 export default AppRoot;

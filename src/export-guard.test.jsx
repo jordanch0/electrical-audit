@@ -99,10 +99,11 @@ describe('deliverExportFile: never alerts, always cleans up', () => {
     const alertSpy = vi.fn(); vi.stubGlobal('alert', alertSpy); window.webkit = { messageHandlers: { shareFile: { postMessage: () => { throw new Error('ZQSITE secret'); } } } };
     let caught; try { deliverExportFile('QUJD', 'f.xlsx'); } catch (e) { caught = e; } expect(caught).toBeInstanceOf(ExportDeliveryError); expect(caught.message).not.toContain('ZQSITE'); expect(alertSpy).not.toHaveBeenCalled();
   });
-  it('the download path: the link is added, clicked, removed, and the URL revoked after 30 s', () => {
+  it('the download path: the link is added, clicked, removed, and the URL revoked after 120 s (release t: it was 30 s; a big download on a slow phone must not lose its URL)', () => {
     fakeTimers(['setTimeout', 'clearTimeout']); const u = stubUrl(); const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () { expect(document.body.contains(this)).toBe(true); expect(this.download).toBe('f.xlsx'); });
     deliverExportFile('QUJD', 'f.xlsx'); expect(click).toHaveBeenCalledTimes(1); expect(document.querySelector('a[download]')).toBeNull(); expect(u.revoked).toEqual([]);
-    vi.advanceTimersByTime(30001); expect(u.revoked).toEqual(['blob:zq1']);
+    vi.advanceTimersByTime(30001); expect(u.revoked, 'still held after the old 30 s').toEqual([]);
+    vi.advanceTimersByTime(90000); expect(u.revoked).toEqual(['blob:zq1']);
   });
   it('a click that throws leaves no link in the page and no un-revoked URL, and throws ExportDeliveryError', () => {
     const u = stubUrl(); vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => { throw new Error('blocked'); });
