@@ -97,14 +97,25 @@ function base64ToBlob(base64, mimeType) {
 // ExportDeliveryError (no text is taken from the cause) that runExport turns into the card under the control that was pressed. The download link is always removed and the blob URL is never left unrevoked.
 class ExportDeliveryError extends Error { constructor() { super("export delivery failed"); this.name = "ExportDeliveryError"; } }
 class ExportLibraryError extends Error { constructor() { super("export library missing"); this.name = "ExportLibraryError"; } }
+const EXPORT_URL_REVOKE_MS = 120000;      // a big download on a slow phone must not lose its URL (the backup download waits the same 120 s)
 function deliverExportFile(base64, filename, mimeType=XLSX_MIME) {
-  let link = null, url = null;
+  let blob = null;
   try {
     if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile) {
       window.webkit.messageHandlers.shareFile.postMessage({ base64, filename, mimeType });
       return;
     }
-    url = URL.createObjectURL(base64ToBlob(base64, mimeType));
+    blob = base64ToBlob(base64, mimeType);
+  } catch (_) {
+    throw new ExportDeliveryError();
+  }
+  exportDownloadBlob(blob, filename);
+}
+// The download: a hidden link on a blob URL. Used by deliverExportFile (the one-tap download on a desktop) and as the fallback of the share path. The link is always removed and the URL is never left unrevoked.
+function exportDownloadBlob(blob, filename) {
+  let link = null, url = null;
+  try {
+    url = URL.createObjectURL(blob);
     link = document.createElement('a');
     link.href = url; link.download = filename;
     document.body.appendChild(link);
@@ -115,7 +126,7 @@ function deliverExportFile(base64, filename, mimeType=XLSX_MIME) {
   } finally {
     if (link && link.parentNode) link.parentNode.removeChild(link);
   }
-  const made = url; setTimeout(() => { try { URL.revokeObjectURL(made); } catch (_) {} }, 30000);
+  const made = url; setTimeout(() => { try { URL.revokeObjectURL(made); } catch (_) {} }, EXPORT_URL_REVOKE_MS);
 }
 // ── EXPORT GUARD (release r) ───────────────────────────────────────────────────────────────────────────────────────
 // EVERY export button and blank-template button runs through runExport(scope, fn). A throw anywhere inside fn (the workbook build, "Excel library not loaded", a photo, deliverExportFile) ends in ONE card, ExportFailureCard,
@@ -133,13 +144,86 @@ async function runExport(scope, fn) {
   const timer = setTimeout(() => { if (exportRunning.get(scope) === timer) { exportRunning.delete(scope); exportEmit(); } }, EXPORT_RUN_RELEASE_MS);      // the release tells the button too, so its label comes back
   exportRunning.set(scope, timer);
   exportFailures.delete(scope); exportEmit();                          // one update: the old card goes and the button shows that it is working
-  try { await fn(); }
+  try { await fn((base64, filename, done) => exportHandOver(scope, { base64, filename, mimeType: XLSX_MIME }, done)); }      // fn gets the hand-over for THIS scope only; a template calls it in the same tick as the tap
   catch (e) {
     const kind = e instanceof ExportDeliveryError ? "deliver" : e instanceof ExportLibraryError ? "library" : "build";
     exportLog(kind === "deliver" ? "deliver-failed" : kind === "library" ? "library-missing" : "build-failed", scope, e);
     exportFailures.set(scope, { kind, template: /:template$/.test(scope) }); exportEmit();
   }
   finally { clearTimeout(timer); if (exportRunning.get(scope) === timer) { exportRunning.delete(scope); exportEmit(); } }
+}
+// ── EXPORT HAND-OVER (release t) ───────────────────────────────────────────────────────────────────────────────────
+// runExport gives each export and template function an optional trailing argument, handOver(base64, filename, done), made for THAT scope only (no shared "current run" state: two scopes can build at the same time).
+// Every sink ends with: if (typeof handOver === "function") return handOver(...); deliverExportFile(...). So a function called with no handler (a test, anything outside runExport) delivers exactly as it always did.
+// exportHandOver: 1. the native bridge (deliverExportFile, whose bridge branch is untouched) 2. on a phone or tablet (touch is the primary input, see exportShareWanted) the system share sheet:
+// a snapshot export is held as a READY file in memory (exportFailures, kind "ready") and the person taps Share file (the share sheet only opens inside a fresh tap; a build can take longer than a tap stays valid),
+// a template is tiny and is shared in the same tick as the tap 3. everywhere else (a desktop) the one-tap download, as before. The held file is memory only (never stored, never in a backup) and is dropped when the screen is left.
+// done = what the export does once the file REALLY left the app (the photo-migration proof): after the bridge posted, the download started or the share resolved; never just because the file was built.
+// exportFailures holds ONE entry per scope, which is the card under the button: a failure {kind: build | deliver | library}, or a ready file / a note {kind: ready | shared | downloaded | closed}. A new run clears it.
+const exportBridgePresent = () => !!(typeof window !== "undefined" && window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.shareFile);
+// The share path runs only when: no native bridge; navigator.share and navigator.canShare exist; touch is the PRIMARY input (maxTouchPoints above 0 AND a coarse primary pointer: a phone, a tablet, an iPad that reports as a Mac;
+// a desktop or a touch laptop with a mouse fails); and canShare accepts an (empty) xlsx file. Asks what the phone or computer can do, not what the browser is called. Anything else: today's one-tap download.
+function exportShareWanted(nav = typeof navigator !== "undefined" ? navigator : null, mm = typeof window !== "undefined" && typeof window.matchMedia === "function" ? window.matchMedia.bind(window) : null, bridge = exportBridgePresent()) {
+  try {
+    if (bridge) return false;
+    if (!nav || typeof nav.share !== "function" || typeof nav.canShare !== "function") return false;
+    if (!(nav.maxTouchPoints > 0)) return false;
+    if (typeof mm !== "function" || !mm("(pointer: coarse)").matches) return false;
+    return !!nav.canShare({ files: [new File([""], "x.xlsx", { type: XLSX_MIME })] });
+  } catch (_) { return false; }
+}
+const exportSharing = new Set();      // scopes whose share sheet is open: a second tap is ignored (navigator.share throws if called twice)
+const exportVisit = new Map();        // scope -> a counter bumped when the card leaves the screen, so a late result never shows a stale card on the next visit
+function exportHandOver(scope, file, done) {
+  if (exportBridgePresent() || !exportShareWanted()) { deliverExportFile(file.base64, file.filename, file.mimeType); if (done) done(); return; }      // the bridge posted / the download started: a real hand-over
+  let blob; try { blob = base64ToBlob(file.base64, file.mimeType); } catch (_) { throw new ExportDeliveryError(); }
+  const entry = { kind: "ready", blob, filename: file.filename, mimeType: file.mimeType, template: /:template$/.test(scope), done };
+  if (entry.template) { exportShareStart(scope, entry); return; }       // same tick as the tap: no await before it
+  exportFailures.set(scope, entry); exportEmit();
+}
+// Opens the share sheet with the file ONLY (a title, text or url makes iOS save a second little file). Called as the FIRST action of the tap (Share file) or of the template tap.
+function exportShareStart(scope, entry) {
+  if (exportSharing.has(scope)) return;
+  const visit = exportVisit.get(scope) || 0, here = () => (exportVisit.get(scope) || 0) === visit;
+  const isReady = !entry.template, still = cur => isReady ? exportFailures.get(scope) === cur : here();
+  let p, shown = entry;
+  try { p = navigator.share({ files: [new File([entry.blob], entry.filename, { type: entry.mimeType })] }); } catch (e) { p = Promise.reject(e); }
+  exportSharing.add(scope);
+  if (isReady) { shown = { ...entry, sharing: true, cancelled: false }; exportFailures.set(scope, shown); exportEmit(); }
+  const finish = () => { if (entry.done) { try { entry.done(); } catch (_) {} } };      // the file really left the app: now (and only now) the export's own follow-up runs
+  Promise.resolve(p).then(() => {
+    exportSharing.delete(scope); finish();
+    if (!still(shown)) return;
+    if (isReady) { exportFailures.set(scope, { kind: "shared", filename: entry.filename }); exportEmit(); }
+  }, err => {
+    exportSharing.delete(scope);
+    if (err && err.name === "AbortError") {                                // the sheet was closed: not a failure, nothing logged
+      if (!still(shown)) return;
+      if (isReady) exportFailures.set(scope, { ...entry, sharing: false, cancelled: true }); else exportFailures.set(scope, { kind: "closed", template: true });
+      exportEmit(); return;
+    }
+    exportLog(err && (err.name === "NotAllowedError" || err.name === "InvalidStateError" || err.name === "SecurityError") ? "share-refused" : "share-failed", scope, err);
+    let note;      // the download always runs (the person asked for the file); only the card depends on the screen still being there
+    try { exportDownloadBlob(entry.blob, entry.filename); finish(); note = { kind: "downloaded", filename: entry.filename, template: entry.template }; }
+    catch (e2) { exportLog("deliver-failed", scope, e2); note = { kind: "deliver", template: entry.template }; }
+    if (!still(shown)) return;
+    exportFailures.set(scope, note); exportEmit();
+  });
+}
+const exportShareReady = scope => { const e = exportFailures.get(scope); if (e && e.kind === "ready" && !e.sharing) exportShareStart(scope, e); };
+const exportDiscard = scope => { if (exportFailures.delete(scope)) exportEmit(); };
+// The ready file and the notes (in the card box of ExportFailureCard, which reveals itself clear of the pill). The words are the design's: shared, cancelled, refused (downloaded), closed.
+function ExportReadyCard({ scope, entry }) {
+  const b = (k, t) => React.createElement("b", { key: k }, t), br = k => React.createElement("br", { key: k });
+  if (entry.kind === "shared") return bsCard("ok", "Excel file shared", "If you chose Save to Files, it is in the folder you picked.", "export-shared");
+  if (entry.kind === "downloaded") return bsCard("info", entry.template ? "Template download started" : "Excel file download started", ["This phone could not open the share sheet, so the " + (entry.template ? "template" : "file") + " was downloaded. Find it in the Files app.", br("b"), b("f", entry.filename)], "export-downloaded");
+  if (entry.kind === "closed") return bsCard("info", "The share sheet was closed, so the template was not saved.", "Tap Download Import Template to try again.", "export-closed");
+  const share = React.cloneElement(bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share" }), entry.sharing ? { "aria-busy": "true", "aria-disabled": "true" } : {});
+  return React.createElement(React.Fragment, null,
+    entry.cancelled
+      ? bsCard("info", "The share sheet was closed, so the file was not saved.", [entry.filename, br("b"), "Your file is still ready. Tap ", b("s", "Share file"), " to try again."], "export-ready")
+      : bsCard("ok", "Excel file ready", [entry.filename, br("b"), b("n", "Not saved yet"), ". Tap ", b("s", "Share file"), ", then choose ", b("f", "Save to Files"), " or another location."], "export-ready"),
+    React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, share, bsLink("Discard this file", () => exportDiscard(scope), "export-discard")));
 }
 // The export button (release s). EVERY export and template button is an ExportBtn: while its scope is running it says so in words ("Making…", "Making the template…"), keeps its size (both labels share one grid cell, so the button is as wide as the
 // longer one and never wraps), stays focusable (aria-busy and aria-disabled, never the disabled attribute) and a polite live region says "Making the Excel file. Please wait." The click handler is still runExport, which ignores a repeat tap.
@@ -161,10 +245,11 @@ function ExportFailureCard({ scope, inset }) {
   const failure = React.useSyncExternalStore(exportSubscribe, () => exportFailures.get(scope) || null);
   const boxRef = React.useRef(null);
   useRevealOnOpen(boxRef, !!failure);
-  React.useEffect(() => () => { if (exportFailures.delete(scope)) exportEmit(); }, [scope]);      // leaving the screen drops the card: it never comes back stale on the next visit
+  React.useEffect(() => () => { exportVisit.set(scope, (exportVisit.get(scope) || 0) + 1); if (exportFailures.delete(scope)) exportEmit(); }, [scope]);      // leaving the screen drops the card AND any ready file: it never comes back stale on the next visit
   if (!failure) return null;
   const what = failure.template ? "The blank template" : "The Excel file", how = failure.kind === "deliver" ? "saved" : "made";
-  return React.createElement("div", { ref: boxRef, style: { padding: inset ? "0 16px 12px" : 0, ...GS_MSG_MARGIN } }, bsCard("err", what + " could not be " + how, "Nothing on this phone was changed. Please try again.", "export-failed"));
+  const note = failure.kind === "ready" || failure.kind === "shared" || failure.kind === "downloaded" || failure.kind === "closed";      // not a failure: the ready file or a note (release t)
+  return React.createElement("div", { ref: boxRef, style: { padding: inset ? "0 16px 12px" : 0, ...GS_MSG_MARGIN } }, note ? React.createElement(ExportReadyCard, { scope, entry: failure }) : bsCard("err", what + " could not be " + how, "Nothing on this phone was changed. Please try again.", "export-failed"));
 }
 // The part of an export file name that comes from a typed name (a site name, a date). Safe on Windows, iOS and every browser: no control characters; backslash / : * ? " < > | become "-" (a run is one "-");
 // whitespace runs become one "_" (repeated "_" too); no leading or trailing space . _ - (no hidden file, no trailing dot); at most `max` characters, counted by code point so an emoji is never cut; empty gives `fallback`.
@@ -1062,7 +1147,7 @@ return { id: slugify(projectName), name: projectName, company: company || "Spark
 // U=dark maroon bg, H=red/salmon bg, M=yellow bg, L=light green bg, Pass=white (no fill), Fail=red bg
 // RCD export: MAIN results table (narrow — identifiers, dates, result, notes) + a Defects sheet (FAIL rows only, always present) + a
 // Summary sheet (counts). The defect fields live on the Defects sheet, cross-referenced by the "#" column. Page setup is native (xjPageSetup).
-async function exportExcel(results, project, meta, mode) {
+async function exportExcel(results, project, meta, mode, handOver) {
   const logo = await xjGetLogoDataUrl("rcd", project.id);
   const isInject = mode === "inject";
   const testDate = isInject ? ((meta && meta.injectDate) || "") : ((meta && meta.pushDate) || "");
@@ -1120,12 +1205,13 @@ async function exportExcel(results, project, meta, mode) {
   xjPageSetup(ss, false, null);
   const filename = exportFileName("", project.name, `RCD_${isInject ? "Injection" : "Push"}`, testDate);
   xjFitRows(wb);
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 // ─────────────────────────────────────────────────────────────────────────
 // TEMPLATE DOWNLOAD — gives user a sample import spreadsheet
 // ─────────────────────────────────────────────────────────────────────────
-function downloadTemplate() {
+function downloadTemplate(handOver) {
 const XLSX=XLSX_LIB; if(!XLSX){throw new ExportLibraryError();}
 const wb=XLSX.utils.book_new();
 const rows=[
@@ -1160,6 +1246,7 @@ ws["!merges"]=[{s:{r:0,c:0},e:{r:0,c:4}},{s:{r:1,c:0},e:{r:1,c:4}},{s:{r:3,c:0},
 XLSX.utils.book_append_sheet(wb,ws,"RCD Import");
 const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
 const fname="RCD_Import_Template.xlsx";
+if (typeof handOver === "function") return handOver(tOut, fname);
 deliverExportFile(tOut, fname);
 }
 // ─────────────────────────────────────────────────────────────────────────
@@ -1675,7 +1762,7 @@ onOpenDetail: c=>setDetailInfo({areaId:activeAreaId,panelId:activePanelId,circui
 , !showGate&&detailInfo&&project&&React.createElement(DetailModal, { ...detailInfo, project: project, mode: mode, results: allResults, meta: meta, dropdowns: dropdowns, onPatch: patch=>patchCircuit(activeProject,detailInfo.areaId,detailInfo.panelId,detailInfo.circuit,patch), onClose: ()=>setDetailInfo(null),})
 , !detailInfo&&view==="report"&&project&&React.createElement(ReportView, { project: project, results: allResults, meta: meta, onBack:()=>setView("home"),})
 , !detailInfo&&view==="manage"&&project&&React.createElement(ManageView, { project: project, dropdowns: dropdowns, onUpdateProject: updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)), onBack:()=>setView("home"),})
-, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>runExport(exportSnapScope("rcd",snap),()=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode)),
+, !detailInfo&&view==="history"&&React.createElement(HistoryView, { history: history.filter(h=>h.projectId===activeProject), project: project, viewSnap: viewSnap, setViewSnap: setViewSnap, viewArea: viewArea, setViewArea: setViewArea, onDelete: id=>setHistory(prev=>prev.filter(h=>h.id!==id)), onExportSnap: (snap)=>runExport(exportSnapScope("rcd",snap),h=>exportExcel({[snap.projectId]:snap.results},projects.find(p=>p.id===snap.projectId)||project,snap.meta,snap.mode, h)),
 onContinueFromSnap: (snap)=>{
   // Deep-copy snap results into active results (does NOT overwrite archived snap)
   setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
@@ -3247,7 +3334,7 @@ function ielSiteSummary(results,project,cat){
 
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
 
-async function exportIELExcel(project, results, meta) {
+async function exportIELExcel(project, results, meta, handOver) {
   const logo = await xjGetLogoDataUrl("iel", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
@@ -3288,6 +3375,7 @@ async function exportIELExcel(project, results, meta) {
   });
   const filename = exportFileName("IEL", sName, "", testDate);
   xjFitRows(wb);
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -3384,7 +3472,7 @@ function parseIELExcel(data){
   return{siteName,siteId,areas,results,company:parsedCompany,abn:parsedAbn,licence:parsedLicence};
 }
 
-function downloadIELTemplate(){
+function downloadIELTemplate(handOver){
   const XLSX=XLSX_LIB; if(!XLSX){throw new ExportLibraryError();}
   const wb=XLSX.utils.book_new();
   const rows=[
@@ -3417,6 +3505,7 @@ function downloadIELTemplate(){
   XLSX.utils.book_append_sheet(wb,ws,"IEL Import");
   const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname="IEL_Import_Template.xlsx";
+  if (typeof handOver === "function") return handOver(tOut, fname);
   deliverExportFile(tOut, fname);
 }
 
@@ -3562,7 +3651,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns,onBack:()=>setView("home")})
-      ,!detailInfo&&view==="history"&&React.createElement(IELHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewCat,setViewCat,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>runExport(exportSnapScope("iel",snap),()=>exportIELExcel(project,snap.results||{},snap.meta||{})),
+      ,!detailInfo&&view==="history"&&React.createElement(IELHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewCat,setViewCat,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>runExport(exportSnapScope("iel",snap),h=>exportIELExcel(project,snap.results||{},snap.meta||{}, h)),
         onContinueFromSnap:(snap)=>{
           setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
           setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
@@ -5404,7 +5493,7 @@ function tatSiteSummary(results, project) {
 
 // Export value for the Frequency column: exactly the interval ("1 Month", "3 Months", "12 Months"), never the dropdown's descriptive suffix.
 const tatFreqPlain = v => { const s = String(v == null || v === "" ? "3" : v).trim(); return s === "1" ? "1 Month" : `${s} Months`; };
-async function exportTATExcel(project, results, meta) {
+async function exportTATExcel(project, results, meta, handOver) {
   const logo = await xjGetLogoDataUrl("tat", project.id);
   const testDate = (meta && meta.testDate) || "";
   const auditor = (meta && meta.auditor) || "";
@@ -5449,6 +5538,7 @@ async function exportTATExcel(project, results, meta) {
   });
   const filename = exportFileName("TAT", sName, "", testDate);
   xjFitRows(wb);
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -5527,7 +5617,7 @@ function parseTATExcel(data) {
   return{siteName,siteId,areas,results,company:parsedCompany,abn:parsedAbn,licence:parsedLicence};
 }
 
-function downloadTATTemplate(){
+function downloadTATTemplate(handOver){
   const XLSX=XLSX_LIB; if(!XLSX){throw new ExportLibraryError();}
   const wb=XLSX.utils.book_new();
   const rows=[
@@ -5561,6 +5651,7 @@ function downloadTATTemplate(){
   XLSX.utils.book_append_sheet(wb,ws,"T&T Import");
   const tOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname="TAT_Import_Template.xlsx";
+  if (typeof handOver === "function") return handOver(tOut, fname);
   deliverExportFile(tOut, fname);
 }
 
@@ -5717,7 +5808,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,!detailItemId&&view==="settings"&&React.createElement(TATSettingsView,{dropdowns:tatDropdowns,setDropdowns:setTatDropdowns,equipTypes,setEquipTypes,freqOptions,setFreqOptions,applianceNames,setApplianceNames,tatDefaults,setTatDefaults,onBack:()=>setView("home")})
       ,!detailItemId&&view==="history"&&React.createElement(TATHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,
         onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),
-        onExportSnap:snap=>runExport(exportSnapScope("tat",snap),()=>exportTATExcel(project,snap.results||{},snap.meta||{})),
+        onExportSnap:snap=>runExport(exportSnapScope("tat",snap),h=>exportTATExcel(project,snap.results||{},snap.meta||{}, h)),
         onContinueFromSnap:snap=>{setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setGateArmed(false);setActiveAreaId(null);setView("home");},
         onBack:()=>setView("home"),
       })
@@ -6934,7 +7025,7 @@ function siteMonitor(results, project) {
 // ─────────────────────────────────────────────────────────────────────────
 // EXCEL EXPORT
 // ─────────────────────────────────────────────────────────────────────────
-async function exportThermoExcel(project, results, meta) {
+async function exportThermoExcel(project, results, meta, handOver) {
   const logo = await xjGetLogoDataUrl("thermo", project.id);
   const sName = project.name || "Site";
   const testDate = meta && meta.testDate || "";
@@ -6977,6 +7068,7 @@ async function exportThermoExcel(project, results, meta) {
   });
   const filename = exportFileName("Thermo", sName, "", testDate);
   xjFitRows(wb);
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), filename);
 }
 
@@ -7146,7 +7238,7 @@ function parseThermoExcel(data, overrideName, XLSX) {
 // ─────────────────────────────────────────────────────────────────────────
 // TEMPLATE DOWNLOAD
 // ─────────────────────────────────────────────────────────────────────────
-function downloadThermoTemplate() {
+function downloadThermoTemplate(handOver) {
   const XLSX = XLSX_LIB; if (!XLSX) { throw new ExportLibraryError(); }
   const rows = [
     ["Site Name — enter your site name here"],
@@ -7183,6 +7275,7 @@ function downloadThermoTemplate() {
   XLSX.utils.book_append_sheet(wb, ws, "Thermo Import");
   const out = XLSX.write(wb, { bookType: "xlsx", type: "base64", cellStyles: true });
   const fname = "Thermo_Import_Template.xlsx";
+  if (typeof handOver === "function") return handOver(out, fname);
   deliverExportFile(out, fname);
 }
 
@@ -10217,10 +10310,10 @@ function ThermoApp({
     viewBoard, setViewBoard,
     viewCirc, setViewCirc,
     onDelete: id => setHistory(prev => prev.filter(h => h.id !== id)),
-    onExportSnap: snap => runExport(exportSnapScope("thermo", snap), () => exportThermoExcel({
+    onExportSnap: snap => runExport(exportSnapScope("thermo", snap), h => exportThermoExcel({
       ...project,
       areas: project?.areas || []
-    }, snap.results || {}, snap.meta || {})),
+    }, snap.results || {}, snap.meta || {}, h)),
     onContinueFromSnap: snap => {
       setAllResults(prev => ({
         ...prev,
@@ -11230,7 +11323,7 @@ function swbSheetName(board, area, used) {
   used.add(name.toLowerCase());
   return name;
 }
-async function exportSWBExcel(project, allResults, meta) {
+async function exportSWBExcel(project, allResults, meta, handOver) {
   const wb = new ExcelJS.Workbook();
   const logo = await xjGetLogoDataUrl("swb", project.id);
   const sName = project.name || "Site";
@@ -11332,8 +11425,10 @@ async function exportSWBExcel(project, allResults, meta) {
 
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
+  const verified = () => { if (anyPhotoEmbedded) confirmPhotoMigrationVerified("swb"); };   // a real export that actually embedded a migrated photo is proof the round trip works
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(buf), exportFileName("SWB", sName, "", testDate), verified);
   deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("SWB", sName, "", testDate));
-  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("swb");   // a real export that actually embedded a migrated photo is proof the round trip works
+  verified();
 }
 
 // ─── Excel import ─────────────────────────────────────────────────────────
@@ -11422,7 +11517,7 @@ function parseSWBExcel(data) {
   } catch(e){ return null; }
 }
 
-function downloadSWBTemplate() {
+function downloadSWBTemplate(handOver) {
   const XLSX=XLSX_LIB; if(!XLSX){throw new ExportLibraryError();}
   const wb=XLSX.utils.book_new();
   const rows=[
@@ -11454,6 +11549,7 @@ function downloadSWBTemplate() {
   XLSX.utils.book_append_sheet(wb,ws,"SWB Import");
   const wbOut=XLSX.write(wb,{bookType:"xlsx",type:"base64",cellStyles:true});
   const fname="SWB_Import_Template.xlsx";
+  if (typeof handOver === "function") return handOver(wbOut, fname);
   deliverExportFile(wbOut, fname);
 }
 
@@ -11622,7 +11718,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,view==="dropdowns"&&React.createElement(SWBDropdownsView,{dropdowns:swbDropdowns,setDropdowns:setSwbDropdowns,onBack:()=>setView("home")})
       ,view==="history"&&React.createElement(SWBHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,error:historyError,
           onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(swbPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
-          onExportSnap:snap=>runExport(exportSnapScope("swb",snap),()=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{})),
+          onExportSnap:snap=>runExport(exportSnapScope("swb",snap),h=>exportSWBExcel(project,{[project.id]:snap.results||{}},snap.meta||{}, h)),
           onContinueFromSnap:async snap=>{
             try{
               const copied=await copySitePhotosForContinue(snap.results||{},swbExtractPhotos);
@@ -12706,7 +12802,7 @@ function eltRegisterRows(project, allResults, meta) {
   });
 }
 
-async function exportELTExcel(project, allResults, meta) {
+async function exportELTExcel(project, allResults, meta, handOver) {
   const wb = new ExcelJS.Workbook();
   const logo = await xjGetLogoDataUrl("elt", project.id);
   const ws = wb.addWorksheet("Emergency Lighting");
@@ -12802,8 +12898,10 @@ async function exportELTExcel(project, allResults, meta) {
   }
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
+  const verified = () => { if (anyPhotoEmbedded) confirmPhotoMigrationVerified("elt"); };   // a real export that actually embedded a migrated photo is proof the round trip works
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(buf), exportFileName("ELT", sName, "", testDate), verified);
   deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("ELT", sName, "", testDate));
-  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("elt");   // a real export that actually embedded a migrated photo is proof the round trip works
+  verified();
 }
 
 // A retired default type that means the same as a current default: shown as the current one, stored value left untouched.
@@ -12939,7 +13037,7 @@ function ELTApp({ onGoHome }) {
       ,view==="dropdowns"&&project&&eltEl(SWBDropdownsView,{dropdowns:eltDropdowns,setDropdowns:setEltDropdowns,onBack:goHome,lists:ELT_DROPDOWN_LISTS,hint:ELT_DROPDOWN_HINT,showDefault:true,reserved:["Other"]})
       ,view==="history"&&project&&eltEl(ELTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,error:historyError,
           onDelete:id=>{const h=history.find(x=>x.id===id);if(h)sitePhotoStore.delPhotoList(assetPhotoList(h.results));setHistory(prev=>prev.filter(x=>x.id!==id));},
-          onExportSnap:snap=>runExport(exportSnapScope("elt",snap),()=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{})),
+          onExportSnap:snap=>runExport(exportSnapScope("elt",snap),h=>exportELTExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}, h)),
           onContinueFromSnap:async snap=>{
             try{
               const copied=await copySitePhotosForContinue(snap.results||{},assetResultsExtractPhotos);
@@ -13036,7 +13134,7 @@ function parseELTExcel(data, typeOptions) {
     return { ok:true, siteName, company, abn, licence, assets, skipped, duplicates, unknownTypes, badMaintained };
   } catch(e) { return { ok:false, error:"Could not parse file — check it is a valid Excel or CSV file." }; }
 }
-function downloadELTTemplate() {
+function downloadELTTemplate(handOver) {
   const XLSX=XLSX_LIB; if(!XLSX){throw new ExportLibraryError();}
   const rows=[
     ["Site Name — enter your site name here"],
@@ -13051,6 +13149,7 @@ function downloadELTTemplate() {
   ws["!cols"]=ELT_COLUMNS.map((c,i)=>({wch:i<6?24:14}));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"ELT Import");
   const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+  if (typeof handOver === "function") return handOver(out,"ELT_Import_Template.xlsx");
   deliverExportFile(out,"ELT_Import_Template.xlsx");
 }
 
@@ -13661,7 +13760,7 @@ function parseIRTExcel(data){
 }
 
 // ─── Template download ────────────────────────────────────────────────────
-function downloadIRTTemplate(){
+function downloadIRTTemplate(handOver){
   const XLSX=XLSX_LIB;if(!XLSX){throw new ExportLibraryError();}
   const rows=[
     ["Site Name \u2014 enter your site name here"],
@@ -13679,13 +13778,14 @@ function downloadIRTTemplate(){
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"IRT Import");
   const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
   const fname="IRT_Import_Template.xlsx";
+  if (typeof handOver === "function") return handOver(out, fname);
   deliverExportFile(out, fname);
 }
 
 // ─── Excel export ─────────────────────────────────────────────────────────
 // IRT export: THREE linked sheets, all keyed by the same "#":  Register (narrow summary — the sheet meant for a client PDF),
 // Readings (the full 10-reading breakdown per circuit — the raw-data backup) and Defects (FAIL rows only, always present).
-async function exportIRTExcel(project, results, meta) {
+async function exportIRTExcel(project, results, meta, handOver) {
   const logo = await xjGetLogoDataUrl("irt", project.id);
   const sName = project.name || "Site";
   const homeNext = meta.nextTestDate || (meta.testDate ? addYearsISO(meta.testDate, 1) : "");
@@ -13721,6 +13821,7 @@ async function exportIRTExcel(project, results, meta) {
   });
   const fname = exportFileName("IR_Test", sName, "", meta.testDate);
   xjFitRows(wb);
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
   deliverExportFile(swbArrayBufferToBase64(await wb.xlsx.writeBuffer()), fname);
 }
 
@@ -14488,7 +14589,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       view==="report"&&project&&React.createElement(IRTReportView,{project,results:allResults,meta,onBack:()=>setView("home")}),
       view==="manage"&&project&&React.createElement(IRTManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")}),
       view==="dropdowns"&&React.createElement(IRTDropdownsView,{dropdowns:irtDropdowns,setDropdowns:setIrtDropdowns,onBack:()=>setView("home")}),
-      view==="history"&&React.createElement(IRTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewPanel,setViewPanel,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>runExport(exportSnapScope("irt",snap),()=>exportIRTExcel(project,{[project.id]:snap.results||{}},snap.meta||{})),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");},onBack:()=>setView("home")})
+      view==="history"&&React.createElement(IRTHistoryView,{history:history.filter(h=>h.projectId===activeProject),project,viewSnap,setViewSnap,viewArea,setViewArea,viewPanel,setViewPanel,onDelete:id=>setHistory(prev=>prev.filter(h=>h.id!==id)),onExportSnap:snap=>runExport(exportSnapScope("irt",snap),h=>exportIRTExcel(project,{[project.id]:snap.results||{}},snap.meta||{}, h)),onContinueFromSnap:snap=>{setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setActiveItemId(null);setView("audit");},onBack:()=>setView("home")})
     ),
     // Guide modal — direct child of root, outside overflow:hidden SS.main
     showGuide&&React.createElement(IRTMotorInfoModal,{onClose:()=>setShowGuide(false)}),
@@ -15145,7 +15246,7 @@ function parseWelderExcel(data) {
     return { ok:true, siteName, company, abn, licence, assets, skipped, duplicates, combined, exact };
   } catch(e) { return { ok:false, error:"Could not parse file — check it is a valid Excel or CSV file." }; }
 }
-function downloadWelderTemplate() {
+function downloadWelderTemplate(handOver) {
   const XLSX=XLSX_LIB; if(!XLSX){throw new ExportLibraryError();}
   const rows=[
     ["Site Name — enter your site name here"],
@@ -15160,6 +15261,7 @@ function downloadWelderTemplate() {
   ws["!cols"]=WELDER_COLUMNS.map((c,i)=>({wch:i<4?26:14}));
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,"Welder Import");
   const out=XLSX.write(wb,{bookType:"xlsx",type:"base64"});
+  if (typeof handOver === "function") return handOver(out,"Welder_Import_Template.xlsx");
   deliverExportFile(out,"Welder_Import_Template.xlsx");
 }
 
@@ -15645,7 +15747,7 @@ function welderSheetName(a, used) {
   used.add(name.toLowerCase());
   return name;
 }
-async function exportWelderExcel(project, allResults, meta) {
+async function exportWelderExcel(project, allResults, meta, handOver) {
   const wb = new ExcelJS.Workbook();
   const logo = await xjGetLogoDataUrl("welder", project.id);
   const sName = project.name||"Site";
@@ -15746,8 +15848,10 @@ async function exportWelderExcel(project, allResults, meta) {
   });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
+  const verified = () => { if (anyPhotoEmbedded) confirmPhotoMigrationVerified("welder"); };   // a real export that actually embedded a migrated photo is proof the round trip works
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(buf), exportFileName("Welder", sName, "", testDate), verified);
   deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("Welder", sName, "", testDate));
-  if (anyPhotoEmbedded) confirmPhotoMigrationVerified("welder");   // a real export that actually embedded a migrated photo is proof the round trip works
+  verified();
 }
 
 function WelderApp({ onGoHome }) {
@@ -15838,7 +15942,7 @@ function WelderApp({ onGoHome }) {
     else goProjects();
   };
   const exportSnap = snap=>{
-    runExport(exportSnapScope("welder",snap),()=>exportWelderExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}));
+    runExport(exportSnapScope("welder",snap),h=>exportWelderExcel({...project,areas:snap.areas||project.areas},{[project.id]:snap.results||{}},snap.meta||{}, h));
   };
   const navBtn = (icon,label,active,onClick)=>eltEl(SWBNavBtn,{icon,label,active,onClick,color:"#334155"});
 
@@ -16038,7 +16142,7 @@ const gsdPageSetupFixed = sheet => {
   sheet.pageSetup = { paperSize: 9, orientation: "portrait", scale: 100, fitToPage: false, margins: { left: 0.25, right: 0.25, top: 0.5, bottom: 0.6, header: 0.3, footer: 0.3 } };
   sheet.headerFooter = { oddFooter: "&L&A&RPage &P of &N" };
 };
-async function exportGSDExcel(project, items, meta) {
+async function exportGSDExcel(project, items, meta, handOver) {
   const wb = new ExcelJS.Workbook(); const m = meta || {};
   const logo = await xjGetLogoDataUrl("gsd", project.id); const off = 1;   // the shared header always reserves row 1 (logo row); `put` below is relative to the header
   const sName = project.name || "Site"; const testDate = earliestIso((items || []).map(i => i.lastTested)) || m.testDate || ""; const nextDue = m.nextTestDate || addYearsISO(m.testDate || "", 1);   // Date Tested = the earliest DATE LOGGED; the Next Audit Due is unchanged (a defect has no due of its own)
@@ -16087,6 +16191,7 @@ async function exportGSDExcel(project, items, meta) {
     emptyText: "No defects recorded", landscape: true });
   xjFitRows(wb);
   const buf = await wb.xlsx.writeBuffer();
+  if (typeof handOver === "function") return handOver(swbArrayBufferToBase64(buf), exportFileName("Site_Defects", sName, "", testDate));
   deliverExportFile(swbArrayBufferToBase64(buf), exportFileName("Site_Defects", sName, "", testDate));
 }
 
@@ -16245,7 +16350,7 @@ function GSDApp({ onGoHome }) {
       , view === "dropdowns" && project && gsdEl(SWBDropdownsView, { dropdowns, setDropdowns, onBack: goHome, lists: GSD_DROPDOWN_LISTS, hint: GSD_DROPDOWN_HINT, showDefault: true, reserved: ["Other"] })
       , view === "history" && project && gsdEl(GSDHistoryView, { history: history.filter(h => h.projectId === activeProject), project, viewSnap, setViewSnap,
           onDelete: id => { const h = history.find(x => x.id === id); if (h) gsdPhotoStore.delItems(h.items); setHistory(prev => prev.filter(x => x.id !== id)); },
-          onExportSnap: snap => runExport(exportSnapScope("gsd", snap), () => exportGSDExcel({ ...project, areas: snap.areas || project.areas }, snap.items || [], snap.meta || {})), onContinueFromSnap: continueFromSnap, error: historyError }))
+          onExportSnap: snap => runExport(exportSnapScope("gsd", snap), h => exportGSDExcel({ ...project, areas: snap.areas || project.areas }, snap.items || [], snap.meta || {}, h)), onContinueFromSnap: continueFromSnap, error: historyError }))
     , view !== "projects" && gsdEl("nav", { style: SS.bottomNav }
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_HOME, label: "Home", active: view === "home", onClick: goHome, color: "#334155" })
       , gsdEl(SWBNavBtn, { icon: NAV_ICON_AUDIT, label: "Audit", active: ["audit", "item"].includes(view), onClick: goAuditTab, color: "#334155" })
