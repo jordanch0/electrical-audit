@@ -72,7 +72,7 @@ describe('a snapshot export on a phone: built, held, then Share file', () => {
   });
   it('Share file and Discard this file are 44 px high and sit side by side (Share file takes the room, Discard its own width)', async () => {
     phoneOn(); render(<Harness scope={scope()} fn={file()} />); await userEvent.setup().click(screen.getByRole('button', { name: 'Export' })); await screen.findByTestId('export-ready');
-    const s = screen.getByTestId('export-share'), x = screen.getByTestId('export-discard'); expect(s.style.minHeight).toBe('44px'); expect(x.style.minHeight).toBe('44px'); expect(s.style.width).toBe(''); expect(s.style.flex).toBe('1 1 0%'); expect(x.style.width).toBe('auto'); expect(s.parentElement).toBe(x.parentElement); expect(s.textContent).toBe('Share file'); expect(x.textContent).toBe('Discard this file');
+    const s = screen.getByTestId('export-share'), x = screen.getByTestId('export-discard'); expect(s.style.minHeight).toBe('44px'); expect(x.style.minHeight).toBe('44px'); expect(s.style.width).toBe(''); expect(s.style.flex).toBe('1000 1 auto'); expect(x.style.width).toBe('auto'); expect(s.parentElement).toBe(x.parentElement); expect(s.textContent).toBe('Share file'); expect(x.textContent).toBe('Discard this file');
   });
   it('the share sheet is opened INSIDE the Share file tap, as its first action (no wait before it)', async () => {
     const share = phoneOn(); render(<Harness scope={scope()} fn={file()} />); await userEvent.setup().click(screen.getByRole('button', { name: 'Export' })); await screen.findByTestId('export-ready');

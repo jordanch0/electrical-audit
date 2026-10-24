@@ -8,7 +8,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { runExport, ExportBtn, ExportFailureCard, BACKUP_UI } from './App.jsx';
-import { phoneOn, phoneOff, abortError, SAMPLE_B64 } from './test/share-env.js';
+import { phoneOn, phoneOff, abortError, named, downloadsOn, SAMPLE_B64 } from './test/share-env.js';
 
 const SRC = fs.readFileSync(process.cwd() + '/src/App.jsx', 'utf8');
 const STYLE = { padding: '5px 10px', background: 'transparent', border: '1px solid #d4d4d8', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#14532d' };
@@ -47,7 +47,7 @@ describe('one card, one layout', () => {
   it('the ready state: one status element holding the title, the name, the short line and BOTH buttons, in that order', async () => {
     const { card } = await ready(); expect(screen.getAllByTestId('export-ready')).toHaveLength(1); expect(card.getAttribute('role')).toBe('status'); expect(card.getAttribute('data-gs-msg')).toBe('export-ready|Excel file ready');
     const rows = [...card.children]; expect(rows).toHaveLength(4); expect(rows[0].textContent).toBe('Excel file ready'); expect(rows[1].getAttribute('data-testid')).toBe('export-ready-name'); expect(rows[2].textContent).toBe('Not saved yet. Tap Share file.'); expect(rows[2].querySelector('b').textContent).toBe('Not saved yet.');
-    expect([...rows[3].children].map(c => c.getAttribute('data-testid'))).toEqual(['export-share', 'export-discard']); expect(rows[3].style.display).toBe('flex'); expect(rows[3].style.alignItems).toBe('center'); expect(rows[3].style.flexWrap).toBe('');
+    expect([...rows[3].children].map(c => c.getAttribute('data-testid'))).toEqual(['export-share', 'export-discard']); expect(rows[3].style.display).toBe('flex'); expect(rows[3].style.alignItems).toBe('center'); expect(rows[3].style.flexWrap).toBe('wrap');
   });
   it('the card has the module-neutral look: padding 10 x 12, a 12 px margin above and below, the rounded border, the shared reveal margin', async () => {
     const { card } = await ready(); expect(card.style.padding).toBe('10px 12px'); expect(card.style.margin).toBe('12px 0px'); expect(card.style.borderRadius).toBe('10px'); expect(card.style.scrollMarginTop).not.toBe(''); expect(card.style.scrollMarginBottom).not.toBe('');
@@ -69,15 +69,15 @@ describe('one card, one layout', () => {
   });
 });
 
-describe('the two buttons: 44 px, side by side, Share file takes the room, neither wraps (the rules that make the 320 layout)', () => {
-  it('both are at least 44 px high; Share file grows, Discard keeps its own width and does not shrink; neither is full width', async () => {
+describe('the two buttons: 44 px, side by side, Share file takes the room, neither label wraps (the rules that make the 320 layout); the row may wrap Discard under Share file on a very narrow phone', () => {
+  it('both are at least 44 px high; Share file grows (1000 to 1) on one line, Discard keeps its own width unless it wraps onto its own line; padding 6 px (the fix for 320)', async () => {
     await ready(); const s = screen.getByTestId('export-share'), x = screen.getByTestId('export-discard');
-    expect(s.style.minHeight).toBe('44px'); expect(x.style.minHeight).toBe('44px'); expect(s.style.flex).toBe('1 1 0%'); expect(x.style.flex).toBe('0 0 auto'); expect(x.style.width).toBe('auto'); expect(s.style.width).toBe('');
-    expect(x.style.padding).toBe('0px 10px'); expect(s.parentElement).toBe(x.parentElement); expect(s.parentElement.parentElement).toBe(screen.getByTestId('export-ready')); expect(s.style.boxSizing).toBe('border-box');
+    expect(s.style.minHeight).toBe('44px'); expect(x.style.minHeight).toBe('44px'); expect(s.style.flex).toBe('1000 1 auto'); expect(s.style.whiteSpace).toBe('nowrap'); expect(x.style.flex).toBe('1 0 auto'); expect(x.style.width).toBe('auto'); expect(s.style.width).toBe('');
+    expect(x.style.padding).toBe('0px 6px'); expect(s.parentElement).toBe(x.parentElement); expect(s.parentElement.parentElement).toBe(screen.getByTestId('export-ready')); expect(s.style.boxSizing).toBe('border-box');
   });
-  it('the source gives the row no wrap and the card no fixed width or height', () => {
+  it('the source lets the row wrap (Discard drops under Share file when both cannot fit) and gives the card no fixed width or height', () => {
     const a = SRC.indexOf('function ExportReadyCard('), z = SRC.indexOf('// The export button (release s)'); const body = SRC.slice(a, z);
-    expect(body).not.toMatch(/flexWrap|flex-wrap/); expect(body).not.toMatch(/\bwidth: \d|\bheight: \d|\bmaxWidth/); expect(body.match(/function ExportReadyCard\(/g)).toHaveLength(1);
+    expect(body).toContain('flexWrap: "wrap"'); expect(body).toContain('flex: "1000 1 auto", whiteSpace: "nowrap"'); expect(body).not.toMatch(/\bwidth: \d|\bheight: \d|\bmaxWidth/); expect(body.match(/function ExportReadyCard\(/g)).toHaveLength(1);
   });
   it('(a) the Discard text on the card fill is 4.5:1 or better, for the ok card and the info card, computed from the real BACKUP_UI colours', () => {
     for (const kind of ['ok', 'info']) { const r = ratio(BACKUP_UI.slateText, BACKUP_UI.card[kind].bg); expect(r, 'Discard on ' + kind).toBeGreaterThanOrEqual(4.5); }
@@ -101,5 +101,26 @@ describe('source scan: one card for everything', () => {
   it('bsLink takes an optional fifth argument that is merged last, and the four-argument callers are unchanged', () => {
     expect(SRC).toMatch(/const bsLink = \(label, onClick, id, disabled, extra\) =>/); expect(SRC).toContain('width: "100%", ...(extra || {}) } }, label);');
     const calls = SRC.match(/bsLink\("[^"]+", [^\n]*?\)/g) || []; expect(calls.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// Found in 2B (release t): in a History card (a flex column with align-items center) a note box with no width is only as wide as its content, so the ready card was 261 px wide at 390 while the cancelled one filled the card.
+// jsdom has no layout, so this proves the one thing that fixes it: EVERY kind of note is a direct child of the ONE box that carries width 100%, border-box and minWidth 0 (the pixels were measured in Chrome: report-t2-verification-C.txt).
+describe('every note sits in the one box that fills its parent', () => {
+  const H2 = ({ scope: sc, fn, template }) => <div data-testid="outer"><ExportBtn scope={sc} template={template} style={STYLE} run={() => runExport(sc, fn)}>Export</ExportBtn><ExportFailureCard scope={sc} inset /></div>;
+  const okFile = h => { h(SAMPLE_B64, 'IEL_Box_2026-10-20.xlsx'); };
+  async function show(kind) {
+    const user = userEvent.setup(); const sc = scope(kind === 'closed' ? 'swb' : 'iel') + (kind === 'closed' ? ':template' : '');
+    if (kind === 'closed') { phoneOn({ share: vi.fn().mockRejectedValue(abortError()) }); render(<H2 scope={sc} template fn={okFile} />); await user.click(screen.getByRole('button', { name: /Export/ })); return screen.findByTestId('export-closed'); }
+    if (kind === 'failed') { phoneOn(); render(<H2 scope={sc} fn={async () => { throw new Error('x'); }} />); await user.click(screen.getByRole('button', { name: 'Export' })); return screen.findByTestId('export-failed'); }
+    const share = kind === 'cancelled' ? vi.fn().mockRejectedValue(abortError()) : kind === 'downloaded' ? vi.fn().mockRejectedValue(named('NotAllowedError')) : vi.fn(async () => {});
+    if (kind === 'downloaded') downloadsOn(); phoneOn({ share }); render(<H2 scope={sc} fn={okFile} />); await user.click(screen.getByRole('button', { name: 'Export' })); const card = await screen.findByTestId('export-ready');
+    if (kind === 'ready') return card;
+    await user.click(screen.getByTestId('export-share')); return kind === 'shared' ? screen.findByTestId('export-shared') : kind === 'downloaded' ? screen.findByTestId('export-downloaded') : screen.findByText('Still ready. Tap Share file to try again.').then(() => screen.getByTestId('export-ready'));
+  }
+  it.each(['ready', 'cancelled', 'shared', 'downloaded', 'closed', 'failed'])('the %s note is a direct child of the box with width 100%, border-box and minWidth 0, and the box is the inset one', async kind => {
+    const card = await show(kind); const box = card.parentElement;
+    expect(box.parentElement).toBe(screen.getByTestId('outer')); expect(box.style.width).toBe('100%'); expect(box.style.boxSizing).toBe('border-box'); expect(['0', '0px']).toContain(box.style.minWidth); expect(box.style.padding).toBe('0px 16px 12px');
+    expect(box.children).toHaveLength(1);      // one note at a time, nothing beside it that could shrink the box
   });
 });

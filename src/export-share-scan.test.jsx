@@ -108,7 +108,7 @@ describe('(6) the buttons are 44 px', () => {
   });
   it('Share file is the shared bsBtn and Discard this file the shared bsLink (both minHeight 44)', () => {
     expect(SRC).toMatch(/const bsBtn = [^\n]*\n\s*const base = \{ minHeight: 44,/); expect(SRC).toMatch(/const bsLink = [^\n]*minHeight: 44,/);
-    const c = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard'); expect(c).toContain('bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share", flex: true })'); expect(c).toContain('bsLink("Discard this file", () => exportDiscard(scope), "export-discard", false, { width: "auto", flex: "0 0 auto", padding: "0 10px" })');
+    const c = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard'); expect(c).toContain('bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share", flex: true })'); expect(c).toContain('bsLink("Discard this file", () => exportDiscard(scope), "export-discard", false, { width: "auto", flex: "1 0 auto", padding: "0 6px" })');
   });
 });
 
@@ -130,6 +130,11 @@ describe('(7) the export download and (8) the held file', () => {
     const a = SRC.indexOf('// ── EXPORT HAND-OVER (release t)'), z = SRC.indexOf('// The export button (release s)'); expect(a).toBeGreaterThan(-1); expect(z).toBeGreaterThan(a);
     const block = SRC.slice(a, z); expect(block).not.toMatch(/localStorage|sessionStorage|indexedDB|\.setItem\(|save\(/);
     const card = bodyOf(/^function ExportFailureCard\(/m, 'ExportFailureCard'); expect(card).not.toMatch(/localStorage|sessionStorage|indexedDB|setItem/);
+  });
+  it('the box of ExportFailureCard fills its parent (width 100%, border-box, minWidth 0): in the History card (a centred flex column) a box without a width shrinks to its content (found in 2B)', () => {
+    const f = bodyOf(/^function ExportFailureCard\(/m, 'ExportFailureCard');
+    expect(f).toContain('style: { width: "100%", boxSizing: "border-box", minWidth: 0, padding: inset ? "0 16px 12px" : 0, ...GS_MSG_MARGIN }');
+    const r = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard'); expect(r).not.toMatch(/\bwidth: \d/);      // the card itself carries no width: it fills the box
   });
   it('the ready file and the notes render inside ExportFailureCard\'s box: the reveal hook comes before the early return, and leaving the screen bumps the visit counter and drops the entry', () => {
     const f = bodyOf(/^function ExportFailureCard\(/m, 'ExportFailureCard'); expect(f.indexOf('useRevealOnOpen(boxRef, !!failure)')).toBeLessThan(f.indexOf('if (!failure) return null')); expect(f).toContain('exportVisit.set(scope, (exportVisit.get(scope) || 0) + 1); if (exportFailures.delete(scope)) exportEmit();'); expect(f).toContain('React.createElement(ExportReadyCard, { scope, entry: failure })'); expect(f).toContain('GS_MSG_MARGIN');
