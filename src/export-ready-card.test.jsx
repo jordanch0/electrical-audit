@@ -59,7 +59,9 @@ describe('one card, one layout', () => {
     expect(c2.style.padding).toBe('10px 12px');
   });
   it('the cancelled card uses the info colours and the ready card the ok colours (a word, an icon and a colour: never colour alone)', async () => {
-    const { card } = await ready(); expect(hexOfRgb(card.style.background)).toBe(BACKUP_UI.card.ok.bg); expect(card.querySelector('svg')).not.toBeNull(); expect(card.querySelector('[data-testid="export-share"] svg')).not.toBeNull();
+    const share = vi.fn().mockRejectedValueOnce(abortError()); const { user, card } = await ready('IEL_Colours_2026-10-20.xlsx', scope(), share); expect(hexOfRgb(card.style.background)).toBe(BACKUP_UI.card.ok.bg); expect(card.querySelector('svg')).not.toBeNull();
+    await user.click(screen.getByTestId('export-share')); await screen.findByText('The share sheet was closed, so the file was not saved.'); const c2 = screen.getByTestId('export-ready'); expect(hexOfRgb(c2.style.background)).toBe(BACKUP_UI.card.info.bg); expect(hexOfRgb(c2.style.borderColor || c2.style.border.split(' ').slice(-3).join(' '))).toBe(BACKUP_UI.card.info.border);
+    expect(c2.querySelector('svg')).not.toBeNull(); expect(card.querySelector('[data-testid="export-share"] svg')).not.toBeNull();
   });
   it('the same card, word for word, for all nine modules', async () => {
     const texts = []; for (const mod of ['rcd', 'iel', 'tat', 'thermo', 'swb', 'irt', 'elt', 'welder', 'gsd']) { const { card } = await ready('X_Example_2026-10-20.xlsx', scope(mod)); texts.push(card.textContent); cleanup(); phoneOff(); }

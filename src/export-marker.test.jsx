@@ -8,7 +8,7 @@ import { runExport, exportMarkStart, exportMarkRead, EXPORT_MARK_KEY, ExportDeli
 import { phoneOn, phoneOff } from './test/share-env.js';
 
 const SRC = fs.readFileSync(process.cwd() + '/src/App.jsx', 'utf8');
-const fakeTimers = toFake => { vi.useRealTimers(); vi.useFakeTimers({ toFake: [...toFake, ...(process.env.CLOCK_AT ? ['Date'] : [])] }); if (process.env.CLOCK_AT) vi.setSystemTime(new Date(process.env.CLOCK_AT)); };
+const fakeTimers = toFake => { vi.useRealTimers(); vi.useFakeTimers({ toFake: [...new Set([...toFake, ...(process.env.CLOCK_AT ? ['Date'] : [])])] }); if (process.env.CLOCK_AT) vi.setSystemTime(new Date(process.env.CLOCK_AT)); };
 const TIMERS = ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'];
 beforeEach(() => { localStorage.clear(); vi.spyOn(console, 'warn').mockImplementation(() => {}); });
 afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); phoneOff(); Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true }); });
@@ -31,9 +31,8 @@ describe('the record: written before the build, exactly six fields, no names', (
 
 describe('the heartbeat and the visibility flag', () => {
   it('beat moves every 2 s while the build runs', async () => {
-    fakeTimers(TIMERS); let release; const p = runExport('gsd:snap:a', () => new Promise(r => { release = r; })); const b0 = exportMarkRead().beat;
-    await vi.advanceTimersByTimeAsync(5000); expect(exportMarkRead().beat).toBeGreaterThanOrEqual(b0); expect(vi.getTimerCount()).toBeGreaterThan(0);
-    if (process.env.CLOCK_AT) expect(exportMarkRead().beat).toBeGreaterThan(b0);
+    fakeTimers([...TIMERS, 'Date']); let release; const p = runExport('gsd:snap:a', () => new Promise(r => { release = r; })); const b0 = exportMarkRead().beat;
+    await vi.advanceTimersByTimeAsync(2100); expect(exportMarkRead().beat - b0).toBeGreaterThanOrEqual(2000); await vi.advanceTimersByTimeAsync(3000); expect(exportMarkRead().beat - b0).toBeGreaterThanOrEqual(4000); expect(vi.getTimerCount()).toBeGreaterThan(0);
     release(); await p;
   });
   it('the page being hidden during the build sets hid true; a page that stays visible keeps it false', async () => {
