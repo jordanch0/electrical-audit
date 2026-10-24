@@ -213,17 +213,21 @@ function exportShareStart(scope, entry) {
 const exportShareReady = scope => { const e = exportFailures.get(scope); if (e && e.kind === "ready" && !e.sharing) exportShareStart(scope, e); };
 const exportDiscard = scope => { if (exportFailures.delete(scope)) exportEmit(); };
 // The ready file and the notes (in the card box of ExportFailureCard, which reveals itself clear of the pill). The words are the design's: shared, cancelled, refused (downloaded), closed.
+// The middle of a long file name, so it stays on one line in the compact card (the full name is read out by a screen reader).
+const exportShortName = (name, head = 16, tail = 14) => { const t = String(name == null ? "" : name); return t.length <= head + tail + 1 ? t : t.slice(0, head) + "\u2026" + t.slice(-tail); };
 function ExportReadyCard({ scope, entry }) {
   const b = (k, t) => React.createElement("b", { key: k }, t), br = k => React.createElement("br", { key: k });
   if (entry.kind === "shared") return bsCard("ok", "Excel file shared", "If you chose Save to Files, it is in the folder you picked.", "export-shared");
   if (entry.kind === "downloaded") return bsCard("info", entry.template ? "Template download started" : "Excel file download started", ["This phone could not open the share sheet, so the " + (entry.template ? "template" : "file") + " was downloaded. Find it in the Files app.", br("b"), b("f", entry.filename)], "export-downloaded");
   if (entry.kind === "closed") return bsCard("info", "The share sheet was closed, so the template was not saved.", "Tap Download Import Template to try again.", "export-closed");
-  const share = React.cloneElement(bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share" }), entry.sharing ? { "aria-busy": "true", "aria-disabled": "true" } : {});
-  return React.createElement(React.Fragment, null,
-    entry.cancelled
-      ? bsCard("info", "The share sheet was closed, so the file was not saved.", [entry.filename, br("b"), "Your file is still ready. Tap ", b("s", "Share file"), " to try again."], "export-ready")
-      : bsCard("ok", "Excel file ready", [entry.filename, br("b"), b("n", "Not saved yet"), ". Tap ", b("s", "Share file"), ", then choose ", b("f", "Save to Files"), " or another location."], "export-ready"),
-    React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: 2 } }, share, bsLink("Discard this file", () => exportDiscard(scope), "export-discard")));
+  // The ready file: ONE compact card (release t, design D2): title, a small one-line file name, one short line, and Share file beside Discard this file (both 44 px). Same layout for the cancelled state.
+  const cancelled = !!entry.cancelled, c = BACKUP_UI.card[cancelled ? "info" : "ok"], title = cancelled ? "The share sheet was closed, so the file was not saved." : "Excel file ready";
+  const share = React.cloneElement(bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share", flex: true }), entry.sharing ? { "aria-busy": "true", "aria-disabled": "true" } : {});
+  return React.createElement("div", { role: "status", "data-testid": "export-ready", "data-gs-msg": "export-ready|" + title, style: { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 12px", margin: "12px 0", ...GS_MSG_MARGIN } },
+    React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", color: c.title } }, bsIcon(c.icon), React.createElement("div", { style: { fontSize: 13, fontWeight: 800, lineHeight: 1.3 } }, title)),
+    React.createElement("div", { "data-testid": "export-ready-name", style: { fontSize: 11, color: c.body, lineHeight: 1.4, marginTop: 2 } }, React.createElement("span", { "aria-hidden": "true" }, exportShortName(entry.filename)), React.createElement("span", { style: EXPORT_SR_ONLY }, entry.filename)),
+    React.createElement("div", { style: { fontSize: 12, color: c.body, lineHeight: 1.4, marginTop: 2 } }, cancelled ? "Still ready. Tap Share file to try again." : [b("n", "Not saved yet."), " Tap Share file."]),
+    React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 8 } }, share, bsLink("Discard this file", () => exportDiscard(scope), "export-discard", false, { width: "auto", flex: "0 0 auto", padding: "0 10px" })));
 }
 // The export button (release s). EVERY export and template button is an ExportBtn: while its scope is running it says so in words ("Making…", "Making the template…"), keeps its size (both labels share one grid cell, so the button is as wide as the
 // longer one and never wraps), stays focusable (aria-busy and aria-disabled, never the disabled attribute) and a polite live region says "Making the Excel file. Please wait." The click handler is still runExport, which ignores a repeat tap.
@@ -10615,7 +10619,7 @@ const bsBtn = (label, onClick, o = {}) => {
     : o.kind === "secondary" ? { background: "transparent", color: BACKUP_UI.slateText, border: `1px solid ${BACKUP_UI.slate}`, cursor: "pointer" } : o.kind === "danger" ? { background: BACKUP_UI.red, color: BACKUP_UI.white, border: "none", cursor: "pointer" } : { background: BACKUP_UI.slate, color: BACKUP_UI.white, border: "none", cursor: "pointer" };
   return React.createElement("button", { type: "button", onClick: o.disabled ? undefined : onClick, disabled: !!o.disabled, "aria-disabled": o.disabled ? true : undefined, "data-testid": o.id, style: { ...base, ...look } }, o.icon ? bsIcon(o.icon, 18) : null, label);
 };
-const bsLink = (label, onClick, id, disabled) => React.createElement("button", { type: "button", onClick: disabled ? undefined : onClick, disabled: !!disabled, "data-testid": id, style: { minHeight: 44, background: "transparent", border: "none", color: disabled ? BACKUP_UI.disabledFg : BACKUP_UI.slateText, fontSize: 13, fontWeight: 700, textDecoration: "underline", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", width: "100%" } }, label);
+const bsLink = (label, onClick, id, disabled, extra) => React.createElement("button", { type: "button", onClick: disabled ? undefined : onClick, disabled: !!disabled, "data-testid": id, style: { minHeight: 44, background: "transparent", border: "none", color: disabled ? BACKUP_UI.disabledFg : BACKUP_UI.slateText, fontSize: 13, fontWeight: 700, textDecoration: "underline", cursor: disabled ? "not-allowed" : "pointer", fontFamily: "inherit", width: "100%", ...(extra || {}) } }, label);
 const bsSpinner = () => React.createElement("div", { "aria-hidden": true, style: { width: 18, height: 18, border: "3px solid #d4d4d8", borderTop: `3px solid ${BACKUP_UI.slate}`, borderRadius: "50%", flexShrink: 0, animation: "spin 0.8s linear infinite" } });
 const bsBusyRow = (text, sub) => React.createElement("div", { role: "status", "data-gs-msg": "busy", style: { display: "flex", gap: 10, alignItems: "flex-start", fontSize: 13, color: BACKUP_UI.ink, margin: "4px 0 12px", ...GS_MSG_MARGIN } }, bsSpinner(), React.createElement("div", null, text, sub ? React.createElement("div", { style: { fontSize: 11, color: BACKUP_UI.muted, marginTop: 2 } }, sub) : null));
 const bsDivider = () => React.createElement("div", { style: { borderTop: `1px solid ${BACKUP_UI.line}`, margin: "20px 0 16px" } });
