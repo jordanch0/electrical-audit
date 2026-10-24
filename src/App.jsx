@@ -276,12 +276,13 @@ function ExportReadyCard({ scope, entry }) {
   if (entry.kind === "closed") return bsCard("info", "The share sheet was closed, so the template was not saved.", "Tap Download Import Template to try again.", "export-closed");
   // The ready file: ONE compact card (release t, design D2): title, a small one-line file name, one short line, and Share file beside Discard this file (both 44 px). Same layout for the cancelled state.
   const cancelled = !!entry.cancelled, c = BACKUP_UI.card[cancelled ? "info" : "ok"], title = cancelled ? "The share sheet was closed, so the file was not saved." : "Excel file ready";
-  const share = React.cloneElement(bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share", flex: true }), entry.sharing ? { "aria-busy": "true", "aria-disabled": "true" } : {});
+  const share0 = bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share", flex: true });
+  const share = React.cloneElement(share0, { style: { ...share0.props.style, flex: "1000 1 auto", whiteSpace: "nowrap" }, ...(entry.sharing ? { "aria-busy": "true", "aria-disabled": "true" } : {}) });
   return React.createElement("div", { role: "status", "data-testid": "export-ready", "data-gs-msg": "export-ready|" + title, style: { background: c.bg, border: `1px solid ${c.border}`, borderRadius: 10, padding: "10px 12px", margin: "12px 0", ...GS_MSG_MARGIN } },
     React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", color: c.title } }, bsIcon(c.icon), React.createElement("div", { style: { fontSize: 13, fontWeight: 800, lineHeight: 1.3 } }, title)),
     React.createElement("div", { "data-testid": "export-ready-name", style: { fontSize: 11, color: c.body, lineHeight: 1.4, marginTop: 2 } }, React.createElement("span", { "aria-hidden": "true" }, exportShortName(entry.filename)), React.createElement("span", { style: EXPORT_SR_ONLY }, entry.filename)),
     React.createElement("div", { style: { fontSize: 12, color: c.body, lineHeight: 1.4, marginTop: 2 } }, cancelled ? "Still ready. Tap Share file to try again." : [b("n", "Not saved yet."), " Tap Share file."]),
-    React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center", marginTop: 8 } }, share, bsLink("Discard this file", () => exportDiscard(scope), "export-discard", false, { width: "auto", flex: "0 0 auto", padding: "0 10px" })));
+    React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, alignItems: "center", marginTop: 8 } }, share, bsLink("Discard this file", () => exportDiscard(scope), "export-discard", false, { width: "auto", flex: "1 0 auto", padding: "0 6px" })));
 }
 // The export button (release s). EVERY export and template button is an ExportBtn: while its scope is running it says so in words ("Making…", "Making the template…"), keeps its size (both labels share one grid cell, so the button is as wide as the
 // longer one and never wraps), stays focusable (aria-busy and aria-disabled, never the disabled attribute) and a polite live region says "Making the Excel file. Please wait." The click handler is still runExport, which ignores a repeat tap.
@@ -307,7 +308,7 @@ function ExportFailureCard({ scope, inset }) {
   if (!failure) return null;
   const what = failure.template ? "The blank template" : "The Excel file", how = failure.kind === "deliver" ? "saved" : "made";
   const note = failure.kind === "ready" || failure.kind === "shared" || failure.kind === "downloaded" || failure.kind === "closed";      // not a failure: the ready file or a note (release t)
-  return React.createElement("div", { ref: boxRef, style: { padding: inset ? "0 16px 12px" : 0, ...GS_MSG_MARGIN } }, note ? React.createElement(ExportReadyCard, { scope, entry: failure }) : bsCard("err", what + " could not be " + how, "Nothing on this phone was changed. Please try again.", "export-failed"));
+  return React.createElement("div", { ref: boxRef, style: { width: "100%", boxSizing: "border-box", minWidth: 0, padding: inset ? "0 16px 12px" : 0, ...GS_MSG_MARGIN } }, note ? React.createElement(ExportReadyCard, { scope, entry: failure }) : bsCard("err", what + " could not be " + how, "Nothing on this phone was changed. Please try again.", "export-failed"));
 }
 // The part of an export file name that comes from a typed name (a site name, a date). Safe on Windows, iOS and every browser: no control characters; backslash / : * ? " < > | become "-" (a run is one "-");
 // whitespace runs become one "_" (repeated "_" too); no leading or trailing space . _ - (no hidden file, no trailing dot); at most `max` characters, counted by code point so an emoji is never cut; empty gives `fallback`.
