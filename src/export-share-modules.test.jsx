@@ -40,7 +40,7 @@ describe.each(MODS)('%s', (mod, complete, viewName, hasDetail, key) => {
   it('History list: ready card after the Export button, a new Export replaces the file, Discard drops it, a closed sheet keeps it, a double tap opens the sheet once, a refused sheet downloads once, leaving drops the card', async () => {
     const user = await toHistory(mod, complete); await user.click((await screen.findAllByText(/^Archived /))[0]); await pause(30);
     let b = await exportBtn(); await user.click(b); let card = await ready();
-    expect(FOLLOWS(b, card), 'the ready card follows the Export button').toBe(true); expect(card.textContent).toMatch(/^Excel file ready.+\.xlsx.*Not saved yet\. Tap Share file, then choose Save to Files or another location\.$/);
+    expect(FOLLOWS(b, card), 'the ready card follows the Export button').toBe(true); expect(card.textContent).toMatch(/^Excel file ready.+\.xlsx.*Not saved yet\. Tap Share file\.Share fileDiscard this file$/);
     expect(share).not.toHaveBeenCalled(); expect(d.created).toEqual([]); expect(screen.queryByTestId('export-failed')).toBeNull(); expect((await exportBtn()).getAttribute('aria-busy')).toBeNull();
     expect(screen.getByTestId('export-share').style.minHeight).toBe('44px'); expect(screen.getByTestId('export-discard').style.minHeight).toBe('44px'); expect(b.style.minHeight).toBe('44px');
     // a new Export replaces the held file (still exactly one ready card)

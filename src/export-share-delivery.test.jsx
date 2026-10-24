@@ -60,7 +60,9 @@ describe('a snapshot export on a phone: built, held, then Share file', () => {
     render(<Harness scope={scope()} fn={file(NAME, done)} />);
     await user.click(screen.getByRole('button', { name: 'Export' }));
     const card = await screen.findByTestId('export-ready');
-    expect(card.textContent).toBe('Excel file ready' + NAME + 'Not saved yet. Tap Share file, then choose Save to Files or another location.'); expect(card.getAttribute('role')).toBe('status');
+    // release t, design D2: ONE compact card: the title, the name shortened in the middle (aria-hidden) and in full for a screen reader, one short line, then the two buttons inside the card
+    expect(card.textContent).toBe('Excel file ready' + 'IEL_Ross_&_Sons_…026-10-20.xlsx' + NAME + 'Not saved yet. Tap Share file.' + 'Share file' + 'Discard this file'); expect(card.getAttribute('role')).toBe('status');
+    expect(screen.getByTestId('export-share').closest('[data-testid="export-ready"]')).toBe(card); expect(screen.getByTestId('export-discard').closest('[data-testid="export-ready"]')).toBe(card);
     expect(share).not.toHaveBeenCalled(); expect(d.created).toEqual([]); expect(done).not.toHaveBeenCalled(); expect(screen.queryByTestId('export-failed')).toBeNull();
     await user.click(screen.getByTestId('export-share')); const shared = await screen.findByTestId('export-shared');
     expect(shared.textContent).toBe('Excel file sharedIf you chose Save to Files, it is in the folder you picked.');
@@ -68,9 +70,9 @@ describe('a snapshot export on a phone: built, held, then Share file', () => {
     expect(arg.files[0].name).toBe(NAME); expect(arg.files[0].type).toBe(XLSX_MIME); expect(arg.files[0].size).toBe(3);
     expect(done).toHaveBeenCalledTimes(1); expect(d.created).toEqual([]); expect(screen.queryByTestId('export-ready')).toBeNull(); expect(screen.getByRole('button', { name: 'Export' }).getAttribute('aria-busy')).toBeNull(); expect(exportLogs()).toEqual([]);
   });
-  it('Share file and Discard this file are 44 px high and full width', async () => {
+  it('Share file and Discard this file are 44 px high and sit side by side (Share file takes the room, Discard its own width)', async () => {
     phoneOn(); render(<Harness scope={scope()} fn={file()} />); await userEvent.setup().click(screen.getByRole('button', { name: 'Export' })); await screen.findByTestId('export-ready');
-    const s = screen.getByTestId('export-share'), x = screen.getByTestId('export-discard'); expect(s.style.minHeight).toBe('44px'); expect(x.style.minHeight).toBe('44px'); expect(s.style.width).toBe('100%'); expect(s.textContent).toBe('Share file'); expect(x.textContent).toBe('Discard this file');
+    const s = screen.getByTestId('export-share'), x = screen.getByTestId('export-discard'); expect(s.style.minHeight).toBe('44px'); expect(x.style.minHeight).toBe('44px'); expect(s.style.width).toBe(''); expect(s.style.flex).toBe('1 1 0%'); expect(x.style.width).toBe('auto'); expect(s.parentElement).toBe(x.parentElement); expect(s.textContent).toBe('Share file'); expect(x.textContent).toBe('Discard this file');
   });
   it('the share sheet is opened INSIDE the Share file tap, as its first action (no wait before it)', async () => {
     const share = phoneOn(); render(<Harness scope={scope()} fn={file()} />); await userEvent.setup().click(screen.getByRole('button', { name: 'Export' })); await screen.findByTestId('export-ready');
@@ -87,7 +89,7 @@ describe('a snapshot export on a phone: built, held, then Share file', () => {
     const share = phoneOn({ share: vi.fn().mockRejectedValueOnce(abortError()).mockResolvedValue(undefined) }); const d = downloadsOn(); const done = vi.fn(); const user = userEvent.setup(); const sc = scope();
     render(<Harness scope={sc} fn={file('IEL_Cancel_2026-10-20.xlsx', done)} />); await user.click(screen.getByRole('button', { name: 'Export' })); await screen.findByTestId('export-ready');
     await user.click(screen.getByTestId('export-share')); await act(async () => {});
-    const card = screen.getByTestId('export-ready'); expect(card.textContent).toBe('The share sheet was closed, so the file was not saved.IEL_Cancel_2026-10-20.xlsxYour file is still ready. Tap Share file to try again.');
+    const card = screen.getByTestId('export-ready'); expect(card.textContent).toBe('The share sheet was closed, so the file was not saved.' + 'IEL_Cancel_2026-10-20.xlsx' + 'IEL_Cancel_2026-10-20.xlsx' + 'Still ready. Tap Share file to try again.' + 'Share file' + 'Discard this file');
     expect(screen.queryByTestId('export-failed')).toBeNull(); expect(warn).not.toHaveBeenCalled(); expect(d.created).toEqual([]); expect(done).not.toHaveBeenCalled(); expect(screen.getByTestId('export-share').getAttribute('aria-busy')).toBeNull();
     await user.click(screen.getByTestId('export-share')); expect(await screen.findByTestId('export-shared')).toBeTruthy(); expect(share).toHaveBeenCalledTimes(2); expect(done).toHaveBeenCalledTimes(1); expect(exportLogs()).toEqual([]);
   });

@@ -108,7 +108,17 @@ describe('(6) the buttons are 44 px', () => {
   });
   it('Share file is the shared bsBtn and Discard this file the shared bsLink (both minHeight 44)', () => {
     expect(SRC).toMatch(/const bsBtn = [^\n]*\n\s*const base = \{ minHeight: 44,/); expect(SRC).toMatch(/const bsLink = [^\n]*minHeight: 44,/);
-    const c = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard'); expect(c).toContain('bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share" })'); expect(c).toContain('bsLink("Discard this file", () => exportDiscard(scope), "export-discard")');
+    const c = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard'); expect(c).toContain('bsBtn("Share file", () => exportShareReady(scope), { id: "export-share", icon: "share", flex: true })'); expect(c).toContain('bsLink("Discard this file", () => exportDiscard(scope), "export-discard", false, { width: "auto", flex: "0 0 auto", padding: "0 10px" })');
+  });
+});
+
+describe('(9) the compact card, the lean copy and the marker leave the hand-over alone', () => {
+  it('the ready card shortens the name through one helper, shows the title, name, line and buttons in one box, and has no second card for the cancelled state', () => {
+    const c = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard'); expect(c).toContain('exportShortName(entry.filename)'); expect(c).toContain('"data-testid": "export-ready"'); expect((c.match(/"data-testid": "export-ready"/g) || []).length).toBe(1); expect(c).not.toContain('React.Fragment');
+  });
+  it('runExport keeps its original lines inside the marker\'s outer try, and the hand-over block still comes after it and holds no storage call', () => {
+    const r = SRC.slice(SRC.indexOf('async function runExport(scope, fn) {'), SRC.indexOf('// ── EXPORT HAND-OVER (release t)')); expect(r).toContain('exportHandOver(scope, { base64, filename, mimeType: XLSX_MIME }, done)'); expect(r).toContain('} finally { markEnd(); }');
+    const a = SRC.indexOf('// ── EXPORT HAND-OVER (release t)'), z = SRC.indexOf('// The export button (release s)'); expect(SRC.slice(a, z)).not.toMatch(/exportMark|photoCopy/);
   });
 });
 
@@ -127,7 +137,8 @@ describe('(7) the export download and (8) the held file', () => {
   it('the wording of the cards is the design\'s', () => {
     const c = bodyOf(/^function ExportReadyCard\(/m, 'ExportReadyCard');
     ['"Excel file shared"', '"If you chose Save to Files, it is in the folder you picked."', '"Template download started"', '"Excel file download started"', 'This phone could not open the share sheet, so the ', ' was downloaded. Find it in the Files app.', '"The share sheet was closed, so the template was not saved."', '"Tap Download Import Template to try again."',
-      '"The share sheet was closed, so the file was not saved."', '"Your file is still ready. Tap "', '" to try again."', '"Excel file ready"', '"Not saved yet"', '". Tap "', '", then choose "', '" or another location."'].forEach(w => expect(c, w).toContain(w));
+      '"The share sheet was closed, so the file was not saved."', '"Still ready. Tap Share file to try again."', '"Excel file ready"', '"Not saved yet."', '" Tap Share file."'].forEach(w => expect(c, w).toContain(w));
+    ['Your file is still ready', 'then choose', 'or another location'].forEach(w => expect(c, 'the old long wording is gone: ' + w).not.toContain(w));       // release t, design D2: the compact card has one short line
     expect(c).not.toMatch(/\bdevice\b/i);
   });
 });

@@ -7,7 +7,7 @@ import React from 'react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, cleanup, waitFor, within, configure, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AppRoot, { GlobalSettingsView, BACKUP_UI, BACKUP_MODULES, zipOpen, backupBuild, backupRestore, backupMessageText, BACKUP_LIST_SPECS, backupPlan, backupKeyAllowed, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS, RESTORE_KEY, BACKUP_COPIES_KEY, BACKUP_LAST_KEY } from './App.jsx';
+import AppRoot, { GlobalSettingsView, BACKUP_UI, BACKUP_MODULES, zipOpen, backupBuild, backupRestore, backupMessageText, BACKUP_LIST_SPECS, backupPlan, backupKeyAllowed, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS, RESTORE_KEY, BACKUP_COPIES_KEY, BACKUP_LAST_KEY, EXPORT_MARK_KEY } from './App.jsx';
 import { idbSnapshot, lsSnapshot, seedPhone, wipe, seedSourceFull, withDb } from './test/backup-fixtures.js';
 
 vi.setConfig({ testTimeout: 30000 });
@@ -239,10 +239,10 @@ const KEY_CLASS = k => {
   if (specs.some(s => s.key === k)) return 'lists-settings';
   if (new RegExp('^(' + mods + ')-dropdowns-v\\d+$').test(k)) return specs.some(s => s.key.startsWith(k.split('-')[0] + '-dropdowns-')) ? 'legacy' : null;
   if (/^(?:rcd-mode|iel-cat)-v\d+$/.test(k)) return 'legacy';
-  if (new RegExp('^(?:' + mods + ')-photos-migrated-v\\d+$').test(k) || /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_COPIES_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY].includes(k)) return 'internal';
+  if (new RegExp('^(?:' + mods + ')-photos-migrated-v\\d+$').test(k) || /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_COPIES_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY, EXPORT_MARK_KEY].includes(k)) return 'internal';
   return null;
 };
-const NOT_IN_FILE = k => /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_COPIES_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY].includes(k);       // the app's own bookkeeping is deliberately not written into a backup
+const NOT_IN_FILE = k => /-preMigration-v\d+$/.test(k) || [RESTORE_KEY, BACKUP_COPIES_KEY, BACKUP_LAST_KEY, LEFTOVER_KEY, ERASE_KEY, EXPORT_MARK_KEY].includes(k);       // the app's own bookkeeping is deliberately not written into a backup
 const CAME_BACK = ['restored', 'business', 'lists-settings'];                                                                          // the classes a restore into an empty phone brings back
 const NOT_RESTORED_CLASSES = ['legacy'];                                                                                                // what it leaves out that is not an app note
 const WORDS = { business: 'what is saved in the Business tab (name, ABN and licence)', logo: 'the company logo', 'lists-settings': 'the lists and settings in each module' };
