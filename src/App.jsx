@@ -139,8 +139,61 @@ const exportSubscribe = f => { exportListeners.add(f); return () => { exportList
 const exportSnapScope = (mod, snap) => mod + ":snap:" + (snap && snap.id);
 const exportErrName = e => { try { const n = e && e.name; return typeof n === "string" && /^[A-Za-z]{1,40}$/.test(n) ? n : "Error"; } catch (_) { return "Error"; } };      // never throws (a hostile error object, a getter that throws)
 function exportLog(code, scope, e) { try { console.warn("[SparkCheck export]", code, String(scope).split(":")[0], exportErrName(e)); } catch (_) {} }
+// ── THE EXPORT MARKER (release t) ──────────────────────────────────────────────────────────────────────────────────────────────
+// A page that the phone kills in the middle of a big export leaves no trace, so nothing would tell the person. runExport writes ONE small record before a SNAPSHOT export builds (a template is tiny and is not marked) and
+// removes it when the build function settles (success, a build failure or a handler error; NEVER when a share sheet closes: that is a later tap). The record holds only: v, mod (the module key), at (ISO time), beat (the
+// last heartbeat, every 2 s), tab (a random id of this page load) and hid (true if the page was ever hidden during the build). No site name, file name, scope id or size. At the next start exportMarkCheck() finds a
+// record whose heartbeat is older than 15 s and shows ONE quiet notice; a younger one belongs to another tab (or a page killed a moment ago) and is looked at once more after 16 s. Every read and write is wrapped:
+// a full or private storage means no marker and the export runs exactly as before. The marker is the ONLY storage write an export makes (it is not data); the key is excluded from backups and removed by Delete all data.
+const EXPORT_MARK_KEY = "sparkcheck-export-running-v1", EXPORT_MARK_BEAT_MS = 2000, EXPORT_MARK_STALE_MS = 15000, EXPORT_MARK_RECHECK_MS = 16000;
+const exportTabId = Math.random().toString(36).slice(2, 10);
+let exportMarkN = 0, exportMarkTimer = null, exportMarkRec = null, exportMarkVis = null;
+function exportMarkWrite(rec) { try { localStorage.setItem(EXPORT_MARK_KEY, JSON.stringify(rec)); return true; } catch (_) { return false; } }
+function exportMarkRead() { try { const r = JSON.parse(localStorage.getItem(EXPORT_MARK_KEY)); return r && r.v === 1 && typeof r.beat === "number" && typeof r.tab === "string" ? r : null; } catch (_) { return null; } }
+// Starts the marker for one build and returns the function that ends it (once). Several builds at once share one record, one timer and one listener; the last one to end removes all three.
+function exportMarkStart(scope) {
+  try {
+    exportMarkN++;
+    if (exportMarkN === 1) {
+      exportMarkRec = { v: 1, mod: String(scope).split(":")[0], at: new Date().toISOString(), beat: Date.now(), tab: exportTabId, hid: false };
+      if (!exportMarkWrite(exportMarkRec)) exportMarkRec = null;                                                            // no marker, no timer: the export just runs
+      else {
+        exportMarkTimer = setInterval(() => { try { exportMarkRec.beat = Date.now(); if (!exportMarkWrite(exportMarkRec)) localStorage.removeItem(EXPORT_MARK_KEY); } catch (_) {} }, EXPORT_MARK_BEAT_MS);      // a heartbeat that cannot be written takes the record away (no false alarm in another tab)
+        exportMarkVis = () => { try { if (document.visibilityState === "hidden") { exportMarkRec.hid = true; exportMarkWrite(exportMarkRec); } } catch (_) {} };
+        document.addEventListener("visibilitychange", exportMarkVis);
+      }
+    }
+  } catch (_) {}
+  let ended = false;
+  return () => {
+    if (ended) return; ended = true;
+    try {
+      exportMarkN = Math.max(0, exportMarkN - 1);
+      if (exportMarkN === 0) {
+        if (exportMarkTimer) clearInterval(exportMarkTimer); exportMarkTimer = null;                                          // no timer outlives the build
+        if (exportMarkVis) document.removeEventListener("visibilitychange", exportMarkVis); exportMarkVis = null;
+        if (exportMarkRec) { exportMarkRec = null; localStorage.removeItem(EXPORT_MARK_KEY); }
+      }
+    } catch (_) {}
+  };
+}
+// At the next start. Returns what it did (for the tests): none, own, fresh, shown, error.
+function exportMarkCheck(now = Date.now(), again = true) {
+  try {
+    const r = exportMarkRead(); if (!r) return "none";
+    if (r.tab === exportTabId) return "own";                                                                               // a build of THIS page: not a crash
+    if (now - r.beat < EXPORT_MARK_STALE_MS) { if (again) setTimeout(() => { try { exportMarkCheck(Date.now(), false); } catch (_) {} }, EXPORT_MARK_RECHECK_MS); return "fresh"; }
+    try { localStorage.removeItem(EXPORT_MARK_KEY); } catch (_) {}                                                         // it shows once
+    if (appCrashShown) return "crash-screen";
+    appLog("export-unfinished", null, /^[a-z]{1,10}$/.test(String(r.mod)) ? r.mod : "export"); showAppNotice({ testId: "export-unfinished-notice", html: r.hid ? EXPORT_NOTICE_HIDDEN : EXPORT_NOTICE_MEMORY }); return "shown";
+  } catch (_) { return "error"; }
+}
+const EXPORT_NOTICE_MEMORY = '<div style="flex:1"><b>The last export did not finish.</b><div>The phone probably ran out of memory. Your saved audits are safe. Close other apps and try again. If it keeps happening, this site may have too many photos for one export.</div></div>';
+const EXPORT_NOTICE_HIDDEN = '<div style="flex:1"><b>The last export did not finish</b> because SparkCheck was closed or left in the background. Your saved audits are safe. Try the export again and keep SparkCheck open.</div>';
 async function runExport(scope, fn) {
   if (exportRunning.has(scope)) return;
+  const markEnd = /:template$/.test(scope) ? () => {} : exportMarkStart(scope);      // the crash marker: written before the build, ended when the build function settles (not when a share sheet closes)
+  try {
   const timer = setTimeout(() => { if (exportRunning.get(scope) === timer) { exportRunning.delete(scope); exportEmit(); } }, EXPORT_RUN_RELEASE_MS);      // the release tells the button too, so its label comes back
   exportRunning.set(scope, timer);
   exportFailures.delete(scope); exportEmit();                          // one update: the old card goes and the button shows that it is working
@@ -151,6 +204,7 @@ async function runExport(scope, fn) {
     exportFailures.set(scope, { kind, template: /:template$/.test(scope) }); exportEmit();
   }
   finally { clearTimeout(timer); if (exportRunning.get(scope) === timer) { exportRunning.delete(scope); exportEmit(); } }
+  } finally { markEnd(); }
 }
 // ── EXPORT HAND-OVER (release t) ───────────────────────────────────────────────────────────────────────────────────
 // runExport gives each export and template function an optional trailing argument, handOver(base64, filename, done), made for THAT scope only (no shared "current run" state: two scopes can build at the same time).
@@ -11104,15 +11158,15 @@ function appIsNoise(message, filename, stack) {
   if (/^Script error\.?$/i.test(m.trim()) && !f) return true;
   return false;
 }
-function showAppNotice() {
+function showAppNotice(custom) {
   try {
     if (appNoticeEl && document.body.contains(appNoticeEl)) return;                  // at most one at a time
     if (Date.now() < appNoticeUntil) return;                                          // and not again straight after a dismiss
     const el = document.createElement("div");
-    el.setAttribute("role", "alert"); el.setAttribute("data-testid", "app-error-notice");
+    el.setAttribute("role", "alert"); el.setAttribute("data-testid", (custom && custom.testId) || "app-error-notice");
     el.style.cssText = "position:fixed;left:12px;right:12px;top:calc(env(safe-area-inset-top, 0px) + 8px);max-width:480px;margin:0 auto;background:#f7f6f3;color:#18181b;border:1px solid #b45309;border-radius:12px;padding:12px 14px;font-size:13px;line-height:1.4;z-index:99998;box-shadow:0 4px 16px rgba(0,0,0,0.2);display:flex;align-items:flex-start;gap:10px;font-family:inherit;";
     el.innerHTML = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#b45309" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0;margin-top:1px"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
-      + '<div style="flex:1"><b>Something went wrong in the background.</b><div>If a screen looks wrong, close and reopen SparkCheck.</div></div>';
+      + (custom ? custom.html : '<div style="flex:1"><b>Something went wrong in the background.</b><div>If a screen looks wrong, close and reopen SparkCheck.</div></div>');
     const dismiss = document.createElement("button");
     dismiss.type = "button"; dismiss.textContent = "Dismiss"; dismiss.setAttribute("data-testid", "app-error-notice-dismiss");
     dismiss.style.cssText = "flex-shrink:0;min-height:44px;padding:0 12px;background:transparent;border:1px solid #d4d4d8;border-radius:8px;color:#18181b;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;";
@@ -16727,7 +16781,7 @@ const backupFilename = (d = new Date()) => `SparkCheck-backup-${localISODate(d)}
 const BACKUP_MODULES = ["rcd", "iel", "tat", "thermo", "swb", "irt", "elt", "welder", "gsd"];
 const BACKUP_KEY_RE = new RegExp("^(?:(?:" + BACKUP_MODULES.join("|") + ")-(?:projects|results|meta|history|dropdowns|audit-active|items|photos-migrated)-v\\d+|rcd-mode-v\\d+|iel-cat-v\\d+|tat-(?:settings|freqs|names|defaults)-v\\d+|cal-events-v\\d+|app-settings-v\\d+)$");
 const backupKeyAllowed = k => typeof k === "string" && BACKUP_KEY_RE.test(k);
-const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-copies-v1" || k === "sparkcheck-last-backup-v1" || k === "sparkcheck-erase-pending-v1" || k === "sparkcheck-leftover-v1");
+const backupKeyExcluded = k => typeof k === "string" && (/-preMigration-v\d+$/.test(k) || k === "sparkcheck-restore-v1" || k === "sparkcheck-copies-v1" || k === "sparkcheck-last-backup-v1" || k === "sparkcheck-erase-pending-v1" || k === "sparkcheck-leftover-v1" || k === "sparkcheck-export-running-v1");
 function backupCollectLocalStorage(storage = localStorage) {
   const entries = {}, unknown = [], excluded = [];
   for (let i = 0; i < storage.length; i++) { const k = storage.key(i); if (k == null) continue; if (backupKeyExcluded(k)) excluded.push(k); else if (backupKeyAllowed(k)) entries[k] = storage.getItem(k) || ""; else unknown.push(k); }
@@ -17734,7 +17788,7 @@ function backupLastBackupText(storage = localStorage, now = new Date()) {
 // ── Plain words for the saved-data keys, for messages a person reads ("RCD Testing, list of sites"), never the key itself. Covers every key the app can name: the module keys (any version), the calendar, the settings, the
 // copies kept before an update, and the app's own records. A key the app does not know (another app's, or anything else) is never echoed: it reads "other saved data".
 const BACKUP_ROLE_WORDS = { projects: "list of sites", results: "test results", items: "list of defects", meta: "audit details", history: "History", dropdowns: "dropdown lists", "audit-active": "audit in progress", "photos-migrated": "photo storage note" };
-const BACKUP_KEY_WORDS = { "sparkcheck-restore-v1": "Restore record", "sparkcheck-copies-v1": "Restored copies note", "sparkcheck-last-backup-v1": "Last backup note", "sparkcheck-leftover-v1": "Erase leftover note", "sparkcheck-erase-pending-v1": "Erase in progress note" };
+const BACKUP_KEY_WORDS = { "sparkcheck-restore-v1": "Restore record", "sparkcheck-copies-v1": "Restored copies note", "sparkcheck-last-backup-v1": "Last backup note", "sparkcheck-leftover-v1": "Erase leftover note", "sparkcheck-erase-pending-v1": "Erase in progress note", "sparkcheck-export-running-v1": "Export in progress note" };
 function backupKeyLabel(key) {
   const k = typeof key === "string" ? key : "";
   if (BACKUP_KEY_WORDS[k]) return BACKUP_KEY_WORDS[k];
@@ -17857,5 +17911,5 @@ export { requestPersistentStorage };
 export { GS_TAB_LABELS };
 export { useRevealOnOpen, DropdownNotice, ContinueConfirmBtn };
 export { backupDayText, BACKUP_COPIES_KEY, backupCanon, backupSiteCanon, backupRemapIds, backupBuildIdMap, backupInverseEntry, backupCopyName, backupVerifyCopies, backupNodeCount, backupPointerIds, backupMetaStable, BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
-export { runExport, exportShareWanted, ExportBtn, useExportBusy, appLog, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
+export { runExport, exportShareWanted, exportMarkStart, exportMarkCheck, exportMarkRead, EXPORT_MARK_KEY, ExportBtn, useExportBusy, appLog, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
 export default AppRoot;
