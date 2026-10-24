@@ -449,6 +449,38 @@ const sitePhotoStore = {
   // for a bare photo array not wrapped in an owning record — SWB's board-level `_photos` is exactly this shape
   delPhotoList: photos => Promise.all((photos || []).map(p => sitePhotoStore.delPhoto(p))),
 };
+// ── The lean photo export copy (release t) ─────────────────────────────────────────────────────────────────────────────────────
+// One full-size decode per photo, never two (the old path decoded every photo twice, once only to read its size, and built a base64 data URL of the full image). The size is read from the SAME decode
+// (naturalWidth / naturalHeight, as the old size read did); the photo is read through a blob URL; ONE Image and ONE canvas are reused for every photo of an export; the previous bitmap is released before the next photo
+// (src removed, blob URL revoked) and, at the end of the loop, photoCopyRelease() shrinks the canvas to 0 x 0 (iOS Safari holds canvas memory until a canvas is shrunk) and clears the Image. A small yield every few photos
+// lets the browser collect. The bytes it returns are the same as the old path's for the same photo: same canvas size (the same natural size), same drawImage, same toDataURL("image/jpeg", 0.7); an image already small
+// enough (scale 1) is returned untouched as its data URL, exactly as before; an image that cannot be decoded gives its own data URL, exactly as before (the old size read fell back to 4 x 3, scale 1).
+const photoCopyKit = { im: null, c: null, n: 0 };
+function photoCopyRelease() {
+  const k = photoCopyKit;
+  try { if (k.c) { k.c.width = 0; k.c.height = 0; } } catch (_) {}
+  try { if (k.im) k.im.removeAttribute("src"); } catch (_) {}
+  k.im = null; k.c = null; k.n = 0;
+}
+async function photoExportCopy(rec, maxSide = 320) {
+  let url = null, blobUrl = null;
+  try {
+    if (typeof document === "undefined") return { dataUrl: gsdRecToDataUrl(rec) };
+    const k = photoCopyKit; if (++k.n % 4 === 0) await new Promise(r => setTimeout(r, 0));      // let the browser collect every few photos
+    // a blob URL (no base64 text); where the browser has no createObjectURL (jsdom in the tests) the data URL is the source, as the old path always used
+    if (typeof URL !== "undefined" && typeof URL.createObjectURL === "function") { url = URL.createObjectURL(new Blob([rec.buf], { type: rec.type || "image/jpeg" })); blobUrl = url; } else url = gsdRecToDataUrl(rec);
+    if (!k.im) k.im = new Image(); const im = k.im; let ok = true;
+    await new Promise(res => { im.onload = res; im.onerror = () => { ok = false; res(); }; im.src = url; });
+    if (!ok) return { dataUrl: gsdRecToDataUrl(rec) };
+    const w = im.naturalWidth || 4, h = im.naturalHeight || 3, s = Math.min(1, maxSide / Math.max(w, h));
+    if (s >= 1) return { dataUrl: gsdRecToDataUrl(rec) };
+    if (!k.c) k.c = document.createElement("canvas"); const c = k.c; c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
+    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.7) };
+  } finally {
+    try { if (photoCopyKit.im) photoCopyKit.im.removeAttribute("src"); } catch (_) {}
+    try { if (blobUrl) URL.revokeObjectURL(blobUrl); } catch (_) {}
+  }
+}
 // The two image operations behind one object, same reasoning as gsdPhotoIO: tests can supply deterministic ones (jsdom has no canvas).
 const sitePhotoIO = {
   async resize(file) {
@@ -456,14 +488,8 @@ const sitePhotoIO = {
     const { w, h } = await gsdImageSize(fullUrl);
     return { full: gsdDataUrlToRec(fullUrl), thumb: gsdDataUrlToRec(thumbUrl), w, h };
   },
-  // stored full image -> a small copy for export embedding: { dataUrl } (long edge <= maxSide) — same as gsdPhotoIO.exportCopy
-  async exportCopy(rec, maxSide = 320) {
-    const url = gsdRecToDataUrl(rec); const { w, h } = await gsdImageSize(url); const s = Math.min(1, maxSide / Math.max(w, h));
-    if (s >= 1 || typeof document === "undefined") return { dataUrl: url };
-    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
-    const im = new Image(); await new Promise(r => { im.onload = r; im.onerror = r; im.src = url; });
-    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.7) };
-  },
+  // stored full image -> a small copy for export embedding: { dataUrl } (long edge <= maxSide). Same helper as gsdPhotoIO.exportCopy (the lean copy).
+  async exportCopy(rec, maxSide = 320) { return photoExportCopy(rec, maxSide); },
   // A full-size data URL -> a small thumbnail data URL (long edge 200, quality 0.6). Behind this swappable object for the same
   // reason as `resize`/`exportCopy`: jsdom has no real canvas, so migrateSitePhotos's migration path (which has no File to hand
   // resizeImageToDataUrl, only an already-decoded data URL) needs a stubbable seam for its own thumbnail generation. Falls back
@@ -11340,9 +11366,11 @@ async function exportSWBExcel(project, allResults, meta, handOver) {
   // Photos live in sitePhotoStore (Stage 4, 2026-09-29) as {id,w,h} pointers, not inline dataUrl — resolve every one
   // referenced by any board's photos into a small export-sized copy BEFORE building any sheet (GSD's pattern).
   const photoCopies = new Map();
-  for (const row of rows) for (const p of swbGetBoardPhotos(res, project.id, row.area.id, row.board.id)) if (!photoCopies.has(p.id)) {
-    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
-  }
+  try {
+    for (const row of rows) for (const p of swbGetBoardPhotos(res, project.id, row.area.id, row.board.id)) if (!photoCopies.has(p.id)) {
+      let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+    }
+  } finally { photoCopyRelease(); }
   const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
   const passSt = xjStatusStyle("PASS");
   const failSt = xjStatusStyle("FAIL");
@@ -12869,9 +12897,11 @@ async function exportELTExcel(project, allResults, meta, handOver) {
   // pointers, not inline dataUrl — resolve every one into a small export-sized copy BEFORE building the sheet (GSD's pattern).
   const withPhotos = areaAssets(project).map(a=>({asset:a,res:eltGetRes(allResults||{},project.id,a.id)})).filter(x=>(x.res.photos||[]).length>0);
   const photoCopies = new Map();
-  for (const { res } of withPhotos) for (const p of res.photos || []) if (!photoCopies.has(p.id)) {
-    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
-  }
+  try {
+    for (const { res } of withPhotos) for (const p of res.photos || []) if (!photoCopies.has(p.id)) {
+      let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+    }
+  } finally { photoCopyRelease(); }
   const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
   if (withPhotos.length) {
     const ps = wb.addWorksheet("Photos");
@@ -15768,9 +15798,11 @@ async function exportWelderExcel(project, allResults, meta, handOver) {
   // referenced by this export's own rows into a small export-sized copy BEFORE building any sheet (same pattern as GSD's
   // exportGSDExcel). A photo whose record is missing is skipped, its space kept, never a broken image reference.
   const photoCopies = new Map();
-  for (const row of rows) for (const p of (row.res && row.res.photos) || []) if (!photoCopies.has(p.id)) {
-    let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
-  }
+  try {
+    for (const row of rows) for (const p of (row.res && row.res.photos) || []) if (!photoCopies.has(p.id)) {
+      let c = null; try { const rec = await sitePhotoStore.get(p.id); if (rec) c = await sitePhotoIO.exportCopy(rec); } catch (_) {} photoCopies.set(p.id, c);
+    }
+  } finally { photoCopyRelease(); }
   const anyPhotoEmbedded = [...photoCopies.values()].some(Boolean);
 
   // ── Register ──
@@ -16066,14 +16098,8 @@ const gsdPhotoIO = {
     const { w, h } = await gsdImageSize(fullUrl);
     return { full: gsdDataUrlToRec(fullUrl), thumb: gsdDataUrlToRec(thumbUrl), w, h };
   },
-  // stored full image -> a small copy for the export file: { dataUrl } (long edge <= maxSide). Keeps the .xlsx small (~30 KB / photo).
-  async exportCopy(rec, maxSide = 320) {
-    const url = gsdRecToDataUrl(rec); const { w, h } = await gsdImageSize(url); const s = Math.min(1, maxSide / Math.max(w, h));
-    if (s >= 1 || typeof document === "undefined") return { dataUrl: url };
-    const c = document.createElement("canvas"); c.width = Math.max(1, Math.round(w * s)); c.height = Math.max(1, Math.round(h * s));
-    const im = new Image(); await new Promise(r => { im.onload = r; im.onerror = r; im.src = url; });
-    c.getContext("2d").drawImage(im, 0, 0, c.width, c.height); return { dataUrl: c.toDataURL("image/jpeg", 0.7) };
-  },
+  // stored full image -> a small copy for the export file: { dataUrl } (long edge <= maxSide). Keeps the .xlsx small (~30 KB / photo). See photoExportCopy (the lean copy).
+  async exportCopy(rec, maxSide = 320) { return photoExportCopy(rec, maxSide); },
 };
 async function gsdStorePhotos(files) {
   const out = [];
@@ -16154,9 +16180,11 @@ async function exportGSDExcel(project, items, meta, handOver) {
   const sections = gsdReportSections(project, items);
   // the export copies of every photo, read from IndexedDB (a missing one is skipped, its space kept)
   const copies = new Map();
-  for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
-    let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
-  }
+  try {
+    for (const sec of sections) for (const e of sec.entries) for (const p of e.item.photos || []) if (!copies.has(p.id)) {
+      let c = null; try { const rec = await gsdPhotoStore.get(p.id); if (rec) c = await gsdPhotoIO.exportCopy(rec); } catch (_) {} copies.set(p.id, c);
+    }
+  } finally { photoCopyRelease(); }
   const layout = gsdLayout(sections.map(sec => ({ name: sec.area.name, items: sec.entries.map(e => ({ caption: e.caption, detail: e.detail, photos: (e.item.photos || []).map(p => ({ id: p.id, ...gsdFit(p.w, p.h) })) })) })), GSD_HEAD_PT);
 
   // ── Sheet 1: the photo report ──
