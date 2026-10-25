@@ -4024,7 +4024,7 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
         ,React.createElement('div',{style:{position:"relative",marginTop:4}},React.createElement('div',{style:{...SI.metaInput,textAlign:"center",cursor:"pointer"}},meta.nextTestDate?fmtDate(meta.nextTestDate):"Not set"),React.createElement('input',{type:"date",value:meta.nextTestDate||"",onChange:e=>setMeta({nextTestDate:e.target.value}),style:{position:"absolute",top:0,left:0,width:"100%",height:"100%",opacity:0,cursor:"pointer"}}))
       )
     )
-    ,React.createElement('div',{style:SI.modeSelectLabel},"SELECT TEST CATEGORY")
+    ,React.createElement('div',{style:SI.modeSelectLabel},"TEST CATEGORIES")
     ,IEL_CATEGORIES.map(cat=>{
       const sum=ielSiteSummary(results,project,cat.key);
       const pct=sum.total>0?Math.round(((sum.pass+sum.fail+sum.na)/sum.total)*100):0;
