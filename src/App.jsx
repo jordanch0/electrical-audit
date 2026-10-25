@@ -4196,19 +4196,27 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
 
   const patch=p=>onPatch({...p});
 
+  // Auto PASS (release u): the tick that completes ALL the required checks (two for isolators and e-stops, three for lanyards) sets PASS in the same patch, but ONLY from UNTESTED
+  // (a recorded FAIL or N/A is never flipped silently) and only on a tap (opening or loading an item changes nothing). Unticking a required check still takes a PASS back to UNTESTED.
+  const[autoNote,setAutoNote]=React.useState(false);
   const toggleCheck=key=>{
     const newVal=!item[key];
     const updated={...item,[key]:newVal};
-    // If any required check is unchecked, downgrade pass to untested
+    const cur=item.status||IEL_STATUS.UNTESTED;
     const stillAllChecked=requiredChecks.every(k=>updated[k]);
-    const newStatus=!stillAllChecked&&updated.status===IEL_STATUS.PASS?IEL_STATUS.UNTESTED:updated.status;
+    let newStatus=cur;
+    if(!stillAllChecked&&cur===IEL_STATUS.PASS)newStatus=IEL_STATUS.UNTESTED;                                   // If any required check is unchecked, downgrade pass to untested
+    else if(stillAllChecked&&newVal&&cur===IEL_STATUS.UNTESTED)newStatus=IEL_STATUS.PASS;                       // the last tick passes the item
+    setAutoNote(newStatus===IEL_STATUS.PASS&&cur===IEL_STATUS.UNTESTED);
     onPatch({[key]:newVal,status:newStatus});
   };
 
   const setStatus=s=>{
     if(s===IEL_STATUS.PASS&&!allChecked)return; // blocked
+    setAutoNote(false);
     onPatch({status:s});                                                    // the date is set by patchItem: first result = the Home date, a changed result keeps it, "—" clears it
   };
+  const stillWord=item.status===IEL_STATUS.FAIL?"FAIL":item.status===IEL_STATUS.NA?"N/A":"";
 
   const nextDue=ielItemDue(item,meta).label||null;
   const sm=IEL_SM[item.status||IEL_STATUS.UNTESTED]||IEL_SM.untested;
@@ -4271,6 +4279,7 @@ function IELItemModal({areaId,panelId,itemId,project,cat,results,meta,dropdowns,
       ,React.createElement('div',{style:{marginBottom:14}}
         ,React.createElement('div',{style:{fontSize:10,color:"#5f5b57",letterSpacing:0.8,fontWeight:700,marginBottom:8}},"RESULT")
         ,!allChecked&&React.createElement('div',{style:{background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:12,color:"#92400e"}},"⚠ All checks must be ticked before marking as PASS")
+        ,React.createElement('div',{role:"status","data-testid":"iel-check-note",style:{fontSize:12,color:"#3f3f46",marginBottom:(autoNote&&item.status===IEL_STATUS.PASS)||(allChecked&&stillWord)?8:0}},autoNote&&item.status===IEL_STATUS.PASS?"Marked PASS because all checks are ticked.":(allChecked&&stillWord?"All checks are ticked. The result is still "+stillWord+". Tap PASS to change it.":""))
         ,React.createElement('div',{style:{display:"flex",gap:8}}
           ,[IEL_STATUS.PASS,IEL_STATUS.FAIL,IEL_STATUS.NA,IEL_STATUS.UNTESTED].map(s=>{
             const sm2=IEL_SM[s]||IEL_SM.untested;
