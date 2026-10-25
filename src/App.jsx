@@ -3751,7 +3751,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
         onContinueFromSnap:(snap)=>{
           setAllResults(prev=>({...prev,[activeProject]:JSON.parse(JSON.stringify(snap.results||{}))}));
           setAllMeta(prev=>({...prev,[activeProject]:{...snap.meta}}));
-          setActiveMap(prev=>auditActiveSet(prev,activeProject,{}));
+          const snapCats=ielCatsWithResults(snap.results);                                   // the snapshot holds every category; the current one is where the audit was left, else the first with results
+          setActiveMap(prev=>auditActiveSet(prev,activeProject,snapCats.length?{cat:snapCats.includes(snap.cat)?snap.cat:snapCats[0]}:{}));
           setGateArmed(false);
           setActiveAreaId(null);
           setActivePanelId(null);
