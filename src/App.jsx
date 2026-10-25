@@ -3416,6 +3416,16 @@ function ielSiteSummary(results,project,cat){
   });
   return{pass,fail,na,untested,total:pass+fail+na+untested};
 }
+// The categories (in the Home order) that hold at least one result in ONE site's results object ({areaId:{cat:{itemId:record}}}).
+function ielCatsWithResults(siteResults){
+  const r=siteResults||{};
+  return IEL_CATEGORIES.map(c=>c.key).filter(k=>Object.keys(r).some(aid=>{const m=(r[aid]||{})[k]||{};return Object.keys(m).some(id=>itemHasStatus(m[id]));}));
+}
+// A History snapshot holds the results of EVERY category, so its label says "All Categories" when more than one category has results (an old snapshot is relabelled here, at display time; nothing is rewritten).
+function ielSnapLabel(snap){
+  if(ielCatsWithResults(snap&&snap.results).length>1)return "All Categories";
+  return (snap&&snap.label)||"IEL Audit";
+}
 
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
 
@@ -3671,7 +3681,8 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const archiveAudit=()=>{
     if(!project)return;
     const catLabel=activeCat?(IEL_CATEGORIES.find(c=>c.key===activeCat)||{label:activeCat}).label:"All Categories";
-    const snap={id:ielUid(),projectId:activeProject,projectName:project.name,auditor:meta.auditor||"",testDate:meta.testDate||"",cat:activeCat||null,label:catLabel,archivedAt:new Date().toISOString(),results:JSON.parse(JSON.stringify(allResults[activeProject]||{})),meta:{...meta}};
+    const snapResults=JSON.parse(JSON.stringify(allResults[activeProject]||{}));
+    const snap={id:ielUid(),projectId:activeProject,projectName:project.name,auditor:meta.auditor||"",testDate:meta.testDate||"",cat:activeCat||null,label:ielSnapLabel({results:snapResults,label:catLabel}),archivedAt:new Date().toISOString(),results:snapResults,meta:{...meta}};
     setHistory(prev=>[snap,...prev].slice(0,100));
     return snap;
   };
@@ -3730,7 +3741,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setGateArmed(false);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},activeCatKey:activeCat,auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
       ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
-      ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELPanelListView,{area,project,results:allResults,cat:activeCat,catColor,onSelect:id=>{setActivePanelId(id);setView("panel");}})
+      ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELTypeSwitcher,{area,project,results:allResults,cat:activeCat,onSelect:(catKey,panelId)=>{setActiveCat(catKey);setActivePanelId(panelId);setView("panel");}})
       ,!showGate&&!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
       ,!showGate&&detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
@@ -4074,30 +4085,42 @@ function IELAreaListView({project,results,cat,catColor,onSelect}){
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// IEL PANEL LIST — shows the category's items in the area (mirrors PanelListView)
+// IEL TYPE SWITCHER (release u) — the page after the area list: the three test categories for THIS area in the Home order, each with its own item count for the area, the full status set and a
+// progress bar. The current category is marked in words (and aria-current) on a card that can be opened; a category with no items in the area says "No items", is never marked Current and cannot be opened. Tapping one makes it the current category.
 // Here "panel" = the category panel within an area
 // ─────────────────────────────────────────────────────────────────────────
-function IELPanelListView({area,project,results,cat,catColor,onSelect}){
-  const catPanel=area.panels.find(p=>p.name===cat);
-  if(!catPanel)return React.createElement('div',{style:SI.listWrap},React.createElement('div',{style:{color:"#52525b",fontSize:14}},"No items for this category in ",area.name,". Add items via ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage."));
-  // Group items by their panel — for IEL the panel IS the catPanel, circuits are items
-  // But to mirror RCD which has panels inside areas, we show one "panel" card for the cat
-  const items=catPanel.circuits;
-  const s=ielCatSummary(results,project.id,area.id,cat,items);
-  const catI=IEL_CATEGORIES.find(c=>c.key===cat)||IEL_CATEGORIES[0];
+function IELTypeSwitcher({area,project,results,cat,onSelect}){
   return React.createElement('div',{style:SI.listWrap}
     ,React.createElement('div',{style:SI.listTitle},area.name)
-    ,React.createElement('button',{style:{...SI.siteCard,...(s.fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:s.untested===0?{background:"#dcfce7",borderColor:"#86efac"}:{})},onClick:()=>onSelect(catPanel.id)}
-      ,React.createElement('div',{style:SI.siteCardLeft}
-        ,React.createElement('div',{style:SI.siteCardName},catI.icon," ",catI.label)
-        ,React.createElement('div',{style:SI.siteCardSub},items.length," item",items.length!==1?"s":"")
-,React.createElement(StatusSet,{model:"full",s:s,dash:true,style:{marginTop:6}})
-      )
-      ,React.createElement('div',{style:SI.siteCardRight}
-                ,s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
-        ,React.createElement('span',{style:SI.arrow},"›")
-      )
-    )
+    ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:12}},"Choose a test category")
+    ,IEL_CATEGORIES.map(c=>{
+      const cp=area.panels.find(p=>p.name===c.key);
+      const items=cp?cp.circuits:[];
+      const total=items.length;
+      const s=ielCatSummary(results,project.id,area.id,c.key,items);
+      const pct=total>0?Math.round(((s.pass+s.fail+s.na)/total)*100):0;
+      const empty=total===0;
+      const current=c.key===cat&&!empty;
+      return React.createElement('button',{key:c.key,type:"button","data-testid":"iel-type-"+c.key,"aria-current":current?"true":undefined,"aria-disabled":empty?"true":undefined,
+        style:{...SI.siteCard,minHeight:44,boxSizing:"border-box",...(empty?{background:"#e4e4e7",borderColor:"#d4d4d8",cursor:"not-allowed"}:s.fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{}),...(current?{boxShadow:"inset 0 0 0 2px "+c.color}:{})},
+        onClick:()=>{if(!empty)onSelect(c.key,cp.id);}}
+        ,React.createElement('div',{style:SI.siteCardLeft}
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
+            ,React.createElement('span',{style:{fontSize:16,fontWeight:700,color:"#18181b"}},c.icon," ",c.label)
+            ,current&&React.createElement('span',{style:{fontSize:11,fontWeight:800,color:"#14532d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:6,padding:"1px 6px"}},"✓ Current")
+          )
+          ,React.createElement('div',{style:SI.siteCardSub},empty?"No items":nw(total,"item"))
+          ,!empty&&React.createElement(StatusSet,{model:"full",s,dash:true,style:{marginTop:6}})
+          ,!empty&&React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
+            ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:s.fail>0?"#dc2626":c.color}})
+          )
+        )
+        ,React.createElement('div',{style:SI.siteCardRight}
+          ,!empty&&s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
+          ,!empty&&React.createElement('span',{style:SI.arrow},"›")
+        )
+      );
+    })
   );
 }
 
@@ -4669,7 +4692,7 @@ function IELHistoryView({history,project,viewSnap,setViewSnap,viewArea,setViewAr
         ,React.createElement('button',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",width:"100%",background:"transparent",border:"none",cursor:"pointer",padding:"14px 16px",color:"inherit",textAlign:"left"},onClick:()=>setExpanded(expanded===snap.id?null:snap.id)}
           ,React.createElement('div',{style:{flex:1}}
             ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,marginBottom:4}}
-              ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#047857"}},snap.label||"IEL Audit")
+              ,React.createElement('span',{style:{fontSize:13,fontWeight:800,color:"#047857"}},ielSnapLabel(snap))
               )
             ,React.createElement('div',{style:{fontSize:12,color:"#52525b"}},fmtDate(snap.testDate)," · ",snap.auditor||"No auditor"," · ",nw(total,"item"))
             ,React.createElement('div',{style:{fontSize:11,color:"#52525b",marginTop:2}},"Archived ",fmtDateTime(snap.archivedAt))
@@ -17920,6 +17943,7 @@ async function requestPersistentStorage(nav = typeof navigator !== "undefined" ?
 export { requestPersistentStorage };
 export { GS_TAB_LABELS };
 export { useRevealOnOpen, DropdownNotice, ContinueConfirmBtn };
+export { ielCatsWithResults, ielSnapLabel };
 export { backupDayText, BACKUP_COPIES_KEY, backupCanon, backupSiteCanon, backupRemapIds, backupBuildIdMap, backupInverseEntry, backupCopyName, backupVerifyCopies, backupNodeCount, backupPointerIds, backupMetaStable, BACKUP_LIST_SPECS, backupBizFill, backupKeyFill, backupKeyIsEmpty, backupSettingsInserts, backupDeepEqual, backupFilledText, backupKeyExcluded, eraseStartup, eraseBegin, eraseOwnedKeys, eraseStepLimitMs, eraseMarker, eraseLeftover, eraseSet, eraseRuntime, ERASE_KEY, LEFTOVER_KEY, ERASE_MAX_ATTEMPTS, ERASE_RENDER_BUDGET_MS };
 export { runExport, exportShareWanted, exportMarkStart, exportMarkCheck, exportMarkRead, EXPORT_MARK_KEY, ExportBtn, useExportBusy, appLog, ExportFailureCard, ExportDeliveryError, ExportLibraryError, exportSnapScope, deliverExportFile, AppErrorBoundary, CrashScreen, installGlobalErrorNotice };
 export default AppRoot;
