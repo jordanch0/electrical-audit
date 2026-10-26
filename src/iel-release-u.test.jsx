@@ -1,4 +1,4 @@
-// RELEASE u, IEL only (FICTIONAL data). (1) AUTO PASS: the tick that completes every required check (two for isolators and e-stops, three for lanyards) sets PASS from UNTESTED, never from FAIL
+// RELEASE u, IEL only (FICTIONAL data). release u2 retired the TYPE SWITCHER tests (8) with the switcher; the item list now has a tab bar (src/iel-release-u2.test.jsx). (1) AUTO PASS: the tick that completes every required check (two for isolators and e-stops, three for lanyards) sets PASS from UNTESTED, never from FAIL
 // or N/A, only on a tap. (2) TYPE SWITCHER: the page after the area list shows the three categories for THAT area in the Home order. (3) The History label says All Categories when more than
 // one category has results. (4) Home heading. (5) Continue restores every category and picks the current one.
 import React from 'react';
@@ -30,7 +30,7 @@ async function toHome(user) { render(<AppRoot />); await user.click(screen.getBy
 const CAT_KEY = { 'E-Stops': 'estops', Lanyards: 'lanyards', Isolators: 'isolators' };
 // release u2: the Home rows are a read-only summary and the one button is Start / Continue Audit; the category the audit is on is the stored one (what a row tap used to write)
 async function toArea(user, cat, area) { localStorage.setItem(A, JSON.stringify({ v: 1, sites: { s1: { cat: CAT_KEY[cat] } } })); await toHome(user); await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ })); await user.click(await screen.findByText(area)); }
-async function toItem(user, cat, area, item) { await toArea(user, cat, area); await user.click(await screen.findByTestId('iel-type-' + ({ 'E-Stops': 'estops', Lanyards: 'lanyards', Isolators: 'isolators' })[cat])); await user.click(await screen.findByText(item)); }
+async function toItem(user, cat, area, item) { await toArea(user, cat, area); await user.click(await screen.findByTestId('iel-tab-' + CAT_KEY[cat])); await user.click(await screen.findByText(item)); }
 const tick = (user, name) => user.click(screen.getByRole('button', { name: new RegExp(name) }));
 
 describe('AUTO PASS', () => {
@@ -129,67 +129,6 @@ describe('AUTO PASS', () => {
       }
       expect(ls(R).s1.a1.lanyards.y1.status).toBe('pass');
     } finally { spy.mockRestore(); }
-  });
-});
-
-describe('TYPE SWITCHER', () => {
-  const cards = () => ['estops', 'lanyards', 'isolators'].map(k => screen.getByTestId('iel-type-' + k));
-  it('three full-width cards in the Home order, each with the count for THIS area, the full status set and a progress bar', async () => {
-    seed({ a1: { estops: { x1: { ...done } } } }); const user = userEvent.setup(); await toArea(user, 'E-Stops', 'Wash Plant');
-    const [e, l, i] = cards(); expect(screen.getByText('Choose a test category')).toBeInTheDocument();
-    expect(e.compareDocumentPosition(l) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); expect(l.compareDocumentPosition(i) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(within(e).getByText('2 items')).toBeInTheDocument(); expect(within(l).getByText('2 items')).toBeInTheDocument();
-    expect(within(e).getByText('1 PASS')).toBeInTheDocument(); expect(within(e).getByText('1 —')).toBeInTheDocument();      // full set: PASS FAIL N/A and the dash for untested
-    expect(within(e).getAllByText(/PASS|FAIL|N\/A/).length).toBe(3);
-    expect(e.style.minHeight).toBe('44px');
-  });
-  it('the count is for the AREA, not the site: Crusher Yard has one isolator and no e-stops or lanyards', async () => {
-    seed(); const user = userEvent.setup(); await toArea(user, 'Isolators', 'Crusher Yard');
-    const [e, l, i] = cards(); expect(within(i).getByText('1 item')).toBeInTheDocument();
-    expect(within(e).getByText('No items')).toBeInTheDocument(); expect(within(l).getByText('No items')).toBeInTheDocument();
-    expect(e.getAttribute('aria-current')).toBeNull(); expect(l.getAttribute('aria-current')).toBeNull(); expect(i.getAttribute('aria-current')).toBe('true'); expect(within(i).getByText('✓ Current')).toBeInTheDocument();   // Isolators is the audit's category and can be opened: the only card marked
-    expect(screen.getAllByText(/Current/)).toHaveLength(1);
-  });
-  it('a disabled card is NEVER marked Current: the audit is on E-Stops, this area has none, so no card is marked at all', async () => {
-    seed(); const user = userEvent.setup(); await toArea(user, 'E-Stops', 'Crusher Yard');
-    const [e, l, i] = cards(); expect(within(e).getByText('No items')).toBeInTheDocument(); expect(e.getAttribute('aria-disabled')).toBe('true');
-    expect(e.getAttribute('aria-current')).toBeNull(); expect(within(e).queryByText(/Current/)).toBeNull();
-    expect(l.getAttribute('aria-current')).toBeNull(); expect(i.getAttribute('aria-current')).toBeNull();
-    expect(document.querySelector('[aria-current]')).toBeNull(); expect(screen.queryByText(/Current/)).toBeNull();
-    expect(within(i).getByText('1 item')).toBeInTheDocument(); expect(i.getAttribute('aria-disabled')).toBeNull();                 // Isolators can still be opened
-  });
-  it('a category with no items says No items, is aria-disabled, shows no counts, and cannot be opened', async () => {
-    seed(); const user = userEvent.setup(); await toArea(user, 'E-Stops', 'Wash Plant');
-    const iso = screen.getByTestId('iel-type-isolators'); expect(within(iso).getByText('No items')).toBeInTheDocument();
-    expect(iso.getAttribute('aria-disabled')).toBe('true'); expect(within(iso).queryByText(/PASS/)).toBeNull();
-    await user.click(iso); expect(screen.getByText('Choose a test category')).toBeInTheDocument(); expect(screen.queryByText(/Tap any item to open the test form/)).toBeNull();
-    expect(screen.getByTestId('iel-type-estops').getAttribute('aria-current')).toBe('true'); expect(iso.getAttribute('aria-current')).toBeNull();      // the tap changed nothing: the current category is still E-Stops
-    await new Promise(r => setTimeout(r, 30)); expect(ls(A).sites.s1.cat).toBe('estops');
-    expect(screen.getByTestId('iel-type-estops').getAttribute('aria-disabled')).toBeNull();
-  });
-  it('an area with no panels at all shows three disabled cards', async () => {
-    seed(); const user = userEvent.setup(); await toArea(user, 'E-Stops', 'Pit Store');
-    cards().forEach(c => { expect(within(c).getByText('No items')).toBeInTheDocument(); expect(c.getAttribute('aria-disabled')).toBe('true'); });
-  });
-  it('the current category is marked in words and with aria-current, and only that one', async () => {
-    seed(); const user = userEvent.setup(); await toArea(user, 'Lanyards', 'Wash Plant');
-    const [e, l, i] = cards(); expect(within(l).getByText('✓ Current')).toBeInTheDocument(); expect(l.getAttribute('aria-current')).toBe('true');
-    expect(e.getAttribute('aria-current')).toBeNull(); expect(i.getAttribute('aria-current')).toBeNull(); expect(within(e).queryByText(/Current/)).toBeNull();
-  });
-  it('switching: open E-Stops, Back, open Lanyards: same area, the other category becomes current and is saved; Back chain is item list, switcher, area list', async () => {
-    seed(); const user = userEvent.setup(); await toArea(user, 'E-Stops', 'Wash Plant');
-    await user.click(screen.getByTestId('iel-type-estops')); expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();
-    await user.click(screen.getByText('Back')); await user.click(await screen.findByTestId('iel-type-lanyards'));
-    expect(await screen.findByText('Pit Lanyard 1')).toBeInTheDocument(); expect(screen.getByText(/Wash Plant · 2 items/)).toBeInTheDocument();
-    await waitFor(() => expect(ls(A).sites.s1.cat).toBe('lanyards'));
-    await user.click(screen.getByText('Back')); expect(await screen.findByText('Choose a test category')).toBeInTheDocument();
-    expect(within(screen.getByTestId('iel-type-lanyards')).getByText('✓ Current')).toBeInTheDocument();
-    await user.click(screen.getByText('Back')); expect(await screen.findByText('Select Area')).toBeInTheDocument();
-  });
-  it('the Home heading reads TEST CATEGORIES and the three rows are still there', async () => {
-    seed(); const user = userEvent.setup(); await toHome(user);
-    expect(screen.getByText('TEST CATEGORIES')).toBeInTheDocument(); expect(screen.queryByText('SELECT TEST CATEGORY')).toBeNull();
-    ['estops', 'lanyards', 'isolators'].forEach(k => expect(screen.getByTestId('iel-home-' + k)).toBeInTheDocument());
   });
 });
 

@@ -66,7 +66,7 @@ describe('real UI: save meta, change ONLY the test date -> items keep lastTested
   async function openItemList(user) {
     await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));
     await user.click(await screen.findByText('Plant'));
-    await user.click(await screen.findByText('E-Stops'));
+    await user.click(await screen.findByTestId('iel-tab-estops'));
     await screen.findByText('Conv 1');
   }
   it('saved default next-due, then ONLY the test date is edited: the stored next-due follows it, so items still use lastTested + 3 months', async () => {
@@ -112,7 +112,7 @@ describe('IEL screens carry no hard-coded interval wording', () => {
     await screen.findByText('Example Quarry', { selector: 'div' }); expect(text()).not.toMatch(INTERVAL);          // site list (the site card's sub-line)
     await user.click(screen.getByText('Example Quarry', { selector: 'div' })); await screen.findByText('NEXT TEST DUE'); expect(text()).not.toMatch(INTERVAL);
     await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ })); await user.click(await screen.findByText('Plant')); expect(text()).not.toMatch(INTERVAL);
-    await user.click(await screen.findByText('E-Stops')); await screen.findByText('Conv 1'); expect(text()).not.toMatch(INTERVAL);
+    await user.click(await screen.findByTestId('iel-tab-estops')); await screen.findByText('Conv 1'); expect(text()).not.toMatch(INTERVAL);
     expect(screen.getByText('Due: 15/11/2026')).toBeTruthy();                                                           // the date is still there
   });
   it('the source has no "3-month cycle" text either', () => {

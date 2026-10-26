@@ -61,7 +61,7 @@ describe('IEL fail panel', () => {
     await user.click(await screen.findByText('Site I', { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));
     await user.click(await screen.findByText('Plant Room'));
-    await user.click(await screen.findByText('E-Stops'));
+    await user.click(await screen.findByTestId('iel-tab-estops'));
     await user.click(await screen.findByText('Screen 1'));
     await user.click(screen.getByRole('button', { name: 'FAIL' }));
     expect(await screen.findByText(FAIL_HEADING)).toBeInTheDocument();

@@ -296,14 +296,13 @@ describe('IEL TESTING — folder level kept across another tab (real seed labels
     await user.click(screen.getByText('IEL TESTING', { exact: true })); await user.click(await screen.findByText(pillSeed.SITE, { selector: 'div' }));
     await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));   // Start / Continue Audit (release u2: the category is chosen later, in the area)
     await user.click(await screen.findByText('Wash Plant'));                           // area -> the category panel card
-    await user.click((await screen.findAllByText('E-Stops'))[0]);                      // panel -> the items
-    expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();
+    expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();           // release u2: the area opens straight on its item list (the first tab with items)
     await user.click(screen.getByRole('button', { name: new RegExp(`^${tab}$`) }));
     await user.click(screen.getByRole('button', { name: /^Audit$/ }));
     expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();           // same (deepest) level
     expect(screen.queryByText('AUDIT IN PROGRESS')).toBeNull();
-    await back(user); expect(screen.queryByText('Feed Conveyor 1')).toBeNull(); expect(screen.getAllByText('E-Stops').length).toBeGreaterThan(0);   // one Back = the panel list of the area
-    await back(user); expect(screen.queryByText('E-Stops')).toBeNull();                                                                   // another Back = the area list
+    await back(user); expect(screen.queryByText('Feed Conveyor 1')).toBeNull(); expect(screen.getByText('Select Area')).toBeInTheDocument();    // one Back = the area list (release u2: the switcher level is gone)
+    expect(screen.queryByTestId('iel-tab-estops')).toBeNull();
   });
 });
 

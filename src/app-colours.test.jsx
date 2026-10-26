@@ -34,7 +34,7 @@ describe('Priority URGENT is visibly distinct from HIGH in the app', () => {
     localStorage.setItem('iel-meta-v2', JSON.stringify({ p1: { auditor: 'Jane Auditor', testDate: '2026-07-13', notes: '' } }));
     const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByText('IEL TESTING'));
     await user.click(await screen.findByText('Example Quarry', { selector: 'div' })); await screen.findByText('NEXT TEST DUE'); await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));
-    await user.click(await screen.findByText('Plant')); await user.click(await screen.findByText('E-Stops')); await user.click(await screen.findByText('Conv 1'));
+    await user.click(await screen.findByText('Plant')); await user.click(await screen.findByTestId('iel-tab-estops')); await user.click(await screen.findByText('Conv 1'));
     const pri = txt => screen.getAllByRole('button').find(b => b.textContent.trim().startsWith(txt));
     await user.click(pri('U')); const u = pri('U'); expect(u).toHaveStyle({ background: 'rgb(155, 0, 0)', color: 'rgb(255, 255, 255)' });
     await user.click(pri('H')); const h = pri('H'); expect(h).toHaveStyle({ background: 'rgb(254, 226, 226)', color: 'rgb(185, 28, 28)' });

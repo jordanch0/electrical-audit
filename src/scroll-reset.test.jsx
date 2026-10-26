@@ -85,7 +85,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     await user.type(await screen.findByPlaceholderText('Enter name to begin audit…'), 'Jordan');
     await user.click(await screen.findByText(/Start \/ Continue Audit/));
     await user.click(await screen.findByText('Warehouse'));
-    await user.click(await screen.findByText(/E-Stops/)); // category summary card
+    await user.click(await screen.findByTestId('iel-tab-estops')); // the tab (release u2: the item list is open at once)
 
     const lastItem = await screen.findByText('E-Stop 3');
     const container = findScrollContainer(lastItem);

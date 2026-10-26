@@ -3426,6 +3426,13 @@ function ielSnapLabel(snap){
   if(ielCatsWithResults(snap&&snap.results).length>1)return "All Categories";
   return (snap&&snap.label)||"IEL Audit";
 }
+// release u2: the tab an area shows = the remembered one when this area has items in it, else the first category with items (Home order), else none (an area with no items at all)
+function ielTabCat(area,remembered){
+  const has=k=>{const p=area&&area.panels.find(p=>p.name===k);return !!(p&&p.circuits.length>0);};
+  if(remembered&&has(remembered))return remembered;
+  const first=IEL_CATEGORIES.find(c=>has(c.key));
+  return first?first.key:null;
+}
 // release u2: an area's totals across the three categories (the area list shows the total and one progress line; the tab bar shows each category's own count)
 function ielAreaSummary(results,project,area){
   let pass=0,fail=0,na=0,untested=0,total=0;
@@ -3621,11 +3628,9 @@ function IELApp({ onGoHome }) {
   const [loaded,        setLoaded]       = React.useState(false);
   const [saveFlash,     setSaveFlash]    = React.useState(false);
   const [activeProject, setActiveProject]= React.useState(null);
-  const lastAuditViewRef = React.useRef("audit");   // the audit screen the user was on, so another tab and back returns to the same level
 
-  const [view,          setView]         = React.useState("projects"); // projects|home|audit|panel|manage|history|report
+  const [view,          setView]         = React.useState("projects"); // projects|home|audit|manage|history|report|dropdowns   (audit = the gate, the area list or an area's item list)
   const [activeAreaId,  setActiveAreaId] = React.useState(null);
-  const [activePanelId, setActivePanelId]= React.useState(null);
   const [detailInfo,    setDetailInfo]   = React.useState(null); // {areaId,panelId,itemId}
   const [ielDropdowns,  setIelDropdowns] = React.useState({responsibility:IEL_DEFAULT_RESPONSIBILITY,rectified:IEL_DEFAULT_RECTIFIED});
   const [viewSnap,      setViewSnap]     = React.useState(null);
@@ -3673,9 +3678,9 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
   const setMeta  = patch=>setAllMeta(prev=>({...prev,[activeProject]:{...meta,dateDay:meta.dateDay||localISODate(),...patch}}));
   useHomeDateFollow("iel", loaded, setAllMeta, projects);
   const area     = project&&project.areas.find(a=>a.id===activeAreaId);
-  // panel here represents a category-panel (panel.name = catKey)
-  const panel    = area&&area.panels.find(p=>p.id===activePanelId);
-  const catInfo  = IEL_CATEGORIES.find(c=>c.key===activeCat)||IEL_CATEGORIES[0];
+  // release u2: the SHOWN tab of the open area = the remembered one (the entry's cat) when the area has items in it, else the first category with items, else none. Showing the fallback writes nothing.
+  const tabCat   = area?ielTabCat(area,activeCat):null;
+  const listShown= view==="audit"&&!!project&&!showGate&&!detailInfo&&!!area;      // the item list (the tab bar is pinned in main, which then keeps scrollPaddingTop 52 clear of it)
 
   const patchItem=(pid,aid,cat,itemId,patch)=>{
     setAllResults(prev=>{
@@ -3693,16 +3698,16 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     return snap;
   };
 
-  const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);setActivePanelId(null);};
+  const goProjects=()=>{setView("projects");setActiveProject(null);setActiveAreaId(null);};
   const clearSnap=()=>{setViewSnap(null);setViewArea(null);setViewCat(null);};   // leaving History (any tab, or the Home / Audit tabs) drops the open snapshot — ELT / Welder / GSD already do this
   const goHome=()=>{clearSnap();setView("home");};   // the Home tab keeps the folder level
 
-  useScrollMemory(mainElRef,[view,activeCat,activeAreaId,activePanelId,detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"||view==="panel"));
+  // Scroll memory (in memory only, the existing hook): the key is the LEVEL, so every list level has its own position and each category TAB in each AREA remembers its own (a first visit starts at the top; the item page starts at the top and never overwrites the list).
+  // The area list's key has no tab part, so switching tabs in an area never moves the area list's remembered position.
+  useScrollMemory(mainElRef,["a",view,activeAreaId||"",activeAreaId?(tabCat||"none"):"",detailInfo?"d":""].join("|"),!detailInfo&&(view==="projects"||view==="audit"));
   if(!loaded)return React.createElement('div',{style:SI.loader},React.createElement('div',{style:SI.loaderSpinner}),React.createElement('p',{style:{color:"#5f5b57",marginTop:16}},"Loading…"));
 
-  const catColor = catInfo?catInfo.color:"#047857";
-  const isAudit  = view==="audit"||view==="panel";if(isAudit)lastAuditViewRef.current=view;
-  const summary  = project&&activeCat?ielSiteSummary(allResults,project,activeCat):{total:0,pass:0,fail:0,na:0,untested:0};
+  const isAudit  = view==="audit";
   const canGoBack= view!=="projects";
 
   const handleBack=()=>{
@@ -3710,12 +3715,9 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     if(viewSnap){setViewSnap(null);setViewArea(null);setViewCat(null);return;}
     if(detailInfo){setDetailInfo(null);return;}
     if(view==="dropdowns"){setView("home");return;}
-    if(view==="panel"){setView("audit");setActivePanelId(null);}
-    else if(view==="audit"&&showGate){setView("home");}
-    else if(view==="audit"&&activePanelId){setActivePanelId(null);}
+    if(view==="audit"&&showGate){setView("home");}
     else if(view==="audit"&&activeAreaId){setActiveAreaId(null);}
-    else if(view==="audit"&&!activeAreaId){setGateArmed(true);setView("home");}
-    else if(view==="audit"&&!activeAreaId){setView("home");}
+    else if(view==="audit"){setGateArmed(true);setView("home");}
     else if(view==="home"){goProjects();}
     else if(["manage","report","history","dropdowns"].includes(view)){setView("home");}
     else goProjects();
@@ -3742,14 +3744,13 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     )
 
     // ── Main
-    ,React.createElement('main',{style:SI.main,ref:mainElRef}
+    ,React.createElement('main',{style:{...SI.main,...(listShown?{scrollPaddingTop:52}:{})},ref:mainElRef}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartAudit:()=>{setActiveMap(prev=>auditEntryIsActive(prev[activeProject])?auditGateOff(prev,activeProject):auditActiveSet(prev,activeProject,{}));setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartAudit:()=>{setActiveMap(prev=>auditEntryIsActive(prev[activeProject])?auditGateOff(prev,activeProject):auditActiveSet(prev,activeProject,{}));setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);}})
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
       ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,onSelect:id=>setActiveAreaId(id)})
-      ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELTypeSwitcher,{area,project,results:allResults,cat:activeCat,onSelect:(catKey,panelId)=>{setActiveCat(catKey);setActivePanelId(panelId);setView("panel");}})
-      ,!showGate&&!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
-      ,!showGate&&detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
+      ,listShown&&React.createElement(IELItemGrid,{area,tab:tabCat,project,results:allResults,meta,scrollEl:mainElRef,onPick:key=>setActiveCat(key),onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,tabCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,tabCat,itemId,{status:s}),onOpenDetail:itemId=>{const p=area.panels.find(p=>p.name===tabCat);setDetailInfo({areaId:activeAreaId,panelId:p.id,itemId});}})
+      ,!showGate&&detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:tabCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,tabCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
       ,!detailInfo&&view==="report"&&project&&React.createElement(IELReportView,{project,results:allResults,meta,onBack:()=>setView("home")})
       ,!detailInfo&&view==="manage"&&project&&React.createElement(IELManageView,{project,onUpdateProject:updated=>setProjects(prev=>prev.map(p=>p.id===updated.id?updated:p)),onBack:()=>setView("home")})
       ,!detailInfo&&view==="dropdowns"&&React.createElement(IELDropdownsView,{dropdowns:ielDropdowns,setDropdowns:setIelDropdowns,onBack:()=>setView("home")})
@@ -3761,7 +3762,6 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
           setActiveMap(prev=>auditActiveSet(prev,activeProject,snapCats.length?{cat:snapCats.includes(snap.cat)?snap.cat:snapCats[0]}:{}));
           setGateArmed(false);
           setActiveAreaId(null);
-          setActivePanelId(null);
           setView("home");
         },onBack:()=>setView("home")})
     )
@@ -3771,7 +3771,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // ── Bottom nav
     ,view!=="projects"&&React.createElement('nav',{style:SI.bottomNav}
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_HOME,     label:"Home",     active:view==="home",     color:"#334155",onClick:()=>{setDetailInfo(null);goHome();}})
-      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);if(showGate){setView("audit");setActivePanelId(null);return;}if(isAudit){setView("audit");setActivePanelId(null);}else{const v=lastAuditViewRef.current;if(v==="panel"&&area&&panel){setView("panel");}else{if(!area)setActiveAreaId(null);setActivePanelId(null);setView("audit");}}}})
+      ,React.createElement(IELNavBtn,{icon:NAV_ICON_AUDIT,    label:"Audit",    active:isAudit,          color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);if(showGate){setView("audit");return;}if(isAudit){if(detailInfo)setDetailInfo(null);else setActiveAreaId(null);setView("audit");}else{setDetailInfo(null);if(!area)setActiveAreaId(null);setView("audit");}}})
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_REPORT,   label:"Report",   active:view==="report",  color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("report");}})
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_HISTORY,  label:"History",  active:view==="history", color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("history");}})
       ,React.createElement(IELNavBtn,{icon:NAV_ICON_MANAGE,   label:"Manage",   active:view==="manage",  color:"#334155",onClick:()=>{clearSnap();setDetailInfo(null);setView("manage");}})
@@ -4090,62 +4090,63 @@ function IELAreaListView({project,results,onSelect}){
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// IEL TYPE SWITCHER (release u) — the page after the area list: the three test categories for THIS area in the Home order, each with its own item count for the area, the full status set and a
-// progress bar. The current category is marked in words (and aria-current) on a card that can be opened; a category with no items in the area says "No items", is never marked Current and cannot be opened. Tapping one makes it the current category.
-// Here "panel" = the category panel within an area
+// IEL CATEGORY TABS (release u2, variant C) — three SEPARATE pill buttons (no track) in the Home order, one line each: the label, then the count for THIS area. Each button is a 44 px tap target and
+// they share the width (no dead gap); the visible pill is 36 px tall and sits 4 px in from each side of its button, so two pills are 8 px apart and the outer pills line up with the cards (the
+// tablist is 4 px wider than the content on each side). SELECTED = pale green fill, 2 px green outline, bold, aria-selected. AVAILABLE = light fill, 1 px border. EMPTY (0 items) = greyed fill,
+// shows 0, aria-disabled, does nothing. The wrapper is PINNED at the top of the item list (position sticky inside main, the only scroll container): opaque page colour, full-bleed, a hairline
+// only while it is pinned over scrolled content. Layer = 4 + 44 + 4 = 52 px (main gets scrollPaddingTop 52 while the list shows).
 // ─────────────────────────────────────────────────────────────────────────
-function IELTypeSwitcher({area,project,results,cat,onSelect}){
-  return React.createElement('div',{style:SI.listWrap}
-    ,React.createElement('div',{style:SI.listTitle},area.name)
-    ,React.createElement('div',{style:{fontSize:12,color:"#52525b",marginBottom:12}},"Choose a test category")
-    ,IEL_CATEGORIES.map(c=>{
-      const cp=area.panels.find(p=>p.name===c.key);
-      const items=cp?cp.circuits:[];
-      const total=items.length;
-      const s=ielCatSummary(results,project.id,area.id,c.key,items);
-      const pct=total>0?Math.round(((s.pass+s.fail+s.na)/total)*100):0;
-      const empty=total===0;
-      const current=c.key===cat&&!empty;
-      return React.createElement('button',{key:c.key,type:"button","data-testid":"iel-type-"+c.key,"aria-current":current?"true":undefined,"aria-disabled":empty?"true":undefined,
-        style:{...SI.siteCard,minHeight:44,boxSizing:"border-box",...(empty?{background:"#e4e4e7",borderColor:"#d4d4d8",cursor:"not-allowed"}:s.fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{}),...(current?{boxShadow:"inset 0 0 0 2px "+c.color}:{})},
-        onClick:()=>{if(!empty)onSelect(c.key,cp.id);}}
-        ,React.createElement('div',{style:SI.siteCardLeft}
-          ,React.createElement('div',{style:{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}
-            ,React.createElement('span',{style:{fontSize:16,fontWeight:700,color:"#18181b"}},c.icon," ",c.label)
-            ,current&&React.createElement('span',{style:{fontSize:11,fontWeight:800,color:"#14532d",background:"#dcfce7",border:"1px solid #86efac",borderRadius:6,padding:"1px 6px"}},"✓ Current")
-          )
-          ,React.createElement('div',{style:SI.siteCardSub},empty?"No items":nw(total,"item"))
-          ,!empty&&React.createElement(StatusSet,{model:"full",s,dash:true,style:{marginTop:6}})
-          ,!empty&&React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
-            ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:s.fail>0?"#dc2626":c.color}})
-          )
-        )
-        ,React.createElement('div',{style:SI.siteCardRight}
-          ,!empty&&s.untested===0&&s.fail===0&&React.createElement('span',{style:{color:"#14532d",fontSize:18,fontWeight:800}},"✓")
-          ,!empty&&React.createElement('span',{style:SI.arrow},"›")
-        )
-      );
-    })
+function IELCategoryTabs({area,tab,onPick,pinned,barRef}){
+  const counts={};IEL_CATEGORIES.forEach(c=>{const p=area.panels.find(p=>p.name===c.key);counts[c.key]=p?p.circuits.length:0;});
+  const enabled=IEL_CATEGORIES.filter(c=>counts[c.key]>0);
+  const onKey=e=>{
+    if(!enabled.length)return;
+    const i=enabled.findIndex(c=>c.key===tab);let n=null;
+    if(e.key==="ArrowRight")n=enabled[(i+1)%enabled.length];else if(e.key==="ArrowLeft")n=enabled[(i-1+enabled.length)%enabled.length];else if(e.key==="Home")n=enabled[0];else if(e.key==="End")n=enabled[enabled.length-1];
+    if(!n)return;e.preventDefault();onPick(n.key);const el=e.currentTarget.querySelector("#iel-tab-"+n.key);if(el)el.focus();
+  };
+  return React.createElement('div',{ref:barRef,"data-testid":"iel-tabs-pin",style:{position:"sticky",top:0,zIndex:5,background:"#e8e6e2",margin:"0 -16px",padding:"4px 16px",boxShadow:pinned?"0 1px 0 #d4d4d8":"none"}}
+    ,React.createElement('div',{role:"tablist","aria-label":"Test category",onKeyDown:onKey,style:{display:"flex",margin:"0 -4px",height:44}}
+      ,IEL_CATEGORIES.map(c=>{const n=counts[c.key],empty=n===0,sel=c.key===tab;
+        return React.createElement('button',{key:c.key,type:"button",role:"tab",id:"iel-tab-"+c.key,"data-testid":"iel-tab-"+c.key,"aria-selected":sel,"aria-disabled":empty?"true":undefined,"aria-controls":"iel-tabpanel","aria-label":c.label+", "+nw(n,"item"),tabIndex:sel||(tab===null&&c.key===IEL_CATEGORIES[0].key)?0:-1,
+          onClick:()=>{if(!empty&&!sel)onPick(c.key);},
+          style:{flex:"1 1 0",minWidth:0,height:44,background:"transparent",border:"none",padding:"0 4px",margin:0,cursor:empty?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}
+          ,React.createElement('span',{style:{display:"flex",alignItems:"center",justifyContent:"center",width:"100%",height:36,boxSizing:"border-box",borderRadius:999,whiteSpace:"nowrap",fontSize:12,fontWeight:empty?500:700,background:sel?"#dcfce7":empty?"#e4e4e7":"#f7f6f3",border:"1px solid "+(sel?"#047857":"#d4d4d8"),boxShadow:sel?"inset 0 0 0 1px #047857":"none",color:sel?"#14532d":empty?"#5f5b57":"#3f3f46"}}
+            ,React.createElement('span',null,c.label),React.createElement('span',{style:{marginLeft:4}},n)));
+      })
+    )
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 // IEL ITEM GRID — mirrors CircuitGrid, items = machines
 // ─────────────────────────────────────────────────────────────────────────
-function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSetAll,onOpenDetail}){
-  const items=panel.circuits;
-  const machineNames=panel.machineNames||{};
-  const s=ielCatSummary(results,project.id,area.id,cat,items);
+// release u2: the item list of an area: its name, the pinned tab bar, then the header (icon, category, count), the full status set for THAT category in THAT area, the hint and the item cards.
+// `tab` is the SHOWN category (ielTabCat), null when the area has no items at all. The tab bar is pinned by position sticky in main; `pinned` only draws the hairline.
+function IELItemGrid({area,tab,project,results,meta,scrollEl,onPick,onPatch,onSetAll,onOpenDetail}){
+  const cat=tab;
+  const panel=tab?area.panels.find(p=>p.name===tab):null;
+  const items=panel?panel.circuits:[];
+  const machineNames=(panel&&panel.machineNames)||{};
+  const s=panel?ielCatSummary(results,project.id,area.id,cat,items):{pass:0,fail:0,na:0,untested:0};
   const catI=IEL_CATEGORIES.find(c=>c.key===cat)||IEL_CATEGORIES[0];
+  const catColor=catI.color;
+  const barRef=React.useRef(null);const[pinned,setPinned]=React.useState(false);
+  React.useEffect(()=>{const el=scrollEl&&scrollEl.current;if(!el)return undefined;
+    const on=()=>{const b=barRef.current;const p=!!b&&el.scrollTop>0&&b.getBoundingClientRect().top<=el.getBoundingClientRect().top+0.5;setPinned(prev=>prev===p?prev:p);};
+    on();el.addEventListener("scroll",on,{passive:true});return()=>el.removeEventListener("scroll",on);},[scrollEl]);
   return React.createElement('div',{style:SI.circuitWrap}
-    ,React.createElement('div',{style:SI.panelHeader}
+    ,React.createElement('div',{style:SI.listTitle},area.name)
+    ,React.createElement(IELCategoryTabs,{area,tab,onPick,pinned,barRef})
+    ,React.createElement('div',{role:"tabpanel",id:"iel-tabpanel","aria-labelledby":tab?"iel-tab-"+tab:undefined,style:{paddingTop:4}}
+    ,panel&&React.createElement('div',{style:SI.panelHeader}
       ,React.createElement('div',null
         ,React.createElement('div',{style:SI.panelTitle},catI.icon," ",catI.label)
-        ,React.createElement('div',{style:SI.panelSub},area.name," · ",items.length," item",items.length!==1?"s":"")
+        ,React.createElement('div',{style:SI.panelSub},nw(items.length,"item"))
       )
     )
-    ,React.createElement(StatusSet,{model:"full",s:{...s,total:items.length},style:{marginBottom:10}})
-    ,React.createElement('div',{style:{fontSize:12,color:catColor,background:"#f0eeea",border:`1px solid ${catColor}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},catI.icon," Tap any item to open the test form")
+    ,panel&&React.createElement(StatusSet,{model:"full",s:{...s,total:items.length},style:{marginBottom:10}})
+    ,panel&&React.createElement('div',{style:{fontSize:12,color:catColor,background:"#f0eeea",border:`1px solid ${catColor}33`,borderRadius:8,padding:"8px 12px",marginBottom:12}},catI.icon," Tap any item to open the test form")
     ,items.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:13}},"No items. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add items.")
     ,React.createElement('div',{style:{display:"flex",flexDirection:"column",gap:8}}
       ,items.map(itemId=>{
@@ -4177,6 +4178,7 @@ function IELItemGrid({area,panel,project,results,cat,catColor,meta,onPatch,onSet
           ,React.createElement('div',{style:{display:"flex",alignItems:"center",padding:"0 12px",color:"#52525b",fontSize:20}},"›")
         );
       })
+    )
     )
   );
 }
