@@ -99,3 +99,33 @@ describe('HOME is a read-only summary with one Start / Continue Audit button', (
     expect(ls(A).sites.s1.cat).toBe('estops');
   });
 });
+
+describe('AREA LIST: each area shows its total across the three categories and ONE progress line', () => {
+  const rowOf = name => screen.getByText(name).closest('button');
+  const pills = row => [...row.querySelectorAll('[data-statuspill]')].map(p => p.textContent);
+  async function toAreaList(user) { await toHome(user); await user.click(startBtn()); await screen.findByText('Select Area'); }
+  it('A-1 each area row shows its total across all three categories and one progress line, no four-number set', async () => {
+    seed({ a1: { estops: { x1: { ...done } }, lanyards: { y1: { status: 'na', lastTested: day(5) } } } });          // Wash Plant: 4 items (2 e-stops + 2 lanyards), 2 tested
+    const user = userEvent.setup(); await toAreaList(user);
+    const w = rowOf('Wash Plant'), c = rowOf('Crusher Yard');
+    expect(within(w).getByText('4 items')).toBeInTheDocument(); expect(within(c).getByText('1 item')).toBeInTheDocument();    // the TOTAL of every category, not the current one
+    expect(w.querySelectorAll('[data-statuspills]').length).toBe(1);                                                    // ONE progress line
+    expect(pills(w)).toEqual(['CLEAR', '50%']); expect(pills(c)).toEqual(['CLEAR', '0%']);
+    [w, c].forEach(r => expect(r.textContent).not.toMatch(/PASS|N\/A|UNTESTED| of |tested/));                           // no four-number set, no fraction
+    expect(w.querySelector('div[style*="height: 4px"]')).not.toBeNull();
+  });
+  it('A-2 FAIL is named on a pill on a row with a fail, CLEAR otherwise; the percentage counts pass, fail and N/A as tested', async () => {
+    seed({ a1: { estops: { x1: { ...done }, x2: { status: 'fail', mechCheck: true, lastTested: day(5) } }, lanyards: { y1: { status: 'na', lastTested: day(5) } } } });    // 3 of 4 tested, 1 fail
+    const user = userEvent.setup(); await toAreaList(user);
+    const w = screen.getByText('Wash Plant').closest('button'), c = screen.getByText('Crusher Yard').closest('button');
+    expect([...w.querySelectorAll('[data-statuspill]')].map(p => p.textContent)).toEqual(['1 FAIL', '75%']);            // the word FAIL, and 3 of 4 = 75 (untested is not tested)
+    expect(w.style.background).toBe('rgb(254, 226, 226)');                                                              // the red tint stays, as reinforcement only
+    expect([...c.querySelectorAll('[data-statuspill]')].map(p => p.textContent)).toEqual(['CLEAR', '0%']); expect(c.style.background).not.toBe('rgb(254, 226, 226)');
+  });
+  it('A-3 an area with no items shows 0 items, no progress line, no bar, and still opens', async () => {
+    seed(null); const user = userEvent.setup(); await toAreaList(user);
+    const p = screen.getByText('Pit Store').closest('button');
+    expect(within(p).getByText('0 items')).toBeInTheDocument(); expect(p.querySelector('[data-statuspill]')).toBeNull(); expect(p.querySelector('div[style*="height: 4px"]')).toBeNull();
+    await user.click(p); await waitFor(() => expect(screen.queryByText('Select Area')).toBeNull()); expect(screen.getByText('Pit Store')).toBeInTheDocument();
+  });
+});

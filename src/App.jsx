@@ -3426,6 +3426,12 @@ function ielSnapLabel(snap){
   if(ielCatsWithResults(snap&&snap.results).length>1)return "All Categories";
   return (snap&&snap.label)||"IEL Audit";
 }
+// release u2: an area's totals across the three categories (the area list shows the total and one progress line; the tab bar shows each category's own count)
+function ielAreaSummary(results,project,area){
+  let pass=0,fail=0,na=0,untested=0,total=0;
+  IEL_CATEGORIES.forEach(c=>{const p=area.panels.find(p=>p.name===c.key);const items=p?p.circuits:[];const s=ielCatSummary(results,project.id,area.id,c.key,items);pass+=s.pass;fail+=s.fail;na+=s.na;untested+=s.untested;total+=items.length;});
+  return{pass,fail,na,untested,total};
+}
 
 // ─── IEL Excel helpers ────────────────────────────────────────────────────
 
@@ -3740,7 +3746,7 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}})
       ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartAudit:()=>{setActiveMap(prev=>auditEntryIsActive(prev[activeProject])?auditGateOff(prev,activeProject):auditActiveSet(prev,activeProject,{}));setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
-      ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat||IEL_CATEGORIES[0].key,catColor,onSelect:id=>setActiveAreaId(id)})
+      ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELTypeSwitcher,{area,project,results:allResults,cat:activeCat,onSelect:(catKey,panelId)=>{setActiveCat(catKey);setActivePanelId(panelId);setView("panel");}})
       ,!showGate&&!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
       ,!showGate&&detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
@@ -4058,25 +4064,21 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartAudit,onReport,
 // ─────────────────────────────────────────────────────────────────────────
 // IEL AREA LIST (mirrors AreaListView)
 // ─────────────────────────────────────────────────────────────────────────
-function IELAreaListView({project,results,cat,catColor,onSelect}){
+function IELAreaListView({project,results,onSelect}){
   return React.createElement('div',{style:SI.listWrap}
     ,React.createElement('div',{style:SI.listTitle},"Select Area")
     ,project.areas.length===0&&React.createElement('div',{style:{color:"#52525b",fontSize:14}},"No areas. Go to ",React.createElement('svg',{viewBox:'0 0 24 24',width:14,height:14,fill:'none',stroke:'currentColor',strokeWidth:1.8,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0,verticalAlign:'middle'}},React.createElement('path',{d:'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z'}),React.createElement('path',{d:'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z'}))," Manage to add areas.")
     ,project.areas.map(area=>{
-      // Only count panels for this cat
-      const catPanel=area.panels.find(p=>p.name===cat);
-      const items=catPanel?catPanel.circuits:[];
-      let pass=0,fail=0,na=0,untested=0;
-      items.forEach(id=>{const v=ielGetStatus(results,project.id,area.id,cat,id);if(v===IEL_STATUS.PASS)pass++;else if(v===IEL_STATUS.NA)na++;else if(v===IEL_STATUS.FAIL)fail++;else untested++;});
-      const total=items.length;
-      const pct=total>0?Math.round(((pass+fail+na)/total)*100):0;
-      return React.createElement('button',{key:area.id,style:{...SI.siteCard,...(fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>onSelect(area.id)}
+      // release u2: the area's TOTAL across the three categories, ONE progress line (a FAIL pill or CLEAR, and the percentage tested = pass + fail + N/A, the RCD mode-button pattern); no count breakdown
+      const ar=ielAreaSummary(results,project,area);
+      const pct=ar.total>0?Math.round(((ar.pass+ar.fail+ar.na)/ar.total)*100):0;
+      return React.createElement('button',{key:area.id,style:{...SI.siteCard,...(ar.fail>0?{background:"#fee2e2",borderColor:"#fca5a5"}:{})},onClick:()=>onSelect(area.id)}
         ,React.createElement('div',{style:SI.siteCardLeft}
           ,React.createElement('div',{style:SI.siteCardName},area.name)
-          ,React.createElement('div',{style:SI.siteCardSub},nw(total,"item"))
-          ,React.createElement(StatusSet,{model:"full",s:{pass,fail,na,untested},dash:true,style:{marginTop:6}})
-          ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
-            ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:fail>0?"#dc2626":untested>0?catColor:"#16a34a"}})
+          ,React.createElement('div',{style:SI.siteCardSub},nw(ar.total,"item"))
+          ,ar.total>0&&React.createElement('div',{style:{marginTop:6}},React.createElement(StatusPills,{compact:true,pills:[ar.fail>0?["fail",ar.fail,"FAIL",{alert:true}]:["pass",null,"CLEAR"],["info",pct+"%"]]}))
+          ,ar.total>0&&React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:8,overflow:"hidden"}}
+            ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:ar.fail>0?"#dc2626":ar.untested>0?"#047857":"#16a34a"}})
           )
         )
         ,React.createElement('div',{style:SI.siteCardRight}
