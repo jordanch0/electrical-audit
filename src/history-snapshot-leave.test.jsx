@@ -18,7 +18,7 @@ const SNAP = { id: 'h1', projectId: 's1', projectName: 'Site One', testDate: '20
 export const MODULES = [
   { tile: 'RCD TESTING', p: 'rcd-projects-v6', m: 'rcd-meta-v6', h: 'rcd-history-v6', start: /^Injection Test/, snap: { mode: 'inject', label: 'Injection Test' },
     areas: [{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'p1', name: 'MSB 1', circuits: ['CB 1', 'CB 2'] }] }], drill: ['Wash Plant', 'MSB 1'], item: 'CB 1', gridText: 'CB 2', isItem: () => !!screen.queryByText(/MSB 1\s*·\s*CB 1/) },
-  { tile: 'IEL TESTING', p: 'iel-projects-v2', m: 'iel-meta-v2', h: 'iel-history-v2', start: /E-Stops/, snap: { cat: 'estops' },
+  { tile: 'IEL TESTING', p: 'iel-projects-v2', m: 'iel-meta-v2', h: 'iel-history-v2', start: /Start \/ Continue Audit/, snap: { cat: 'estops' },
     areas: [{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'e1', name: 'estops', circuits: ['x1', 'x2'], machineNames: { x1: 'Feed Conveyor 1', x2: 'Feed Conveyor 2' } }] }], drill: ['Wash Plant', 'E-Stops'], item: 'Feed Conveyor 1', gridText: 'Feed Conveyor 2', isItem: () => !screen.queryByText('Feed Conveyor 2') },
   { tile: 'TEST & TAG', p: 'tat-projects-v1', m: 'tat-meta-v1', h: 'tat-history-v1', start: /Start \/ Continue Audit/, snap: {},
     areas: [{ id: 'a1', name: 'Workshop', defaultFreq: '3', items: ['i1', 'i2'], itemNames: { i1: 'Angle grinder', i2: 'Drill' }, itemTags: {}, itemEquipTypes: {}, itemFreqs: {} }], drill: ['Workshop'], item: 'Angle grinder', gridText: 'Drill', isItem: () => !screen.queryByText('Drill') },

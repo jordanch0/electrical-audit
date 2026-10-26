@@ -83,7 +83,7 @@ describe('scroll resets to top when opening an item (regression for scroll-to-bo
     await user.click(await screen.findByText('IEL TESTING'));
     await user.click(await screen.findByText('IEL Site'));
     await user.type(await screen.findByPlaceholderText('Enter name to begin audit…'), 'Jordan');
-    await user.click(await screen.findByText('E-Stops'));
+    await user.click(await screen.findByText(/Start \/ Continue Audit/));
     await user.click(await screen.findByText('Warehouse'));
     await user.click(await screen.findByText(/E-Stops/)); // category summary card
 

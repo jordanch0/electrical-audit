@@ -35,7 +35,7 @@ describe('screens show the stored value when the phone has none of the settings'
   });
   it('IEL', async () => {
     S('iel-projects-v2', site([{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'e1', name: 'estops', circuits: ['x1'], machineNames: { x1: 'Feed Conveyor 1' } }] }])); S('iel-meta-v2', META); S('iel-results-v2', { s1: { a1: { estops: { x1: { status: 'fail', mechCheck: true, circuitIso: true, lastTested: '2026-10-05', ...FAIL } } } } });
-    const user = userEvent.setup(); await open(user, 'IEL TESTING'); await user.click(screen.getByRole('button', { name: /E-Stops/ })); await user.click(await screen.findByText('Wash Plant')); await user.click(await screen.findByRole('button', { name: /E-Stops/ })); await user.click(await screen.findByText('Feed Conveyor 1')); await seen();
+    const user = userEvent.setup(); await open(user, 'IEL TESTING'); await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ })); await user.click(await screen.findByText('Wash Plant')); await user.click(await screen.findByRole('button', { name: /E-Stops/ })); await user.click(await screen.findByText('Feed Conveyor 1')); await seen();
   });
   it('TAT: a frequency, equipment type and appliance name that are in none of this phone\'s lists', async () => {
     S('tat-projects-v1', site([{ id: 'a1', name: 'Workshop', defaultFreq: '5', items: ['i1'], itemNames: { i1: 'Weird Appliance' }, itemTags: {}, itemEquipTypes: { i1: 'Strange Type' }, itemFreqs: { i1: '5' } }])); S('tat-meta-v1', META); S('tat-results-v1', { s1: { a1: { i1: { status: 'fail', visualCheck: 'pass', electricalCheck: 'fail', equipType: 'Strange Type', freq: '5', lastTested: '2026-10-05', ...FAIL } } } });

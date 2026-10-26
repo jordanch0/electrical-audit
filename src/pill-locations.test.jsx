@@ -30,8 +30,8 @@ const LOCATIONS = [
   L('rcd-push', 'full', 'RCD history', ['complete:Complete Push Test', 'btn:History'], { min: 1, noBadge: true, counts: { '10 circuits': 1 } }), L('rcd-push', 'full', 'RCD home (no fractions)', [], { min: 0, noPattern: true }),
   // IEL
   L('iel', 'full', 'IEL site list', [], { site: false, min: 1, noBadge: true, counts: { '12 items': 1 } }), L('iel', 'full', 'IEL home category rows', [], { min: 3, counts: { '6 items': 1, '3 items': 2 } }),
-  L('iel', 'full', 'IEL areas', ['t:E-Stops'], { min: 2, noBadge: true, counts: { '4 items': 1, '2 items': 1 } }), L('iel', 'full', 'IEL panels', ['t:E-Stops', 't:Wash Plant'], { min: 1, noBadge: true, counts: { '4 items': 1 } }),
-  L('iel', 'full', 'IEL item-grid header', ['t:E-Stops', 't:Wash Plant', 'T:E-Stops'], { min: 1, counts: { '4 items': 1 } }), L('iel', 'full', 'IEL history', ['complete:Complete IEL Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '12 items': 1 } }),
+  L('iel', 'full', 'IEL areas', ['btn:Start / Continue Audit'], { min: 2, noBadge: true, counts: { '4 items': 1, '2 items': 1 } }), L('iel', 'full', 'IEL panels', ['btn:Start / Continue Audit', 't:Wash Plant'], { min: 1, noBadge: true, counts: { '4 items': 1 } }),
+  L('iel', 'full', 'IEL item-grid header', ['btn:Start / Continue Audit', 't:Wash Plant', 'T:E-Stops'], { min: 1, counts: { '4 items': 1 } }), L('iel', 'full', 'IEL history', ['complete:Complete IEL Audit', 'btn:History'], { min: 1, noBadge: true, counts: { '12 items': 1 } }),
   // TAT
   L('tat', 'full', 'TAT site list', [], { site: false, min: 1, noBadge: true, counts: { '10 items': 1 } }), L('tat', 'full', 'TAT home', [], { min: 1, counts: { '10 items': 1 } }), L('tat', 'full', 'TAT areas', ['btn:Audit'], { min: 2, noBadge: true, counts: { '6 items': 1, '4 items': 1 } }),
   L('tat', 'full', 'TAT item-grid header', ['btn:Audit', 't:Workshop'], { min: 1, counts: { '6 items': 1 } }), L('tat', 'full', 'TAT report (summary + area rows)', ['btn:Report'], { min: 3, counts: { '10 items': 1, '6 items': 1, '4 items': 1 } }),

@@ -64,7 +64,7 @@ describe('real UI: save meta, change ONLY the test date -> items keep lastTested
   }
   const dates = () => document.querySelectorAll('input[type=date]');
   async function openItemList(user) {
-    await user.click(screen.getAllByText('E-Stops')[0]);
+    await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));
     await user.click(await screen.findByText('Plant'));
     await user.click(await screen.findByText('E-Stops'));
     await screen.findByText('Conv 1');
@@ -111,7 +111,7 @@ describe('IEL screens carry no hard-coded interval wording', () => {
     const text = () => document.body.textContent;
     await screen.findByText('Example Quarry', { selector: 'div' }); expect(text()).not.toMatch(INTERVAL);          // site list (the site card's sub-line)
     await user.click(screen.getByText('Example Quarry', { selector: 'div' })); await screen.findByText('NEXT TEST DUE'); expect(text()).not.toMatch(INTERVAL);
-    await user.click(screen.getAllByText('E-Stops')[0]); await user.click(await screen.findByText('Plant')); expect(text()).not.toMatch(INTERVAL);
+    await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ })); await user.click(await screen.findByText('Plant')); expect(text()).not.toMatch(INTERVAL);
     await user.click(await screen.findByText('E-Stops')); await screen.findByText('Conv 1'); expect(text()).not.toMatch(INTERVAL);
     expect(screen.getByText('Due: 15/11/2026')).toBeTruthy();                                                           // the date is still there
   });

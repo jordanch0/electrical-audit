@@ -3738,9 +3738,9 @@ const setGateArmed=v=>setActiveMap(prev=>v?auditGateOn(prev,activeProject):audit
     // ── Main
     ,React.createElement('main',{style:SI.main,ref:mainElRef}
       ,view==="projects"&&React.createElement(IELProjectListView,{projects,allResults,onSelect:id=>{setActiveProject(id);setView("home");},onAddProject:(p,importedResults)=>{setProjects(prev=>[...prev,p]);if(importedResults)setAllResults(prev=>({...prev,[p.id]:importedResults}));},onDeleteProject:id=>{siteLogoStore.del("iel",id).catch(()=>{});setProjects(prev=>prev.filter(p=>p.id!==id));setAllResults(prev=>{const n={...prev};delete n[id];return n;});setAllMeta(prev=>{const n={...prev};delete n[id];return n;});setHistory(prev=>prev.filter(h=>h.projectId!==id));setActiveMap(prev=>auditActiveClear(prev,id));if(activeProject===id)goProjects();}})
-      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartCat:cat=>{setActiveCat(cat);setView("audit");setGateArmed(false);},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},activeCatKey:activeCat,auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
+      ,view==="home"&&project&&React.createElement(IELProjectHomeView,{project,meta,setMeta,results:allResults,onStartAudit:()=>{setActiveMap(prev=>auditEntryIsActive(prev[activeProject])?auditGateOff(prev,activeProject):auditActiveSet(prev,activeProject,{}));setView("audit");},onReport:()=>setView("report"),onManage:()=>setView("manage"),onHistory:()=>setView("history"),onReset:()=>{setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);setAllResults(prev=>({...prev,[activeProject]:{}}));setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),nextTestDate:""}}));},auditActive,lastArchivedAt:history.filter(h=>h.projectId===activeProject).reduce((latest,h)=>!latest||h.archivedAt>latest?h.archivedAt:latest,null),onCompleteAudit:()=>{archiveAudit();setAllResults(prev=>{const proj=prev[activeProject]||{};const cleared={};Object.keys(proj).forEach(aid=>{cleared[aid]={};IEL_CATEGORIES.forEach(c=>{cleared[aid][c.key]={};});});return{...prev,[activeProject]:cleared};});setAllMeta(prev=>({...prev,[activeProject]:{...homeDateRelease("iel",prev[activeProject]),notes:""}}));setActiveCat(null);setGateArmed(false);setActiveAreaId(null);setActivePanelId(null);}})
       ,isAudit&&project&&showGate&&React.createElement(AuditGatePage,{accent:"#047857",hasActiveAudit:auditActive,hasAuditor:!!(meta&&meta.auditor&&meta.auditor.trim()),onGoHome:goHome,onEnterAudit:()=>setGateArmed(false)})
-      ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat,catColor,onSelect:id=>setActiveAreaId(id)})
+      ,isAudit&&project&&!showGate&&!activeAreaId&&React.createElement(IELAreaListView,{project,results:allResults,cat:activeCat||IEL_CATEGORIES[0].key,catColor,onSelect:id=>setActiveAreaId(id)})
       ,isAudit&&project&&!showGate&&activeAreaId&&area&&!activePanelId&&React.createElement(IELTypeSwitcher,{area,project,results:allResults,cat:activeCat,onSelect:(catKey,panelId)=>{setActiveCat(catKey);setActivePanelId(panelId);setView("panel");}})
       ,!showGate&&!detailInfo&&view==="panel"&&panel&&React.createElement(IELItemGrid,{area,panel,project,results:allResults,cat:activeCat,catColor,meta,onPatch:(itemId,patch)=>patchItem(activeProject,activeAreaId,activeCat,itemId,patch),onSetAll:(itemId,s)=>patchItem(activeProject,activeAreaId,activeCat,itemId,{status:s}),onOpenDetail:itemId=>{setDetailInfo({areaId:activeAreaId,panelId:activePanelId,itemId});}})
       ,!showGate&&detailInfo&&project&&React.createElement(IELItemModal,{...detailInfo,project,cat:activeCat,results:allResults,meta,dropdowns:ielDropdowns,onPatch:patch=>patchItem(activeProject,detailInfo.areaId,activeCat,detailInfo.itemId,patch),onClose:()=>setDetailInfo(null)})
@@ -4005,7 +4005,7 @@ function IELProjectListView({projects,allResults,onSelect,onAddProject,onDeleteP
 // ─────────────────────────────────────────────────────────────────────────
 // IEL PROJECT HOME — auditor gate + category selection (mirrors ProjectHomeView)
 // ─────────────────────────────────────────────────────────────────────────
-function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,onManage,onHistory,onReset,onCompleteAudit,activeCatKey,auditActive,lastArchivedAt}){
+function IELProjectHomeView({project,meta,setMeta,results,onStartAudit,onReport,onManage,onHistory,onReset,onCompleteAudit,auditActive,lastArchivedAt}){
   const hasAuditor=!!(meta.auditor&&meta.auditor.trim());
   return React.createElement('div',{style:SI.homeWrap}
     ,React.createElement('div',{style:SI.siteTitle},project.name)
@@ -4029,25 +4029,27 @@ function IELProjectHomeView({project,meta,setMeta,results,onStartCat,onReport,on
     ,IEL_CATEGORIES.map(cat=>{
       const sum=ielSiteSummary(results,project,cat.key);
       const pct=sum.total>0?Math.round(((sum.pass+sum.fail+sum.na)/sum.total)*100):0;
-      return React.createElement('button',{key:cat.key,
-        style:{...SI.catBtn,flexWrap:"wrap",borderColor:`${cat.color}${hasAuditor?"88":"33"}`,opacity:hasAuditor?1:0.5,cursor:hasAuditor?"pointer":"not-allowed"},
-        onClick:()=>hasAuditor&&onStartCat(cat.key),disabled:!hasAuditor,"aria-disabled":!hasAuditor}
+      // release u2: a READ-ONLY summary row (a div: no onClick, no chevron, not a control); the one Start / Continue Audit button follows the rows
+      return React.createElement('div',{key:cat.key,"data-testid":"iel-home-"+cat.key,
+        style:{...SI.catBtn,cursor:"default",flexWrap:"wrap",borderColor:"#e4e4e7"}}
         ,React.createElement('span',{style:{fontSize:28,marginRight:4}},cat.icon)
         ,React.createElement('div',{style:{flex:1,textAlign:"left"}}
-          ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},React.createElement('div',{style:{fontSize:15,fontWeight:800,color:hasAuditor?cat.color:"#52525b",letterSpacing:0.3}},cat.label),React.createElement('span',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(sum.total,"item")))
+          ,React.createElement('div',{style:{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8}},React.createElement('div',{style:{fontSize:15,fontWeight:800,color:cat.color,letterSpacing:0.3}},cat.label),React.createElement('span',{style:{fontSize:11,color:"#52525b",flexShrink:0}},nw(sum.total,"item")))
           ,React.createElement('div',{style:{fontSize:11,color:"#5f5b57",marginTop:1}},cat.desc)
           ,React.createElement('div',{style:{width:"100%",height:4,background:"#e4e4e7",borderRadius:2,marginTop:6,overflow:"hidden"}}
             ,React.createElement('div',{style:{height:"100%",borderRadius:2,width:`${pct}%`,background:sum.fail>0?"#dc2626":cat.color,transition:"width 0.4s"}})
           )
         )
-        ,React.createElement('span',{style:{fontSize:22,color:hasAuditor?cat.color+"88":"#52525b"}},"›")
         ,React.createElement(StatusSet,{model:"full",s:sum,style:{flex:"0 0 100%",marginTop:8}})
       );
     })
+    ,React.createElement('button',{style:{width:"100%",maxWidth:500,padding:"16px",background:hasAuditor?"#047857":"#f7f6f3",color:hasAuditor?"#fff":"#52525b",border:`2px solid ${hasAuditor?"#047857":"#e4e4e7"}`,borderRadius:16,fontSize:16,fontWeight:800,cursor:hasAuditor?"pointer":"not-allowed",letterSpacing:0.5},onClick:()=>hasAuditor&&onStartAudit(),disabled:!hasAuditor,"aria-disabled":!hasAuditor}
+      ,React.createElement('svg',{viewBox:'0 0 24 24',width:15,height:15,fill:'none',stroke:'currentColor',strokeWidth:2,strokeLinecap:'round',strokeLinejoin:'round',style:{flexShrink:0}},React.createElement('polyline',{points:'9 11 12 14 22 4'}),React.createElement('path',{d:'M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11'}))," Start / Continue Audit"
+    )
     ,!hasAuditor&&React.createElement(AuditorRequiredNote, null)
     ,auditActive===true&&React.createElement('div',{style:{width:"100%",maxWidth:500,background:"#f0eeea",border:"1px solid #d4d4d8",borderRadius:12,padding:"10px 14px"}}
       ,React.createElement('div',{style:{fontSize:10,color:"#5f5b57",fontWeight:700,letterSpacing:0.8,marginBottom:8}},"COMPLETE ACTIVE AUDIT")
-      ,React.createElement(CompleteAuditBtn,{color:(IEL_CATEGORIES.find(c=>c.key===activeCatKey)||{color:"#047857"}).color,label:"Complete IEL Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
+      ,React.createElement(CompleteAuditBtn,{color:"#047857",label:"Complete IEL Audit",onComplete:onCompleteAudit,disabled:!hasAuditor})
     )
     ,React.createElement(ConfirmReset,{onConfirm:onReset,prompt:"Reset all results?",renderIdle:open=>React.createElement('button',{style:{background:"transparent",border:"none",color:"#52525b",fontSize:12,cursor:"pointer",textDecoration:"underline"},onClick:open},"Reset all test results")})
   );

@@ -26,7 +26,7 @@ const START = /Start \/ Continue Audit/;
 // tile, projects key, meta key, active-flag key, how to press Start on Home, an areas value that makes the module render
 const MODULES = [
   { tile: 'RCD TESTING', pk: 'rcd-projects-v6', mk: 'rcd-meta-v6', ak: 'rcd-audit-active-v1', start: /^Push Test/ },
-  { tile: 'IEL TESTING', pk: 'iel-projects-v2', mk: 'iel-meta-v2', ak: 'iel-audit-active-v1', start: /E-Stops/ },
+  { tile: 'IEL TESTING', pk: 'iel-projects-v2', mk: 'iel-meta-v2', ak: 'iel-audit-active-v1', start: /Start \/ Continue Audit/ },
   { tile: 'TEST & TAG', pk: 'tat-projects-v1', mk: 'tat-meta-v1', ak: 'tat-audit-active-v1', start: START },
   { tile: 'THERMOGRAPHIC', pk: 'thermo-projects-v1', mk: 'thermo-meta-v1', ak: 'thermo-audit-active-v1', start: START },
   { tile: 'SWITCHBOARD', pk: 'swb-projects-v1', mk: 'swb-meta-v1', ak: 'swb-audit-active-v1', start: START },
@@ -294,7 +294,7 @@ describe('IEL TESTING — folder level kept across another tab (real seed labels
     const d = pillSeed.build('iel', 'nologo'); Object.entries(d.ls).forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v)));
     const user = userEvent.setup(); render(<AppRoot />);
     await user.click(screen.getByText('IEL TESTING', { exact: true })); await user.click(await screen.findByText(pillSeed.SITE, { selector: 'div' }));
-    await user.click(screen.getByRole('button', { name: /E-Stops/ }));                  // Start the E-Stops category
+    await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));   // Start / Continue Audit (release u2: the category is chosen later, in the area)
     await user.click(await screen.findByText('Wash Plant'));                           // area -> the category panel card
     await user.click((await screen.findAllByText('E-Stops'))[0]);                      // panel -> the items
     expect(await screen.findByText('Feed Conveyor 1')).toBeInTheDocument();

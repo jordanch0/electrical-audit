@@ -9,7 +9,7 @@ export const GATE_MODS = [
   { tile: 'RCD TESTING', short: 'RCD', p: 'rcd-projects-v6', r: 'rcd-results-v6', m: 'rcd-meta-v6', a: 'rcd-audit-active-v1', old: ['rcd-mode-v6', 'push'], entry: { mode: 'push' }, start: /^Push Test/,
     areas: [{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'p1', name: 'MSB 1', circuits: ['CB 1', 'CB 2'] }] }],
     marked: { a1: { p1: { 'CB 1': { push: { status: 'pass' }, inject: {} } } } }, meta: au => ({ auditor: au, pushDate: DATE, injectDate: DATE, notes: '' }) },
-  { tile: 'IEL TESTING', short: 'IEL', p: 'iel-projects-v2', r: 'iel-results-v2', m: 'iel-meta-v2', a: 'iel-audit-active-v1', old: ['iel-cat-v2', 'estops'], entry: { cat: 'estops' }, start: /E-Stops/,
+  { tile: 'IEL TESTING', short: 'IEL', p: 'iel-projects-v2', r: 'iel-results-v2', m: 'iel-meta-v2', a: 'iel-audit-active-v1', old: ['iel-cat-v2', 'estops'], entry: { cat: 'estops' }, start: /Start \/ Continue Audit/,
     areas: [{ id: 'a1', name: 'Wash Plant', panels: [{ id: 'e1', name: 'estops', circuits: ['x1', 'x2'], machineNames: { x1: 'Feed Conveyor 1', x2: 'Feed Conveyor 2' } }] }],
     marked: { a1: { estops: { x1: { status: 'pass', lastTested: DATE } } } }, meta: au => ({ auditor: au, testDate: DATE, notes: '' }) },
   { tile: 'TEST & TAG', short: 'TAT', p: 'tat-projects-v1', r: 'tat-results-v1', m: 'tat-meta-v1', a: 'tat-audit-active-v1', entry: {}, start: /Start \/ Continue Audit/,

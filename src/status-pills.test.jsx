@@ -71,7 +71,7 @@ describe('real UI: the item-grid header is a full-width STATUS pill row WITH N/A
     localStorage.setItem('iel-results-v2', JSON.stringify({ p1: { a: { estops: { a: { status: 'pass', lastTested: '2026-07-13' }, b: { status: 'pass', lastTested: '2026-07-13' }, c: { status: 'fail', lastTested: '2026-07-13' }, d: { status: 'na' } } } } }));
     localStorage.setItem('iel-meta-v2', JSON.stringify({ p1: { auditor: 'Jane Auditor', testDate: '2026-07-13', notes: '' } }));
     const user = userEvent.setup(); render(<AppRoot />); await user.click(screen.getByText('IEL TESTING'));
-    await user.click(await screen.findByText('Example Quarry', { selector: 'div' })); await screen.findByText('NEXT TEST DUE'); await user.click(screen.getAllByText('E-Stops')[0]);
+    await user.click(await screen.findByText('Example Quarry', { selector: 'div' })); await screen.findByText('NEXT TEST DUE'); await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));
     await user.click(await screen.findByText('Plant')); await user.click(await screen.findByText('E-Stops')); await screen.findByText('M1');
     const row = document.querySelector('[data-statuspills]'); expect([...row.children].map(c => c.textContent)).toEqual(['2 PASS', '1 FAIL', '1 N/A', '1 UNTESTED']);
     expect(row).toHaveStyle({ marginBottom: '10px' });

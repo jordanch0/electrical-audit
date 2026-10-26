@@ -59,7 +59,7 @@ describe('IEL fail panel', () => {
     render(<AppRoot />);
     await user.click(screen.getByText('IEL TESTING'));
     await user.click(await screen.findByText('Site I', { selector: 'div' }));
-    await user.click(screen.getAllByText('E-Stops')[0]);
+    await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ }));
     await user.click(await screen.findByText('Plant Room'));
     await user.click(await screen.findByText('E-Stops'));
     await user.click(await screen.findByText('Screen 1'));

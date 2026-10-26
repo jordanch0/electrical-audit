@@ -27,7 +27,9 @@ const seed = (results, extra = {}) => {
 };
 const done = { status: 'pass', mechCheck: true, circuitIso: true, lastTested: day(5) };
 async function toHome(user) { render(<AppRoot />); await user.click(screen.getByText('IEL TESTING', { exact: true })); await user.click(await screen.findByText('Site One', { selector: 'div' })); }
-async function toArea(user, cat, area) { await toHome(user); await user.click(screen.getByRole('button', { name: new RegExp(cat) })); await user.click(await screen.findByText(area)); }
+const CAT_KEY = { 'E-Stops': 'estops', Lanyards: 'lanyards', Isolators: 'isolators' };
+// release u2: the Home rows are a read-only summary and the one button is Start / Continue Audit; the category the audit is on is the stored one (what a row tap used to write)
+async function toArea(user, cat, area) { localStorage.setItem(A, JSON.stringify({ v: 1, sites: { s1: { cat: CAT_KEY[cat] } } })); await toHome(user); await user.click(screen.getByRole('button', { name: /Start \/ Continue Audit/ })); await user.click(await screen.findByText(area)); }
 async function toItem(user, cat, area, item) { await toArea(user, cat, area); await user.click(await screen.findByTestId('iel-type-' + ({ 'E-Stops': 'estops', Lanyards: 'lanyards', Isolators: 'isolators' })[cat])); await user.click(await screen.findByText(item)); }
 const tick = (user, name) => user.click(screen.getByRole('button', { name: new RegExp(name) }));
 
@@ -107,8 +109,8 @@ describe('AUTO PASS', () => {
     seed(); const user = userEvent.setup(); await toItem(user, 'Lanyards', 'Wash Plant', 'Pit Lanyard 1');
     await tick(user, 'Mechanism'); await tick(user, 'Circuit Isolation'); await tick(user, 'Lanyard Tension'); await waitFor(() => expect(ls(R).s1.a1.lanyards.y1.status).toBe('pass'));
     await user.click(screen.getByRole('button', { name: /^Home$/ }));                                                    // Home: the Lanyards row shows 1 PASS (the other rows none)
-    const row = await screen.findByRole('button', { name: /Lanyards/ }); expect(within(row).getByText('1 PASS')).toBeInTheDocument();
-    expect(within(screen.getByRole('button', { name: /E-Stops/ })).getByText('0 PASS')).toBeInTheDocument();
+    const row = await screen.findByTestId('iel-home-lanyards'); expect(within(row).getByText('1 PASS')).toBeInTheDocument();
+    expect(within(screen.getByTestId('iel-home-estops')).getByText('0 PASS')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: /^Report$/ }));                                                  // Report: one category summary has 1 PASS, the others 0
     expect(await screen.findAllByText('1 PASS')).toHaveLength(1); expect(screen.getAllByText('0 PASS')).toHaveLength(2);
     await user.click(screen.getByRole('button', { name: /^Home$/ }));                                                    // Complete Audit: the snapshot counts the item as PASS
@@ -187,7 +189,7 @@ describe('TYPE SWITCHER', () => {
   it('the Home heading reads TEST CATEGORIES and the three rows are still there', async () => {
     seed(); const user = userEvent.setup(); await toHome(user);
     expect(screen.getByText('TEST CATEGORIES')).toBeInTheDocument(); expect(screen.queryByText('SELECT TEST CATEGORY')).toBeNull();
-    ['E-Stops', 'Lanyards', 'Isolators'].forEach(n => expect(screen.getByRole('button', { name: new RegExp(n) })).toBeInTheDocument());
+    ['estops', 'lanyards', 'isolators'].forEach(k => expect(screen.getByTestId('iel-home-' + k)).toBeInTheDocument());
   });
 });
 
