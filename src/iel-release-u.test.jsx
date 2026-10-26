@@ -80,6 +80,17 @@ describe('AUTO PASS', () => {
     await user.click(screen.getByRole('button', { name: 'PASS' })); await new Promise(r => setTimeout(r, 30));
     const r = ls(R); expect(!r || !r.s1 || !r.s1.a1 || !r.s1.a1.estops || !r.s1.a1.estops.x1 || (r.s1.a1.estops.x1.status || 'untested') === 'untested').toBe(true);
   });
+  it('U5: the tap completes the set on an old item saved as PASS (one check missing); it stays PASS, keeps its date, and the line Marked PASS because all checks are ticked must not show', async () => {
+    const old = { status: 'pass', mechCheck: true, lanyardCond: true, lastTested: day(5) };                     // a lanyard saved as PASS with circuitIso missing (data from before a manual PASS was blocked)
+    seed({ a1: { lanyards: { y1: { ...old } } } }); const user = userEvent.setup(); await toItem(user, 'Lanyards', 'Wash Plant', 'Pit Lanyard 1');
+    expect(screen.getByTestId('iel-check-note').textContent).toBe('');                                          // opening changes nothing
+    await tick(user, 'Circuit Isolation');                                                                     // this tap completes the set, but the item is already PASS: it is not an automatic pass
+    await waitFor(() => expect(ls(R).s1.a1.lanyards.y1.circuitIso).toBe(true));
+    const rec = ls(R).s1.a1.lanyards.y1;
+    expect(rec.status).toBe('pass'); expect(rec.lastTested).toBe(day(5)); expect(rec.mechCheck).toBe(true); expect(rec.lanyardCond).toBe(true);
+    expect(screen.getByTestId('iel-check-note').textContent).toBe('');                                          // the line must not show
+    expect(Object.keys(ls(R).s1)).toEqual(['a1']); expect(Object.keys(ls(R).s1.a1)).toEqual(['lanyards']); expect(Object.keys(ls(R).s1.a1.lanyards)).toEqual(['y1']);   // no other item or category was written
+  });
   it('a lanyard passes on the THIRD tick in ALL SIX orders of its three checks, and never earlier', async () => {
     const names = ['Mechanism', 'Circuit Isolation', 'Lanyard Tension'];
     const orders = [[0, 1, 2], [0, 2, 1], [1, 0, 2], [1, 2, 0], [2, 0, 1], [2, 1, 0]];
