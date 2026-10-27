@@ -183,6 +183,17 @@ describe('TABS: three separate pills, in the Home order, one line each', () => {
     await user.click(screen.getByTestId('iel-tab-lanyards'));
     expect(set()).toEqual(['0 PASS', '0 FAIL', '1 N/A', '1 UNTESTED']);                                                          // THAT category in THAT area
   });
+  it('T-4b the header carries the AREA counts, not the whole site: a second area with the same category does not change them', async () => {
+    seed({ a1: { estops: { x1: { ...done } } }, a2: { estops: { w1: { status: 'fail', mechCheck: true, lastTested: day(5) }, w2: { ...done }, w3: { ...done } } } });
+    const site = JSON.parse(JSON.stringify(SITE));
+    site.areas[1].panels.push({ id: 'e2', name: 'estops', circuits: ['w1', 'w2', 'w3'], machineNames: { w1: 'Crusher E-Stop 1', w2: 'Crusher E-Stop 2', w3: 'Crusher E-Stop 3' } });
+    localStorage.setItem(P, JSON.stringify([site]));
+    const user = userEvent.setup(); await toList(user, 'Wash Plant', { cat: 'estops' });
+    const panel = () => screen.getByRole('tabpanel'); const set = () => [...panel().querySelectorAll('[data-statuspill]')].map(p => p.textContent);
+    expect(set()).toEqual(['1 PASS', '0 FAIL', '0 N/A', '1 UNTESTED']); expect(within(panel()).getByText('2 items')).toBeInTheDocument();   // the whole site would read 3 PASS, 1 FAIL
+    await user.click(screen.getByText('Back')); await user.click(await screen.findByText('Crusher Yard')); await screen.findByRole('tablist', { name: 'Test category' });
+    expect(set()).toEqual(['2 PASS', '1 FAIL', '0 N/A', '0 UNTESTED']); expect(within(panel()).getByText('3 items')).toBeInTheDocument();
+  });
   it('T-5 the shown tab: the remembered one when the area has items there, else the first with items; showing the fallback writes nothing', async () => {
     seed(null); const user = userEvent.setup(); await toList(user, 'Wash Plant', { cat: 'lanyards' });
     expect(selectedTabs()).toEqual(['iel-tab-lanyards']);                                                                      // remembered and present here
