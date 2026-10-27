@@ -225,6 +225,22 @@ describe('TABS: three separate pills, in the Home order, one line each', () => {
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); expect(await screen.findByRole('tablist', { name: 'Test category' })).toBeInTheDocument();     // the item page closed, the item list stays
     await user.click(screen.getByRole('button', { name: /^Audit$/ })); expect(await screen.findByText('Select Area')).toBeInTheDocument();                       // then the area list
   });
+  it('T-9b the Audit pill after the open area was deleted in Manage lands on the AREA LIST (no empty item list, no crash)', async () => {
+    seed(null); const user = userEvent.setup(); await toList(user, 'Wash Plant', { cat: 'lanyards' });
+    expect(screen.getByRole('tablist', { name: 'Test category' })).toBeInTheDocument();                                  // the Wash Plant item list is open
+    await user.click(screen.getByRole('button', { name: /^Manage$/ }));
+    const row = (await screen.findByText('Wash Plant')).closest('button').parentElement;                                   // the area card header in Manage
+    await user.click(within(row).getAllByRole('button').at(-1));                                                          // the trash icon (last button of the row)
+    await user.click(await within(row).findByRole('button', { name: /Delete/ }));                                         // second step of the two-step delete
+    await waitFor(() => expect(ls(P)[0].areas.map(a => a.id)).toEqual(['a2', 'a3']));                                     // Wash Plant is really gone from storage
+    await user.click(screen.getByRole('button', { name: /^Audit$/ }));
+    expect(await screen.findByText('Select Area')).toBeInTheDocument();                                                   // the area list, not an empty item list
+    expect(screen.queryByRole('tablist', { name: 'Test category' })).toBeNull();
+    expect(screen.queryByText('Wash Plant')).toBeNull();
+    expect(screen.getByText('Crusher Yard')).toBeInTheDocument(); expect(screen.getByText('Pit Store')).toBeInTheDocument();
+    await user.click(screen.getByText('Crusher Yard'));                                                                   // and the list still works afterwards
+    expect(await screen.findByRole('tablist', { name: 'Test category' })).toBeInTheDocument(); expect(selectedTabs()).toEqual(['iel-tab-isolators']);
+  });
   it('T-10 old stored entries open on the right tab: { cat: estops }, { cat: lanyards }, {} and the legacy iel-cat-v2 migration', async () => {
     for (const [entry, want] of [[{ cat: 'estops' }, 'iel-tab-estops'], [{ cat: 'lanyards' }, 'iel-tab-lanyards'], [{}, 'iel-tab-estops']]) {
       cleanup(); localStorage.clear(); seed({ a1: { estops: { x1: { ...done } } } }); const user = userEvent.setup(); await toList(user, 'Wash Plant', entry); expect(selectedTabs()).toEqual([want]);
